@@ -21,8 +21,10 @@ case-pipeline/
 ├── lib/
 │   ├── monday/               # Shared Monday.com API utilities
 │   │   ├── api.ts            # Core API functions
+│   │   ├── api.test.ts       # API tests
 │   │   ├── types.ts          # TypeScript interfaces
-│   │   ├── column-resolver.ts # Dynamic column resolution
+│   │   ├── column-resolver.ts    # Dynamic column resolution
+│   │   ├── column-resolver.test.ts # Column resolver tests
 │   │   └── index.ts          # Re-exports
 │   ├── config/               # Configuration loading
 │   │   ├── types.ts          # Config type definitions
@@ -31,9 +33,18 @@ case-pipeline/
 │   └── template/             # Template utilities
 │       ├── mapper.ts         # Variable mapping & validation
 │       └── index.ts          # Re-exports
-├── scripts/seed/             # Test data seeding (uses shared lib)
+├── scripts/
+│   ├── seed/                 # Test data seeding
+│   │   ├── index.ts          # CLI entry point
+│   │   ├── seed-profiles.ts  # Profile generation
+│   │   ├── seed-contracts.ts # Contract generation
+│   │   └── lib/              # Generators and constants
+│   └── sync-config/          # Config synchronization tool
+│       ├── index.ts          # CLI entry point
+│       └── lib/              # Differ, reporter, YAML generator
 ├── index.ts                  # Main entry point
-└── templates/                # Handlebars templates
+├── templates/                # Handlebars templates
+└── output/                   # Rendered template output
 ```
 
 ## Configuration Files
@@ -192,3 +203,60 @@ validation:
   required: [contact_name, email]
   warn_if_empty: [phone, notes]
 ```
+
+## Config Synchronization
+
+The `sync-config` tool keeps your YAML configuration in sync with Monday.com board structures.
+
+### Usage
+
+```bash
+# Sync all boards - detect new/missing columns
+bun scripts/sync-config
+
+# Preview changes without writing
+bun scripts/sync-config --dry-run
+
+# Add a new board to config
+bun scripts/sync-config --add-board=123456789 --board-key=new_board
+
+# Verbose output showing all matched columns
+bun scripts/sync-config --verbose
+
+# Export board reference to markdown
+bun scripts/sync-config --export=output/boards-reference.md
+```
+
+### What It Does
+
+1. **Detects new columns** - Columns added to Monday.com that aren't in your config
+2. **Detects missing columns** - Columns in config that no longer exist on the board
+3. **Auto-generates config** - Creates resolution strategies for new columns
+4. **Preserves existing config** - Merges new columns without overwriting existing definitions
+
+### Example Output
+
+```
+Fetching board: profiles (18397286934)...
+  Found: "Client Profiles" with 12 columns
+
+  New columns (not in config):
+    + company (text) → by_title pattern: "company"
+    + linkedin (link) → by_type type: link
+
+  Missing (in config but not on board):
+    - old_field
+```
+
+## Testing
+
+Run the test suite:
+
+```bash
+bun test
+```
+
+Tests cover:
+- Column resolution strategies (`by_type`, `by_title`, `by_id`)
+- Fallback resolution chains
+- API response parsing and error handling

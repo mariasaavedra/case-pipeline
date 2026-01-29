@@ -19,7 +19,7 @@ import type { ProfileData, ContractData } from "./types";
 // =============================================================================
 
 export function randomElement<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+  return arr[Math.floor(Math.random() * arr.length)] as T;
 }
 
 export function randomInt(min: number, max: number): number {
@@ -52,7 +52,7 @@ export function generateDate(daysFromNow: { min: number; max: number }): string 
   const days = randomInt(daysFromNow.min, daysFromNow.max);
   const date = new Date();
   date.setDate(date.getDate() + days);
-  return date.toISOString().split("T")[0];
+  return date.toISOString().split("T")[0] as string;
 }
 
 export function generateNotes(): string {

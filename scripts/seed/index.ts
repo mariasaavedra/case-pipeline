@@ -58,12 +58,12 @@ function parseArgs() {
     } else if (arg === "contracts") {
       config.command = "contracts";
     } else if (arg.startsWith("--profiles=")) {
-      config.profileCount = parseInt(arg.split("=")[1]) || DEFAULT_CONFIG.profileCount;
+      config.profileCount = parseInt(arg.split("=")[1] ?? "") || DEFAULT_CONFIG.profileCount;
     } else if (arg.startsWith("--contracts=")) {
-      const range = arg.split("=")[1];
+      const range = arg.split("=")[1] ?? "";
       const [min, max] = range.split("-").map((n) => parseInt(n));
-      if (!isNaN(min)) config.contractsPerProfile.min = min;
-      if (!isNaN(max)) config.contractsPerProfile.max = max;
+      if (min !== undefined && !isNaN(min)) config.contractsPerProfile.min = min;
+      if (max !== undefined && !isNaN(max)) config.contractsPerProfile.max = max;
     } else if (/^\d+$/.test(arg)) {
       config.profileIds.push(arg);
     }
