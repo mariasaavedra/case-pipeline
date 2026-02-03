@@ -4,15 +4,16 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
+    "@faker-js/faker": "^10.2.0",
     "@types/js-yaml": "^4.0.9",
     "docxtemplater": "^3.67.6",
-    "dotenv": "^17.2.3",
     "handlebars": "^4.7.8",
     "js-yaml": "^4.1.1",
     "pizzip": "^3.2.0"

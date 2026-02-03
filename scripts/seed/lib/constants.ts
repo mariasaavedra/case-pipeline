@@ -2,15 +2,27 @@
 // Constants for Monday.com seeding
 // =============================================================================
 
-// Board IDs
-export const PROFILES_BOARD_ID = "18397286934";
-export const CONTRACTS_BOARD_ID = "18397312752";
+import { loadBoardsConfig } from "../../../lib/config";
+
+// Board IDs - loaded from config/boards.yaml
+export interface BoardIds {
+  profilesBoardId: string;
+  contractsBoardId: string;
+}
+
+export async function loadBoardIds(): Promise<BoardIds> {
+  const boards = await loadBoardsConfig();
+  return {
+    profilesBoardId: boards.profiles.id,
+    contractsBoardId: boards.contracts.id,
+  };
+}
 
 // Name generation data
 export const FIRST_NAMES = [
   "James", "Maria", "Robert", "Linda", "Michael", "Barbara", "William", "Elizabeth",
   "David", "Jennifer", "Carlos", "Patricia", "Jose", "Susan", "Ahmed", "Sarah",
-  "Wei", "Karen", "Raj", "Nancy", "Yuki", "Lisa", "Omar", "Margaret", "Ivan"
+  "Wei", "Karen", "Raj", "Nancy", "Yuki", "Lisa", "Omar", "Margaret", "Ivan", "Rafael"
 ];
 
 export const LAST_NAMES = [

@@ -248,6 +248,78 @@ Fetching board: profiles (18397286934)...
     - old_field
 ```
 
+## Data Factory (Seed Scripts)
+
+The `scripts/seed/` folder contains a scalable data generation system for populating Monday.com boards with realistic test data.
+
+### Features
+
+- **Realistic fake data** using [@faker-js/faker](https://fakerjs.dev/) - generates realistic names, emails, phone numbers, addresses, and contextual notes
+- **SQLite persistence** - stages generated data locally before syncing to Monday.com
+- **Reproducible generation** - use `--seed` to generate identical data sets
+- **Batch processing** - rate-limited sync to avoid API throttling
+- **Dry-run mode** - test without making API calls
+
+### Usage
+
+```bash
+# Full pipeline: generate profiles + contracts and sync to Monday.com
+bun scripts/seed/factory.ts --profiles=10 --contracts=1-3
+
+# Generate only (no API calls) - useful for testing
+bun scripts/seed/factory.ts --generate-only --profiles=50
+
+# Reproducible data with a seed value
+bun scripts/seed/factory.ts --generate-only --profiles=10 --seed=42
+
+# Sync previously generated batch
+bun scripts/seed/factory.ts --sync-only --batch-id=1
+
+# List all batches
+bun scripts/seed/factory.ts --list-batches
+
+# Dry run (simulates sync without API calls)
+bun scripts/seed/factory.ts --dry-run --profiles=5
+```
+
+### Architecture
+
+```
+scripts/seed/lib/
+├── db/                    # SQLite database layer
+│   ├── connection.ts      # Database singleton (bun:sqlite)
+│   └── schema.ts          # Tables: seed_batches, profiles, contracts
+├── factory/               # Data generation
+│   ├── column-generators.ts  # Faker-powered generators
+│   ├── profile-factory.ts    # Profile generation
+│   └── contract-factory.ts   # Contract generation
+├── sync/                  # Monday.com synchronization
+│   └── batch-sync.ts      # Rate-limited batch syncer
+└── seeder/                # Orchestration
+    └── seeder.ts          # Main pipeline coordinator
+```
+
+### Data Generators
+
+| Generator | Output |
+|-----------|--------|
+| `generateName()` | Realistic full names (e.g., "Tracy Miller", "Dr. Erica Connelly") |
+| `generateEmail(name)` | Email matching the name (e.g., "Tracy.Miller@gmail.com") |
+| `generatePhone()` | 10-digit phone number |
+| `generateNotes()` | Contextual case notes with lorem ipsum |
+| `generateContractId()` | Contract ID format: CTR-2026-XXXX |
+| `generateAddress()` | Full street address |
+
+### Reproducibility
+
+The `--seed` flag ensures deterministic generation:
+
+```bash
+# These two commands produce identical data
+bun scripts/seed/factory.ts --generate-only --profiles=5 --seed=42
+bun scripts/seed/factory.ts --generate-only --profiles=5 --seed=42
+```
+
 ## Testing
 
 Run the test suite:
@@ -260,3 +332,4 @@ Tests cover:
 - Column resolution strategies (`by_type`, `by_title`, `by_id`)
 - Fallback resolution chains
 - API response parsing and error handling
+- Data factory generators and seeding
