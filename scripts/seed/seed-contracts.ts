@@ -3,10 +3,10 @@
 // =============================================================================
 
 import {
-  CONTRACTS_BOARD_ID,
   CASE_TYPES,
   CONTRACT_STATUSES,
   DEFAULT_CONFIG,
+  loadBoardIds,
 } from "./lib/constants";
 import { generateContractData, randomInt } from "./lib/generators";
 import {
@@ -88,16 +88,25 @@ export interface SeedContractsResult {
   board: { id: string; name: string };
 }
 
+export interface SeedContractsOptions {
+  profiles: ProfileReference[];
+  contractsPerProfile?: { min: number; max: number };
+  boardId?: string;
+}
+
 export async function seedContracts(
-  profiles: ProfileReference[],
-  contractsPerProfile: { min: number; max: number } = DEFAULT_CONFIG.contractsPerProfile
+  options: SeedContractsOptions
 ): Promise<SeedContractsResult> {
+  const { profiles } = options;
+  const contractsPerProfile = options.contractsPerProfile ?? DEFAULT_CONFIG.contractsPerProfile;
+  const boardId = options.boardId ?? (await loadBoardIds()).contractsBoardId;
+
   if (profiles.length === 0) {
     throw new Error("No profiles provided. Create profiles first.");
   }
 
   console.log("\n[1/3] Fetching contracts board structure...");
-  const board = await fetchBoardStructure(CONTRACTS_BOARD_ID);
+  const board = await fetchBoardStructure(boardId);
   console.log(`  Board: "${board.name}" (${board.columns.length} columns)`);
 
   // Log columns for debugging
@@ -114,7 +123,7 @@ export async function seedContracts(
 
   const caseTypeCol = findColumnByTitle(board.columns, /case|type/);
   if (caseTypeCol) {
-    await ensureLabelsExist(CONTRACTS_BOARD_ID, caseTypeCol, CASE_TYPES);
+    await ensureLabelsExist(boardId, caseTypeCol, CASE_TYPES);
   }
 
   const statusCol =
@@ -122,7 +131,7 @@ export async function seedContracts(
     findColumnByType(board.columns, "color") ||
     findColumnByTitle(board.columns, /status/);
   if (statusCol && statusCol.id !== caseTypeCol?.id) {
-    await ensureLabelsExist(CONTRACTS_BOARD_ID, statusCol, CONTRACT_STATUSES);
+    await ensureLabelsExist(boardId, statusCol, CONTRACT_STATUSES);
   }
 
   // Create contracts
@@ -137,7 +146,7 @@ export async function seedContracts(
       const contractName = `${profile.name} - ${contract.caseType}`;
       const columnValues = buildContractColumnValues(board.columns, contract, profile.id);
 
-      const item = await createItem(CONTRACTS_BOARD_ID, groupId, contractName, columnValues);
+      const item = await createItem(boardId, groupId, contractName, columnValues);
       results.push({ item, contract, profileId: profile.id });
       console.log(`  Created: ${item.name} (linked to ${profile.name})`);
     }
@@ -182,7 +191,7 @@ async function main() {
   console.log("Monday.com Contract Seeder");
   console.log("=".repeat(60));
 
-  const result = await seedContracts(profiles);
+  const result = await seedContracts({ profiles });
 
   const elapsed = (performance.now() - startTime).toFixed(0);
   console.log("\n" + "=".repeat(60));

@@ -1,91 +1,163 @@
-# case-pipeline
+# Case Pipeline
 
-A prototype slice of a larger internal automation platform (Zapier/Retool-style), starting with one high-value workflow: generating documents from Monday.com data and templates.
-
-This repository exists to validate the end-to-end execution path that will eventually power an internal workflow engine, replacing Zapier for critical, high-impact automations.
+A config-driven automation platform for Monday.com workflows, featuring document generation, test data seeding, and board relationship analysis.
 
 ---
 
-## Positioning
+## Features
 
-**Today:**  
-Zapier handles a large portion of business-critical workflows.
-
-**Goal:**  
-Build an internal automation platform that:
-
-- Centralizes credentials and connector logic
-- Version-controls workflows and transformations
-- Provides execution history, retries, and observability
-- Supports human-in-the-loop steps and approvals
-- Integrates deeply with internal systems (Monday, SharePoint, etc.)
-
-This repository is the smallest viable “workflow unit” proving that direction.
+- **Document Generation** - Create documents from Monday.com data using Handlebars templates with interactive profile selection
+- **Test Data Seeding** - Generate realistic test data with Faker.js and sync to Monday.com boards
+- **Configuration Sync** - Keep board configurations in sync with Monday.com using YAML-based definitions
+- **Relationship Analysis** - Visualize board connections, mirror columns, and data flow
 
 ---
 
-## What This Repo Does (Current State)
+## Quick Start
 
-Workflow: **Render client confirmation document**
+### Prerequisites
 
-1. Load configuration from environment variables
-2. Fetch a single Monday item via GraphQL
-3. Map Monday column values to template variables
-4. Render a Handlebars template
-5. Write a timestamped artifact to disk
+- [Bun](https://bun.sh) runtime (v1.0+)
+- Monday.com API token
 
-No UI. No scheduler. No background services.  
-One deterministic run → one artifact.
-
----
-
-## What This Repo Intentionally Does *Not* Do
-
-These concerns belong to the future platform, not this prototype:
-
-- Credential vaulting or token rotation
-- Scheduling, webhooks, or event triggers
-- Retries, backoff, idempotency
-- Multi-step orchestration or branching
-- Persistent execution state/history
-- Role-based access control
-- Visual workflow builders or approval UIs
-
----
-
-## Prerequisites
-
-- **Bun** runtime  
-  https://bun.com
-
-- **Monday.com API access**  
-  https://developer.monday.com/api-reference/docs/authentication
-
-- **Templating**
-  https://handlebarsjs.com/guide/
-
-Node.js is not required.
-
----
-
-## Install
+### Installation
 
 ```bash
 bun install
 ```
 
-## Run
+### Configuration
 
-```bash
-bun index.ts
+Create a `.env` file with your Monday.com credentials:
+
+```env
+MONDAY_API_TOKEN=your_api_token_here
 ```
 
+Board configurations are defined in `config/boards.yaml`.
 
-On success:
+---
 
-The Monday item is fetched
+## CLI Usage
 
-Template variables are logged
+The unified CLI provides access to all functionality:
 
-A rendered file is written to /output
+```bash
+bun cli.ts <command> [options]
+```
 
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `render` | Generate documents from Monday.com items |
+| `seed` | Generate and sync test data to boards |
+| `sync` | Synchronize board configuration with Monday.com |
+| `analyze` | Analyze board relationships and generate maps |
+
+### Examples
+
+```bash
+# Interactive document generation - browse and select a profile
+bun cli.ts render
+
+# Render a specific item
+bun cli.ts render --item=123456789
+
+# Generate 10 test profiles with 2-3 contracts each
+bun cli.ts seed --profiles=10 --contracts=2-3
+
+# Preview what would change without writing
+bun cli.ts seed --dry-run
+
+# Sync board configuration
+bun cli.ts sync
+
+# Discover all boards in workspace
+bun cli.ts sync --discover
+
+# Generate relationship map as markdown
+bun cli.ts analyze -o=docs/boards.md
+
+# Export relationship data as JSON
+bun cli.ts analyze --format=json -o=map.json
+```
+
+Run `bun cli.ts <command> --help` for detailed options.
+
+---
+
+## Architecture
+
+### Config-Driven Design
+
+Board definitions live in `config/boards.yaml`, making it easy to:
+- Add new boards without code changes
+- Define column mappings with fallback strategies
+- Configure relationships between boards
+
+### Column Resolution
+
+Columns are resolved using flexible strategies:
+- `by_type` - Match by Monday.com column type
+- `by_title` - Match by column title (case-insensitive)
+- `by_id` - Match by exact column ID
+
+Strategies can be chained for fallback behavior.
+
+### Project Structure
+
+```
+├── cli.ts                    # Main CLI entry point
+├── cli/commands/             # CLI command implementations
+├── config/
+│   └── boards.yaml           # Board configuration
+├── lib/
+│   ├── config/               # Configuration loading
+│   ├── monday/               # Monday.com API client
+│   ├── relationship-map/     # Board analysis
+│   └── template/             # Template rendering
+├── scripts/
+│   ├── seed/                 # Data seeding tools
+│   └── sync-config/          # Configuration sync
+└── templates/                # Handlebars templates
+```
+
+---
+
+## Development
+
+### Running Tests
+
+```bash
+bun test
+```
+
+### Type Checking
+
+```bash
+bun run typecheck
+```
+
+### Package Scripts
+
+```bash
+bun run cli <command>    # Run CLI
+bun run render           # Shortcut for render command
+bun run seed             # Shortcut for seed command
+bun run sync             # Shortcut for sync command
+bun run analyze          # Shortcut for analyze command
+```
+
+---
+
+## Documentation
+
+- [Architecture Guide](docs/ARCHITECTURE.md) - Detailed system design and patterns
+- [Boards Reference](output/boards-reference.md) - Generated board documentation
+
+---
+
+## License
+
+Private - Internal use only.

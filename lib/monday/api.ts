@@ -51,27 +51,34 @@ export class TimeoutError extends MondayApiError {
 }
 
 // =============================================================================
-// Retry Configuration
+// API Configuration
 // =============================================================================
 
-interface RetryConfig {
+interface ApiConfig {
   maxRetries: number;
   baseDelayMs: number;
   maxDelayMs: number;
   timeoutMs: number;
+  apiVersion: string;
 }
 
-const DEFAULT_RETRY_CONFIG: RetryConfig = {
+const DEFAULT_API_CONFIG: ApiConfig = {
   maxRetries: 3,
   baseDelayMs: 1000,
   maxDelayMs: 10000,
   timeoutMs: 30000,
+  apiVersion: "2024-10",
 };
 
-let retryConfig: RetryConfig = { ...DEFAULT_RETRY_CONFIG };
+let apiConfig: ApiConfig = { ...DEFAULT_API_CONFIG };
 
-export function setRetryConfig(config: Partial<RetryConfig>): void {
-  retryConfig = { ...retryConfig, ...config };
+export function setApiConfig(config: Partial<ApiConfig>): void {
+  apiConfig = { ...apiConfig, ...config };
+}
+
+/** @deprecated Use setApiConfig instead */
+export function setRetryConfig(config: Partial<Omit<ApiConfig, "apiVersion">>): void {
+  apiConfig = { ...apiConfig, ...config };
 }
 
 // =============================================================================
@@ -186,11 +193,11 @@ async function executeRequest(
       headers: {
         "Content-Type": "application/json",
         Authorization: token,
-        "API-Version": "2023-04",
+        "API-Version": apiConfig.apiVersion,
       },
       body: JSON.stringify({ query, variables }),
     },
-    retryConfig.timeoutMs
+    apiConfig.timeoutMs
   );
 }
 
@@ -201,7 +208,7 @@ export async function mondayRequest<T>(
   const token = getApiToken();
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= apiConfig.maxRetries; attempt++) {
     try {
       const response = await executeRequest(token, query, variables);
 
@@ -211,9 +218,9 @@ export async function mondayRequest<T>(
 
         // For rate limits, wait the specified time
         if (error instanceof RateLimitError) {
-          if (attempt < retryConfig.maxRetries) {
+          if (attempt < apiConfig.maxRetries) {
             console.warn(
-              `Rate limited. Waiting ${error.retryAfterMs}ms before retry ${attempt + 1}/${retryConfig.maxRetries}...`
+              `Rate limited. Waiting ${error.retryAfterMs}ms before retry ${attempt + 1}/${apiConfig.maxRetries}...`
             );
             await sleep(error.retryAfterMs);
             continue;
@@ -221,14 +228,14 @@ export async function mondayRequest<T>(
         }
 
         // For other retryable errors, use exponential backoff
-        if (error.retryable && attempt < retryConfig.maxRetries) {
+        if (error.retryable && attempt < apiConfig.maxRetries) {
           const delay = calculateBackoff(
             attempt,
-            retryConfig.baseDelayMs,
-            retryConfig.maxDelayMs
+            apiConfig.baseDelayMs,
+            apiConfig.maxDelayMs
           );
           console.warn(
-            `Request failed (${error.message}). Retrying in ${Math.round(delay)}ms (${attempt + 1}/${retryConfig.maxRetries})...`
+            `Request failed (${error.message}). Retrying in ${Math.round(delay)}ms (${attempt + 1}/${apiConfig.maxRetries})...`
           );
           await sleep(delay);
           continue;
@@ -254,14 +261,14 @@ export async function mondayRequest<T>(
             (e as { message: string }).message.toLowerCase().includes("rate limit")
         );
 
-        if (isRateLimitError && attempt < retryConfig.maxRetries) {
+        if (isRateLimitError && attempt < apiConfig.maxRetries) {
           const delay = calculateBackoff(
             attempt,
-            retryConfig.baseDelayMs,
-            retryConfig.maxDelayMs
+            apiConfig.baseDelayMs,
+            apiConfig.maxDelayMs
           );
           console.warn(
-            `GraphQL rate limit error. Retrying in ${Math.round(delay)}ms (${attempt + 1}/${retryConfig.maxRetries})...`
+            `GraphQL rate limit error. Retrying in ${Math.round(delay)}ms (${attempt + 1}/${apiConfig.maxRetries})...`
           );
           await sleep(delay);
           continue;
@@ -285,19 +292,19 @@ export async function mondayRequest<T>(
         error instanceof TimeoutError ||
         error instanceof NetworkError
       ) {
-        if (attempt < retryConfig.maxRetries) {
+        if (attempt < apiConfig.maxRetries) {
           const delay = calculateBackoff(
             attempt,
-            retryConfig.baseDelayMs,
-            retryConfig.maxDelayMs
+            apiConfig.baseDelayMs,
+            apiConfig.maxDelayMs
           );
           console.warn(
-            `Network error: ${error.message}. Retrying in ${Math.round(delay)}ms (${attempt + 1}/${retryConfig.maxRetries})...`
+            `Network error: ${error.message}. Retrying in ${Math.round(delay)}ms (${attempt + 1}/${apiConfig.maxRetries})...`
           );
           await sleep(delay);
           continue;
         }
-        throw new NetworkError(`Network error after ${retryConfig.maxRetries} retries: ${error.message}`, error);
+        throw new NetworkError(`Network error after ${apiConfig.maxRetries} retries: ${error.message}`, error);
       }
 
       // Re-throw unknown errors
@@ -343,6 +350,117 @@ export async function fetchBoardStructure(boardId: string): Promise<MondayBoard>
   }
 
   return board;
+}
+
+/**
+ * Fetch all boards in the workspace (for discovery)
+ */
+export async function fetchAllBoards(): Promise<MondayBoard[]> {
+  const query = `
+    query {
+      boards(limit: 100) {
+        id
+        name
+        columns {
+          id
+          title
+          type
+          settings_str
+        }
+        groups {
+          id
+          title
+        }
+      }
+    }
+  `;
+
+  const result = await mondayRequest<{ data: { boards: MondayBoard[] } }>(query);
+  return result.data.boards || [];
+}
+
+export interface BoardItemsPage {
+  items: MondayItem[];
+  cursor: string | null;
+}
+
+/**
+ * Fetches items from a board with pagination support
+ */
+export async function fetchBoardItems(
+  boardId: string,
+  options: { limit?: number; cursor?: string } = {}
+): Promise<BoardItemsPage> {
+  const limit = options.limit ?? 50;
+
+  const query = `
+    query ($boardId: ID!, $limit: Int!, $cursor: String) {
+      boards(ids: [$boardId]) {
+        items_page(limit: $limit, cursor: $cursor) {
+          cursor
+          items {
+            id
+            name
+            group {
+              id
+              title
+            }
+            column_values {
+              id
+              text
+              ... on MirrorValue {
+                display_value
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const result = await mondayRequest<{
+    data: { boards: [{ items_page: { cursor: string | null; items: MondayItem[] } }] };
+  }>(query, {
+    boardId,
+    limit,
+    cursor: options.cursor ?? null,
+  });
+
+  const board = result.data.boards[0];
+  if (!board) {
+    throw new Error(`Board ${boardId} not found`);
+  }
+
+  return {
+    items: board.items_page.items,
+    cursor: board.items_page.cursor,
+  };
+}
+
+/**
+ * Fetches all items from a board (handles pagination automatically)
+ */
+export async function fetchAllBoardItems(
+  boardId: string,
+  options: { maxItems?: number; onProgress?: (count: number) => void } = {}
+): Promise<MondayItem[]> {
+  const maxItems = options.maxItems ?? 500;
+  const allItems: MondayItem[] = [];
+  let cursor: string | null = null;
+
+  do {
+    const page = await fetchBoardItems(boardId, { limit: 50, cursor: cursor ?? undefined });
+    allItems.push(...page.items);
+    cursor = page.cursor;
+
+    options.onProgress?.(allItems.length);
+
+    if (allItems.length >= maxItems) {
+      break;
+    }
+  } while (cursor);
+
+  return allItems.slice(0, maxItems);
 }
 
 export async function fetchItem(itemId: string): Promise<MondayItem> {

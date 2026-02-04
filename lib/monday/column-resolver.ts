@@ -13,18 +13,25 @@ export interface ResolvedColumns {
 // Resolution strategies
 // =============================================================================
 
+/**
+ * Resolves a column by its type (exact match).
+ * Returns the first column matching the specified type.
+ */
 function resolveByType(
   columns: MondayColumn[],
-  type: string,
-  allowedTypes?: string[]
+  type: string
 ): MondayColumn | undefined {
-  return columns.find((col) => {
-    if (col.type !== type) return false;
-    if (allowedTypes && !allowedTypes.includes(col.type)) return false;
-    return true;
-  });
+  return columns.find((col) => col.type === type);
 }
 
+/**
+ * Resolves a column by title pattern (regex match).
+ * Optionally filters by allowed column types.
+ *
+ * @param columns - Available columns to search
+ * @param pattern - Regex pattern to match against column titles (case-insensitive)
+ * @param allowedTypes - If provided, only match columns of these types
+ */
 function resolveByTitle(
   columns: MondayColumn[],
   pattern: string,
@@ -38,6 +45,9 @@ function resolveByTitle(
   });
 }
 
+/**
+ * Resolves a column by its exact ID.
+ */
 function resolveById(
   columns: MondayColumn[],
   id: string
@@ -64,7 +74,8 @@ export function resolveColumn(
       if (!resolution.type) {
         throw new Error("Column resolution by_type requires 'type' field");
       }
-      column = resolveByType(columns, resolution.type, resolution.types);
+      // Note: resolution.types is ignored for by_type strategy since we match exact type
+      column = resolveByType(columns, resolution.type);
       break;
 
     case "by_title":

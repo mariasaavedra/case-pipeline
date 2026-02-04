@@ -2,13 +2,17 @@
 // Tests for Monday.com API utilities
 // =============================================================================
 
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, mock, beforeEach, afterEach } from "bun:test";
 import {
   getLinkedItemIds,
   findColumnByType,
   findColumnByTitle,
   parseColumnLabels,
   getExistingLabelNames,
+  updateColumnValue,
+  updateLinkedItemColumn,
+  setApiToken,
+  MondayApiError,
 } from "./api";
 import type { MondayItem, MondayColumn } from "./types";
 
@@ -245,18 +249,169 @@ describe("getExistingLabelNames", () => {
 });
 
 // =============================================================================
-// API mutation tests (require mocking - structure for future)
+// API mutation tests
 // =============================================================================
 
+// Store original fetch to restore after tests
+const originalFetch = globalThis.fetch;
+
 describe("updateColumnValue", () => {
-  test.todo("formats value as JSON string", () => {});
-  test.todo("calls API with correct mutation structure", () => {});
-  test.todo("returns item ID on success", () => {});
-  test.todo("throws on API error", () => {});
+  beforeEach(() => {
+    setApiToken("test-token");
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("formats value as JSON string in request", async () => {
+    let capturedBody: any = null;
+
+    globalThis.fetch = mock(async (url: string, options: RequestInit) => {
+      capturedBody = JSON.parse(options.body as string);
+      return new Response(
+        JSON.stringify({
+          data: { change_column_value: { id: "123" } },
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+
+    await updateColumnValue("board1", "item1", "status_col", { label: "Done" });
+
+    expect(capturedBody.variables.value).toBe(JSON.stringify({ label: "Done" }));
+  });
+
+  test("calls API with correct mutation structure", async () => {
+    let capturedBody: any = null;
+
+    globalThis.fetch = mock(async (url: string, options: RequestInit) => {
+      capturedBody = JSON.parse(options.body as string);
+      return new Response(
+        JSON.stringify({
+          data: { change_column_value: { id: "123" } },
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+
+    await updateColumnValue("board123", "item456", "status_col", { label: "Working" });
+
+    expect(capturedBody.variables.boardId).toBe("board123");
+    expect(capturedBody.variables.itemId).toBe("item456");
+    expect(capturedBody.variables.columnId).toBe("status_col");
+    expect(capturedBody.query).toContain("change_column_value");
+  });
+
+  test("returns item ID on success", async () => {
+    globalThis.fetch = mock(async () => {
+      return new Response(
+        JSON.stringify({
+          data: { change_column_value: { id: "updated-item-789" } },
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await updateColumnValue("board1", "item1", "col1", "value");
+
+    expect(result.id).toBe("updated-item-789");
+  });
+
+  test("throws on API error", async () => {
+    globalThis.fetch = mock(async () => {
+      return new Response(
+        JSON.stringify({
+          errors: [{ message: "Invalid column ID" }],
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+
+    await expect(
+      updateColumnValue("board1", "item1", "invalid_col", "value")
+    ).rejects.toThrow();
+  });
 });
 
 describe("updateLinkedItemColumn", () => {
-  test.todo("updates all linked items by default", () => {});
-  test.todo("updates specific item when itemIndex provided", () => {});
-  test.todo("returns empty array when no linked items", () => {});
+  beforeEach(() => {
+    setApiToken("test-token");
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("updates all linked items by default", async () => {
+    const updateCalls: string[] = [];
+
+    globalThis.fetch = mock(async (url: string, options: RequestInit) => {
+      const body = JSON.parse(options.body as string);
+      updateCalls.push(body.variables.itemId);
+      return new Response(
+        JSON.stringify({
+          data: { change_column_value: { id: body.variables.itemId } },
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+
+    const results = await updateLinkedItemColumn(
+      mockItemWithRelation,
+      "contracts_relation",
+      "contracts_board",
+      "status_col",
+      { label: "Updated" }
+    );
+
+    expect(results).toHaveLength(3);
+    expect(updateCalls).toContain("111");
+    expect(updateCalls).toContain("222");
+    expect(updateCalls).toContain("333");
+  });
+
+  test("updates specific item when itemIndex provided", async () => {
+    const updateCalls: string[] = [];
+
+    globalThis.fetch = mock(async (url: string, options: RequestInit) => {
+      const body = JSON.parse(options.body as string);
+      updateCalls.push(body.variables.itemId);
+      return new Response(
+        JSON.stringify({
+          data: { change_column_value: { id: body.variables.itemId } },
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+
+    const results = await updateLinkedItemColumn(
+      mockItemWithRelation,
+      "contracts_relation",
+      "contracts_board",
+      "status_col",
+      { label: "Updated" },
+      { itemIndex: 1 }
+    );
+
+    expect(results).toHaveLength(1);
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0]).toBe("222"); // Second item (index 1)
+  });
+
+  test("returns empty array when no linked items", async () => {
+    globalThis.fetch = mock(async () => {
+      throw new Error("Should not be called");
+    }) as unknown as typeof fetch;
+
+    const results = await updateLinkedItemColumn(
+      mockItemWithoutRelation,
+      "contracts_relation",
+      "contracts_board",
+      "status_col",
+      { label: "Updated" }
+    );
+
+    expect(results).toEqual([]);
+  });
 });

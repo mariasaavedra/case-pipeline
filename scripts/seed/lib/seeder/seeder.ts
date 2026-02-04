@@ -104,12 +104,23 @@ export class Seeder {
     };
 
     try {
+      // Validate required board configs exist
+      const profilesBoardConfig = this.boardsConfig.profiles;
+      const contractsBoardConfig = this.boardsConfig.contracts;
+
+      if (!profilesBoardConfig) {
+        throw new Error("Missing 'profiles' board configuration in config/boards.yaml");
+      }
+      if (!contractsBoardConfig) {
+        throw new Error("Missing 'contracts' board configuration in config/boards.yaml");
+      }
+
       // Phase 1: Generate profiles
       console.log("\n[1/4] Generating profiles...");
       const profileFactory = new ProfileFactory(this.db, this.config.seed);
       const profiles = profileFactory.generateBatch(this.config.profileCount, {
         batchId,
-        boardConfig: this.boardsConfig.profiles,
+        boardConfig: profilesBoardConfig,
       });
       result.profiles.generated = profiles.length;
       console.log(`  Generated ${profiles.length} profiles`);
@@ -125,7 +136,7 @@ export class Seeder {
         });
         const contracts = contractFactory.generateBatchForProfile(count, {
           batchId,
-          boardConfig: this.boardsConfig.contracts,
+          boardConfig: contractsBoardConfig,
           profileLocalId: profile.localId,
           profileName: profile.name,
         });
@@ -157,7 +168,7 @@ export class Seeder {
 
       const profileSyncResult = await syncer.syncProfiles(
         batchId,
-        this.boardsConfig.profiles
+        profilesBoardConfig
       );
       result.profiles.synced = profileSyncResult.synced;
       result.profiles.failed = profileSyncResult.failed;
@@ -167,7 +178,7 @@ export class Seeder {
       console.log("\n[4/4] Syncing contracts to Monday.com...");
       const contractSyncResult = await syncer.syncContracts(
         batchId,
-        this.boardsConfig.contracts
+        contractsBoardConfig
       );
       result.contracts.synced = contractSyncResult.synced;
       result.contracts.failed = contractSyncResult.failed;
@@ -192,6 +203,17 @@ export class Seeder {
    * Syncs an existing batch
    */
   private async syncExistingBatch(batchId: number, startTime: number): Promise<SeederResult> {
+    // Validate required board configs exist
+    const profilesBoardConfig = this.boardsConfig.profiles;
+    const contractsBoardConfig = this.boardsConfig.contracts;
+
+    if (!profilesBoardConfig) {
+      throw new Error("Missing 'profiles' board configuration in config/boards.yaml");
+    }
+    if (!contractsBoardConfig) {
+      throw new Error("Missing 'contracts' board configuration in config/boards.yaml");
+    }
+
     const result: SeederResult = {
       batchId,
       profiles: { generated: 0, synced: 0, failed: 0 },
@@ -222,13 +244,13 @@ export class Seeder {
     });
 
     console.log("\n[1/2] Syncing profiles...");
-    const profileSyncResult = await syncer.syncProfiles(batchId, this.boardsConfig.profiles);
+    const profileSyncResult = await syncer.syncProfiles(batchId, profilesBoardConfig);
     result.profiles.synced = profileSyncResult.synced;
     result.profiles.failed = profileSyncResult.failed;
     console.log(`\n  Synced: ${profileSyncResult.synced}, Failed: ${profileSyncResult.failed}`);
 
     console.log("\n[2/2] Syncing contracts...");
-    const contractSyncResult = await syncer.syncContracts(batchId, this.boardsConfig.contracts);
+    const contractSyncResult = await syncer.syncContracts(batchId, contractsBoardConfig);
     result.contracts.synced = contractSyncResult.synced;
     result.contracts.failed = contractSyncResult.failed;
     console.log(`\n  Synced: ${contractSyncResult.synced}, Failed: ${contractSyncResult.failed}`);

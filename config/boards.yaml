@@ -2,8 +2,7 @@
 # Monday.com Board Configuration
 # =============================================================================
 #
-# Board IDs can be overridden via environment variables:
-#   PROFILES_BOARD_ID, CONTRACTS_BOARD_ID
+# Board IDs can be overridden via environment variables.
 #
 # Column resolution strategies:
 #   by_type  - Match by column type (email, phone, status, date, etc.)
@@ -14,92 +13,230 @@
 
 boards:
   profiles:
-    id: "${PROFILES_BOARD_ID:18397286934}"
-    name: "Client Profiles"
+    id: ${PROFILES_BOARD_ID:18397286934}
+    name: Client Profiles
     columns:
-      # Standard columns resolved by type
       email:
         resolve: by_type
         type: email
-
       phone:
         resolve: by_type
         type: phone
-
-      # Status/priority - try by title first, then by type
       priority:
         resolve: by_title
-        pattern: "priority"
-        types: [status, color]
+        pattern: priority
+        types:
+          - status
+          - color
         fallback:
           resolve: by_type
           type: status
-
-      # Date column
       next_interaction:
         resolve: by_type
         type: date
         fallback:
           resolve: by_title
-          pattern: "date|interaction|next"
-
-      # Notes/text column
+          pattern: date|interaction|next
       notes:
         resolve: by_title
-        pattern: "notes|text"
-        types: [text, long_text]
-
-      # Board relation to contracts
+        pattern: notes|text
+        types:
+          - text
+          - long_text
       contracts_relation:
         resolve: by_type
         type: board_relation
-
-      # Mirror columns - resolved by title pattern
       case_type_mirror:
         resolve: by_title
-        pattern: "case.*type|type"
-        types: [mirror, lookup]
-
+        pattern: case.*type|type
+        types:
+          - mirror
+          - lookup
       contract_value_mirror:
         resolve: by_title
-        pattern: "value|amount"
-        types: [mirror, lookup]
-
+        pattern: value|amount
+        types:
+          - mirror
+          - lookup
       contract_casetype_mirror:
         resolve: by_title
-        pattern: "casetype|case"
-        types: [mirror, lookup]
-
+        pattern: casetype|case
+        types:
+          - mirror
+          - lookup
       contract_id_mirror:
         resolve: by_title
-        pattern: "contract.*id|id"
-        types: [mirror, lookup]
-
+        pattern: contract.*id|id
+        types:
+          - mirror
+          - lookup
+      subitems:
+        resolve: by_type
+        type: subtasks
+      address:
+        resolve: by_title
+        pattern: address
+        types:
+          - text
+          - long_text
+      create_contract:
+        resolve: by_type
+        type: button
+      item_id:
+        resolve: by_type
+        type: item_id
+      paralegal:
+        resolve: by_type
+        type: people
+      file:
+        resolve: by_type
+        type: file
   contracts:
-    id: "${CONTRACTS_BOARD_ID:18397312752}"
-    name: "Contracts"
+    id: ${CONTRACTS_BOARD_ID:18397312752}
+    name: Contracts
     columns:
       case_type:
         resolve: by_title
-        pattern: "case|type"
-        types: [status, dropdown]
-
+        pattern: case|type
+        types:
+          - status
+          - dropdown
       value:
         resolve: by_type
         type: numbers
         fallback:
           resolve: by_title
-          pattern: "value|amount|price"
-
+          pattern: value|amount|price
       contract_id:
-        resolve: by_title
-        pattern: "contract.*id"
-        types: [text]
-
+        resolve: by_type
+        type: item_id
       status:
         resolve: by_type
         type: status
-
       profile_relation:
         resolve: by_type
         type: board_relation
+      pessoa:
+        resolve: by_type
+        type: people
+      created:
+        resolve: by_type
+        type: creation_log
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - mirror
+          - lookup
+      email:
+        resolve: by_title
+        pattern: email
+        types:
+          - mirror
+          - lookup
+      address:
+        resolve: by_title
+        pattern: address
+        types:
+          - mirror
+          - lookup
+  rfes:
+    id: "18398294203"
+    name: RFEs
+    columns:
+      person:
+        resolve: by_type
+        type: people
+      status:
+        resolve: by_type
+        type: status
+      date:
+        resolve: by_type
+        type: date
+      profiles:
+        resolve: by_type
+        type: board_relation
+      projects:
+        resolve: by_type
+        type: mirror
+  original_notices:
+    id: "18398294069"
+    name: Original Notices
+    columns:
+      person:
+        resolve: by_type
+        type: people
+      status:
+        resolve: by_type
+        type: status
+      date:
+        resolve: by_type
+        type: date
+  court_cases:
+    id: "18398293948"
+    name: Court Cases
+    columns:
+      person:
+        resolve: by_type
+        type: people
+      status:
+        resolve: by_type
+        type: status
+      date:
+        resolve: by_type
+        type: date
+  open_forms:
+    id: "18398293848"
+    name: Open Forms
+    columns:
+      status:
+        resolve: by_type
+        type: status
+      profiles:
+        resolve: by_title
+        pattern: profile
+        types:
+          - board_relation
+      person:
+        resolve: by_type
+        type: people
+      date:
+        resolve: by_type
+        type: date
+      contracts:
+        resolve: by_title
+        pattern: contract
+        types:
+          - board_relation
+      profiles_1:
+        resolve: by_type
+        type: mirror
+      forms:
+        resolve: by_type
+        type: dropdown
+  new_workflow:
+    id: "18397336357"
+    name: New workflow
+    columns:
+      person:
+        resolve: by_type
+        type: people
+      status:
+        resolve: by_type
+        type: status
+      date:
+        resolve: by_type
+        type: date
+  subelementos_de_profiles:
+    id: "18397292214"
+    name: Subelementos de Profiles
+    columns:
+      owner:
+        resolve: by_type
+        type: people
+      status:
+        resolve: by_type
+        type: status
+      date:
+        resolve: by_type
+        type: date

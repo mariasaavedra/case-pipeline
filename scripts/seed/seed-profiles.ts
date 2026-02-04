@@ -2,7 +2,7 @@
 // Seed Profiles - Creates random client profiles in Monday.com
 // =============================================================================
 
-import { PROFILES_BOARD_ID, PRIORITIES, DEFAULT_CONFIG } from "./lib/constants";
+import { PRIORITIES, DEFAULT_CONFIG, loadBoardIds } from "./lib/constants";
 import { generateProfileData, generatePriority } from "./lib/generators";
 import {
   setApiToken,
@@ -74,11 +74,19 @@ export interface SeedProfilesResult {
   board: { id: string; name: string };
 }
 
+export interface SeedProfilesOptions {
+  count?: number;
+  boardId?: string;
+}
+
 export async function seedProfiles(
-  count: number = DEFAULT_CONFIG.profileCount
+  options: SeedProfilesOptions = {}
 ): Promise<SeedProfilesResult> {
+  const count = options.count ?? DEFAULT_CONFIG.profileCount;
+  const boardId = options.boardId ?? (await loadBoardIds()).profilesBoardId;
+
   console.log("\n[1/3] Fetching profiles board structure...");
-  const board = await fetchBoardStructure(PROFILES_BOARD_ID);
+  const board = await fetchBoardStructure(boardId);
   console.log(`  Board: "${board.name}" (${board.columns.length} columns)`);
 
   // Log columns for debugging
@@ -97,7 +105,7 @@ export async function seedProfiles(
     findColumnByType(board.columns, "color") ||
     findColumnByTitle(board.columns, /status|priority/);
   if (statusCol) {
-    await ensureLabelsExist(PROFILES_BOARD_ID, statusCol, PRIORITIES);
+    await ensureLabelsExist(boardId, statusCol, PRIORITIES);
   }
 
   // Create profiles
@@ -107,7 +115,7 @@ export async function seedProfiles(
   for (let i = 0; i < count; i++) {
     const profile = generateProfileData();
     const columnValues = buildProfileColumnValues(board.columns, profile);
-    const item = await createItem(PROFILES_BOARD_ID, groupId, profile.name, columnValues);
+    const item = await createItem(boardId, groupId, profile.name, columnValues);
     results.push({ item, profile });
     console.log(`  Created: ${item.name} (ID: ${item.id})`);
   }
@@ -138,7 +146,7 @@ async function main() {
   console.log("Monday.com Profile Seeder");
   console.log("=".repeat(60));
 
-  const result = await seedProfiles(count);
+  const result = await seedProfiles({ count });
 
   const elapsed = (performance.now() - startTime).toFixed(0);
   console.log("\n" + "=".repeat(60));

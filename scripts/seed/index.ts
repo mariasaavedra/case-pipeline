@@ -99,7 +99,7 @@ async function main() {
 
   if (config.command === "profiles") {
     // Seed only profiles
-    const result = await seedProfiles(config.profileCount);
+    const result = await seedProfiles({ count: config.profileCount });
     profilesCreated = result.profiles.length;
   } else if (config.command === "contracts") {
     // Seed contracts for specific profile IDs
@@ -114,13 +114,13 @@ async function main() {
       name: `Profile ${id}`,
     }));
 
-    const result = await seedContracts(profiles, config.contractsPerProfile);
+    const result = await seedContracts({ profiles, contractsPerProfile: config.contractsPerProfile });
     contractsCreated = result.contracts.length;
   } else {
     // Seed both profiles and contracts
     console.log(`\nSeeding ${config.profileCount} profiles with ${config.contractsPerProfile.min}-${config.contractsPerProfile.max} contracts each...\n`);
 
-    const profilesResult = await seedProfiles(config.profileCount);
+    const profilesResult = await seedProfiles({ count: config.profileCount });
     profilesCreated = profilesResult.profiles.length;
 
     const profiles: ProfileReference[] = profilesResult.profiles.map((p) => ({
@@ -128,7 +128,7 @@ async function main() {
       name: p.item.name,
     }));
 
-    const contractsResult = await seedContracts(profiles, config.contractsPerProfile);
+    const contractsResult = await seedContracts({ profiles, contractsPerProfile: config.contractsPerProfile });
     contractsCreated = contractsResult.contracts.length;
   }
 

@@ -12,9 +12,19 @@ export interface BoardIds {
 
 export async function loadBoardIds(): Promise<BoardIds> {
   const boards = await loadBoardsConfig();
+  const profilesBoard = boards.profiles;
+  const contractsBoard = boards.contracts;
+
+  if (!profilesBoard) {
+    throw new Error("Missing 'profiles' board configuration in config/boards.yaml");
+  }
+  if (!contractsBoard) {
+    throw new Error("Missing 'contracts' board configuration in config/boards.yaml");
+  }
+
   return {
-    profilesBoardId: boards.profiles.id,
-    contractsBoardId: boards.contracts.id,
+    profilesBoardId: profilesBoard.id,
+    contractsBoardId: contractsBoard.id,
   };
 }
 

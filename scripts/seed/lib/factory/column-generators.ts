@@ -156,7 +156,10 @@ const columnGenerators: Record<string, ColumnGenerator> = {
     return { label: faker.helpers.arrayElement(labels) };
   },
 
-  color: (ctx) => columnGenerators.status(ctx),
+  color: (ctx) => {
+    const labels = ctx?.labels ?? PRIORITIES;
+    return { label: faker.helpers.arrayElement(labels) };
+  },
 
   date: (ctx) => {
     const minDays = ctx?.minDays ?? 1;
@@ -177,7 +180,12 @@ const columnGenerators: Record<string, ColumnGenerator> = {
     return generateNotes();
   },
 
-  long_text: (ctx) => columnGenerators.text(ctx),
+  long_text: (ctx) => {
+    if (ctx?.samples && ctx.samples.length > 0) {
+      return faker.helpers.arrayElement(ctx.samples);
+    }
+    return generateNotes();
+  },
 
   dropdown: (ctx) => {
     const labels = ctx?.labels ?? CASE_TYPES;

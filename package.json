@@ -1,8 +1,17 @@
 {
   "name": "case-pipeline",
-  "module": "index.ts",
+  "module": "cli.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "cli": "bun cli.ts",
+    "render": "bun cli.ts render",
+    "seed": "bun cli.ts seed",
+    "sync": "bun cli.ts sync",
+    "analyze": "bun cli.ts analyze",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.9.3"
