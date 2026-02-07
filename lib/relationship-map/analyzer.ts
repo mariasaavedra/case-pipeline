@@ -77,6 +77,11 @@ export function analyzeBoards(
         for (const linkedBoardId of linkedBoardIds) {
           const linkedBoardInfo = boardLookup.get(linkedBoardId);
 
+          // Skip connections to boards not in the config
+          if (options.trackedOnly && !linkedBoardInfo) {
+            continue;
+          }
+
           const connection: BoardConnection = {
             id: `${board.id}-${column.id}-${linkedBoardId}`,
             sourceBoard: {

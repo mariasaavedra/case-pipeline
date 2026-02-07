@@ -38,11 +38,6 @@ export interface MondayItem {
   column_values: MondayColumnValue[];
 }
 
-export interface CreatedItem {
-  id: string;
-  name: string;
-}
-
 export interface ColumnLabels {
   [key: string]: string;
 }

@@ -14,11 +14,12 @@ Thank you for working with our office. This letter confirms the contact informat
 
 Information on File
 
-Client Name: {{contact_name}}
+Client Name: {{contact_name}} (Client ID: {{item_id}})
 Email Address: {{email}}
 Phone Number: {{phone}}
 Priority Level: {{priority}}
 Next Scheduled Interaction: {{next_interaction}}
+Services Hired: {{contractCasetype}}
 
 Notes / Internal Summary
 

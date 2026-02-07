@@ -1,15 +1,17 @@
 # Case Pipeline
 
-A config-driven automation platform for Monday.com workflows, featuring document generation, test data seeding, and board relationship analysis.
+A config-driven read-only analysis and document generation platform for Monday.com, connected to a production immigration law workspace with 18 tracked boards.
+
+> **Branch: `read-only`** - All Monday.com write operations have been removed. This branch is safe to run against production data.
 
 ---
 
 ## Features
 
 - **Document Generation** - Create documents from Monday.com data using Handlebars templates with interactive profile selection
-- **Test Data Seeding** - Generate realistic test data with Faker.js and sync to Monday.com boards
+- **Test Data Seeding** - Generate realistic test data locally with Faker.js and SQLite (no Monday.com sync)
 - **Configuration Sync** - Keep board configurations in sync with Monday.com using YAML-based definitions
-- **Relationship Analysis** - Visualize board connections, mirror columns, and data flow
+- **Relationship Analysis** - Visualize board connections, mirror columns, and data flow with phantom board filtering
 
 ---
 
@@ -78,6 +80,9 @@ bun cli.ts sync --discover
 
 # Generate relationship map as markdown
 bun cli.ts analyze -o=docs/boards.md
+
+# Generate map showing only tracked board connections
+bun cli.ts analyze --tracked-only --main-board=profiles -o=docs/boards.md
 
 # Export relationship data as JSON
 bun cli.ts analyze --format=json -o=map.json
@@ -153,8 +158,8 @@ bun run analyze          # Shortcut for analyze command
 
 ## Documentation
 
-- [Architecture Guide](docs/ARCHITECTURE.md) - Detailed system design and patterns
-- [Boards Reference](output/boards-reference.md) - Generated board documentation
+- [Architecture Guide](docs/CONFIG-ARCHITECTURE.md) - Detailed system design and patterns
+- [Board Relationship Map](docs/boards.md) - Visual map of all 18 tracked boards and their connections
 
 ---
 

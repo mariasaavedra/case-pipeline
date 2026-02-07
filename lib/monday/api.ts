@@ -2,7 +2,7 @@
 // Monday.com API utilities
 // =============================================================================
 
-import type { MondayBoard, MondayColumn, MondayItem, CreatedItem, ColumnLabels } from "./types";
+import type { MondayBoard, MondayColumn, MondayItem, ColumnLabels } from "./types";
 
 // =============================================================================
 // Custom Error Types
@@ -512,70 +512,8 @@ export async function fetchItem(itemId: string): Promise<MondayItem> {
   return item;
 }
 
-export async function createItem(
-  boardId: string,
-  groupId: string,
-  itemName: string,
-  columnValues: Record<string, unknown>
-): Promise<CreatedItem> {
-  const query = `
-    mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON!) {
-      create_item(
-        board_id: $boardId
-        group_id: $groupId
-        item_name: $itemName
-        column_values: $columnValues
-      ) {
-        id
-        name
-      }
-    }
-  `;
-
-  const result = await mondayRequest<{ data: { create_item: CreatedItem } }>(query, {
-    boardId,
-    groupId,
-    itemName,
-    columnValues: JSON.stringify(columnValues),
-  });
-
-  return result.data.create_item;
-}
-
-export async function updateColumnValue(
-  boardId: string,
-  itemId: string,
-  columnId: string,
-  value: unknown
-): Promise<{ id: string }> {
-  const query = `
-    mutation ($boardId: ID!, $itemId: ID!, $columnId: String!, $value: JSON!) {
-      change_column_value(
-        board_id: $boardId
-        item_id: $itemId
-        column_id: $columnId
-        value: $value
-      ) {
-        id
-      }
-    }
-  `;
-
-  const result = await mondayRequest<{ data: { change_column_value: { id: string } } }>(
-    query,
-    {
-      boardId,
-      itemId,
-      columnId,
-      value: JSON.stringify(value),
-    }
-  );
-
-  return result.data.change_column_value;
-}
-
 // =============================================================================
-// Linked item utilities
+// Linked item utilities (read-only)
 // =============================================================================
 
 /**
@@ -590,52 +528,6 @@ export function getLinkedItemIds(
     return [];
   }
   return columnValue.linked_item_ids;
-}
-
-/**
- * Updates a column value on all linked items (or a specific one).
- * Useful for updating data on connected boards through a relation.
- *
- * @param item - The source item containing the board relation
- * @param relationColumnId - The column ID of the board_relation in the source item
- * @param targetBoardId - The board ID where linked items live
- * @param targetColumnId - The column ID to update on linked items
- * @param value - The new value (will be JSON stringified)
- * @param options.itemIndex - If provided, only update this specific linked item (0-indexed)
- */
-export async function updateLinkedItemColumn(
-  item: MondayItem,
-  relationColumnId: string,
-  targetBoardId: string,
-  targetColumnId: string,
-  value: unknown,
-  options?: { itemIndex?: number }
-): Promise<{ id: string }[]> {
-  const linkedIds = getLinkedItemIds(item, relationColumnId);
-
-  if (linkedIds.length === 0) {
-    return [];
-  }
-
-  // Filter to specific index if provided
-  const idsToUpdate =
-    options?.itemIndex !== undefined
-      ? [linkedIds[options.itemIndex]].filter((id): id is string => Boolean(id))
-      : linkedIds;
-
-  const results: { id: string }[] = [];
-
-  for (const linkedItemId of idsToUpdate) {
-    const result = await updateColumnValue(
-      targetBoardId,
-      linkedItemId,
-      targetColumnId,
-      value
-    );
-    results.push(result);
-  }
-
-  return results;
 }
 
 // =============================================================================
@@ -685,78 +577,3 @@ export function getExistingLabelNames(column: MondayColumn): string[] {
   return Object.values(labels);
 }
 
-function findNextLabelIndex(column: MondayColumn): number {
-  const labels = parseColumnLabels(column);
-  const indices = Object.keys(labels)
-    .map((k) => parseInt(k))
-    .filter((n) => !isNaN(n));
-  if (indices.length === 0) return 1;
-  return Math.max(...indices) + 1;
-}
-
-async function addStatusLabels(
-  boardId: string,
-  columnId: string,
-  column: MondayColumn,
-  newLabels: string[]
-): Promise<void> {
-  let nextIndex = findNextLabelIndex(column);
-
-  for (const label of newLabels) {
-    const query = `
-      mutation ($boardId: ID!, $columnId: String!, $value: String!) {
-        change_column_metadata(
-          board_id: $boardId
-          column_id: $columnId
-          column_property: labels
-          value: $value
-        ) {
-          id
-        }
-      }
-    `;
-
-    const labelValue = JSON.stringify({ labels: { [nextIndex]: label } });
-    await mondayRequest(query, {
-      boardId,
-      columnId,
-      value: labelValue,
-    });
-    nextIndex++;
-  }
-}
-
-export async function ensureLabelsExist(
-  boardId: string,
-  column: MondayColumn,
-  requiredLabels: string[]
-): Promise<void> {
-  // Dropdown columns auto-create labels when setting values
-  if (column.type === "dropdown") {
-    console.log(`  Skipping "${column.title}" (dropdown) - labels auto-create on use`);
-    return;
-  }
-
-  // Only handle status/color columns which require pre-created labels
-  if (column.type !== "status" && column.type !== "color") {
-    return;
-  }
-
-  const existingLabels = getExistingLabelNames(column);
-  const missingLabels = requiredLabels.filter(
-    (label) =>
-      !existingLabels.some(
-        (existing) => existing.toLowerCase() === label.toLowerCase()
-      )
-  );
-
-  if (missingLabels.length === 0) {
-    console.log(`  "${column.title}" - all labels exist`);
-    return;
-  }
-
-  console.log(
-    `  Adding missing labels to "${column.title}": ${missingLabels.join(", ")}`
-  );
-  await addStatusLabels(boardId, column.id, column, missingLabels);
-}

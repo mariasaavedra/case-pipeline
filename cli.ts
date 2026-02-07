@@ -18,7 +18,7 @@ const COMMANDS = {
     handler: renderCommand,
   },
   seed: {
-    description: "Seed test data to Monday.com boards",
+    description: "Generate test data to local SQLite database",
     handler: seedCommand,
   },
   sync: {

@@ -20,6 +20,7 @@ interface AnalyzeOptions {
   format: "markdown" | "json" | "mermaid";
   includeMirrors: boolean;
   mainBoard?: string;
+  trackedOnly: boolean;
 }
 
 // =============================================================================
@@ -30,6 +31,7 @@ function parseArgs(args: string[]): AnalyzeOptions {
   const options: AnalyzeOptions = {
     format: "markdown",
     includeMirrors: true,
+    trackedOnly: false,
   };
 
   for (const arg of args) {
@@ -51,6 +53,9 @@ function parseArgs(args: string[]): AnalyzeOptions {
     }
     if (arg.startsWith("--main-board=")) {
       options.mainBoard = arg.slice(13);
+    }
+    if (arg === "--tracked-only") {
+      options.trackedOnly = true;
     }
   }
 
@@ -76,6 +81,7 @@ Options:
   --output=<path>, -o=<path>   Output file path (default: stdout)
   --format=<type>              Output format: markdown, json, mermaid (default: markdown)
   --main-board=<key>           Specify main board by config key
+  --tracked-only               Only show connections between tracked boards
   --no-mirrors                 Exclude mirror column details
   --help, -h                   Show this help
 
@@ -85,6 +91,7 @@ Examples:
   bun cli.ts analyze -o=map.json               # Export as JSON
   bun cli.ts analyze --format=mermaid          # Generate Mermaid diagram
   bun cli.ts analyze --main-board=profiles     # Set profiles as main board
+  bun cli.ts analyze --tracked-only            # Filter out phantom boards
 `);
 }
 
@@ -124,6 +131,7 @@ export async function analyzeCommand(args: string[]): Promise<void> {
   // Analyze boards
   const data = analyzeBoards(boards, {
     mainBoardKey: options.mainBoard,
+    trackedOnly: options.trackedOnly,
   });
 
   // Generate output based on format

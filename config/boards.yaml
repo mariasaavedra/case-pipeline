@@ -12,231 +12,3031 @@
 # =============================================================================
 
 boards:
-  profiles:
-    id: ${PROFILES_BOARD_ID:18397286934}
-    name: Client Profiles
+  nvc_notices:
+    id: "18392490403"
+    name: NVC Notices
     columns:
-      email:
-        resolve: by_type
-        type: email
-      phone:
-        resolve: by_type
-        type: phone
-      priority:
-        resolve: by_title
-        pattern: priority
-        types:
-          - status
-          - color
-        fallback:
-          resolve: by_type
-          type: status
-      next_interaction:
-        resolve: by_type
-        type: date
-        fallback:
-          resolve: by_title
-          pattern: date|interaction|next
-      notes:
-        resolve: by_title
-        pattern: notes|text
-        types:
-          - text
-          - long_text
-      contracts_relation:
-        resolve: by_type
-        type: board_relation
-      case_type_mirror:
-        resolve: by_title
-        pattern: case.*type|type
-        types:
-          - mirror
-          - lookup
-      contract_value_mirror:
-        resolve: by_title
-        pattern: value|amount
-        types:
-          - mirror
-          - lookup
-      contract_casetype_mirror:
-        resolve: by_title
-        pattern: casetype|case
-        types:
-          - mirror
-          - lookup
-      contract_id_mirror:
-        resolve: by_title
-        pattern: contract.*id|id
-        types:
-          - mirror
-          - lookup
       subitems:
         resolve: by_type
         type: subtasks
-      address:
+      person:
+        resolve: by_type
+        type: people
+      profile:
+        resolve: by_type
+        type: board_relation
+      a_number:
         resolve: by_title
-        pattern: address
+        pattern: a.*number
+        types:
+          - mirror
+          - lookup
+      notice_type:
+        resolve: by_title
+        pattern: notice.*type
+        types:
+          - status
+      status:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      notice_date:
+        resolve: by_type
+        type: date
+      phone_number:
+        resolve: by_title
+        pattern: phone.*number
+        types:
+          - mirror
+          - lookup
+      e_mail:
+        resolve: by_title
+        pattern: e-mail
+        types:
+          - mirror
+          - lookup
+  appointments_wh:
+    id: "9283837796"
+    name: Appointments WH
+    columns:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      status:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      create_fee_k:
+        resolve: by_title
+        pattern: create.*fee.*k?
+        types:
+          - mirror
+          - lookup
+      case_type_s:
+        resolve: by_title
+        pattern: case.*type(s)
+        types:
+          - mirror
+          - lookup
+      attorney:
+        resolve: by_type
+        type: people
+      case_no:
+        resolve: by_title
+        pattern: case.*no.
+        types:
+          - mirror
+          - lookup
+      consult_date:
+        resolve: by_type
+        type: date
+      alien_number:
+        resolve: by_title
+        pattern: alien.*number
         types:
           - text
           - long_text
-      create_contract:
-        resolve: by_type
-        type: button
-      item_id:
-        resolve: by_type
-        type: item_id
-      paralegal:
-        resolve: by_type
-        type: people
-      file:
-        resolve: by_type
-        type: file
-  contracts:
-    id: ${CONTRACTS_BOARD_ID:18397312752}
-    name: Contracts
-    columns:
-      case_type:
+      date_of_birth:
         resolve: by_title
-        pattern: case|type
+        pattern: date.*of.*birth
         types:
-          - status
-          - dropdown
-      value:
-        resolve: by_type
-        type: numbers
-        fallback:
-          resolve: by_title
-          pattern: value|amount|price
-      contract_id:
-        resolve: by_type
-        type: item_id
-      status:
-        resolve: by_type
-        type: status
-      profile_relation:
-        resolve: by_type
-        type: board_relation
-      pessoa:
-        resolve: by_type
-        type: people
-      created:
-        resolve: by_type
-        type: creation_log
+          - text
+          - long_text
+      country_of_birth:
+        resolve: by_title
+        pattern: country.*of.*birth
+        types:
+          - text
+          - long_text
       phone:
         resolve: by_title
         pattern: phone
         types:
-          - mirror
-          - lookup
+          - text
+          - long_text
       email:
         resolve: by_title
         pattern: email
         types:
-          - mirror
-          - lookup
+          - text
+          - long_text
+      first_name:
+        resolve: by_title
+        pattern: first.*name
+        types:
+          - text
+          - long_text
+      last_name:
+        resolve: by_title
+        pattern: last.*name
+        types:
+          - text
+          - long_text
+      description:
+        resolve: by_title
+        pattern: description
+        types:
+          - text
+          - long_text
+      description_2:
+        resolve: by_title
+        pattern: description.*2
+        types:
+          - text
+          - long_text
       address:
         resolve: by_title
         pattern: address
         types:
+          - text
+          - long_text
+      monday_doc_v2:
+        resolve: by_type
+        type: direct_doc
+      consult_id:
+        resolve: by_type
+        type: item_id
+      consult_uuid:
+        resolve: by_title
+        pattern: consult.*uuid
+        types:
+          - text
+          - long_text
+      calendly:
+        resolve: by_title
+        pattern: calendly?
+        types:
+          - status
+      consult_created_on:
+        resolve: by_type
+        type: date
+      link_to_jail_intakes:
+        resolve: by_type
+        type: board_relation
+      e_file:
+        resolve: by_title
+        pattern: e-file
+        types:
           - mirror
           - lookup
-  rfes:
-    id: "18398294203"
-    name: RFEs
+      projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      fee_ks:
+        resolve: by_title
+        pattern: fee.*ks
+        types:
+          - mirror
+          - lookup
+      language:
+        resolve: by_title
+        pattern: language
+        types:
+          - status
+      profiles:
+        resolve: by_type
+        type: board_relation
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+        types:
+          - mirror
+          - lookup
+      files_p:
+        resolve: by_title
+        pattern: files.*(p)
+        types:
+          - mirror
+          - lookup
+      files_nm:
+        resolve: by_type
+        type: file
+      jail_intakes:
+        resolve: by_type
+        type: board_relation
+      link_to_jail_intakes_1:
+        resolve: by_type
+        type: board_relation
+      consult_sharepoint:
+        resolve: by_title
+        pattern: consult.*sharepoint
+        types:
+          - text
+          - long_text
+      files:
+        resolve: by_type
+        type: file
+      link_to_profiles:
+        resolve: by_type
+        type: board_relation
+      link_to_open_forms:
+        resolve: by_type
+        type: board_relation
+      intake_sheet:
+        resolve: by_type
+        type: doc
+      profile_id:
+        resolve: by_title
+        pattern: profile.*id
+        types:
+          - mirror
+          - lookup
+      consult_file:
+        resolve: by_title
+        pattern: consult.*file
+        types:
+          - mirror
+          - lookup
+      jail_intake_id:
+        resolve: by_title
+        pattern: jail.*intake.*id
+        types:
+          - mirror
+          - lookup
+  _fa_jail_intakes:
+    id: "8094412694"
+    name: "[FA] Jail Intakes"
     columns:
-      person:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      status:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      appt_with:
+        resolve: by_title
+        pattern: "appt.*with:"
+        types:
+          - status
+      create_appt:
+        resolve: by_type
+        type: button
+      intake_created_on:
+        resolve: by_type
+        type: date
+      detention_facility:
+        resolve: by_title
+        pattern: detention.*facility
+        types:
+          - status
+      jail:
+        resolve: by_title
+        pattern: jail
+        types:
+          - text
+          - long_text
+      det_facility:
+        resolve: by_title
+        pattern: det..*facility
+        types:
+          - status
+      consult_date:
+        resolve: by_type
+        type: date
+      alien_number:
+        resolve: by_title
+        pattern: alien.*number
+        types:
+          - text
+          - long_text
+      date_of_nta:
+        resolve: by_type
+        type: date
+      date_nta_docketed:
+        resolve: by_type
+        type: date
+      date_of_birth:
+        resolve: by_title
+        pattern: date.*of.*birth
+        types:
+          - text
+          - long_text
+      country_of_citizenship:
+        resolve: by_type
+        type: country
+      country_of_birth:
+        resolve: by_title
+        pattern: country.*of.*birth
+        types:
+          - text
+          - long_text
+      country_ies_of_citizenship:
+        resolve: by_title
+        pattern: country(ies).*of.*citizenship
+        types:
+          - text
+          - long_text
+      what_date_did_you_get_picked_up_by_ice:
+        resolve: by_type
+        type: date
+      is_this_your_first_interaction_with_ice:
+        resolve: by_title
+        pattern: is.*this.*your.*first.*interaction.*with.*ice?
+        types:
+          - status
+      have_you_seen_an_immigration_judge:
+        resolve: by_title
+        pattern: have.*you.*seen.*an.*immigration.*judge?
+        types:
+          - status
+      when_is_your_next_hearing:
+        resolve: by_type
+        type: date
+      have_you_ever_been_ordered_removed:
+        resolve: by_title
+        pattern: have.*you.*ever.*been.*ordered.*removed?
+        types:
+          - status
+      have_you_ever_been_back_to_your_country_since_this_interaction_with_ice:
+        resolve: by_title
+        pattern: have.*you.*ever.*been.*back.*to.*your.*country.*since.*this.*interaction.*with.*ice?
+        types:
+          - status
+      do_you_have_someone_to_pay_the_consult_fee:
+        resolve: by_title
+        pattern: do.*you.*have.*someone.*to.*pay.*the.*consult.*fee?
+        types:
+          - status
+      point_of_contact_phone_number:
+        resolve: by_type
+        type: phone
+      do_you_give_permission_to_speak_to_this_person_about_details_of_your_case:
+        resolve: by_title
+        pattern: do.*you.*give.*permission.*to.*speak.*to.*this.*person.*about.*details.*of.*your.*case?
+        types:
+          - status
+      have_you_ever_been_arrested:
+        resolve: by_title
+        pattern: have.*you.*ever.*been.*arrested?
+        types:
+          - status
+      why_did_ice_pick_you_up:
+        resolve: by_title
+        pattern: why.*did.*ice.*pick.*you.*up?
+        types:
+          - text
+          - long_text
+      have_you_ever_plead_guilty_in_front_of_a_judge:
+        resolve: by_title
+        pattern: have.*you.*ever.*plead.*guilty.*in.*front.*of.*a.*judge?
+        types:
+          - status
+      did_you_pay_any_fines:
+        resolve: by_title
+        pattern: did.*you.*pay.*any.*fines?
+        types:
+          - status
+      poc_name_and_relationship_with_detained:
+        resolve: by_title
+        pattern: "poc.*name.*and.*relationship.*with.*detained:"
+        types:
+          - text
+          - long_text
+      nta:
+        resolve: by_type
+        type: file
+      relationship:
+        resolve: by_title
+        pattern: relationship
+        types:
+          - dropdown
+      callers_name:
+        resolve: by_title
+        pattern: callers.*name
+        types:
+          - text
+          - long_text
+      poc_phone:
+        resolve: by_title
+        pattern: poc.*phone
+        types:
+          - text
+          - long_text
+      poc_email:
+        resolve: by_title
+        pattern: poc.*email
+        types:
+          - text
+          - long_text
+      description:
+        resolve: by_title
+        pattern: description
+        types:
+          - text
+          - long_text
+      language:
+        resolve: by_title
+        pattern: language
+        types:
+          - status
+      have_you_even_been_removed:
+        resolve: by_title
+        pattern: have.*you.*even.*been.*removed?
+        types:
+          - status
+      monday_doc_v2:
+        resolve: by_type
+        type: direct_doc
+      in_contact_with:
+        resolve: by_title
+        pattern: in.*contact.*with
+        types:
+          - dropdown
+      racial_profiling:
+        resolve: by_title
+        pattern: racial.*profiling
+        types:
+          - status
+      arrest_warrant:
+        resolve: by_title
+        pattern: arrest.*warrant
+        types:
+          - status
+      circumstances_of_detention:
+        resolve: by_title
+        pattern: circumstances.*of.*detention
+        types:
+          - text
+          - long_text
+      immigration_history:
+        resolve: by_title
+        pattern: immigration.*history
+        types:
+          - dropdown
+      criminal_history_additional_details:
+        resolve: by_title
+        pattern: criminal.*history.*additional.*details
+        types:
+          - text
+          - long_text
+      criminal_history:
+        resolve: by_title
+        pattern: criminal.*history
+        types:
+          - status
+      which_criminal_history:
+        resolve: by_title
+        pattern: which.*criminal.*history
+        types:
+          - dropdown
+      attorney_phone_number:
+        resolve: by_type
+        type: phone
+      attorney_name:
+        resolve: by_title
+        pattern: attorney.*name
+        types:
+          - text
+          - long_text
+      do_you_have_an_attorney:
+        resolve: by_title
+        pattern: do.*you.*have.*an.*attorney?
+        types:
+          - status
+      authority_that_made_the_arrest:
+        resolve: by_title
+        pattern: authority.*that.*made.*the.*arrest
+        types:
+          - status
+      last_interaction_date:
+        resolve: by_type
+        type: date
+      point_of_contact_name_and_relationship:
+        resolve: by_title
+        pattern: point.*of.*contact.*name.*and.*relationship
+        types:
+          - text
+          - long_text
+      has_any_illnesses:
+        resolve: by_title
+        pattern: has.*any.*illnesses
+        types:
+          - text
+          - long_text
+      require_medication:
+        resolve: by_title
+        pattern: require.*medication
+        types:
+          - text
+          - long_text
+      link_to_court_cases:
+        resolve: by_type
+        type: board_relation
+      any_prior_contact_with_immigration:
+        resolve: by_title
+        pattern: any.*prior.*contact.*with.*immigration
+        types:
+          - text
+          - long_text
+      have_you_ever_left_the_u_s:
+        resolve: by_title
+        pattern: have.*you.*ever.*left.*the.*u.s?
+        types:
+          - status
+      date_left_the_u_s:
+        resolve: by_title
+        pattern: date.*left.*the.*u.s.
+        types:
+          - text
+          - long_text
+      date_return_the_u_s:
+        resolve: by_title
+        pattern: date.*return.*the.*u.s.
+        types:
+          - text
+          - long_text
+      reason_for_leaving_the_u_s:
+        resolve: by_title
+        pattern: reason.*for.*leaving.*the.*u.s.
+        types:
+          - text
+          - long_text
+      detention_facility_other:
+        resolve: by_title
+        pattern: detention.*facility.*(other)
+        types:
+          - text
+          - long_text
+      driver_s_license:
+        resolve: by_title
+        pattern: driver's.*license
+        types:
+          - status
+      next_immigration_court_date:
+        resolve: by_title
+        pattern: "next.*immigration.*court.*date:"
+        types:
+          - text
+          - long_text
+      last_updated:
+        resolve: by_type
+        type: last_updated
+      intake_created:
+        resolve: by_type
+        type: date
+      profiles:
+        resolve: by_type
+        type: mirror
+      x_appointments:
+        resolve: by_type
+        type: board_relation
+      consult_date_1:
+        resolve: by_type
+        type: date
+      created_by:
+        resolve: by_type
+        type: people
+      mx_consulate_intake:
+        resolve: by_type
+        type: doc
+      files:
+        resolve: by_type
+        type: file
+      jail_intake_id:
+        resolve: by_type
+        type: item_id
+      state_of_origin_mexico:
+        resolve: by_title
+        pattern: state.*of.*origin.*(mexico)
+        types:
+          - text
+          - long_text
+      children_how_many_birthplaces_ages:
+        resolve: by_title
+        pattern: children?.*(how.*many?.*birthplaces,.*ages)
+        types:
+          - text
+          - long_text
+      educational_professional_background:
+        resolve: by_title
+        pattern: educational.*/.*professional.*background
+        types:
+          - text
+          - long_text
+      industry:
+        resolve: by_title
+        pattern: industry
+        types:
+          - dropdown
+      education_level:
+        resolve: by_title
+        pattern: education.*level
+        types:
+          - dropdown
+      english_proficiency:
+        resolve: by_title
+        pattern: english.*proficiency
+        types:
+          - dropdown
+      indigenous_language_spoken:
+        resolve: by_title
+        pattern: indigenous.*language.*spoken
+        types:
+          - text
+          - long_text
+      speaks_an_indigenous_language:
+        resolve: by_title
+        pattern: speaks.*an.*indigenous.*language
+        types:
+          - status
+      time_in_the_u_s:
+        resolve: by_title
+        pattern: time.*in.*the.*u.s.
+        types:
+          - status
+      immigration_status:
+        resolve: by_title
+        pattern: immigration.*status
+        types:
+          - status
+      how_did_you_enter_to_the_u_s:
+        resolve: by_title
+        pattern: how.*did.*you.*enter.*to.*the.*u.s.?
+        types:
+          - status
+      city_and_state_of_detention:
+        resolve: by_title
+        pattern: city.*and.*state.*of.*detention
+        types:
+          - text
+          - long_text
+      place_of_detention:
+        resolve: by_title
+        pattern: place.*of.*detention
+        types:
+          - status
+      place_of_detention_other:
+        resolve: by_title
+        pattern: place.*of.*detention.*(other)
+        types:
+          - text
+          - long_text
+      time_range_of_detention:
+        resolve: by_title
+        pattern: time.*range.*of.*detention
+        types:
+          - status
+  _na_originals_cards_notices:
+    id: "8025618300"
+    name: "[NA] Originals + Cards + Notices"
+    columns:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      sherpa:
         resolve: by_type
         type: people
       status:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      date_received:
         resolve: by_type
-        type: status
-      date:
+        type: date
+      what_we_have:
+        resolve: by_type
+        type: dropdown
+      cyf_appt_date:
         resolve: by_type
         type: date
       profiles:
         resolve: by_type
         type: board_relation
       projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      fee_ks:
+        resolve: by_title
+        pattern: fee.*ks
+        types:
+          - mirror
+          - lookup
+      e_mail:
+        resolve: by_title
+        pattern: e-mail
+        types:
+          - mirror
+          - lookup
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - mirror
+          - lookup
+      phone_number:
+        resolve: by_title
+        pattern: phone.*number
+        types:
+          - mirror
+          - lookup
+      language:
+        resolve: by_title
+        pattern: language
+        types:
+          - mirror
+          - lookup
+      profile_status:
+        resolve: by_title
+        pattern: profile.*status
+        types:
+          - mirror
+          - lookup
+      address:
+        resolve: by_title
+        pattern: address
+        types:
+          - mirror
+          - lookup
+      last_updated:
         resolve: by_type
-        type: mirror
-  original_notices:
-    id: "18398294069"
-    name: Original Notices
+        type: last_updated
+      cd_open_forms:
+        resolve: by_type
+        type: board_relation
+      receipt_number:
+        resolve: by_type
+        type: text
+      received_priority_date:
+        resolve: by_type
+        type: date
+      form:
+        resolve: by_title
+        pattern: form
+        types:
+          - mirror
+          - lookup
+      receipt_type:
+        resolve: by_title
+        pattern: receipt.*type
+        types:
+          - status
+      link_to_cd_open_forms:
+        resolve: by_type
+        type: board_relation
+      e_file:
+        resolve: by_title
+        pattern: e-file
+        types:
+          - mirror
+          - lookup
+      creation_log:
+        resolve: by_type
+        type: creation_log
+      court_cases:
+        resolve: by_type
+        type: board_relation
+      link_to_duplicate_of_mail_list:
+        resolve: by_type
+        type: board_relation
+  foias:
+    id: "7862404612"
+    name: FOIAs
     columns:
-      person:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      type:
+        resolve: by_type
+        type: tags
+      paralegal:
         resolve: by_type
         type: people
       status:
         resolve: by_type
         type: status
-      date:
+      timeline:
+        resolve: by_type
+        type: timeline
+      link_to_fee_ks:
+        resolve: by_type
+        type: board_relation
+      profile:
+        resolve: by_type
+        type: board_relation
+  _cd_open_forms:
+    id: "8025566986"
+    name: "[CD] Open Forms"
+    columns:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      target_date:
         resolve: by_type
         type: date
-  court_cases:
-    id: "18398293948"
-    name: Court Cases
-    columns:
-      person:
+      a_number:
+        resolve: by_title
+        pattern: a.*number
+        types:
+          - mirror
+          - lookup
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+      forms:
         resolve: by_type
-        type: people
+        type: tags
+      nvc_case:
+        resolve: by_title
+        pattern: nvc.*case?
+        types:
+          - status
+      ds_160_or_ds_260:
+        resolve: by_title
+        pattern: ds-160.*or.*ds-260?
+        types:
+          - status
+      nvc_notice_type:
+        resolve: by_title
+        pattern: nvc.*notice.*type
+        types:
+          - status
+      nvc_notice:
+        resolve: by_type
+        type: file
+      nvc_case_id:
+        resolve: by_title
+        pattern: nvc.*case.*id.*#
+        types:
+          - text
+          - long_text
+      invoice_id:
+        resolve: by_title
+        pattern: invoice.*id.*#
+        types:
+          - text
+          - long_text
+      sponsor_name:
+        resolve: by_title
+        pattern: sponsor.*name
+        types:
+          - text
+          - long_text
+      case_no:
+        resolve: by_title
+        pattern: case.*no.
+        types:
+          - mirror
+          - lookup
+      attorney:
+        resolve: by_title
+        pattern: attorney
       status:
-        resolve: by_type
-        type: status
-      date:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      interview_status:
+        resolve: by_title
+        pattern: interview.*status
+        types:
+          - status
+      forms_sent_date:
         resolve: by_type
         type: date
-  open_forms:
-    id: "18398293848"
-    name: Open Forms
-    columns:
-      status:
+      location:
         resolve: by_type
-        type: status
+        type: dropdown
+      assignment_date:
+        resolve: by_type
+        type: date
+      on_open_forms_since:
+        resolve: by_type
+        type: creation_log
+      translations:
+        resolve: by_title
+        pattern: translations?
+        types:
+          - status
+      urgent:
+        resolve: by_title
+        pattern: urgent?
+        types:
+          - status
+      fee_ks:
+        resolve: by_type
+        type: board_relation
       profiles:
+        resolve: by_type
+        type: board_relation
+      e_file:
+        resolve: by_title
+        pattern: e-file
+        types:
+          - mirror
+          - lookup
+      forms_appt_date:
+        resolve: by_type
+        type: date
+      link_to_appeals:
+        resolve: by_type
+        type: board_relation
+      monday_doc_v2:
+        resolve: by_type
+        type: direct_doc
+      hire_date:
+        resolve: by_type
+        type: date
+      interview_date:
+        resolve: by_type
+        type: date
+      north_pole_until:
+        resolve: by_type
+        type: date
+      consult:
+        resolve: by_title
+        pattern: consult
+        types:
+          - mirror
+          - lookup
+      project:
+        resolve: by_title
+        pattern: project
+        types:
+          - mirror
+          - lookup
+      fee_ks_1:
+        resolve: by_title
+        pattern: fee.*ks
+        types:
+          - mirror
+          - lookup
+      e_mail:
+        resolve: by_title
+        pattern: e-mail
+        types:
+          - mirror
+          - lookup
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - mirror
+          - lookup
+      ff:
+        resolve: by_title
+        pattern: ff
+        types:
+          - mirror
+          - lookup
+      profile:
         resolve: by_title
         pattern: profile
         types:
-          - board_relation
-      person:
+          - mirror
+          - lookup
+      profile_status:
+        resolve: by_title
+        pattern: profile.*status
+        types:
+          - mirror
+          - lookup
+      file_copy:
         resolve: by_type
-        type: people
-      date:
+        type: file
+      calendaring:
+        resolve: by_type
+        type: board_relation
+      interview_location:
+        resolve: by_title
+        pattern: interview.*location
+        types:
+          - mirror
+          - lookup
+      interview_date_calendaring:
+        resolve: by_title
+        pattern: interview.*date.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      received_priority_date:
         resolve: by_type
         type: date
-      contracts:
+      ps_deadline:
         resolve: by_title
-        pattern: contract
+        pattern: ps.*deadline
         types:
-          - board_relation
-      profiles_1:
+          - mirror
+          - lookup
+      receipt_status:
+        resolve: by_title
+        pattern: receipt.*status
+        types:
+          - status
+      receipt_no:
+        resolve: by_title
+        pattern: receipt.*no.
+        types:
+          - text
+          - long_text
+      cvp_status:
+        resolve: by_title
+        pattern: cvp.*status
+        types:
+          - status
+      documentarily_qualified_date:
         resolve: by_type
-        type: mirror
-      forms:
+        type: date
+      ff_from_fee_k:
+        resolve: by_title
+        pattern: ff.*from.*fee.*k
+        types:
+          - mirror
+          - lookup
+      ff_1:
+        resolve: by_type
+        type: numbers
+      results:
+        resolve: by_title
+        pattern: results
+        types:
+          - status
+      mail_list_date:
+        resolve: by_type
+        type: date
+      link_to_calendaring:
+        resolve: by_type
+        type: board_relation
+      link_to_nvc:
+        resolve: by_type
+        type: board_relation
+  motions:
+    id: "7864109176"
+    name: Motions
+    columns:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      profile:
+        resolve: by_type
+        type: board_relation
+      court_case:
+        resolve: by_type
+        type: board_relation
+      motion:
+        resolve: by_type
+        type: tags
+      attorney:
+        resolve: by_title
+        pattern: attorney
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+      status:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      hearing_type:
+        resolve: by_title
+        pattern: hearing.*type
+        types:
+          - status
+      next_hearing_date:
+        resolve: by_type
+        type: date
+      timeline:
+        resolve: by_type
+        type: timeline
+      link_to_fee_ks:
+        resolve: by_type
+        type: board_relation
+  court_cases:
+    id: "8025546360"
+    name: Court Cases
+    columns:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      attorney:
+        resolve: by_title
+        pattern: attorney
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+      relief:
+        resolve: by_title
+        pattern: relief
+      country:
+        resolve: by_title
+        pattern: country
+        types:
+          - mirror
+          - lookup
+      relief_for_oppositions:
+        resolve: by_title
+        pattern: relief.*for.*oppositions
+        types:
+          - dropdown
+      rider:
+        resolve: by_title
+        pattern: rider?
+        types:
+          - status
+      motions_connected:
+        resolve: by_title
+        pattern: motions.*-.*connected
+        types:
+          - mirror
+          - lookup
+      motions:
+        resolve: by_title
+        pattern: motions
+      our_motions:
+        resolve: by_type
+        type: file
+      mtn_filed:
+        resolve: by_type
+        type: date
+      nta_date:
+        resolve: by_type
+        type: date
+      nta:
+        resolve: by_type
+        type: file
+      nta_validity:
+        resolve: by_title
+        pattern: nta.*validity
+        types:
+          - status
+      entry:
+        resolve: by_title
+        pattern: entry
+        types:
+          - status
+      i213:
+        resolve: by_type
+        type: file
+      a_number:
+        resolve: by_title
+        pattern: a-number
+        types:
+          - mirror
+          - lookup
+      e_file:
+        resolve: by_title
+        pattern: e-file
+        types:
+          - mirror
+          - lookup
+      hearing_type:
+        resolve: by_title
+        pattern: hearing.*type
+        types:
+          - status
+      year:
+        resolve: by_title
+        pattern: year
+        types:
+          - status
+      judge_connected:
+        resolve: by_title
+        pattern: judge.*-.*connected
+        types:
+          - mirror
+          - lookup
+      hearing_date_calendaring:
+        resolve: by_title
+        pattern: hearing.*date.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      x_next_hearing_date:
+        resolve: by_type
+        type: date
+      x_calendar_connected:
+        resolve: by_title
+        pattern: x.*calendar.*-.*connected
+        types:
+          - status
+      calendaring:
+        resolve: by_type
+        type: board_relation
+      deadline_on_cal_calendaring:
+        resolve: by_type
+        type: board_relation
+      calendaring_status_from_calendaring:
+        resolve: by_title
+        pattern: calendaring.*status.*-.*from.*calendaring
+        types:
+          - mirror
+          - lookup
+      deadline_list:
+        resolve: by_title
+        pattern: deadline.*list
+        types:
+          - mirror
+          - lookup
+      month:
+        resolve: by_title
+        pattern: month
+        types:
+          - status
+      hearing_notice:
+        resolve: by_type
+        type: file
+      judge_sched_order:
+        resolve: by_type
+        type: file
+      method:
+        resolve: by_title
+        pattern: method
+        types:
+          - status
+      webexnotice:
+        resolve: by_type
+        type: file
+      hearing_status:
+        resolve: by_title
+        pattern: hearing.*status
+        types:
+          - status
+      deadline_status:
+        resolve: by_title
+        pattern: deadline.*status
+        types:
+          - status
+      deadline_type:
+        resolve: by_title
+        pattern: deadline.*type
+        types:
+          - status
+      ij:
+        resolve: by_title
+        pattern: ij
+        types:
+          - text
+          - long_text
+      written_court_calendaring:
+        resolve: by_title
+        pattern: written.*-.*court.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      due_date_court_calendaring:
+        resolve: by_title
+        pattern: due.*date.*-.*court.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      warning_court_calendaring:
+        resolve: by_title
+        pattern: warning.*-.*court.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      motion_to_recal:
+        resolve: by_title
+        pattern: motion.*to.*recal?
+        types:
+          - status
+      responding_to_mtrc:
+        resolve: by_title
+        pattern: responding.*to.*mtrc?
+        types:
+          - status
+      appt_priority:
+        resolve: by_title
+        pattern: appt..*priority
+        types:
+          - status
+      ecas_or_eservice:
+        resolve: by_title
+        pattern: ecas.*or.*eservice
+        types:
+          - status
+      seeking:
+        resolve: by_title
+        pattern: seeking
+        types:
+          - status
+      criminal:
+        resolve: by_title
+        pattern: criminal
+        types:
+          - dropdown
+      ina_charge:
+        resolve: by_title
+        pattern: ina.*charge
+        types:
+          - dropdown
+      case_strat:
+        resolve: by_title
+        pattern: "case.*strat:"
+        types:
+          - text
+          - long_text
+      filing_history:
+        resolve: by_title
+        pattern: filing.*history
+      trial_file:
+        resolve: by_type
+        type: link
+      tf_status:
+        resolve: by_title
+        pattern: tf.*status
+        types:
+          - status
+      case_prep_status:
+        resolve: by_title
+        pattern: case.*prep.*status
+        types:
+          - status
+      pendings:
+        resolve: by_title
+        pattern: pendings?
+        types:
+          - status
+      filings_overview:
+        resolve: by_title
+        pattern: filings.*overview
+        types:
+          - dropdown
+      needs:
+        resolve: by_title
+        pattern: needs
+        types:
+          - dropdown
+      lm_fees_needs:
+        resolve: by_title
+        pattern: lm.*fees.*-.*needs
+        types:
+          - dropdown
+      strat_meeting_notes:
+        resolve: by_title
+        pattern: strat.*meeting.*notes
+        types:
+          - text
+          - long_text
+      to_do_assigned:
+        resolve: by_type
+        type: date
+      to_do_due:
+        resolve: by_type
+        type: date
+      to_do_assignee:
+        resolve: by_title
+        pattern: to-do.*assignee
+      receptionist:
+        resolve: by_title
+        pattern: receptionist
+      to_do_done:
+        resolve: by_type
+        type: checkbox
+      to_do_deadlines_list_update_mr_comment:
+        resolve: by_title
+        pattern: to.*do.*-.*deadlines.*list.*update.*-.*mr.*comment
+        types:
+          - mirror
+          - lookup
+      para_action:
+        resolve: by_title
+        pattern: para.*action
+        types:
+          - status
+      client_notification:
+        resolve: by_title
+        pattern: client.*notification
+        types:
+          - status
+      client_action:
+        resolve: by_title
+        pattern: client.*action
+        types:
+          - status
+      client_communication:
+        resolve: by_title
+        pattern: client.*communication
+        types:
+          - status
+      life_updates:
+        resolve: by_title
+        pattern: life.*updates
+      language:
+        resolve: by_title
+        pattern: language
+        types:
+          - status
+      appointments:
+        resolve: by_title
+        pattern: appointments
+        types:
+          - status
+      recept_appt_sched_note:
+        resolve: by_title
+        pattern: recept..*appt.*sched..*note
+        types:
+          - text
+          - long_text
+      attorney_notes:
+        resolve: by_title
+        pattern: attorney.*notes
+      last_meeting_w_atty:
+        resolve: by_type
+        type: date
+      initial_meeting:
+        resolve: by_type
+        type: date
+      to_do_per_atty:
+        resolve: by_title
+        pattern: to.*do.*-.*per.*atty
+        types:
+          - dropdown
+      evid_requested:
+        resolve: by_title
+        pattern: evid..*requested
+        types:
+          - text
+          - long_text
+      evid_deadline:
+        resolve: by_type
+        type: date
+      tp_1:
+        resolve: by_type
+        type: date
+      tp_2:
+        resolve: by_type
+        type: date
+      tp_3:
+        resolve: by_type
+        type: date
+      hearing_fees:
+        resolve: by_title
+        pattern: hearing.*fees
+        types:
+          - status
+      payment_history_log:
+        resolve: by_title
+        pattern: payment.*history.*log
+      payment_ref:
+        resolve: by_title
+        pattern: payment.*ref.
+        types:
+          - text
+          - long_text
+      fees_quoted:
+        resolve: by_title
+        pattern: fees.*quoted
+        types:
+          - text
+          - long_text
+      fees_deadline:
+        resolve: by_type
+        type: date
+      fees_deadline_1:
+        resolve: by_title
+        pattern: fees.*deadline
+        types:
+          - text
+          - long_text
+      mh_fees_owed:
+        resolve: by_type
+        type: numbers
+      master_fees_due_on_calendaring:
+        resolve: by_title
+        pattern: master.*fees.*due.*on:.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      mh_fees_paid:
+        resolve: by_type
+        type: date
+      tp_fees_owed:
+        resolve: by_type
+        type: numbers
+      tp_fees_due_calendaring:
+        resolve: by_title
+        pattern: tp.*fees.*due:.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      tp_fees_paid:
+        resolve: by_type
+        type: date
+      trial_fees_owed:
+        resolve: by_type
+        type: numbers
+      trial_fees_due_on_calendaring:
+        resolve: by_title
+        pattern: trial.*fees.*due.*on:.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      trial_fees_paid:
+        resolve: by_type
+        type: date
+      pending_order:
+        resolve: by_title
+        pattern: pending.*order?
+        types:
+          - status
+      ordered:
+        resolve: by_title
+        pattern: "ordered:"
+        types:
+          - dropdown
+      warning_due:
+        resolve: by_type
+        type: date
+      x_due_date:
+        resolve: by_type
+        type: date
+      prep_time_stage:
+        resolve: by_title
+        pattern: prep.*time.*stage
+        types:
+          - status
+      atty_brief_mtn:
+        resolve: by_title
+        pattern: atty.*brief.*/.*mtn
+        types:
+          - status
+      brief:
+        resolve: by_type
+        type: file
+      brief_filed_on:
+        resolve: by_type
+        type: date
+      translations:
+        resolve: by_title
+        pattern: translations?
+        types:
+          - status
+      e28_s:
+        resolve: by_title
+        pattern: e28's
+        types:
+          - status
+      written_pleadings:
+        resolve: by_title
+        pattern: written.*pleadings
+        types:
+          - status
+      wps:
+        resolve: by_type
+        type: file
+      wps_due:
+        resolve: by_type
+        type: date
+      wps_filed_on:
+        resolve: by_type
+        type: date
+      app_for_relief:
+        resolve: by_title
+        pattern: app..*for.*relief
+        types:
+          - status
+      app:
+        resolve: by_type
+        type: file
+      app_due:
+        resolve: by_type
+        type: date
+      app_filed:
+        resolve: by_type
+        type: date
+      receipt_notice:
+        resolve: by_title
+        pattern: receipt.*notice
+        types:
+          - status
+      rn:
+        resolve: by_type
+        type: file
+      rn_filed:
+        resolve: by_type
+        type: date
+      fingerprints:
+        resolve: by_title
+        pattern: fingerprints
+        types:
+          - status
+      fps:
+        resolve: by_type
+        type: file
+      fp_date:
+        resolve: by_type
+        type: date
+      updated_app:
+        resolve: by_title
+        pattern: updated.*app
+        types:
+          - status
+      upd_app:
+        resolve: by_type
+        type: file
+      upd_app_due:
+        resolve: by_type
+        type: date
+      upd_app_filed:
+        resolve: by_type
+        type: date
+      our_evidence:
+        resolve: by_title
+        pattern: our.*evidence
+        types:
+          - status
+      our_evid_due:
+        resolve: by_type
+        type: date
+      our_evid:
+        resolve: by_type
+        type: file
+      table_of_cont:
+        resolve: by_title
+        pattern: table.*of.*cont.
+      filings_quick_ref:
+        resolve: by_title
+        pattern: filings.*quick.*ref.
+        types:
+          - text
+          - long_text
+      witnesses:
+        resolve: by_title
+        pattern: witnesses
+        types:
+          - dropdown
+      witness_list:
+        resolve: by_title
+        pattern: witness.*list
+        types:
+          - status
+      wl:
+        resolve: by_type
+        type: file
+      wl_due:
+        resolve: by_type
+        type: date
+      wl_filed:
+        resolve: by_type
+        type: date
+      dhs_filings:
+        resolve: by_type
+        type: file
+      exh_toc:
+        resolve: by_title
+        pattern: exh..*toc
+        types:
+          - status
+      paid_on:
+        resolve: by_type
+        type: date
+      profile:
+        resolve: by_type
+        type: board_relation
+      monday_doc_v2:
+        resolve: by_type
+        type: direct_doc
+      consults:
+        resolve: by_title
+        pattern: consults
+        types:
+          - mirror
+          - lookup
+      projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      fee_k:
+        resolve: by_title
+        pattern: fee.*k
+        types:
+          - mirror
+          - lookup
+      motions_1:
+        resolve: by_type
+        type: board_relation
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - mirror
+          - lookup
+      e_mail:
+        resolve: by_title
+        pattern: e-mail
+        types:
+          - mirror
+          - lookup
+      address:
+        resolve: by_title
+        pattern: address
+        types:
+          - mirror
+          - lookup
+      profile_status:
+        resolve: by_title
+        pattern: profile.*status
+        types:
+          - mirror
+          - lookup
+      case_no:
+        resolve: by_title
+        pattern: case.*no.
+        types:
+          - mirror
+          - lookup
+      hire_for_bond_by:
+        resolve: by_type
+        type: date
+      det_facility:
+        resolve: by_title
+        pattern: det..*facility
+        types:
+          - status
+      ead:
+        resolve: by_title
+        pattern: ead?
+        types:
+          - status
+      item_id:
+        resolve: by_type
+        type: item_id
+      motion:
+        resolve: by_type
+        type: button
+      mirror_1:
+        resolve: by_title
+        pattern: mirror.*1
+        types:
+          - mirror
+          - lookup
+      create_fee_k:
+        resolve: by_title
+        pattern: create.*fee.*k?
+        types:
+          - mirror
+          - lookup
+      generate_doc_type:
+        resolve: by_title
+        pattern: "generate.*doc.*type:"
+        types:
+          - dropdown
+      generate_doc:
+        resolve: by_title
+        pattern: generate.*doc
+        types:
+          - status
+      link_to_team_tasks:
+        resolve: by_type
+        type: board_relation
+      link_to_na_originals_cards_notices:
+        resolve: by_type
+        type: board_relation
+      link_to_fee_ks:
+        resolve: by_type
+        type: board_relation
+      last_updated:
+        resolve: by_type
+        type: last_updated
+      fa_jail_intakes:
+        resolve: by_type
+        type: board_relation
+      mirror:
+        resolve: by_title
+        pattern: mirror
+        types:
+          - mirror
+          - lookup
+      to_dos:
+        resolve: by_type
+        type: board_relation
+  _lt_i918b_s:
+    id: "8025538497"
+    name: "[LT] I918B's"
+    columns:
+      attorney:
+        resolve: by_title
+        pattern: attorney
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+      case_no:
+        resolve: by_title
+        pattern: case.*no.
+        types:
+          - mirror
+          - lookup
+      status:
+        resolve: by_type
+        type: status
+      hire_date_for_i918b_request:
+        resolve: by_type
+        type: date
+      signed_date:
+        resolve: by_type
+        type: date
+      due_date_for_u_visa_hire:
+        resolve: by_type
+        type: date
+      expiration_date:
+        resolve: by_type
+        type: date
+      link_to_fee_ks:
+        resolve: by_type
+        type: board_relation
+      profile:
+        resolve: by_type
+        type: board_relation
+      subitems:
+        resolve: by_type
+        type: subtasks
+      e_file:
+        resolve: by_title
+        pattern: e-file
+        types:
+          - mirror
+          - lookup
+      consult:
+        resolve: by_title
+        pattern: consult
+        types:
+          - mirror
+          - lookup
+      projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      fee_ks:
+        resolve: by_title
+        pattern: fee.*ks
+        types:
+          - mirror
+          - lookup
+  address_changes:
+    id: "8025531784"
+    name: Address Changes
+    columns:
+      assistant:
+        resolve: by_type
+        type: people
+      case_no:
+        resolve: by_title
+        pattern: case.*no.
+        types:
+          - mirror
+          - lookup
+      status:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      court_or_uscis:
+        resolve: by_title
+        pattern: court.*or.*uscis
+        types:
+          - status
+      ecas_or_paper:
+        resolve: by_title
+        pattern: ecas.*or.*paper?
+        types:
+          - status
+      uscis:
+        resolve: by_title
+        pattern: uscis?
+        types:
+          - status
+      humanitarian:
+        resolve: by_title
+        pattern: humanitarian?
+        types:
+          - status
+      bia:
+        resolve: by_title
+        pattern: bia?
+        types:
+          - status
+      date_received:
+        resolve: by_type
+        type: date
+      date_sent:
+        resolve: by_type
+        type: date
+      casetypes:
+        resolve: by_title
+        pattern: casetypes
+        types:
+          - mirror
+          - lookup
+      profiles:
+        resolve: by_type
+        type: board_relation
+      subitems:
+        resolve: by_type
+        type: subtasks
+      consults:
+        resolve: by_title
+        pattern: consults
+        types:
+          - mirror
+          - lookup
+      projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      fee_ks:
+        resolve: by_title
+        pattern: fee.*ks
+        types:
+          - mirror
+          - lookup
+      address:
+        resolve: by_title
+        pattern: address
+        types:
+          - mirror
+          - lookup
+      e_file:
+        resolve: by_title
+        pattern: e-file
+        types:
+          - mirror
+          - lookup
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - mirror
+          - lookup
+      e_mail:
+        resolve: by_title
+        pattern: e-mail
+        types:
+          - mirror
+          - lookup
+  rfes_all:
+    id: "8025524218"
+    name: RFEs - ALL
+    columns:
+      attorney:
+        resolve: by_title
+        pattern: attorney
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+      type:
         resolve: by_type
         type: dropdown
-  new_workflow:
-    id: "18397336357"
-    name: New workflow
-    columns:
-      person:
-        resolve: by_type
-        type: people
       status:
         resolve: by_type
         type: status
-      date:
+      received_date:
         resolve: by_type
         type: date
-  subelementos_de_profiles:
-    id: "18397292214"
-    name: Subelementos de Profiles
+      warning:
+        resolve: by_type
+        type: date
+      due_date:
+        resolve: by_type
+        type: date
+      client_due_date:
+        resolve: by_type
+        type: date
+      sent_out_date:
+        resolve: by_type
+        type: date
+      notice:
+        resolve: by_type
+        type: file
+      e_file:
+        resolve: by_title
+        pattern: e-file
+        types:
+          - mirror
+          - lookup
+      fee_k:
+        resolve: by_type
+        type: board_relation
+      profile:
+        resolve: by_type
+        type: board_relation
+      subitems:
+        resolve: by_type
+        type: subtasks
+      consults:
+        resolve: by_title
+        pattern: consults
+        types:
+          - mirror
+          - lookup
+      projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      fee_ks:
+        resolve: by_title
+        pattern: fee.*ks
+        types:
+          - mirror
+          - lookup
+      monday_doc_v2:
+        resolve: by_type
+        type: direct_doc
+      e_mail:
+        resolve: by_title
+        pattern: e-mail
+        types:
+          - mirror
+          - lookup
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - mirror
+          - lookup
+      address:
+        resolve: by_title
+        pattern: address
+        types:
+          - mirror
+          - lookup
+      calendaring:
+        resolve: by_type
+        type: board_relation
+      notice_calendaring:
+        resolve: by_title
+        pattern: notice.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      type_calendaring:
+        resolve: by_title
+        pattern: type.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      due_date_calendaring:
+        resolve: by_title
+        pattern: due.*date.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      warning_calendaring:
+        resolve: by_title
+        pattern: warning.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      issue_date_calendaring:
+        resolve: by_title
+        pattern: issue.*date.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      written_calendaring:
+        resolve: by_title
+        pattern: written.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+  fee_ks:
+    id: "8025467270"
+    name: Fee Ks
     columns:
-      owner:
+      tasks:
+        resolve: by_type
+        type: subtasks
+      fee_k_id:
+        resolve: by_type
+        type: item_id
+      contract_stage:
+        resolve: by_title
+        pattern: contract.*stage
+        types:
+          - status
+      case_no:
+        resolve: by_title
+        pattern: case.*no.
+        types:
+          - mirror
+          - lookup
+      ps_stage:
+        resolve: by_title
+        pattern: ps.*stage
+        types:
+          - status
+      contract_for:
+        resolve: by_type
+        type: dropdown
+      north_pole_until:
+        resolve: by_type
+        type: date
+      it_will_go_to:
+        resolve: by_title
+        pattern: it.*will.*go.*to...
+        types:
+          - status
+      attorney:
+        resolve: by_title
+        pattern: attorney
+      assistant:
+        resolve: by_title
+        pattern: assistant
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+      urgent:
+        resolve: by_title
+        pattern: urgent?
+        types:
+          - status
+      e_file:
+        resolve: by_title
+        pattern: e-file
+        types:
+          - mirror
+          - lookup
+      af:
+        resolve: by_type
+        type: numbers
+      ff:
+        resolve: by_type
+        type: numbers
+      pf:
+        resolve: by_type
+        type: numbers
+      contract_added_on:
+        resolve: by_type
+        type: date
+      contract_sent_on:
+        resolve: by_type
+        type: date
+      signed_contract_received_on:
+        resolve: by_type
+        type: date
+      reminder_sent_checked_on:
+        resolve: by_type
+        type: date
+      payment_link_sent_on:
+        resolve: by_type
+        type: date
+      hire_date:
+        resolve: by_type
+        type: date
+      court_cases_connected:
+        resolve: by_type
+        type: board_relation
+      court_payment_history_log:
+        resolve: by_title
+        pattern: court.*-.*payment.*history.*log
+        types:
+          - mirror
+          - lookup
+      lm_date:
+        resolve: by_type
+        type: date
+      address:
+        resolve: by_title
+        pattern: address
+        types:
+          - mirror
+          - lookup
+      e_mail:
+        resolve: by_title
+        pattern: e-mail
+        types:
+          - mirror
+          - lookup
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - mirror
+          - lookup
+      profile:
+        resolve: by_type
+        type: board_relation
+      monday_doc_v2:
+        resolve: by_type
+        type: direct_doc
+      ps_deadline:
+        resolve: by_type
+        type: date
+      open_e_file:
+        resolve: by_title
+        pattern: open.*e-file?
+        types:
+          - status
+      sherpa:
+        resolve: by_title
+        pattern: sherpa
+      consult:
+        resolve: by_title
+        pattern: consult
+        types:
+          - mirror
+          - lookup
+      projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      urgent_cases:
+        resolve: by_type
+        type: board_relation
+      jail_intake_appointment:
+        resolve: by_title
+        pattern: jail.*intake.*/.*appointment
+        types:
+          - mirror
+          - lookup
+      a_number:
+        resolve: by_title
+        pattern: a.*number
+        types:
+          - mirror
+          - lookup
+      projects_1:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      link_to_cd_open_forms:
+        resolve: by_type
+        type: board_relation
+      paralegal_assignment_date:
+        resolve: by_type
+        type: date
+      note_sheet:
+        resolve: by_title
+        pattern: note.*sheet
+        types:
+          - mirror
+          - lookup
+      link:
+        resolve: by_type
+        type: link
+      on_contracts_since:
+        resolve: by_type
+        type: creation_log
+      af_ff_deadline_date:
+        resolve: by_type
+        type: date
+      evidence_received_date:
+        resolve: by_type
+        type: date
+      payment_log:
+        resolve: by_title
+        pattern: payment.*log
+        types:
+          - mirror
+          - lookup
+      language:
+        resolve: by_title
+        pattern: language
+        types:
+          - mirror
+          - lookup
+      cases:
+        resolve: by_type
+        type: board_relation
+  appointments_lb:
+    id: "8025389724"
+    name: Appointments LB
+    columns:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      status:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      create_fee_k:
+        resolve: by_title
+        pattern: create.*fee.*k?
+        types:
+          - mirror
+          - lookup
+      case_type_s:
+        resolve: by_title
+        pattern: case.*type(s)
+        types:
+          - mirror
+          - lookup
+      attorney:
         resolve: by_type
         type: people
+      case_no:
+        resolve: by_title
+        pattern: case.*no.
+        types:
+          - mirror
+          - lookup
+      consult_date:
+        resolve: by_type
+        type: date
+      alien_number:
+        resolve: by_title
+        pattern: alien.*number
+        types:
+          - text
+          - long_text
+      date_of_birth:
+        resolve: by_title
+        pattern: date.*of.*birth
+        types:
+          - text
+          - long_text
+      country_of_birth:
+        resolve: by_title
+        pattern: country.*of.*birth
+        types:
+          - text
+          - long_text
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - text
+          - long_text
+      email:
+        resolve: by_title
+        pattern: email
+        types:
+          - text
+          - long_text
+      first_name:
+        resolve: by_title
+        pattern: first.*name
+        types:
+          - text
+          - long_text
+      last_name:
+        resolve: by_title
+        pattern: last.*name
+        types:
+          - text
+          - long_text
+      description:
+        resolve: by_title
+        pattern: description
+        types:
+          - text
+          - long_text
+      description_2:
+        resolve: by_title
+        pattern: description.*2
+        types:
+          - text
+          - long_text
+      address:
+        resolve: by_title
+        pattern: address
+        types:
+          - text
+          - long_text
+      monday_doc_v2:
+        resolve: by_type
+        type: direct_doc
+      consult_id:
+        resolve: by_type
+        type: item_id
+      consult_uuid:
+        resolve: by_title
+        pattern: consult.*uuid
+        types:
+          - text
+          - long_text
+      calendly:
+        resolve: by_title
+        pattern: calendly?
+        types:
+          - status
+      consult_created_on:
+        resolve: by_type
+        type: date
+      link_to_jail_intakes:
+        resolve: by_type
+        type: board_relation
+      e_file:
+        resolve: by_title
+        pattern: e-file
+        types:
+          - mirror
+          - lookup
+      projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      fee_ks:
+        resolve: by_title
+        pattern: fee.*ks
+        types:
+          - mirror
+          - lookup
+      language:
+        resolve: by_title
+        pattern: language
+        types:
+          - status
+      profiles:
+        resolve: by_type
+        type: board_relation
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+        types:
+          - mirror
+          - lookup
+      files_p:
+        resolve: by_title
+        pattern: files.*(p)
+        types:
+          - mirror
+          - lookup
+      files_nm:
+        resolve: by_type
+        type: file
+      jail_intakes:
+        resolve: by_type
+        type: board_relation
+      link_to_jail_intakes_1:
+        resolve: by_type
+        type: board_relation
+      consult_sharepoint:
+        resolve: by_title
+        pattern: consult.*sharepoint
+        types:
+          - text
+          - long_text
+      files:
+        resolve: by_type
+        type: file
+      link_to_profiles:
+        resolve: by_type
+        type: board_relation
+      link_to_open_forms:
+        resolve: by_type
+        type: board_relation
+      profile_id:
+        resolve: by_title
+        pattern: profile.*id
+        types:
+          - mirror
+          - lookup
+      consult_file:
+        resolve: by_title
+        pattern: consult.*file
+        types:
+          - mirror
+          - lookup
+  appointments_m:
+    id: "8025383981"
+    name: Appointments M
+    columns:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      status:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      consult_date:
+        resolve: by_type
+        type: date
+      create_fee_k:
+        resolve: by_title
+        pattern: create.*fee.*k?
+        types:
+          - mirror
+          - lookup
+      case_type:
+        resolve: by_title
+        pattern: case.*type
+        types:
+          - mirror
+          - lookup
+      attorney:
+        resolve: by_type
+        type: people
+      case_no:
+        resolve: by_title
+        pattern: case.*no.
+        types:
+          - mirror
+          - lookup
+      alien_number:
+        resolve: by_title
+        pattern: alien.*number
+        types:
+          - text
+          - long_text
+      date_of_birth:
+        resolve: by_title
+        pattern: date.*of.*birth
+        types:
+          - text
+          - long_text
+      country_of_birth:
+        resolve: by_title
+        pattern: country.*of.*birth
+        types:
+          - text
+          - long_text
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - text
+          - long_text
+      email:
+        resolve: by_title
+        pattern: email
+        types:
+          - text
+          - long_text
+      description:
+        resolve: by_title
+        pattern: description
+        types:
+          - text
+          - long_text
+      address:
+        resolve: by_title
+        pattern: address
+        types:
+          - text
+          - long_text
+      language:
+        resolve: by_title
+        pattern: language
+        types:
+          - status
+      monday_doc_v2:
+        resolve: by_type
+        type: direct_doc
+      consult_id:
+        resolve: by_type
+        type: item_id
+      profiles:
+        resolve: by_type
+        type: board_relation
+      pronouns:
+        resolve: by_title
+        pattern: pronouns
+        types:
+          - mirror
+          - lookup
+      consult_uuid:
+        resolve: by_title
+        pattern: consult.*uuid
+        types:
+          - text
+          - long_text
+      calendly:
+        resolve: by_title
+        pattern: calendly?
+        types:
+          - status
+      consult_created_on:
+        resolve: by_type
+        type: date
+      link_to_jail_intakes:
+        resolve: by_type
+        type: board_relation
+      client_e_file:
+        resolve: by_title
+        pattern: client.*-.*e-file
+        types:
+          - mirror
+          - lookup
+      case_type_1:
+        resolve: by_title
+        pattern: case.*type
+        types:
+          - mirror
+          - lookup
+      projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      fee_ks:
+        resolve: by_title
+        pattern: fee.*ks
+        types:
+          - mirror
+          - lookup
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+        types:
+          - mirror
+          - lookup
+      jail_intakes:
+        resolve: by_type
+        type: board_relation
+      consult_sharepoint:
+        resolve: by_title
+        pattern: consult.*sharepoint
+        types:
+          - text
+          - long_text
+      link_to_profiles:
+        resolve: by_type
+        type: board_relation
+      link_to_open_forms:
+        resolve: by_type
+        type: board_relation
+      profile_id:
+        resolve: by_title
+        pattern: profile.*id
+        types:
+          - mirror
+          - lookup
+      consult_file:
+        resolve: by_title
+        pattern: consult.*file
+        types:
+          - mirror
+          - lookup
+      paid:
+        resolve: by_title
+        pattern: paid
+      docs:
+        resolve: by_title
+        pattern: docs
+      call_reminder:
+        resolve: by_title
+        pattern: call.*reminder
+      m_consult_note:
+        resolve: by_title
+        pattern: m.*consult.*note
+        types:
+          - text
+          - long_text
+      method:
+        resolve: by_type
+        type: dropdown
+  profiles:
+    id: "8025265377"
+    name: Profiles
+    columns:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      create_fee_k:
+        resolve: by_title
+        pattern: create.*fee.*k?
+      company_profile:
+        resolve: by_type
+        type: link
+      status:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      attorney:
+        resolve: by_type
+        type: people
+      case_type_s:
+        resolve: by_type
+        type: dropdown
+      a_number:
+        resolve: by_title
+        pattern: a.*number
+        types:
+          - text
+          - long_text
+      date_of_birth:
+        resolve: by_title
+        pattern: date.*of.*birth
+        types:
+          - text
+          - long_text
+      email:
+        resolve: by_type
+        type: email
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - text
+          - long_text
+      physical_address:
+        resolve: by_title
+        pattern: physical.*address
+        types:
+          - text
+          - long_text
+      country_of_birth:
+        resolve: by_title
+        pattern: country.*of.*birth
+        types:
+          - text
+          - long_text
+      e_file:
+        resolve: by_title
+        pattern: e-file
+        types:
+          - text
+          - long_text
+      rfe_d:
+        resolve: by_title
+        pattern: rfe'd?
+      uscis_originals:
+        resolve: by_title
+        pattern: uscis/originals?
+      address_change:
+        resolve: by_title
+        pattern: address.*change?
+      label:
+        resolve: by_title
+        pattern: label
+        types:
+          - status
+      preferred_language:
+        resolve: by_title
+        pattern: preferred.*language
+        types:
+          - status
+      consult:
+        resolve: by_type
+        type: board_relation
+      last_consult_date:
+        resolve: by_type
+        type: date
+      projects:
+        resolve: by_type
+        type: board_relation
+      id:
+        resolve: by_type
+        type: item_id
+      fee_ks:
+        resolve: by_type
+        type: board_relation
+      consult_uuid:
+        resolve: by_title
+        pattern: consult.*uuid
+        types:
+          - text
+          - long_text
+      link_to_pd_requests:
+        resolve: by_type
+        type: board_relation
+  appeals:
+    id: "7864113013"
+    name: Appeals
+    columns:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      profile:
+        resolve: by_type
+        type: board_relation
+      attorney:
+        resolve: by_title
+        pattern: attorney
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+      decision_date:
+        resolve: by_type
+        type: date
+      appeal_due:
+        resolve: by_type
+        type: date
+      second_half_due:
+        resolve: by_type
+        type: date
       status:
         resolve: by_type
         type: status
-      date:
+      fee_ks:
+        resolve: by_type
+        type: board_relation
+      relief_denied:
+        resolve: by_type
+        type: dropdown
+  appointments_r:
+    id: "7788520205"
+    name: Appointments R
+    columns:
+      subitems:
+        resolve: by_type
+        type: subtasks
+      status:
+        resolve: by_title
+        pattern: status
+        types:
+          - status
+      create_fee_k:
+        resolve: by_title
+        pattern: create.*fee.*k?
+        types:
+          - mirror
+          - lookup
+      case_type_s:
+        resolve: by_title
+        pattern: case.*type(s)
+        types:
+          - mirror
+          - lookup
+      consult_date:
         resolve: by_type
         type: date
+      case_no:
+        resolve: by_title
+        pattern: case.*no.
+        types:
+          - mirror
+          - lookup
+      attorney:
+        resolve: by_type
+        type: people
+      alien_number:
+        resolve: by_title
+        pattern: alien.*number
+        types:
+          - text
+          - long_text
+      date_of_birth:
+        resolve: by_title
+        pattern: date.*of.*birth
+        types:
+          - text
+          - long_text
+      country_of_birth:
+        resolve: by_title
+        pattern: country.*of.*birth
+        types:
+          - text
+          - long_text
+      phone:
+        resolve: by_title
+        pattern: phone
+        types:
+          - text
+          - long_text
+      email:
+        resolve: by_title
+        pattern: email
+        types:
+          - text
+          - long_text
+      description:
+        resolve: by_type
+        type: long_text
+      address:
+        resolve: by_title
+        pattern: address
+        types:
+          - text
+          - long_text
+      e_file:
+        resolve: by_type
+        type: link
+      language:
+        resolve: by_title
+        pattern: language
+        types:
+          - status
+      monday_doc_v2:
+        resolve: by_type
+        type: direct_doc
+      consult_id:
+        resolve: by_type
+        type: item_id
+      profiles:
+        resolve: by_type
+        type: board_relation
+      projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      fee_ks:
+        resolve: by_title
+        pattern: fee.*ks
+        types:
+          - mirror
+          - lookup
+      calendly:
+        resolve: by_title
+        pattern: calendly?
+        types:
+          - status
+      consult_created_on:
+        resolve: by_type
+        type: date
+      consult_uuid:
+        resolve: by_title
+        pattern: consult.*uuid
+        types:
+          - text
+          - long_text
+      paralegal:
+        resolve: by_title
+        pattern: paralegal
+        types:
+          - mirror
+          - lookup
+      jail_intakes:
+        resolve: by_type
+        type: board_relation
+      consult_sharepoint:
+        resolve: by_title
+        pattern: consult.*sharepoint
+        types:
+          - text
+          - long_text
+      link_to_profiles:
+        resolve: by_type
+        type: board_relation
+      mirror:
+        resolve: by_title
+        pattern: mirror
+        types:
+          - mirror
+          - lookup
+      link_to_open_forms:
+        resolve: by_type
+        type: board_relation
+      profile_id:
+        resolve: by_title
+        pattern: profile.*id
+        types:
+          - mirror
+          - lookup
+      consult_file:
+        resolve: by_title
+        pattern: consult.*file
+        types:
+          - mirror
+          - lookup
+  litigation:
+    id: "4299007012"
+    name: Litigation
+    columns:
+      profile:
+        resolve: by_type
+        type: board_relation
+      case_no:
+        resolve: by_title
+        pattern: case.*no.*#
+        types:
+          - text
+          - long_text
+      subitems:
+        resolve: by_type
+        type: subtasks
+      type_of_case:
+        resolve: by_title
+        pattern: type.*of.*case
+        types:
+          - text
+          - long_text
+      status_of_complaint:
+        resolve: by_title
+        pattern: status.*of.*complaint
+        types:
+          - status
+      work_due:
+        resolve: by_title
+        pattern: work.*due
+        types:
+          - text
+          - long_text
+      due_date:
+        resolve: by_type
+        type: date
+      current_status:
+        resolve: by_title
+        pattern: current.*status
+        types:
+          - status
+      hearing_date:
+        resolve: by_type
+        type: date
+      link_to_fee_ks:
+        resolve: by_type
+        type: board_relation
+      monday_doc_v2:
+        resolve: by_type
+        type: direct_doc

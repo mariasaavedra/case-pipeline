@@ -17,10 +17,10 @@ Completion of this checklist means the person understands **what this repo does,
   https://bun.com/docs/runtime/nodejs-apis
 
 ### Do
-- [ ] Install Bun
-- [ ] Run the project successfully (`bun run index.ts`)
-- [ ] Confirm an output file is generated
-- [ ] Add a console log showing total execution time
+- [X] Install Bun
+- [X] Run the project successfully (`bun run index.ts`)
+- [X] Confirm an output file is generated
+- [X] Add a console log showing total execution time
 
 ### Should Understand
 - What a JS runtime is (vs a framework)
@@ -40,8 +40,8 @@ Completion of this checklist means the person understands **what this repo does,
   https://bun.com/docs/runtime/env
 
 ### Do
-- [ ] Copy `.env.example` → `.env`
-- [ ] Identify which values are required vs optional
+- [X] Copy `.env.example` → `.env`
+- [X] Identify which values are required vs optional
 - [ ] Add a new env var (e.g. `RUN_MODE=dry-run`)
 - [ ] Change script behavior based on that variable
 
@@ -65,10 +65,10 @@ Completion of this checklist means the person understands **what this repo does,
   https://graphql.org/learn/queries/
 
 ### Do
-- [ ] Inspect the GraphQL query in `fetchMondayItem`
-- [ ] Add one additional column to the query
-- [ ] Log the raw API response
-- [ ] Add explicit error handling for missing columns
+- [X] Inspect the GraphQL query in `fetchMondayItem`
+- [X] Add one additional column to the query
+- [X] Log the raw API response
+- [X] Add explicit error handling for missing columns
 
 ### Should Understand
 - GraphQL vs REST

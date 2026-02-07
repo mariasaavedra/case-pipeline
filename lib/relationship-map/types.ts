@@ -102,6 +102,12 @@ export interface AnalyzerOptions {
    * If not specified, the board with the most connections is used.
    */
   mainBoardKey?: string;
+
+  /**
+   * Only include connections between tracked boards (those in the config).
+   * Filters out phantom board references.
+   */
+  trackedOnly?: boolean;
 }
 
 /**

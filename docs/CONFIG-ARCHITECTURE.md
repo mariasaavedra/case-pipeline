@@ -248,38 +248,46 @@ Fetching board: profiles (18397286934)...
     - old_field
 ```
 
+## Board Relationship Analysis
+
+The `analyze` command generates a visual map of board connections and mirror columns.
+
+### Tracked-Only Mode
+
+Use `--tracked-only` to filter out connections to boards outside the config (phantom boards):
+
+```bash
+# Show all connections (including phantom boards)
+bun cli.ts analyze -o=docs/boards.md
+
+# Show only connections between tracked boards
+bun cli.ts analyze --tracked-only --main-board=profiles -o=docs/boards.md
+```
+
+This is implemented at the analyzer level (`lib/relationship-map/analyzer.ts`), so all renderers (markdown, JSON, mermaid) automatically get filtered data.
+
 ## Data Factory (Seed Scripts)
 
-The `scripts/seed/` folder contains a scalable data generation system for populating Monday.com boards with realistic test data.
+The `scripts/seed/` folder contains a data generation system for creating realistic test data.
 
 ### Features
 
 - **Realistic fake data** using [@faker-js/faker](https://fakerjs.dev/) - generates realistic names, emails, phone numbers, addresses, and contextual notes
-- **SQLite persistence** - stages generated data locally before syncing to Monday.com
+- **SQLite persistence** - stages generated data locally in `data/seed.db`
 - **Reproducible generation** - use `--seed` to generate identical data sets
-- **Batch processing** - rate-limited sync to avoid API throttling
-- **Dry-run mode** - test without making API calls
+- **Generate-only mode** - creates data locally without Monday.com API calls
 
 ### Usage
 
 ```bash
-# Full pipeline: generate profiles + contracts and sync to Monday.com
+# Generate profiles and contracts locally
 bun scripts/seed/factory.ts --profiles=10 --contracts=1-3
-
-# Generate only (no API calls) - useful for testing
-bun scripts/seed/factory.ts --generate-only --profiles=50
 
 # Reproducible data with a seed value
 bun scripts/seed/factory.ts --generate-only --profiles=10 --seed=42
 
-# Sync previously generated batch
-bun scripts/seed/factory.ts --sync-only --batch-id=1
-
 # List all batches
 bun scripts/seed/factory.ts --list-batches
-
-# Dry run (simulates sync without API calls)
-bun scripts/seed/factory.ts --dry-run --profiles=5
 ```
 
 ### Architecture
@@ -293,8 +301,6 @@ scripts/seed/lib/
 │   ├── column-generators.ts  # Faker-powered generators
 │   ├── profile-factory.ts    # Profile generation
 │   └── contract-factory.ts   # Contract generation
-├── sync/                  # Monday.com synchronization
-│   └── batch-sync.ts      # Rate-limited batch syncer
 └── seeder/                # Orchestration
     └── seeder.ts          # Main pipeline coordinator
 ```
