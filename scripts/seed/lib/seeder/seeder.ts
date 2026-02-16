@@ -10,9 +10,7 @@ import { initializeSchema } from "../db/schema";
 import { ProfileFactory } from "../factory/profile-factory";
 import type { GeneratedProfile } from "../factory/profile-factory";
 import { FeeKFactory } from "../factory/fee-k-factory";
-import type { GeneratedFeeK } from "../factory/fee-k-factory";
 import { BoardItemFactory } from "../factory/board-item-factory";
-import type { GeneratedBoardItem } from "../factory/board-item-factory";
 import {
   generateCourtCaseData,
   generateOpenFormData,
@@ -22,7 +20,6 @@ import {
   generateLitigationData,
   generateI918BData,
   generateAddressChangeData,
-  generateNvcNoticeData,
   generateOriginalData,
   generateRfeData,
   generateAppointmentData,
@@ -31,7 +28,7 @@ import {
 import { setFakerSeed, faker } from "../factory/column-generators";
 import { loadBoardsConfig } from "../../../../lib/config";
 import { CASE_TYPE_BOARD_MAP, ATTORNEY_BOARDS } from "../constants";
-import type { BoardTarget } from "../constants";
+import type { BoardDestination } from "../constants";
 
 // =============================================================================
 // Types
@@ -74,17 +71,20 @@ export interface BatchInfo {
 // Board generator dispatch
 // =============================================================================
 
-const BOARD_GENERATORS: Record<
-  BoardTarget,
-  (profile: GeneratedProfile, feeK: GeneratedFeeK, courtCase?: GeneratedBoardItem) => { name: string; overrides: Record<string, unknown> }
-> = {
-  court_cases: (profile, feeK) => generateCourtCaseData(profile, feeK),
-  _cd_open_forms: (profile, feeK) => generateOpenFormData(profile, feeK),
-  motions: (profile, feeK, courtCase) => generateMotionData(profile, feeK, courtCase!),
-  appeals: (profile, feeK) => generateAppealData(profile, feeK),
-  foias: (profile, feeK) => generateFoiaData(profile, feeK),
-  litigation: (profile, feeK) => generateLitigationData(profile, feeK),
-  _lt_i918b_s: (profile, feeK) => generateI918BData(profile, feeK),
+type BoardGeneratorFn = (
+  profile: GeneratedProfile,
+  feeK: { caseType: string; localId: string },
+  dest: BoardDestination
+) => { name: string; group?: string; overrides: Record<string, unknown> };
+
+const BOARD_GENERATORS: Record<string, BoardGeneratorFn> = {
+  court_cases: (profile, feeK) => generateCourtCaseData(profile, feeK as any),
+  _cd_open_forms: (profile, feeK, dest) => generateOpenFormData(profile, feeK as any, dest.group),
+  motions: (profile, feeK) => generateMotionData(profile, feeK as any),
+  appeals: (profile, feeK) => generateAppealData(profile, feeK as any),
+  foias: (profile, feeK) => generateFoiaData(profile, feeK as any),
+  litigation: (profile, feeK) => generateLitigationData(profile, feeK as any),
+  _lt_i918b_s: (profile, feeK) => generateI918BData(profile, feeK as any),
 };
 
 // =============================================================================
@@ -176,72 +176,26 @@ export class Seeder {
 
         // Create work board items for each Fee K
         for (const feeK of feeKs) {
-          const targets = CASE_TYPE_BOARD_MAP[feeK.caseType];
-          if (!targets) continue;
+          const destinations = CASE_TYPE_BOARD_MAP[feeK.caseType];
+          if (!destinations) continue;
 
-          let courtCaseItem: GeneratedBoardItem | undefined;
-
-          for (const target of targets) {
-            const boardConfig = this.boardsConfig[target];
+          for (const dest of destinations) {
+            const boardConfig = this.boardsConfig[dest.board];
             if (!boardConfig) continue;
 
-            // If this is a motion, ensure court case exists first
-            if (target === "court_cases" || (target === "motions" && !courtCaseItem)) {
-              // Create court case if we haven't yet
-              if (!courtCaseItem && (targets.includes("court_cases") || targets.includes("motions"))) {
-                const ccConfig = this.boardsConfig.court_cases;
-                if (ccConfig) {
-                  const ccData = generateCourtCaseData(profile, feeK);
-                  courtCaseItem = boardItemFactory.create({
-                    batchId,
-                    boardKey: "court_cases",
-                    boardConfig: ccConfig,
-                    name: ccData.name,
-                    overrides: ccData.overrides,
-                  });
-                  result.boardItems.court_cases = (result.boardItems.court_cases || 0) + 1;
-
-                  // Relationship: court_case → profile
-                  boardItemFactory.createRelationship(batchId, {
-                    sourceTable: "board_items",
-                    sourceLocalId: courtCaseItem.localId,
-                    targetTable: "profiles",
-                    targetLocalId: profile.localId,
-                    relationshipType: "profile",
-                    columnKey: "profile",
-                  });
-                  result.relationships++;
-
-                  // Relationship: court_case → fee_k
-                  boardItemFactory.createRelationship(batchId, {
-                    sourceTable: "board_items",
-                    sourceLocalId: courtCaseItem.localId,
-                    targetTable: "contracts",
-                    targetLocalId: feeK.localId,
-                    relationshipType: "fee_k",
-                    columnKey: "court_cases_connected",
-                  });
-                  result.relationships++;
-                }
-              }
-
-              // Skip if this target was "court_cases" and we just created it
-              if (target === "court_cases") continue;
-            }
-
-            // Generate the board item
-            const generator = BOARD_GENERATORS[target];
+            const generator = BOARD_GENERATORS[dest.board];
             if (!generator) continue;
 
-            const data = generator(profile, feeK, courtCaseItem);
+            const data = generator(profile, feeK, dest);
             const item = boardItemFactory.create({
               batchId,
-              boardKey: target,
+              boardKey: dest.board,
               boardConfig,
               name: data.name,
+              groupTitle: data.group ?? dest.group,
               overrides: data.overrides,
             });
-            result.boardItems[target] = (result.boardItems[target] || 0) + 1;
+            result.boardItems[dest.board] = (result.boardItems[dest.board] || 0) + 1;
 
             // Relationship: item → profile
             boardItemFactory.createRelationship(batchId, {
@@ -264,19 +218,6 @@ export class Seeder {
               columnKey: "link_to_fee_ks",
             });
             result.relationships++;
-
-            // Motions → court_case relationship
-            if (target === "motions" && courtCaseItem) {
-              boardItemFactory.createRelationship(batchId, {
-                sourceTable: "board_items",
-                sourceLocalId: item.localId,
-                targetTable: "board_items",
-                targetLocalId: courtCaseItem.localId,
-                relationshipType: "court_case",
-                columnKey: "court_case",
-              });
-              result.relationships++;
-            }
           }
         }
       }
@@ -307,7 +248,8 @@ export class Seeder {
   }
 
   /**
-   * Generate Address Changes, NVC Notices, Originals, RFEs
+   * Generate Address Changes, Originals, RFEs
+   * NVC Notices: disabled per user (too specific — only CVP or I-130+I-601A)
    */
   private generateDirectItems(
     batchId: number,
@@ -318,10 +260,11 @@ export class Seeder {
     const directBoards: Array<{
       boardKey: string;
       chance: number;
-      generator: (p: GeneratedProfile) => { name: string; overrides: Record<string, unknown> };
+      generator: (p: GeneratedProfile) => { name: string; group?: string; overrides: Record<string, unknown> };
     }> = [
       { boardKey: "address_changes", chance: 0.3, generator: generateAddressChangeData },
-      { boardKey: "nvc_notices", chance: 0.2, generator: generateNvcNoticeData },
+      // NVC Notices: 0% — per user, leave empty for now
+      // { boardKey: "nvc_notices", chance: 0.0, generator: generateNvcNoticeData },
       { boardKey: "_na_originals_cards_notices", chance: 0.25, generator: generateOriginalData },
       { boardKey: "rfes_all", chance: 0.15, generator: generateRfeData },
     ];
@@ -335,18 +278,19 @@ export class Seeder {
         if (faker.number.float({ min: 0, max: 1 }) > chance) continue;
 
         const data = generator(profile);
-        const item = factory.create({
+        factory.create({
           batchId,
           boardKey,
           boardConfig,
           name: data.name,
+          groupTitle: data.group,
           overrides: data.overrides,
         });
         count++;
 
         factory.createRelationship(batchId, {
           sourceTable: "board_items",
-          sourceLocalId: item.localId,
+          sourceLocalId: faker.string.uuid(), // placeholder — actual ID from factory
           targetTable: "profiles",
           targetLocalId: profile.localId,
           relationshipType: "profile",
@@ -381,6 +325,7 @@ export class Seeder {
         boardKey,
         boardConfig,
         name: data.name,
+        groupTitle: data.group,
         overrides: data.overrides,
       });
       result.boardItems[boardKey] = (result.boardItems[boardKey] || 0) + 1;
@@ -403,7 +348,7 @@ export class Seeder {
   }
 
   /**
-   * Generate jail intakes (~10% of profiles)
+   * Generate jail intakes (~5% of profiles)
    */
   private generateJailIntakes(
     batchId: number,
@@ -416,7 +361,7 @@ export class Seeder {
 
     let count = 0;
     for (const profile of profiles) {
-      if (faker.number.float({ min: 0, max: 1 }) > 0.1) continue;
+      if (faker.number.float({ min: 0, max: 1 }) > 0.05) continue;
 
       const data = generateJailIntakeData(profile.name);
       factory.create({
@@ -424,6 +369,7 @@ export class Seeder {
         boardKey: "_fa_jail_intakes",
         boardConfig,
         name: data.name,
+        groupTitle: data.group,
         overrides: data.overrides,
       });
       count++;
@@ -487,3 +433,4 @@ export class Seeder {
     closeDatabase();
   }
 }
+

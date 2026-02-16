@@ -15,6 +15,7 @@ import { faker } from "./column-generators";
 export interface GeneratedBoardItem {
   localId: string;
   boardKey: string;
+  groupTitle?: string;
   name: string;
   columnValues: Record<string, unknown>;
 }
@@ -24,6 +25,8 @@ export interface BoardItemCreateOptions {
   boardKey: string;
   boardConfig: BoardConfig;
   name: string;
+  /** Monday.com group title for the item */
+  groupTitle?: string;
   /** Override auto-generated values for specific columns */
   overrides?: Record<string, unknown>;
 }
@@ -95,6 +98,7 @@ export class BoardItemFactory {
     const item: GeneratedBoardItem = {
       localId,
       boardKey: options.boardKey,
+      groupTitle: options.groupTitle,
       name: options.name,
       columnValues,
     };
@@ -130,12 +134,13 @@ export class BoardItemFactory {
   private persist(item: GeneratedBoardItem, batchId: number): void {
     this.db.prepare(`
       INSERT INTO board_items (
-        batch_id, local_id, board_key, name, column_values
-      ) VALUES (?, ?, ?, ?, ?)
+        batch_id, local_id, board_key, group_title, name, column_values
+      ) VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       batchId,
       item.localId,
       item.boardKey,
+      item.groupTitle ?? null,
       item.name,
       JSON.stringify(item.columnValues)
     );

@@ -4,7 +4,7 @@
 
 import type { Database } from "bun:sqlite";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS board_items (
     local_id TEXT NOT NULL UNIQUE,
     monday_item_id TEXT,
     board_key TEXT NOT NULL,
+    group_title TEXT,
     name TEXT NOT NULL,
     column_values TEXT NOT NULL,
     sync_status TEXT NOT NULL DEFAULT 'pending',
@@ -127,8 +128,20 @@ export function initializeSchema(db: Database): void {
   const currentVersion = db.query("SELECT version FROM schema_version").get() as { version: number } | null;
 
   if (!currentVersion || currentVersion.version < SCHEMA_VERSION) {
-    // Run migrations here when needed
-    console.log(`  Database schema up to date (v${SCHEMA_VERSION})`);
+    const fromVersion = currentVersion?.version ?? 0;
+
+    // Migration v1 → v2: add group_title to board_items
+    if (fromVersion < 2) {
+      const hasColumn = db
+        .query("SELECT COUNT(*) as cnt FROM pragma_table_info('board_items') WHERE name='group_title'")
+        .get() as { cnt: number };
+      if (!hasColumn || hasColumn.cnt === 0) {
+        db.exec("ALTER TABLE board_items ADD COLUMN group_title TEXT");
+      }
+    }
+
+    db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);
+    console.log(`  Database schema migrated to v${SCHEMA_VERSION}`);
   }
 }
 

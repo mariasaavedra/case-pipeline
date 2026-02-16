@@ -1,27 +1,44 @@
 // =============================================================================
 // Board-Specific Data Generators
 // =============================================================================
-// Each function returns { name, overrides } for use with BoardItemFactory.
+// Each function returns { name, group, overrides } for use with BoardItemFactory.
+// Status labels derived from production Monday.com snapshot (2026-02-16).
 
 import { faker } from "./column-generators";
-import { generateDate, generatePhone, generateEmail, generateAddress } from "./column-generators";
+import { generateDate, generatePhone, generateAddress } from "./column-generators";
 import type { GeneratedProfile } from "./profile-factory";
 import type { GeneratedFeeK } from "./fee-k-factory";
-import type { GeneratedBoardItem } from "./board-item-factory";
 import {
-  HEARING_TYPES,
-  RELIEF_TYPES,
-  COURT_STATUSES,
+  COURT_HEARING_TYPES,
+  COURT_HEARING_STATUSES,
+  COURT_SEEKING,
+  COURT_ENTRY_TYPES,
+  COURT_HEARING_YEARS,
+  COURT_ECAS_OPTIONS,
+  COURT_RELIEF_TAGS,
   OPEN_FORM_STATUSES,
-  MOTION_TYPES,
+  MOTION_TYPE_TAGS,
+  MOTION_STATUSES,
   APPEAL_STATUSES,
-  FOIA_TYPES,
-  LANGUAGES,
+  FOIA_TYPE_TAGS,
+  FOIA_STATUSES,
+  LITIGATION_COMPLAINT_STATUSES,
+  LITIGATION_CURRENT_STATUSES,
+  I918B_STATUSES,
+  ADDRESS_CHANGE_STATUSES,
+  ADDRESS_CHANGE_COURT_OR_USCIS,
+  ADDRESS_CHANGE_ECAS_OPTIONS,
+  RFE_STATUSES,
+  RFE_TYPE_TAGS,
+  ORIGINALS_STATUSES,
+  ORIGINALS_RECEIPT_TYPES,
+  ORIGINALS_WHAT_WE_HAVE,
   APPOINTMENT_STATUSES,
-  NVC_NOTICE_TYPES,
-  RECEIPT_TYPES,
-  RFE_TYPES,
+  LANGUAGES,
+  JAIL_INTAKE_STATUSES,
+  JAIL_INTAKE_ATTORNEYS,
   DETENTION_FACILITIES,
+  JAIL_EVER_REMOVED,
 } from "../constants";
 
 // =============================================================================
@@ -30,31 +47,50 @@ import {
 
 interface BoardGenResult {
   name: string;
+  group?: string;
   overrides: Record<string, unknown>;
 }
 
 // =============================================================================
-// Court Cases
+// Court Cases (EOIR immigration court monitoring only)
 // =============================================================================
 
 export function generateCourtCaseData(
   profile: GeneratedProfile,
   feeK: GeneratedFeeK
 ): BoardGenResult {
-  const hearingType = faker.helpers.arrayElement(HEARING_TYPES);
-  const relief = faker.helpers.arrayElement(RELIEF_TYPES);
-  const status = faker.helpers.arrayElement(COURT_STATUSES);
+  const attorney = faker.helpers.arrayElement(["WH", "LB", "M", "R"]);
+  const aNumber = `A${faker.string.numeric(9)}`;
+  const hearingType = faker.helpers.weightedArrayElement(COURT_HEARING_TYPES);
+  const hearingStatus = faker.helpers.weightedArrayElement(COURT_HEARING_STATUSES);
+  const entry = faker.helpers.weightedArrayElement(COURT_ENTRY_TYPES);
+  const seeking = faker.helpers.arrayElement(COURT_SEEKING);
+  const year = faker.helpers.arrayElement(COURT_HEARING_YEARS);
+  const ecas = faker.helpers.weightedArrayElement(COURT_ECAS_OPTIONS);
+  const relief = faker.helpers.arrayElement(COURT_RELIEF_TAGS);
 
   return {
-    name: `${profile.name} - Court Case`,
+    name: `${attorney} - ${profile.name} [${aNumber}]`,
+    group: "Court Case",
     overrides: {
+      // Hearing type (status_1__1)
       hearing_type: { label: hearingType },
-      status: { label: status },
-      x_next_hearing_date: { date: generateDate(7, 180) },
-      nta_date: { date: generateDate(-365, -30) },
-      year: { label: new Date().getFullYear().toString() },
-      entry: { label: faker.helpers.arrayElement(["EWI", "Overstay", "Visa"]) },
-      seeking: { label: relief },
+      // Hearing Status (project_status)
+      status: { label: hearingStatus },
+      // Next hearing date
+      x_next_hearing_date: { date: generateDate(7, 365) },
+      // NTA date (past)
+      nta_date: { date: generateDate(-730, -30) },
+      // Year
+      year: { label: year },
+      // Entry type
+      entry: { label: entry },
+      // Seeking
+      seeking: { label: seeking },
+      // ECAS or eService
+      ecas_or_eservice: { label: ecas },
+      // Relief tags
+      relief: { labels: [relief] },
     },
   };
 }
@@ -65,14 +101,18 @@ export function generateCourtCaseData(
 
 export function generateOpenFormData(
   profile: GeneratedProfile,
-  feeK: GeneratedFeeK
+  feeK: GeneratedFeeK,
+  group?: string
 ): BoardGenResult {
-  const status = faker.helpers.arrayElement(OPEN_FORM_STATUSES);
+  const status = faker.helpers.weightedArrayElement(OPEN_FORM_STATUSES);
 
   return {
     name: `${profile.name} - ${feeK.caseType}`,
+    group: group ?? "Open Forms",
     overrides: {
+      // Status (project_status)
       status: { label: status },
+      // Dates
       target_date: { date: generateDate(14, 90) },
       assignment_date: { date: generateDate(-30, -1) },
       hire_date: { date: generateDate(-90, -1) },
@@ -81,22 +121,28 @@ export function generateOpenFormData(
 }
 
 // =============================================================================
-// Motions
+// Motions (standalone — linked to court case, not creating one)
 // =============================================================================
 
 export function generateMotionData(
   profile: GeneratedProfile,
-  feeK: GeneratedFeeK,
-  _courtCase: GeneratedBoardItem
+  feeK: GeneratedFeeK
 ): BoardGenResult {
-  const motionType = faker.helpers.arrayElement(MOTION_TYPES);
-  const hearingType = faker.helpers.arrayElement(HEARING_TYPES);
+  const motionTag = faker.helpers.arrayElement(MOTION_TYPE_TAGS);
+  const status = faker.helpers.arrayElement(MOTION_STATUSES);
+  const hearingType = faker.helpers.arrayElement(["Master", "Bond", "Trial"]);
 
   return {
-    name: `${profile.name} - ${motionType}`,
+    name: `${profile.name} - ${motionTag}`,
+    group: "Motions to be sent",
     overrides: {
-      status: { label: faker.helpers.arrayElement(["Pending", "Filed", "Granted", "Denied"]) },
+      // Status (project_status)
+      status: { label: status },
+      // Hearing type
       hearing_type: { label: hearingType },
+      // Motion type tag
+      motion: { labels: [motionTag] },
+      // Next hearing date
       next_hearing_date: { date: generateDate(7, 120) },
     },
   };
@@ -114,6 +160,7 @@ export function generateAppealData(
 
   return {
     name: `${profile.name} - Appeal`,
+    group: "Appeals",
     overrides: {
       status: { label: status },
       decision_date: { date: generateDate(-60, -1) },
@@ -131,12 +178,15 @@ export function generateFoiaData(
   profile: GeneratedProfile,
   _feeK: GeneratedFeeK
 ): BoardGenResult {
-  const foiaType = faker.helpers.arrayElement(FOIA_TYPES);
+  const foiaType = faker.helpers.arrayElement(FOIA_TYPE_TAGS);
+  const status = faker.helpers.arrayElement(FOIA_STATUSES);
 
   return {
     name: `${profile.name} - FOIA (${foiaType})`,
+    group: "Pending FOIAs",
     overrides: {
-      status: { label: faker.helpers.arrayElement(["Pending", "Submitted", "Received", "Completed"]) },
+      status: { label: status },
+      type: { labels: [foiaType] },
     },
   };
 }
@@ -149,12 +199,16 @@ export function generateLitigationData(
   profile: GeneratedProfile,
   _feeK: GeneratedFeeK
 ): BoardGenResult {
+  const complaintStatus = faker.helpers.arrayElement(LITIGATION_COMPLAINT_STATUSES);
+  const currentStatus = faker.helpers.arrayElement(LITIGATION_CURRENT_STATUSES);
+
   return {
     name: `${profile.name} - Litigation`,
+    group: "Litigation",
     overrides: {
       type_of_case: "Mandamus",
-      status_of_complaint: { label: faker.helpers.arrayElement(["Draft", "Filed", "Pending", "Resolved"]) },
-      current_status: { label: faker.helpers.arrayElement(["Active", "Pending", "Closed"]) },
+      status_of_complaint: { label: complaintStatus },
+      current_status: { label: currentStatus },
       due_date: { date: generateDate(7, 90) },
       hearing_date: { date: generateDate(30, 180) },
     },
@@ -169,10 +223,13 @@ export function generateI918BData(
   profile: GeneratedProfile,
   _feeK: GeneratedFeeK
 ): BoardGenResult {
+  const status = faker.helpers.weightedArrayElement(I918B_STATUSES);
+
   return {
     name: `${profile.name} - I918B`,
+    group: "Pending I918 B's",
     overrides: {
-      status: { label: faker.helpers.arrayElement(["Pending", "Requested", "Signed", "Filed"]) },
+      status: { label: status },
       hire_date_for_i918b_request: { date: generateDate(-60, -1) },
       signed_date: { date: generateDate(-30, -1) },
       due_date_for_u_visa_hire: { date: generateDate(30, 120) },
@@ -188,33 +245,19 @@ export function generateI918BData(
 export function generateAddressChangeData(
   profile: GeneratedProfile
 ): BoardGenResult {
+  const status = faker.helpers.weightedArrayElement(ADDRESS_CHANGE_STATUSES);
+  const courtOrUscis = faker.helpers.weightedArrayElement(ADDRESS_CHANGE_COURT_OR_USCIS);
+  const ecas = faker.helpers.weightedArrayElement(ADDRESS_CHANGE_ECAS_OPTIONS);
+
   return {
     name: `${profile.name} - Address Change`,
+    group: "Address Changes",
     overrides: {
-      status: { label: faker.helpers.arrayElement(["Pending", "Sent", "Completed"]) },
-      court_or_uscis: { label: faker.helpers.arrayElement(["Court", "USCIS"]) },
-      ecas_or_paper: { label: faker.helpers.arrayElement(["ECAS", "Paper"]) },
+      status: { label: status },
+      court_or_uscis: { label: courtOrUscis },
+      ecas_or_paper: { label: ecas },
       date_received: { date: generateDate(-14, -1) },
       date_sent: { date: generateDate(1, 14) },
-    },
-  };
-}
-
-// =============================================================================
-// NVC Notices (direct from Profile, no Fee K)
-// =============================================================================
-
-export function generateNvcNoticeData(
-  profile: GeneratedProfile
-): BoardGenResult {
-  const noticeType = faker.helpers.arrayElement(NVC_NOTICE_TYPES);
-
-  return {
-    name: `${profile.name} - NVC Notice`,
-    overrides: {
-      notice_type: { label: noticeType },
-      status: { label: faker.helpers.arrayElement(["Received", "Reviewed", "Action Needed"]) },
-      notice_date: { date: generateDate(-30, -1) },
     },
   };
 }
@@ -226,15 +269,18 @@ export function generateNvcNoticeData(
 export function generateOriginalData(
   profile: GeneratedProfile
 ): BoardGenResult {
-  const receiptType = faker.helpers.arrayElement(RECEIPT_TYPES);
+  const status = faker.helpers.weightedArrayElement(ORIGINALS_STATUSES);
+  const receiptType = faker.helpers.weightedArrayElement(ORIGINALS_RECEIPT_TYPES);
+  const whatWeHave = faker.helpers.arrayElement(ORIGINALS_WHAT_WE_HAVE);
 
   return {
-    name: `${profile.name} - ${receiptType}`,
+    name: `${profile.name} - ${whatWeHave}`,
+    group: "Sent To Client",
     overrides: {
-      status: { label: faker.helpers.arrayElement(["Received", "Filed", "Delivered to Client"]) },
-      date_received: { date: generateDate(-30, -1) },
+      status: { label: status },
       receipt_type: { label: receiptType },
-      receipt_number: faker.string.alphanumeric(13).toUpperCase(),
+      what_we_have: { labels: [whatWeHave] },
+      date_received: { date: generateDate(-30, -1) },
     },
   };
 }
@@ -246,12 +292,16 @@ export function generateOriginalData(
 export function generateRfeData(
   profile: GeneratedProfile
 ): BoardGenResult {
-  const rfeType = faker.helpers.arrayElement(RFE_TYPES);
+  const status = faker.helpers.weightedArrayElement(RFE_STATUSES);
+  const rfeType = faker.helpers.arrayElement(RFE_TYPE_TAGS);
+  const attorney = faker.helpers.arrayElement(["WH", "LB", "M", "R"]);
 
   return {
-    name: `${profile.name} - RFE (${rfeType})`,
+    name: `${attorney} - ${rfeType}: ${profile.name}`,
+    group: "USCIS RFEs",
     overrides: {
-      status: { label: faker.helpers.arrayElement(["Received", "In Progress", "Responded", "Closed"]) },
+      status: { label: status },
+      type: { labels: [rfeType] },
       received_date: { date: generateDate(-30, -1) },
       warning: { date: generateDate(14, 60) },
       due_date: { date: generateDate(30, 87) },
@@ -266,14 +316,20 @@ export function generateRfeData(
 export function generateAppointmentData(
   profile: GeneratedProfile
 ): BoardGenResult {
-  const language = faker.helpers.arrayElement(LANGUAGES);
+  const language = faker.helpers.weightedArrayElement(LANGUAGES);
+  const status = faker.helpers.weightedArrayElement(APPOINTMENT_STATUSES);
   const [firstName, ...lastParts] = profile.name.split(" ");
   const lastName = lastParts.join(" ");
+  const calendly = faker.helpers.weightedArrayElement([
+    { value: "yes", weight: 55 },
+    { value: "", weight: 45 },
+  ]);
 
   return {
     name: profile.name,
+    group: "Past Consults",
     overrides: {
-      status: { label: faker.helpers.arrayElement(APPOINTMENT_STATUSES) },
+      status: { label: status },
       consult_date: { date: generateDate(-90, -1) },
       first_name: firstName,
       last_name: lastName,
@@ -282,6 +338,7 @@ export function generateAppointmentData(
       address: generateAddress(),
       language: { label: language },
       description: faker.lorem.sentence(),
+      ...(calendly ? { calendly: { label: calendly } } : {}),
     },
   };
 }
@@ -294,24 +351,26 @@ export function generateJailIntakeData(
   profileName?: string
 ): BoardGenResult {
   const name = profileName ?? faker.person.fullName();
-  const facility = faker.helpers.arrayElement(DETENTION_FACILITIES);
+  const status = faker.helpers.weightedArrayElement(JAIL_INTAKE_STATUSES);
+  const facility = faker.helpers.weightedArrayElement(DETENTION_FACILITIES);
+  const language = faker.helpers.weightedArrayElement(LANGUAGES);
+  const attorney = faker.helpers.weightedArrayElement(JAIL_INTAKE_ATTORNEYS);
+  const everRemoved = faker.helpers.weightedArrayElement(JAIL_EVER_REMOVED);
 
   return {
     name: `${name} - Jail Intake`,
+    group: "Jail Intakes",
     overrides: {
-      status: { label: faker.helpers.arrayElement(["New", "Scheduled", "Completed", "No Show"]) },
+      status: { label: status },
       detention_facility: { label: facility },
+      appt_with: { label: attorney },
       alien_number: faker.string.numeric(9),
       date_of_birth: faker.date.birthdate({ min: 18, max: 65, mode: "age" }).toISOString().split("T")[0],
       country_of_birth: faker.location.country(),
       intake_created: { date: generateDate(-30, -1) },
       consult_date: { date: generateDate(-14, 14) },
-      language: { label: faker.helpers.arrayElement(LANGUAGES) },
-      is_this_your_first_interaction_with_ice: { label: faker.helpers.arrayElement(["Yes", "No"]) },
-      have_you_seen_an_immigration_judge: { label: faker.helpers.arrayElement(["Yes", "No"]) },
-      have_you_ever_been_ordered_removed: { label: faker.helpers.arrayElement(["Yes", "No"]) },
-      have_you_ever_been_arrested: { label: faker.helpers.arrayElement(["Yes", "No"]) },
-      do_you_have_an_attorney: { label: "No" },
+      language: { label: language },
+      have_you_even_been_removed: { label: everRemoved },
     },
   };
 }
