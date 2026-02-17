@@ -45,9 +45,10 @@ import {
 // Types
 // =============================================================================
 
-interface BoardGenResult {
+export interface BoardGenResult {
   name: string;
   group?: string;
+  attorney?: string;
   overrides: Record<string, unknown>;
 }
 
@@ -72,24 +73,16 @@ export function generateCourtCaseData(
   return {
     name: `${attorney} - ${profile.name} [${aNumber}]`,
     group: "Court Case",
+    attorney,
     overrides: {
-      // Hearing type (status_1__1)
       hearing_type: { label: hearingType },
-      // Hearing Status (project_status)
       status: { label: hearingStatus },
-      // Next hearing date
       x_next_hearing_date: { date: generateDate(7, 365) },
-      // NTA date (past)
       nta_date: { date: generateDate(-730, -30) },
-      // Year
       year: { label: year },
-      // Entry type
       entry: { label: entry },
-      // Seeking
       seeking: { label: seeking },
-      // ECAS or eService
       ecas_or_eservice: { label: ecas },
-      // Relief tags
       relief: { labels: [relief] },
     },
   };
@@ -299,6 +292,7 @@ export function generateRfeData(
   return {
     name: `${attorney} - ${rfeType}: ${profile.name}`,
     group: "USCIS RFEs",
+    attorney,
     overrides: {
       status: { label: status },
       type: { labels: [rfeType] },

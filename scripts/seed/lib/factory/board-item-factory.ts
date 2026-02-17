@@ -2,10 +2,11 @@
 // Generic Board Item Factory
 // =============================================================================
 // Creates items for any board using the board_items table.
+// Override-only mode: column_values contains only explicitly set overrides,
+// no auto-generated noise.
 
 import type { Database } from "bun:sqlite";
 import type { BoardConfig } from "../../../../lib/config/types";
-import { generateColumnValue } from "./column-generators";
 import { faker } from "./column-generators";
 
 // =============================================================================
@@ -17,6 +18,10 @@ export interface GeneratedBoardItem {
   boardKey: string;
   groupTitle?: string;
   name: string;
+  status?: string;
+  nextDate?: string;
+  attorney?: string;
+  profileLocalId?: string;
   columnValues: Record<string, unknown>;
 }
 
@@ -27,8 +32,12 @@ export interface BoardItemCreateOptions {
   name: string;
   /** Monday.com group title for the item */
   groupTitle?: string;
-  /** Override auto-generated values for specific columns */
+  /** Explicit column values from board generators */
   overrides?: Record<string, unknown>;
+  /** Denormalized profile link for fast queries */
+  profileLocalId?: string;
+  /** Attorney initials (WH, LB, M, R) */
+  attorney?: string;
 }
 
 export interface ItemRelationship {
@@ -40,12 +49,26 @@ export interface ItemRelationship {
   columnKey: string;
 }
 
-// Read-only column types that should be skipped during generation
-const SKIP_TYPES = new Set([
-  "mirror", "lookup", "item_id", "creation_log",
-  "button", "subtasks", "file", "people", "last_updated",
-  "direct_doc", "doc", "link", "tags",
-]);
+// =============================================================================
+// Next-date key mapping per board
+// =============================================================================
+
+const NEXT_DATE_KEY: Record<string, string> = {
+  court_cases: "x_next_hearing_date",
+  motions: "next_hearing_date",
+  _cd_open_forms: "target_date",
+  appeals: "appeal_due",
+  rfes_all: "due_date",
+  litigation: "due_date",
+  _lt_i918b_s: "due_date_for_u_visa_hire",
+  address_changes: "date_sent",
+  _na_originals_cards_notices: "date_received",
+  appointments_r: "consult_date",
+  appointments_m: "consult_date",
+  appointments_lb: "consult_date",
+  appointments_wh: "consult_date",
+  _fa_jail_intakes: "consult_date",
+};
 
 // =============================================================================
 // BoardItemFactory
@@ -59,40 +82,27 @@ export class BoardItemFactory {
   }
 
   /**
-   * Creates a board item with auto-generated column values + overrides
+   * Creates a board item using only explicit overrides (no auto-generation).
+   * Extracts status and next_date into first-class columns.
    */
   create(options: BoardItemCreateOptions): GeneratedBoardItem {
     const localId = faker.string.uuid();
-    const columnValues: Record<string, unknown> = {};
 
-    // Auto-generate values for writable column types
-    for (const [key, resolution] of Object.entries(options.boardConfig.columns)) {
-      const type = resolution.type ?? resolution.types?.[0];
-      if (!type || SKIP_TYPES.has(type)) continue;
+    // Only use explicitly provided overrides — no auto-generation
+    const columnValues: Record<string, unknown> = options.overrides
+      ? { ...options.overrides }
+      : {};
 
-      // Skip board_relation — handled by relationships
-      if (type === "board_relation") continue;
+    // Extract status from overrides
+    const statusObj = columnValues.status as { label?: string } | undefined;
+    const status = statusObj?.label ?? undefined;
 
-      // Use override if provided
-      if (options.overrides && key in options.overrides) {
-        columnValues[key] = options.overrides[key];
-        continue;
-      }
-
-      // Auto-generate based on type
-      const value = generateColumnValue(type);
-      if (value !== null) {
-        columnValues[key] = value;
-      }
-    }
-
-    // Apply any remaining overrides not in board config
-    if (options.overrides) {
-      for (const [key, value] of Object.entries(options.overrides)) {
-        if (!(key in columnValues)) {
-          columnValues[key] = value;
-        }
-      }
+    // Extract next_date from board-specific key
+    const dateKey = NEXT_DATE_KEY[options.boardKey];
+    let nextDate: string | undefined;
+    if (dateKey && columnValues[dateKey]) {
+      const dateObj = columnValues[dateKey] as { date?: string } | undefined;
+      nextDate = dateObj?.date ?? undefined;
     }
 
     const item: GeneratedBoardItem = {
@@ -100,6 +110,10 @@ export class BoardItemFactory {
       boardKey: options.boardKey,
       groupTitle: options.groupTitle,
       name: options.name,
+      status,
+      nextDate,
+      attorney: options.attorney,
+      profileLocalId: options.profileLocalId,
       columnValues,
     };
 
@@ -134,14 +148,20 @@ export class BoardItemFactory {
   private persist(item: GeneratedBoardItem, batchId: number): void {
     this.db.prepare(`
       INSERT INTO board_items (
-        batch_id, local_id, board_key, group_title, name, column_values
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        batch_id, local_id, board_key, group_title, name,
+        status, next_date, attorney, profile_local_id,
+        column_values
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       batchId,
       item.localId,
       item.boardKey,
       item.groupTitle ?? null,
       item.name,
+      item.status ?? null,
+      item.nextDate ?? null,
+      item.attorney ?? null,
+      item.profileLocalId ?? null,
       JSON.stringify(item.columnValues)
     );
   }

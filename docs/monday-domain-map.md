@@ -26,15 +26,14 @@
       │   │   │        └── RFEs (received by email, occasionally own Fee K)
       │   │   │
       │   │   └── Fee K ──→ Court Case (can be standalone)
-      │   │        │              └── Motions (must link to Court Case)
-      │   │        │
+      │   │
       │   └── Fee K ──→ Open Form (USCIS/NVC, not court)
       │
-      └── Fee K ──→ Appeal / FOIA / Litigation / I918B
+      └── Fee K ──→ Motion / Appeal / FOIA / Litigation / I918B
 
    Key: Some Fee Ks create entries on MULTIPLE boards
-        e.g. Fee K → Court Case + Motion
-             Fee K → Court Case + Open Form
+        e.g. Fee K → Court Case + Open Form
+   Note: Motions link to an existing court case but don't create one
 ```
 
 ## Board Inventory (18 boards)
@@ -75,7 +74,7 @@ Each Fee K's case type determines which work board(s) get entries:
 
 - **Court track**: EOIR hearings, trials, bond → `court_cases`
 - **USCIS/NVC track**: I-forms, N-forms, DACA, TPS, consular → `_cd_open_forms`
-- **Motions**: Always paired with a `court_cases` entry (motions are within someone's court case)
+- **Motions**: Standalone on the `motions` board (link to an existing court case, don't create one)
 - **Appeals**: BIA or Circuit → `appeals`
 - **FOIAs**: EOIR, G639, OBIM, FBI, NRC → `foias`
 - **Litigation**: Mandamus → `litigation`
@@ -83,9 +82,8 @@ Each Fee K's case type determines which work board(s) get entries:
 
 Some case types create entries on **multiple boards** simultaneously:
 - `I-485 (Adjustment in Court)` → `_cd_open_forms` + `court_cases`
-- Any motion type → `motions` + `court_cases`
 
-Court Case Rep can also be standalone (no motion).
+Motions link to an existing court case but are routed only to the `motions` board (they don't create a new `court_cases` entry).
 
 ### Direct-from-Profile Boards (no Fee K)
 

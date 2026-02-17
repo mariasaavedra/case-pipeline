@@ -8,6 +8,9 @@ A config-driven read-only analysis and document generation platform for Monday.c
 
 ## Features
 
+- **Client Dashboard** - Web-based 360-degree view of any client: profile, contracts, active cases, pending items, and appointments
+- **Query Layer** - Typed functions for client search (FTS5), contracts, board items, and full case summaries
+- **JSON API** - RESTful endpoints served by `Bun.serve()` for the dashboard and future integrations
 - **Document Generation** - Create documents from Monday.com data using Handlebars templates with interactive profile selection
 - **Test Data Seeding** - Generate realistic test data locally with Faker.js and SQLite (no Monday.com sync)
 - **Configuration Sync** - Keep board configurations in sync with Monday.com using YAML-based definitions
@@ -53,7 +56,8 @@ bun cli.ts <command> [options]
 | Command | Description |
 |---------|-------------|
 | `render` | Generate documents from Monday.com items |
-| `seed` | Generate and sync test data to boards |
+| `seed` | Generate realistic test data locally (SQLite) |
+| `lookup` | Search clients and view 360 case summary |
 | `sync` | Synchronize board configuration with Monday.com |
 | `analyze` | Analyze board relationships and generate maps |
 
@@ -69,8 +73,14 @@ bun cli.ts render --item=123456789
 # Generate 10 test profiles with 2-3 contracts each
 bun cli.ts seed --profiles=10 --contracts=2-3
 
-# Preview what would change without writing
-bun cli.ts seed --dry-run
+# Search for a client by name
+bun cli.ts lookup Garcia
+
+# View full 360 case summary by ID
+bun cli.ts lookup --id=<local_id>
+
+# Start the web dashboard
+bun run dev
 
 # Sync board configuration
 bun cli.ts sync
@@ -115,13 +125,21 @@ Strategies can be chained for fallback behavior.
 ```
 ├── cli.ts                    # Main CLI entry point
 ├── cli/commands/             # CLI command implementations
+├── server.ts                 # Web server (Bun.serve)
 ├── config/
 │   └── boards.yaml           # Board configuration
 ├── lib/
+│   ├── api/                  # API route handlers
 │   ├── config/               # Configuration loading
 │   ├── monday/               # Monday.com API client
+│   ├── query/                # Query layer (search, contracts, board items, case summary)
 │   ├── relationship-map/     # Board analysis
 │   └── template/             # Template rendering
+├── web/
+│   ├── index.html            # Dashboard entry point
+│   ├── app.tsx               # React root component
+│   ├── config.ts             # Board display config (add/remove boards here)
+│   └── components/           # React components
 ├── scripts/
 │   ├── seed/                 # Data seeding tools
 │   └── sync-config/          # Configuration sync
@@ -147,6 +165,7 @@ bun run typecheck
 ### Package Scripts
 
 ```bash
+bun run dev              # Start web dashboard (localhost:3000)
 bun run cli <command>    # Run CLI
 bun run render           # Shortcut for render command
 bun run seed             # Shortcut for seed command
@@ -159,6 +178,7 @@ bun run analyze          # Shortcut for analyze command
 ## Documentation
 
 - [Architecture Guide](docs/CONFIG-ARCHITECTURE.md) - Detailed system design and patterns
+- [Monday.com Domain Map](docs/monday-domain-map.md) - Board relationships and case flow
 - [Board Relationship Map](docs/boards.md) - Visual map of all 18 tracked boards and their connections
 
 ---

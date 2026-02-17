@@ -75,7 +75,7 @@ type BoardGeneratorFn = (
   profile: GeneratedProfile,
   feeK: { caseType: string; localId: string },
   dest: BoardDestination
-) => { name: string; group?: string; overrides: Record<string, unknown> };
+) => { name: string; group?: string; attorney?: string; overrides: Record<string, unknown> };
 
 const BOARD_GENERATORS: Record<string, BoardGeneratorFn> = {
   court_cases: (profile, feeK) => generateCourtCaseData(profile, feeK as any),
@@ -194,6 +194,8 @@ export class Seeder {
               name: data.name,
               groupTitle: data.group ?? dest.group,
               overrides: data.overrides,
+              profileLocalId: profile.localId,
+              attorney: data.attorney,
             });
             result.boardItems[dest.board] = (result.boardItems[dest.board] || 0) + 1;
 
@@ -260,7 +262,7 @@ export class Seeder {
     const directBoards: Array<{
       boardKey: string;
       chance: number;
-      generator: (p: GeneratedProfile) => { name: string; group?: string; overrides: Record<string, unknown> };
+      generator: (p: GeneratedProfile) => { name: string; group?: string; attorney?: string; overrides: Record<string, unknown> };
     }> = [
       { boardKey: "address_changes", chance: 0.3, generator: generateAddressChangeData },
       // NVC Notices: 0% — per user, leave empty for now
@@ -278,19 +280,21 @@ export class Seeder {
         if (faker.number.float({ min: 0, max: 1 }) > chance) continue;
 
         const data = generator(profile);
-        factory.create({
+        const item = factory.create({
           batchId,
           boardKey,
           boardConfig,
           name: data.name,
           groupTitle: data.group,
           overrides: data.overrides,
+          profileLocalId: profile.localId,
+          attorney: data.attorney,
         });
         count++;
 
         factory.createRelationship(batchId, {
           sourceTable: "board_items",
-          sourceLocalId: faker.string.uuid(), // placeholder — actual ID from factory
+          sourceLocalId: item.localId,
           targetTable: "profiles",
           targetLocalId: profile.localId,
           relationshipType: "profile",
@@ -320,6 +324,8 @@ export class Seeder {
       if (!boardConfig) continue;
 
       const data = generateAppointmentData(profile);
+      // Attorney derived from board key: appointments_r → R, appointments_wh → WH
+      const attorney = boardKey.replace("appointments_", "").toUpperCase();
       const item = factory.create({
         batchId,
         boardKey,
@@ -327,6 +333,8 @@ export class Seeder {
         name: data.name,
         groupTitle: data.group,
         overrides: data.overrides,
+        profileLocalId: profile.localId,
+        attorney,
       });
       result.boardItems[boardKey] = (result.boardItems[boardKey] || 0) + 1;
 
@@ -371,6 +379,7 @@ export class Seeder {
         name: data.name,
         groupTitle: data.group,
         overrides: data.overrides,
+        profileLocalId: profile.localId,
       });
       count++;
     }

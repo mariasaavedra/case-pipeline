@@ -4,7 +4,7 @@
 
 import type { Database } from "bun:sqlite";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -71,6 +71,10 @@ CREATE TABLE IF NOT EXISTS board_items (
     board_key TEXT NOT NULL,
     group_title TEXT,
     name TEXT NOT NULL,
+    status TEXT,
+    next_date TEXT,
+    attorney TEXT,
+    profile_local_id TEXT,
     column_values TEXT NOT NULL,
     sync_status TEXT NOT NULL DEFAULT 'pending',
     sync_error TEXT,
@@ -97,6 +101,29 @@ CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY
 );
 
+-- FTS5 for client search
+CREATE VIRTUAL TABLE IF NOT EXISTS profiles_fts USING fts5(
+    name, email, phone,
+    content='profiles',
+    content_rowid='id'
+);
+
+-- Triggers to keep FTS in sync
+CREATE TRIGGER IF NOT EXISTS profiles_ai AFTER INSERT ON profiles BEGIN
+    INSERT INTO profiles_fts(rowid, name, email, phone)
+    VALUES (new.id, new.name, new.email, new.phone);
+END;
+CREATE TRIGGER IF NOT EXISTS profiles_ad AFTER DELETE ON profiles BEGIN
+    INSERT INTO profiles_fts(profiles_fts, rowid, name, email, phone)
+    VALUES ('delete', old.id, old.name, old.email, old.phone);
+END;
+CREATE TRIGGER IF NOT EXISTS profiles_au AFTER UPDATE ON profiles BEGIN
+    INSERT INTO profiles_fts(profiles_fts, rowid, name, email, phone)
+    VALUES ('delete', old.id, old.name, old.email, old.phone);
+    INSERT INTO profiles_fts(rowid, name, email, phone)
+    VALUES (new.id, new.name, new.email, new.phone);
+END;
+
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_profiles_batch ON profiles(batch_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_sync ON profiles(sync_status);
@@ -106,6 +133,9 @@ CREATE INDEX IF NOT EXISTS idx_contracts_profile ON contracts(profile_local_id);
 CREATE INDEX IF NOT EXISTS idx_contracts_sync ON contracts(sync_status);
 CREATE INDEX IF NOT EXISTS idx_board_items_batch ON board_items(batch_id);
 CREATE INDEX IF NOT EXISTS idx_board_items_board ON board_items(board_key);
+CREATE INDEX IF NOT EXISTS idx_board_items_status ON board_items(status);
+CREATE INDEX IF NOT EXISTS idx_board_items_profile ON board_items(profile_local_id);
+CREATE INDEX IF NOT EXISTS idx_board_items_next_date ON board_items(next_date);
 CREATE INDEX IF NOT EXISTS idx_relationships_source ON item_relationships(source_local_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_target ON item_relationships(target_local_id);
 `;
@@ -140,6 +170,63 @@ export function initializeSchema(db: Database): void {
       }
     }
 
+    // Migration v2 → v3: extracted queryable columns + FTS5
+    if (fromVersion < 3) {
+      const cols = ["status", "next_date", "attorney", "profile_local_id"];
+      for (const col of cols) {
+        const has = db
+          .query(`SELECT COUNT(*) as cnt FROM pragma_table_info('board_items') WHERE name='${col}'`)
+          .get() as { cnt: number };
+        if (!has || has.cnt === 0) {
+          db.exec(`ALTER TABLE board_items ADD COLUMN ${col} TEXT`);
+        }
+      }
+
+      // Add new indices (IF NOT EXISTS is safe for re-runs)
+      db.exec("CREATE INDEX IF NOT EXISTS idx_board_items_status ON board_items(status)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_board_items_profile ON board_items(profile_local_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_board_items_next_date ON board_items(next_date)");
+
+      // FTS5 virtual table for client search
+      const hasFts = db
+        .query("SELECT name FROM sqlite_master WHERE type='table' AND name='profiles_fts'")
+        .get();
+      if (!hasFts) {
+        db.exec(`
+          CREATE VIRTUAL TABLE profiles_fts USING fts5(
+            name, email, phone,
+            content='profiles',
+            content_rowid='id'
+          );
+          -- Populate FTS from existing profiles
+          INSERT INTO profiles_fts(rowid, name, email, phone)
+            SELECT id, name, email, phone FROM profiles;
+          -- Sync triggers
+          CREATE TRIGGER IF NOT EXISTS profiles_ai AFTER INSERT ON profiles BEGIN
+            INSERT INTO profiles_fts(rowid, name, email, phone)
+            VALUES (new.id, new.name, new.email, new.phone);
+          END;
+          CREATE TRIGGER IF NOT EXISTS profiles_ad AFTER DELETE ON profiles BEGIN
+            INSERT INTO profiles_fts(profiles_fts, rowid, name, email, phone)
+            VALUES ('delete', old.id, old.name, old.email, old.phone);
+          END;
+          CREATE TRIGGER IF NOT EXISTS profiles_au AFTER UPDATE ON profiles BEGIN
+            INSERT INTO profiles_fts(profiles_fts, rowid, name, email, phone)
+            VALUES ('delete', old.id, old.name, old.email, old.phone);
+            INSERT INTO profiles_fts(rowid, name, email, phone)
+            VALUES (new.id, new.name, new.email, new.phone);
+          END;
+        `);
+      }
+
+      // Backfill extracted columns from existing JSON data
+      db.exec(`
+        UPDATE board_items
+        SET status = json_extract(column_values, '$.status.label')
+        WHERE status IS NULL AND json_extract(column_values, '$.status.label') IS NOT NULL
+      `);
+    }
+
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);
     console.log(`  Database schema migrated to v${SCHEMA_VERSION}`);
   }
@@ -147,6 +234,10 @@ export function initializeSchema(db: Database): void {
 
 export function resetDatabase(db: Database): void {
   db.exec(`
+    DROP TABLE IF EXISTS profiles_fts;
+    DROP TRIGGER IF EXISTS profiles_ai;
+    DROP TRIGGER IF EXISTS profiles_ad;
+    DROP TRIGGER IF EXISTS profiles_au;
     DROP TABLE IF EXISTS item_relationships;
     DROP TABLE IF EXISTS board_items;
     DROP TABLE IF EXISTS contracts;

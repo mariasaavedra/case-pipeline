@@ -7,6 +7,7 @@ import { renderCommand } from "./cli/commands/render";
 import { seedCommand } from "./cli/commands/seed";
 import { syncCommand } from "./cli/commands/sync";
 import { analyzeCommand } from "./cli/commands/analyze";
+import { lookupCommand } from "./cli/commands/lookup";
 
 // =============================================================================
 // CLI Configuration
@@ -28,6 +29,10 @@ const COMMANDS = {
   analyze: {
     description: "Analyze board relationships and generate maps",
     handler: analyzeCommand,
+  },
+  lookup: {
+    description: "Search clients and view 360 case summary",
+    handler: lookupCommand,
   },
 } as const;
 
