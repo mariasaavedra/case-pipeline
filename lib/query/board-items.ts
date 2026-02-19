@@ -94,7 +94,13 @@ export function getBoardItemDetail(
   if (!row) return null;
 
   return {
-    ...row,
+    localId: row.localId,
+    boardKey: row.boardKey,
+    name: row.name,
+    status: row.status,
+    nextDate: row.nextDate,
+    attorney: row.attorney,
+    groupTitle: row.groupTitle,
     columnValues: safeParseJson(row.column_values),
   };
 }

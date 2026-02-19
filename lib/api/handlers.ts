@@ -29,8 +29,19 @@ function error(message: string, status: number): Response {
 // Handlers
 // =============================================================================
 
-export function handleListClients(_req: Request, db: Database): Response {
-  const profiles = listProfiles(db);
+export function handleListClients(req: Request, db: Database): Response {
+  const url = new URL(req.url);
+  const limitParam = url.searchParams.get("limit");
+  const offsetParam = url.searchParams.get("offset");
+
+  const limit = limitParam
+    ? Math.max(1, Math.min(parseInt(limitParam, 10) || 50, 200))
+    : 50;
+  const offset = offsetParam
+    ? Math.max(0, parseInt(offsetParam, 10) || 0)
+    : 0;
+
+  const profiles = listProfiles(db, limit, offset);
   return json(profiles);
 }
 
@@ -92,7 +103,9 @@ export function handleClientUpdates(req: Request, db: Database): Response {
 
   const url = new URL(req.url);
   const limitParam = url.searchParams.get("limit");
-  const limit = limitParam ? Math.min(parseInt(limitParam, 10) || 50, 200) : 50;
+  const limit = limitParam
+    ? Math.max(1, Math.min(parseInt(limitParam, 10) || 50, 200))
+    : 50;
 
   const updates = getClientUpdates(db, localId, limit);
   return json(updates);

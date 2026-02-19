@@ -10,6 +10,7 @@ export function SearchBar({ onResults }: Props) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -17,6 +18,7 @@ export function SearchBar({ onResults }: Props) {
       setQuery(value);
 
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (controllerRef.current) controllerRef.current.abort();
 
       if (value.trim().length < 2) {
         onResults([]);
@@ -24,11 +26,14 @@ export function SearchBar({ onResults }: Props) {
       }
 
       timerRef.current = setTimeout(async () => {
+        const controller = new AbortController();
+        controllerRef.current = controller;
         setLoading(true);
         try {
-          const results = await searchClients(value.trim());
+          const results = await searchClients(value.trim(), controller.signal);
           onResults(results);
-        } catch {
+        } catch (err) {
+          if ((err as Error).name === "AbortError") return;
           onResults([]);
         } finally {
           setLoading(false);

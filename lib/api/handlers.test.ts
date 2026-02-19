@@ -6,6 +6,7 @@ import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { Database } from "bun:sqlite";
 import { initializeSchema } from "../../scripts/seed/lib/db/schema";
 import {
+  handleListClients,
   handleSearch,
   handleClientDetail,
   handleClientContracts,
@@ -216,6 +217,7 @@ describe("handleBoardItemDetail", () => {
     const body = (await res.json()) as any;
     expect(body.data.boardKey).toBe("appointments_r");
     expect(body.data.columnValues.language.label).toBe("Spanish");
+    expect(body.data.column_values).toBeUndefined();
   });
 
   test("returns 404 for unknown board item", async () => {
@@ -259,5 +261,95 @@ describe("handleClientUpdates", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.data).toEqual([]);
+  });
+
+  test("clamps negative limit to 1", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients/p1/updates?limit=-1", { localId: "p1" });
+    const res = handleClientUpdates(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.data.length).toBeLessThanOrEqual(1);
+  });
+
+  test("treats limit=0 as default (50)", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients/p1/updates?limit=0", { localId: "p1" });
+    const res = handleClientUpdates(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(Array.isArray(body.data)).toBe(true);
+  });
+
+  test("caps limit=9999 to 200", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients/p1/updates?limit=9999", { localId: "p1" });
+    const res = handleClientUpdates(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(Array.isArray(body.data)).toBe(true);
+  });
+
+  test("treats non-numeric limit as default (50)", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients/p1/updates?limit=abc", { localId: "p1" });
+    const res = handleClientUpdates(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(Array.isArray(body.data)).toBe(true);
+  });
+});
+
+// =============================================================================
+// List Clients Tests (with pagination)
+// =============================================================================
+
+describe("handleListClients", () => {
+  test("returns profiles with default limit", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients");
+    const res = handleListClients(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data.length).toBe(2);
+  });
+
+  test("respects limit param", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients?limit=1");
+    const res = handleListClients(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.data.length).toBe(1);
+  });
+
+  test("respects offset param", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients?limit=1&offset=1");
+    const res = handleListClients(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.data.length).toBe(1);
+    // ORDER BY name: "Carlos Garcia" then "Maria Garcia" — offset=1 gives Maria
+    expect(body.data[0].name).toBe("Maria Garcia");
+  });
+
+  test("clamps negative limit to 1", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients?limit=-5");
+    const res = handleListClients(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.data.length).toBeLessThanOrEqual(1);
+  });
+
+  test("treats negative offset as 0", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients?offset=-1");
+    const res = handleListClients(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.data.length).toBe(2);
   });
 });

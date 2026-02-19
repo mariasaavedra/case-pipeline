@@ -56,16 +56,17 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
 }
 
 /**
- * List all profiles, ordered by name
+ * List profiles, ordered by name, with pagination
  */
-export function listProfiles(db: Database): SearchResult[] {
+export function listProfiles(db: Database, limit = 50, offset = 0): SearchResult[] {
   return db
     .prepare(`
       SELECT local_id AS localId, name, email, phone
       FROM profiles
       ORDER BY name
+      LIMIT ? OFFSET ?
     `)
-    .all() as SearchResult[];
+    .all(limit, offset) as SearchResult[];
 }
 
 /**
