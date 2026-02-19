@@ -12,6 +12,7 @@ import {
   handleClientBoardItems,
   handleBoardItemDetail,
   handleClientUpdates,
+  handleClientRelationships,
 } from "./lib/api/handlers";
 import homepage from "./web/index.html";
 
@@ -51,6 +52,9 @@ const server = Bun.serve({
     },
     "/api/clients/:localId/updates": {
       GET: (req) => handleClientUpdates(req, db),
+    },
+    "/api/clients/:localId/relationships": {
+      GET: (req) => handleClientRelationships(req, db),
     },
     "/api/board-items/:localId": {
       GET: (req) => handleBoardItemDetail(req, db),

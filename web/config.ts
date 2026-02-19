@@ -83,3 +83,11 @@ export function getPriorityColor(priority: string | null): string {
   if (!priority) return "gray";
   return PRIORITY_COLORS[priority] ?? "gray";
 }
+
+/** Board keys shown in the Documents & Notices tab */
+export const DOCUMENT_BOARD_KEYS = new Set([
+  "rfes_all",
+  "_na_originals_cards_notices",
+  "nvc_notices",
+  "address_changes",
+]);

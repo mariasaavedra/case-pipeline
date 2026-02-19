@@ -13,6 +13,7 @@ import {
   handleClientBoardItems,
   handleBoardItemDetail,
   handleClientUpdates,
+  handleClientRelationships,
 } from "./handlers";
 
 // =============================================================================
@@ -351,5 +352,55 @@ describe("handleListClients", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.data.length).toBe(2);
+  });
+});
+
+// =============================================================================
+// Client Updates with Offset Tests
+// =============================================================================
+
+describe("handleClientUpdates (offset)", () => {
+  test("returns updates with offset", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients/p1/updates?limit=1&offset=1", { localId: "p1" });
+    const res = handleClientUpdates(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.data.length).toBe(1);
+    // Offset=1 skips the first (newest) update
+    expect(body.data[0].textBody).toBe("Filed I-589");
+  });
+
+  test("treats negative offset as 0", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients/p1/updates?offset=-5", { localId: "p1" });
+    const res = handleClientUpdates(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.data.length).toBe(2);
+  });
+});
+
+// =============================================================================
+// Client Relationships Tests
+// =============================================================================
+
+describe("handleClientRelationships", () => {
+  test("returns relationships for valid client", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients/p1/relationships", { localId: "p1" });
+    const res = handleClientRelationships(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(Array.isArray(body.data)).toBe(true);
+  });
+
+  test("returns empty array for client with no relationships", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients/p2/relationships", { localId: "p2" });
+    const res = handleClientRelationships(req, db);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.data).toEqual([]);
   });
 });

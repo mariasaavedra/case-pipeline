@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { ClientUpdate } from "../api";
-import { BOARD_DISPLAY_NAMES } from "../../lib/query/types";
+import { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS } from "../../lib/query/types";
+import { DOCUMENT_BOARD_KEYS } from "../config";
+import type { TimelineFilter } from "./TimelineFilters";
 
 function formatDateTime(iso: string): { date: string; time: string } {
   const d = new Date(iso);
@@ -29,7 +31,6 @@ function getInitials(name: string): string {
   return (parts[0]?.[0] ?? "?").toUpperCase();
 }
 
-// Deterministic color from name
 const AVATAR_COLORS = [
   { bg: "#1e293b", text: "#e2e8f0" },
   { bg: "#7c3aed", text: "#ede9fe" },
@@ -49,172 +50,178 @@ function getAvatarColor(name: string) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]!;
 }
 
-interface Props {
-  updates: ClientUpdate[];
+const NOTICE_KEYS = new Set(["rfes_all", "nvc_notices", "_na_originals_cards_notices"]);
+
+function matchesFilter(u: ClientUpdate, filter: TimelineFilter): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "notes":
+      return !u.boardKey || (!DOCUMENT_BOARD_KEYS.has(u.boardKey) && !APPOINTMENT_BOARD_KEYS.has(u.boardKey));
+    case "documents":
+      return !!u.boardKey && DOCUMENT_BOARD_KEYS.has(u.boardKey);
+    case "notices":
+      return !!u.boardKey && NOTICE_KEYS.has(u.boardKey);
+    case "appointments":
+      return !!u.boardKey && APPOINTMENT_BOARD_KEYS.has(u.boardKey);
+  }
 }
 
-export function UpdatesTimeline({ updates }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+function getEventBadge(u: ClientUpdate): { label: string; bg: string; text: string } {
+  if (u.sourceType === "reply") return { label: "Reply", bg: "var(--color-status-purple-bg)", text: "var(--color-status-purple)" };
+  if (u.boardKey && DOCUMENT_BOARD_KEYS.has(u.boardKey)) return { label: "Document", bg: "var(--color-status-blue-bg)", text: "var(--color-status-blue)" };
+  if (u.boardKey && APPOINTMENT_BOARD_KEYS.has(u.boardKey)) return { label: "Appt", bg: "var(--color-status-green-bg)", text: "var(--color-status-green)" };
+  if (u.boardKey && NOTICE_KEYS.has(u.boardKey)) return { label: "Notice", bg: "var(--color-status-yellow-bg)", text: "var(--color-status-yellow)" };
+  return { label: "Note", bg: "var(--color-surface-warm)", text: "var(--color-ink-muted)" };
+}
 
-  if (updates.length === 0) return null;
+const PAGE_SIZE = 30;
 
-  const grouped = groupByDate(updates);
+interface Props {
+  updates: ClientUpdate[];
+  filter?: TimelineFilter;
+  last30Days?: boolean;
+}
+
+export function UpdatesTimeline({ updates, filter = "all", last30Days = false }: Props) {
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const filtered = useMemo(() => {
+    let result = updates;
+    if (filter !== "all") {
+      result = result.filter((u) => matchesFilter(u, filter));
+    }
+    if (last30Days) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 30);
+      result = result.filter((u) => new Date(u.createdAtSource) >= cutoff);
+    }
+    return result;
+  }, [updates, filter, last30Days]);
+
+  const paginated = filtered.slice(0, visibleCount);
+  const hasMore = filtered.length > visibleCount;
+
+  if (filtered.length === 0) {
+    return (
+      <div className="py-10 text-center">
+        <p className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
+          {filter === "all" ? "No updates yet." : `No ${filter} found.`}
+        </p>
+      </div>
+    );
+  }
+
+  const grouped = groupByDate(paginated);
   const dateKeys = Object.keys(grouped);
-  const visibleKeys = showAll ? dateKeys : dateKeys.slice(0, 5);
-  const hasMore = dateKeys.length > 5;
 
   return (
-    <div className="card card-elevated overflow-hidden">
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center justify-between px-5 py-3 transition-colors"
-        style={{
-          backgroundColor: "var(--color-surface-warm)",
-          borderBottom: collapsed ? "none" : "1px solid var(--color-border-light)",
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="var(--color-ink-faint)"
-            className={`toggle-chevron ${!collapsed ? "toggle-chevron-open" : ""}`}
-          >
-            <path d="M4.5 2l4 4-4 4" />
-          </svg>
-          <h3
-            className="text-sm font-semibold"
-            style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
-          >
-            Updates & Notes
-          </h3>
-          <span
-            className="text-xs font-medium px-2 py-0.5 rounded-full"
-            style={{
-              backgroundColor: "var(--color-surface)",
-              color: "var(--color-ink-faint)",
-              fontFamily: "var(--font-mono)",
-              border: "1px solid var(--color-border-light)",
-            }}
-          >
-            {updates.length}
-          </span>
-        </div>
-        <span
-          className="text-xs"
-          style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-        >
-          {collapsed ? "Show" : "Hide"}
-        </span>
-      </button>
-
-      {!collapsed && (
-        <div className="px-5 py-4">
-          {visibleKeys.map((date, di) => (
-            <div key={date} className="mb-5 last:mb-0">
-              {/* Date header */}
-              <div className="flex items-center gap-3 mb-3">
-                <span
-                  className="text-[11px] font-semibold uppercase tracking-wider"
-                  style={{ color: "var(--color-amber)", fontFamily: "var(--font-body)" }}
-                >
-                  {date}
-                </span>
-                <div className="flex-1 h-px" style={{ backgroundColor: "var(--color-border-light)" }} />
-              </div>
-
-              {/* Updates for this date */}
-              <div className="space-y-3">
-                {grouped[date]!.map((u) => {
-                  const { time } = formatDateTime(u.createdAtSource);
-                  const initials = getInitials(u.authorName);
-                  const avatarColor = getAvatarColor(u.authorName);
-                  const isReply = u.sourceType === "reply";
-
-                  return (
-                    <div
-                      key={u.localId}
-                      className="flex gap-3"
-                      style={{ paddingLeft: isReply ? 36 : 0 }}
-                    >
-                      {/* Avatar */}
-                      <div
-                        className="author-avatar"
-                        style={{
-                          backgroundColor: isReply ? "transparent" : avatarColor.bg,
-                          color: isReply ? "var(--color-ink-faint)" : avatarColor.text,
-                          border: isReply ? "1.5px solid var(--color-border)" : "none",
-                          fontSize: isReply ? 10 : 11,
-                          width: isReply ? 24 : 28,
-                          height: isReply ? 24 : 28,
-                          marginTop: 2,
-                        }}
-                      >
-                        {initials}
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-1">
-                          <span
-                            className="text-sm font-medium"
-                            style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
-                          >
-                            {u.authorName}
-                          </span>
-                          <span
-                            className="text-[11px]"
-                            style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)" }}
-                          >
-                            {time}
-                          </span>
-                          {u.boardKey && (
-                            <span className="board-tag">
-                              {BOARD_DISPLAY_NAMES[u.boardKey] ?? u.boardKey}
-                            </span>
-                          )}
-                          {isReply && (
-                            <span
-                              className="text-[11px] font-medium px-1.5 py-0.5 rounded"
-                              style={{
-                                backgroundColor: "var(--color-status-purple-bg)",
-                                color: "var(--color-status-purple)",
-                              }}
-                            >
-                              reply
-                            </span>
-                          )}
-                        </div>
-                        <p
-                          className="text-sm whitespace-pre-wrap leading-relaxed"
-                          style={{
-                            color: "var(--color-ink-muted)",
-                            fontFamily: "var(--font-body)",
-                            fontWeight: 300,
-                          }}
-                        >
-                          {u.textBody}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-
-          {/* Show more / show less */}
-          {hasMore && (
-            <button
-              onClick={() => setShowAll(!showAll)}
-              className="mt-3 text-sm font-medium transition-colors"
+    <div>
+      {dateKeys.map((date) => (
+        <div key={date} className="mb-5 last:mb-0">
+          {/* Date header */}
+          <div className="flex items-center gap-3 mb-3">
+            <span
+              className="text-[11px] font-semibold uppercase tracking-wider"
               style={{ color: "var(--color-amber)", fontFamily: "var(--font-body)" }}
             >
-              {showAll ? "Show less" : `Show all ${dateKeys.length} dates...`}
-            </button>
-          )}
+              {date}
+            </span>
+            <div className="flex-1 h-px" style={{ backgroundColor: "var(--color-border-light)" }} />
+          </div>
+
+          {/* Updates for this date */}
+          <div className="space-y-3">
+            {grouped[date]!.map((u) => {
+              const { time } = formatDateTime(u.createdAtSource);
+              const initials = getInitials(u.authorName);
+              const avatarColor = getAvatarColor(u.authorName);
+              const isReply = u.sourceType === "reply";
+              const badge = getEventBadge(u);
+
+              return (
+                <div
+                  key={u.localId}
+                  className="flex gap-3"
+                  style={{ paddingLeft: isReply ? 36 : 0 }}
+                >
+                  {/* Avatar */}
+                  <div
+                    className="author-avatar"
+                    style={{
+                      backgroundColor: isReply ? "transparent" : avatarColor.bg,
+                      color: isReply ? "var(--color-ink-faint)" : avatarColor.text,
+                      border: isReply ? "1.5px solid var(--color-border)" : "none",
+                      fontSize: isReply ? 10 : 11,
+                      width: isReply ? 24 : 28,
+                      height: isReply ? 24 : 28,
+                      marginTop: 2,
+                    }}
+                  >
+                    {initials}
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-1">
+                      {/* Event badge */}
+                      <span
+                        className="event-badge"
+                        style={{ backgroundColor: badge.bg, color: badge.text }}
+                      >
+                        {badge.label}
+                      </span>
+                      <span
+                        className="text-sm font-medium"
+                        style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
+                      >
+                        {u.authorName}
+                      </span>
+                      <span
+                        className="text-[11px]"
+                        style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
+                      >
+                        {time}
+                      </span>
+                      {u.boardKey && (
+                        <span className="board-tag">
+                          {BOARD_DISPLAY_NAMES[u.boardKey] ?? u.boardKey}
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      className="text-sm whitespace-pre-wrap leading-relaxed"
+                      style={{
+                        color: "var(--color-ink-muted)",
+                        fontFamily: "var(--font-body)",
+                        fontWeight: 300,
+                      }}
+                    >
+                      {u.textBody}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {hasMore && (
+        <div className="pt-3 text-center">
+          <button
+            onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+            className="text-sm font-medium px-4 py-2 rounded-lg"
+            style={{
+              color: "var(--color-amber)",
+              fontFamily: "var(--font-body)",
+              backgroundColor: "var(--color-amber-light)",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            Load more ({filtered.length - visibleCount} remaining)
+          </button>
         </div>
       )}
     </div>

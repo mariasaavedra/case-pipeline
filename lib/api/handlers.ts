@@ -11,6 +11,7 @@ import {
   getClientBoardItems,
   getBoardItemDetail,
   getClientUpdates,
+  getClientRelationships,
 } from "../query";
 
 // =============================================================================
@@ -103,12 +104,24 @@ export function handleClientUpdates(req: Request, db: Database): Response {
 
   const url = new URL(req.url);
   const limitParam = url.searchParams.get("limit");
+  const offsetParam = url.searchParams.get("offset");
   const limit = limitParam
     ? Math.max(1, Math.min(parseInt(limitParam, 10) || 50, 200))
     : 50;
+  const offset = offsetParam
+    ? Math.max(0, parseInt(offsetParam, 10) || 0)
+    : 0;
 
-  const updates = getClientUpdates(db, localId, limit);
+  const updates = getClientUpdates(db, localId, limit, offset);
   return json(updates);
+}
+
+export function handleClientRelationships(req: Request, db: Database): Response {
+  const localId = extractParam(req, "localId");
+  if (!localId) return error("Missing localId", 400);
+
+  const relationships = getClientRelationships(db, localId);
+  return json(relationships);
 }
 
 // =============================================================================

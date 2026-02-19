@@ -25,7 +25,8 @@ interface UpdateRow {
 export function getClientUpdates(
   db: Database,
   profileLocalId: string,
-  limit = 50
+  limit = 50,
+  offset = 0
 ): ClientUpdate[] {
   const rows = db
     .query(
@@ -35,9 +36,9 @@ export function getClientUpdates(
        FROM client_updates
        WHERE profile_local_id = ?
        ORDER BY created_at_source DESC
-       LIMIT ?`
+       LIMIT ? OFFSET ?`
     )
-    .all(profileLocalId, limit) as UpdateRow[];
+    .all(profileLocalId, limit, offset) as UpdateRow[];
 
   return rows.map((row) => ({
     localId: row.local_id,

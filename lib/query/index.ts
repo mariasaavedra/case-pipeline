@@ -7,6 +7,8 @@ export { getClientContracts } from "./contracts";
 export { getClientBoardItems, getBoardItemDetail } from "./board-items";
 export { getClientCaseSummary } from "./case-summary";
 export { getClientUpdates } from "./updates";
+export { getClientRelationships } from "./relationships";
+export type { RelationshipWithDetails } from "./relationships";
 export type {
   ProfileSummary,
   ContractSummary,

@@ -256,3 +256,194 @@ body {
 .toggle-chevron-open {
   transform: rotate(90deg);
 }
+
+/* =============================================================================
+   Sticky Client Header
+   ============================================================================= */
+
+.client-header-sticky {
+  position: sticky;
+  top: 52px;
+  z-index: 40;
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* =============================================================================
+   Tab Bar
+   ============================================================================= */
+
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-card);
+  border-radius: 10px 10px 0 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab-button {
+  position: relative;
+  padding: 10px 20px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.tab-button:hover {
+  color: var(--color-ink);
+}
+
+.tab-button[aria-selected="true"] {
+  color: var(--color-ink);
+}
+
+.tab-button[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-amber);
+  border-radius: 2px 2px 0 0;
+}
+
+.tab-button:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+/* =============================================================================
+   Filter Chips
+   ============================================================================= */
+
+.filter-chip {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-warm);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.filter-chip:hover {
+  border-color: var(--color-amber);
+  color: var(--color-ink);
+}
+
+.filter-chip-active {
+  background: var(--color-amber-light);
+  color: var(--color-amber);
+  border-color: var(--color-amber);
+}
+
+.filter-chip:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 1px;
+}
+
+/* =============================================================================
+   Snapshot Grid
+   ============================================================================= */
+
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .snapshot-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.snapshot-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.snapshot-label {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-ink-faint);
+  margin-bottom: 6px;
+}
+
+.snapshot-value {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+/* =============================================================================
+   Event Type Badge (Timeline)
+   ============================================================================= */
+
+.event-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* =============================================================================
+   Action Buttons
+   ============================================================================= */
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  border-color: var(--color-amber);
+  color: var(--color-ink);
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-btn:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 1px;
+}

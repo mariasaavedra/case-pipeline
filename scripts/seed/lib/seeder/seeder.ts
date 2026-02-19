@@ -30,7 +30,15 @@ import { setFakerSeed, faker } from "../factory/column-generators";
 import { loadBoardsConfig } from "../../../../lib/config";
 import { CASE_TYPE_BOARD_MAP, ATTORNEY_BOARDS } from "../constants";
 import type { BoardDestination } from "../constants";
-import { seedRealProfiles } from "../fixtures/real-profiles";
+// Real profile fixtures are gitignored (PII). Import is optional.
+let seedRealProfiles: ((db: Database, batchId: number) => number) | null = null;
+try {
+  // @ts-ignore — file may not exist on disk
+  const mod = require("../fixtures/real-profiles");
+  seedRealProfiles = mod.seedRealProfiles;
+} catch {
+  // Fixture file not present — skip
+}
 
 // =============================================================================
 // Types
@@ -248,10 +256,14 @@ export class Seeder {
       console.log("\n[6/7] Generating client updates...");
       this.generateUpdates(batchId, profiles, result);
 
-      // Phase 7: Real profile fixtures (from sampled Monday.com data)
-      console.log("\n[7/7] Seeding real profile fixtures...");
-      const fixtureCount = seedRealProfiles(this.db, batchId);
-      result.profiles.generated += fixtureCount;
+      // Phase 7: Real profile fixtures (from sampled Monday.com data, optional)
+      if (seedRealProfiles) {
+        console.log("\n[7/7] Seeding real profile fixtures...");
+        const fixtureCount = seedRealProfiles(this.db, batchId);
+        result.profiles.generated += fixtureCount;
+      } else {
+        console.log("\n[7/7] Skipping real fixtures (file not present)");
+      }
 
       this.updateBatchStatus(batchId, "generated");
       result.duration = performance.now() - startTime;

@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { SearchBar } from "./components/SearchBar";
 import { SearchResults } from "./components/SearchResults";
 import { ClientView } from "./components/ClientView";
+import type { TabId } from "./components/ClientTabs";
 import { getClient, listClients } from "./api";
 import type { ClientCaseSummary, SearchResult } from "./api";
 
@@ -13,18 +14,31 @@ function App() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [allProfiles, setAllProfiles] = useState<SearchResult[]>([]);
   const [client, setClient] = useState<ClientCaseSummary | null>(null);
+  const [initialTab, setInitialTab] = useState<TabId>("overview");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const currentClientId = useRef<string | null>(null);
 
   const loadFromHash = useCallback(async () => {
     const hash = window.location.hash;
-    const match = hash.match(/^#client\/(.+)$/);
+    const match = hash.match(/^#client\/([^/]+)(?:\/(overview|documents|appointments|relations))?$/);
     if (match) {
+      const localId = decodeURIComponent(match[1]!);
+      const tab = (match[2] as TabId) ?? "overview";
+
+      // Same client, just switching tabs
+      if (currentClientId.current === localId && client) {
+        setInitialTab(tab);
+        return;
+      }
+
       setLoading(true);
       setError(null);
       try {
-        const data = await getClient(decodeURIComponent(match[1]!));
+        const data = await getClient(localId);
         setClient(data);
+        setInitialTab(tab);
+        currentClientId.current = localId;
       } catch (e) {
         setError((e as Error).message);
       } finally {
@@ -32,8 +46,9 @@ function App() {
       }
     } else {
       setClient(null);
+      currentClientId.current = null;
     }
-  }, []);
+  }, [client]);
 
   useEffect(() => {
     loadFromHash();
@@ -142,7 +157,7 @@ function App() {
       </header>
 
       {/* Main content */}
-      <main className="max-w-6xl mx-auto px-6 py-6">
+      <main className={client ? "" : "max-w-6xl mx-auto px-6 py-6"}>
         {error && (
           <div
             className="animate-in px-4 py-3 rounded-lg mb-5 text-sm"
@@ -151,6 +166,10 @@ function App() {
               color: "var(--color-status-red)",
               border: "1px solid rgba(153,27,27,0.15)",
               fontFamily: "var(--font-body)",
+              maxWidth: "72rem",
+              marginLeft: "auto",
+              marginRight: "auto",
+              ...(client ? { paddingLeft: "1.5rem", paddingRight: "1.5rem" } : {}),
             }}
           >
             {error}
@@ -174,7 +193,7 @@ function App() {
               />
             </div>
             <span className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-              Loading...
+              Loading…
             </span>
           </div>
         )}
@@ -232,7 +251,7 @@ function App() {
           </div>
         )}
 
-        {client && !loading && <ClientView data={client} />}
+        {client && !loading && <ClientView data={client} initialTab={initialTab} />}
       </main>
     </div>
   );
