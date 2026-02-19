@@ -12,7 +12,6 @@ A config-driven read-only analysis and document generation platform for Monday.c
 - **Updates Timeline** - Centralized feed of all Monday.com updates, replies, and automation emails across every board — grouped by date with threaded replies
 - **Query Layer** - Typed functions for client search (FTS5), contracts, board items, updates, and full case summaries
 - **JSON API** - RESTful endpoints served by `Bun.serve()` for the dashboard and future integrations
-- **Real Profile Fixtures** - Handpicked real Monday.com profiles (Ashik, Jabez, Karen, Fernando) seeded alongside generated data for realistic testing
 - **Document Generation** - Create documents from Monday.com data using Handlebars templates with interactive profile selection
 - **Test Data Seeding** - Generate realistic test data locally with Faker.js and SQLite (no Monday.com sync)
 - **Configuration Sync** - Keep board configurations in sync with Monday.com using YAML-based definitions
@@ -58,7 +57,7 @@ bun cli.ts <command> [options]
 | Command | Description |
 |---------|-------------|
 | `render` | Generate documents from Monday.com items |
-| `seed` | Generate realistic test data locally (SQLite) |
+| `seed` | Generate istic test data locally (SQLite) |
 | `lookup` | Search clients and view 360 case summary |
 | `sync` | Synchronize board configuration with Monday.com |
 | `analyze` | Analyze board relationships and generate maps |
@@ -144,7 +143,6 @@ Strategies can be chained for fallback behavior.
 │   └── components/           # React components
 ├── scripts/
 │   ├── seed/                 # Data seeding tools
-│   │   └── lib/fixtures/     # Handpicked real profile fixtures
 │   ├── fetch-profile.ts      # Fetch any Monday.com profile by item ID
 │   └── sync-config/          # Configuration sync
 └── templates/                # Handlebars templates
