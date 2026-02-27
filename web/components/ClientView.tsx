@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import type { ClientCaseSummary } from "../api";
 import { BOARD_CONFIG, SECTION_LABELS, DOCUMENT_BOARD_KEYS } from "../config";
+import { navigate, clientPath } from "../router";
 import { ClientHeaderSticky } from "./ClientHeaderSticky";
 import { ClientSnapshot } from "./ClientSnapshot";
 import { ClientTabs, type TabId } from "./ClientTabs";
@@ -24,10 +25,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
 
   const handleTabChange = (tab: TabId) => {
     setActiveTab(tab);
-    const localId = data.profile.localId;
-    window.location.hash = tab === "overview"
-      ? `#client/${localId}`
-      : `#client/${localId}/${tab}`;
+    navigate(clientPath(data.profile.localId, tab));
   };
 
   const docCount = useMemo(() => {

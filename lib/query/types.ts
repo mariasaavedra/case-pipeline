@@ -78,6 +78,34 @@ export const APPOINTMENT_BOARD_KEYS = new Set([
   "appointments_wh",
 ]);
 
+// Contract statuses considered "paid" (needs action)
+export const PAID_CONTRACT_STATUSES = new Set([
+  "Paid Needs Action",
+  "E-File opened",
+  "Create Project",
+]);
+
+// =============================================================================
+// Dashboard KPI Types
+// =============================================================================
+
+export interface KpiItem {
+  localId: string;
+  name: string;
+  date: string | null;
+  clientName: string | null;
+  clientLocalId: string | null;
+  boardKey: string | null;
+  status: string | null;
+}
+
+export interface KpiCard {
+  key: string;
+  label: string;
+  count: number;
+  items: KpiItem[];
+}
+
 // Board display names for readable output
 export const BOARD_DISPLAY_NAMES: Record<string, string> = {
   court_cases: "Court Cases",

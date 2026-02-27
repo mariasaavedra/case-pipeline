@@ -18,6 +18,9 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      - name: Preflight
+        run: bun run preflight
+
       - name: Typecheck
         run: bun run typecheck
 

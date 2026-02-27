@@ -9,6 +9,7 @@ export { getClientCaseSummary } from "./case-summary";
 export { getClientUpdates } from "./updates";
 export { getClientRelationships } from "./relationships";
 export type { RelationshipWithDetails } from "./relationships";
+export { getDashboardKpis } from "./dashboard";
 export type {
   ProfileSummary,
   ContractSummary,
@@ -16,5 +17,7 @@ export type {
   ClientCaseSummary,
   ClientUpdate,
   SearchResult,
+  KpiCard,
+  KpiItem,
 } from "./types";
-export { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS } from "./types";
+export { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS, PAID_CONTRACT_STATUSES } from "./types";

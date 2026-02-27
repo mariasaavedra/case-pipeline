@@ -8,6 +8,7 @@ A config-driven read-only analysis and document generation platform for Monday.c
 
 ## Features
 
+- **Landing Dashboard** - Firm-wide KPI cards at a glance: open forms, pending contracts, paid Fee Ks, upcoming deadlines, and upcoming hearings — with counts and top-5 item lists
 - **Client Dashboard** - Web-based 360-degree view of any client: profile, contracts, active cases, pending items, appointments, and full updates/notes timeline
 - **Updates Timeline** - Centralized feed of all Monday.com updates, replies, and automation emails across every board — grouped by date with threaded replies
 - **Query Layer** - Typed functions for client search (FTS5), contracts, board items, updates, and full case summaries
@@ -155,6 +156,7 @@ Strategies can be chained for fallback behavior.
 ### Running Tests
 
 ```bash
+bun run preflight
 bun test
 ```
 

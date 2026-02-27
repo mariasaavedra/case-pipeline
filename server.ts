@@ -13,6 +13,7 @@ import {
   handleBoardItemDetail,
   handleClientUpdates,
   handleClientRelationships,
+  handleDashboard,
 } from "./lib/api/handlers";
 import homepage from "./web/index.html";
 
@@ -35,6 +36,9 @@ const server = Bun.serve({
   routes: {
     "/": homepage,
 
+    "/api/dashboard": {
+      GET: (req) => handleDashboard(req, db),
+    },
     "/api/clients": {
       GET: (req) => handleListClients(req, db),
     },
@@ -59,6 +63,15 @@ const server = Bun.serve({
     "/api/board-items/:localId": {
       GET: (req) => handleBoardItemDetail(req, db),
     },
+  },
+  fetch(req) {
+    const url = new URL(req.url);
+    // Unmatched /api/ routes → 404 JSON
+    if (url.pathname.startsWith("/api/")) {
+      return Response.json({ error: "Not found" }, { status: 404 });
+    }
+    // SPA catch-all: serve index.html for all other paths
+    return new Response(Bun.file("web/index.html"));
   },
   development: {
     hmr: true,

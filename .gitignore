@@ -42,3 +42,4 @@ note.md
 # Real client fixture data (PII — local only)
 scripts/seed/lib/fixtures/real-profiles.ts
 scripts/seed/lib/fixtures/fernando.ts
+.dmux/

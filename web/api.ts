@@ -2,10 +2,10 @@
 // API Client — Typed fetch wrappers
 // =============================================================================
 
-import type { SearchResult, ClientCaseSummary, ClientUpdate } from "../lib/query/types";
+import type { SearchResult, ClientCaseSummary, ClientUpdate, KpiCard } from "../lib/query/types";
 import type { RelationshipWithDetails } from "../lib/query/relationships";
 
-export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, BoardItemSummary, ClientUpdate } from "../lib/query/types";
+export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, BoardItemSummary, ClientUpdate, KpiCard, KpiItem } from "../lib/query/types";
 export type { RelationshipWithDetails } from "../lib/query/relationships";
 
 async function apiFetch<T>(url: string): Promise<T> {
@@ -65,4 +65,22 @@ export async function fetchClientUpdates(localId: string, limit = 50, offset = 0
 
 export async function fetchClientRelationships(localId: string): Promise<RelationshipWithDetails[]> {
   return apiFetch<RelationshipWithDetails[]>(`/api/clients/${encodeURIComponent(localId)}/relationships`);
+}
+
+export async function fetchDashboard(hearingRange?: string): Promise<KpiCard[]> {
+  const params = hearingRange ? `?hearingRange=${encodeURIComponent(hearingRange)}` : "";
+  const res = await fetch(`/api/dashboard${params}`);
+
+  const contentType = res.headers.get("content-type") ?? "";
+  let body: { data?: KpiCard[] } | null = null;
+  if (contentType.includes("application/json")) {
+    try {
+      body = (await res.json()) as { data?: KpiCard[] };
+    } catch {
+      // parse failed
+    }
+  }
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return body?.data as KpiCard[];
 }

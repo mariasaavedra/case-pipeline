@@ -12,6 +12,7 @@ import {
   getBoardItemDetail,
   getClientUpdates,
   getClientRelationships,
+  getDashboardKpis,
 } from "../query";
 
 // =============================================================================
@@ -122,6 +123,15 @@ export function handleClientRelationships(req: Request, db: Database): Response 
 
   const relationships = getClientRelationships(db, localId);
   return json(relationships);
+}
+
+export function handleDashboard(req: Request, db: Database): Response {
+  const url = new URL(req.url);
+  const rangeParam = url.searchParams.get("hearingRange");
+  const range = rangeParam === "month" ? "month" : "7d";
+
+  const cards = getDashboardKpis(db, { range });
+  return json(cards);
 }
 
 // =============================================================================

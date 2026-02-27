@@ -447,3 +447,354 @@ body {
   outline: 2px solid var(--color-amber);
   outline-offset: 1px;
 }
+
+/* =============================================================================
+   Sidebar
+   ============================================================================= */
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background: var(--color-navy);
+  display: flex;
+  flex-direction: column;
+  z-index: 60;
+  transition: width 0.2s ease;
+  overflow: hidden;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  height: 52px;
+  flex-shrink: 0;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.sidebar-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.sidebar-item:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.sidebar-item-active {
+  background: rgba(180, 83, 9, 0.15);
+  color: var(--color-amber);
+}
+
+.sidebar-item-active:hover:not(:disabled) {
+  background: rgba(180, 83, 9, 0.2);
+  color: var(--color-amber);
+}
+
+.sidebar-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar-label {
+  flex: 1;
+  text-align: left;
+}
+
+.sidebar-soon {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.sidebar-toggle:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+/* Layout wrapper */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-content {
+  flex: 1;
+  min-width: 0;
+  transition: margin-left 0.2s ease;
+}
+
+/* =============================================================================
+   Snapshot Card — Clickable + Popover
+   ============================================================================= */
+
+.snapshot-card {
+  position: relative;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.snapshot-card:hover {
+  border-color: var(--color-amber);
+  box-shadow: 0 0 0 1px rgba(180, 83, 9, 0.1);
+}
+
+.snapshot-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 240px;
+  max-width: 360px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  z-index: 50;
+}
+
+/* =============================================================================
+   KPI Dashboard Grid
+   ============================================================================= */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.kpi-grid > :nth-child(n+4) {
+  /* 4th and 5th cards span the bottom row evenly */
+}
+
+@media (max-width: 1024px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kpi-card {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.kpi-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.kpi-card-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-amber-light);
+  color: var(--color-amber);
+}
+
+.kpi-card-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kpi-card-label {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-faint);
+}
+
+.kpi-card-count {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-ink);
+  line-height: 1;
+}
+
+.kpi-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--color-border-light);
+  padding-top: 10px;
+}
+
+.kpi-item-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.kpi-item-row:last-child {
+  border-bottom: none;
+}
+
+.kpi-item-name {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpi-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kpi-item-date {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-ink-muted);
+}
+
+.kpi-item-client {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-amber);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.kpi-item-client:hover {
+  color: var(--color-amber-dark);
+  text-decoration: underline;
+}
+
+.kpi-empty {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-ink-faint);
+  padding: 8px 0;
+  font-style: italic;
+}
+
+.kpi-hearing-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+/* =============================================================================
+   Mobile Responsive
+   ============================================================================= */
+
+/* Hamburger button in header */
+.mobile-menu-btn {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar-mobile-open {
+    transform: translateX(0);
+    width: 220px !important;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 55;
+  }
+
+  .sidebar-toggle {
+    display: none;
+  }
+
+  .app-content {
+    margin-left: 0 !important;
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .snapshot-popover {
+    left: -8px;
+    right: -8px;
+    min-width: auto;
+  }
+}

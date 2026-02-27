@@ -1,10 +1,13 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type { ClientCaseSummary } from "../api";
 import { getStatusColor, DOCUMENT_BOARD_KEYS } from "../config";
 import { StatusBadge } from "./StatusBadge";
+import { Popover } from "./Popover";
+import { getMostRelevantUpdate } from "../utils/relevance";
 import { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS } from "../../lib/query/types";
 
 type StatusMode = "worst" | "all" | "primary";
+type PopoverId = "status" | "deadline" | "relief" | "action" | null;
 
 const SEVERITY: Record<string, number> = { red: 0, yellow: 1, blue: 2, green: 3, purple: 4, gray: 5 };
 
@@ -20,57 +23,79 @@ interface Props {
 
 export function ClientSnapshot({ data }: Props) {
   const [statusMode, setStatusMode] = useState<StatusMode>("worst");
+  const [activePopover, setActivePopover] = useState<PopoverId>(null);
 
   const statuses = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const items of Object.values(data.boardItems)) {
+    const counts = new Map<string, { count: number; boards: Set<string> }>();
+    for (const [boardKey, items] of Object.entries(data.boardItems)) {
       for (const item of items) {
-        if (item.status) counts.set(item.status, (counts.get(item.status) ?? 0) + 1);
+        if (item.status) {
+          const existing = counts.get(item.status);
+          if (existing) {
+            existing.count++;
+            existing.boards.add(boardKey);
+          } else {
+            counts.set(item.status, { count: 1, boards: new Set([boardKey]) });
+          }
+        }
       }
     }
     return [...counts.entries()]
-      .map(([status, count]) => ({ status, count, color: getStatusColor(status) }))
+      .map(([status, { count, boards }]) => ({
+        status,
+        count,
+        color: getStatusColor(status),
+        boards: [...boards],
+      }))
       .sort((a, b) => (SEVERITY[a.color] ?? 5) - (SEVERITY[b.color] ?? 5));
   }, [data.boardItems]);
 
   const worstStatus = statuses[0] ?? null;
   const primaryStatus = data.contracts.active[0]?.status ?? null;
 
-  const nextDeadline = useMemo(() => {
+  const deadlines = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
-    let earliest: { date: string; boardKey: string; itemName: string } | null = null;
+    const all: { date: string; boardKey: string; itemName: string }[] = [];
 
     for (const [boardKey, items] of Object.entries(data.boardItems)) {
       for (const item of items) {
         if (item.nextDate && item.nextDate >= today) {
-          if (!earliest || item.nextDate < earliest.date) {
-            earliest = { date: item.nextDate, boardKey, itemName: item.name };
-          }
+          all.push({ date: item.nextDate, boardKey, itemName: item.name });
         }
       }
     }
     for (const a of data.appointments) {
       if (a.nextDate && a.nextDate >= today) {
-        if (!earliest || a.nextDate < earliest.date) {
-          earliest = { date: a.nextDate, boardKey: a.boardKey, itemName: a.name };
-        }
+        all.push({ date: a.nextDate, boardKey: a.boardKey, itemName: a.name });
       }
     }
-    return earliest;
+    return all.sort((a, b) => a.date.localeCompare(b.date));
   }, [data.boardItems, data.appointments]);
+
+  const nextDeadline = deadlines[0] ?? null;
 
   const reliefTypes = useMemo(
     () => [...new Set(data.contracts.active.map((c) => c.caseType))],
     [data.contracts.active]
   );
 
-  const lastAction = data.updates[0] ?? null;
+  const lastAction = useMemo(
+    () => getMostRelevantUpdate(data.updates),
+    [data.updates]
+  );
 
-  const cycleMode = () => {
+  const cycleMode = (e: React.MouseEvent) => {
+    e.stopPropagation();
     const modes: StatusMode[] = ["worst", "all", "primary"];
     const idx = modes.indexOf(statusMode);
     setStatusMode(modes[(idx + 1) % modes.length]!);
   };
+
+  const togglePopover = useCallback((id: PopoverId) => {
+    setActivePopover((prev) => (prev === id ? null : id));
+  }, []);
+
+  const closePopover = useCallback(() => setActivePopover(null), []);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr + "T00:00:00");
@@ -93,7 +118,7 @@ export function ClientSnapshot({ data }: Props) {
   return (
     <div className="snapshot-grid animate-in animate-in-delay-1">
       {/* Card 1: Case Status */}
-      <div className="snapshot-card">
+      <div className="snapshot-card" onClick={() => togglePopover("status")}>
         <div className="flex items-center justify-between mb-2">
           <span className="snapshot-label">Case Status</span>
           <button
@@ -141,10 +166,38 @@ export function ClientSnapshot({ data }: Props) {
             )
           )}
         </div>
+        <Popover open={activePopover === "status"} onClose={closePopover}>
+          <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
+            All Statuses
+          </div>
+          {statuses.length === 0 ? (
+            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No cases found</p>
+          ) : (
+            <div className="space-y-2">
+              {statuses.map((s) => (
+                <div key={s.status} className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={s.status} />
+                    <span className="text-xs" style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-mono)" }}>
+                      x{s.count}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 justify-end">
+                    {s.boards.map((bk) => (
+                      <span key={bk} className="board-tag" style={{ fontSize: 10 }}>
+                        {BOARD_DISPLAY_NAMES[bk] ?? bk}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Popover>
       </div>
 
       {/* Card 2: Next Deadline */}
-      <div className="snapshot-card">
+      <div className="snapshot-card" onClick={() => togglePopover("deadline")}>
         <span className="snapshot-label">Next Deadline</span>
         {nextDeadline ? (
           <div>
@@ -171,10 +224,44 @@ export function ClientSnapshot({ data }: Props) {
             No upcoming deadlines
           </div>
         )}
+        <Popover open={activePopover === "deadline"} onClose={closePopover}>
+          <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
+            Upcoming Deadlines
+          </div>
+          {deadlines.length === 0 ? (
+            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No upcoming deadlines</p>
+          ) : (
+            <div className="space-y-2">
+              {deadlines.slice(0, 5).map((d, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span
+                    className="text-xs font-medium flex-shrink-0"
+                    style={{ color: "var(--color-ink)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", minWidth: 80 }}
+                  >
+                    {formatDate(d.date)}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="board-tag" style={{ fontSize: 10 }}>
+                      {BOARD_DISPLAY_NAMES[d.boardKey] ?? d.boardKey}
+                    </span>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--color-ink-muted)" }}>
+                      {d.itemName}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {deadlines.length > 5 && (
+                <p className="text-[11px]" style={{ color: "var(--color-ink-faint)" }}>
+                  +{deadlines.length - 5} more
+                </p>
+              )}
+            </div>
+          )}
+        </Popover>
       </div>
 
       {/* Card 3: Case Type / Relief */}
-      <div className="snapshot-card">
+      <div className="snapshot-card" onClick={() => togglePopover("relief")}>
         <span className="snapshot-label">Case Type / Relief</span>
         <div className="snapshot-value">
           {reliefTypes.length > 0 ? (
@@ -197,10 +284,36 @@ export function ClientSnapshot({ data }: Props) {
             <span style={{ color: "var(--color-ink-faint)" }}>No active contracts</span>
           )}
         </div>
+        <Popover open={activePopover === "relief"} onClose={closePopover}>
+          <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
+            All Contracts
+          </div>
+          {data.contracts.active.length === 0 && data.contracts.closed.length === 0 ? (
+            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No contracts</p>
+          ) : (
+            <div className="space-y-2">
+              {[...data.contracts.active, ...data.contracts.closed].map((c, i) => (
+                <div key={i} className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium" style={{ color: "var(--color-ink)" }}>
+                      {c.caseType}
+                    </p>
+                    {c.value != null && (
+                      <p className="text-[11px]" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)" }}>
+                        ${Number(c.value).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                  <StatusBadge status={c.status ?? "Unknown"} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Popover>
       </div>
 
       {/* Card 4: Last Action */}
-      <div className="snapshot-card">
+      <div className="snapshot-card" onClick={() => togglePopover("action")}>
         <span className="snapshot-label">Last Action</span>
         {lastAction ? (
           <div>
@@ -230,6 +343,39 @@ export function ClientSnapshot({ data }: Props) {
             No recent activity
           </div>
         )}
+        <Popover open={activePopover === "action"} onClose={closePopover}>
+          <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
+            Last Action Detail
+          </div>
+          {lastAction ? (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-medium" style={{ color: "var(--color-ink)" }}>
+                  {lastAction.authorName}
+                </span>
+                <span
+                  className="text-[11px]"
+                  style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)" }}
+                >
+                  {formatRelativeTime(lastAction.createdAtSource)}
+                </span>
+              </div>
+              {lastAction.boardKey && (
+                <span className="board-tag mb-2 inline-block" style={{ fontSize: 10 }}>
+                  {BOARD_DISPLAY_NAMES[lastAction.boardKey] ?? lastAction.boardKey}
+                </span>
+              )}
+              <p
+                className="text-xs leading-relaxed"
+                style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)", whiteSpace: "pre-wrap" }}
+              >
+                {lastAction.textBody}
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No recent activity</p>
+          )}
+        </Popover>
       </div>
     </div>
   );

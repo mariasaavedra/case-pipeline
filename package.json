@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "preflight": "bash scripts/preflight.sh",
     "cli": "bun cli.ts",
     "render": "bun cli.ts render",
     "seed": "bun cli.ts seed",
