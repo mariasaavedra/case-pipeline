@@ -86,3 +86,36 @@ This avoids over-engineering a custom FTS tokenizer while covering the real use 
 ### Landing Page KPI Integration
 
 **Decision**: Added a 6th KPI card ("Alerts") to the dashboard that shows the total count across all three categories. Clicking the count navigates to `/alerts`. The card shows count-only (no top-5 items) since alerts are better viewed in their grouped format on the dedicated page.
+
+---
+
+## 2026-03-06 — SharePoint Document Integration
+
+### Direct View into SharePoint (No Local File Storage)
+
+**Context**: Every client has an e-file and every consultee has a consult file in SharePoint. The team needs to see these documents directly from the dashboard without switching to SharePoint.
+
+**Decision**: Integrate via Microsoft Graph API to browse SharePoint folder contents inline. No files are stored locally — the app acts as a window into SharePoint.
+
+**Key facts**:
+- **E-files** (clients): organized as `/{Letter}/{LASTNAME, Firstname CaseNumber}/` with subfolders (`FEE Ks/`, `CC/`, `FILINGS/`, `COURT FILINGS/`, etc.)
+- **Consult files** (consultees): organized as `/{Year}/{LASTNAME, Firstname}/`
+- **Mutually exclusive**: when a consultee becomes a client, their consult file is moved to e-files. A person has one or the other, never both.
+- **Monday.com already stores the direct SharePoint link** per client (separate columns for e-file and consult file). This is the linking key — no folder-name guessing needed.
+
+### Auth: Application Credentials (client_credentials)
+
+**Context**: Need to decide between delegated auth (user signs in) or application auth (app accesses SharePoint as itself).
+
+**Decision**: Use application (client_credentials) flow. The dashboard is an internal tool and the Azure AD app already has `Files.ReadWrite.All`, `Sites.Read.All`, and `User.Read`. This avoids requiring each user to authenticate with Microsoft separately.
+
+### Phased Rollout
+
+**Decision**: Three phases to manage complexity:
+1. **Phase 1 — Read-only browsing**: List folder contents via Graph API, click to open in SharePoint. Store the SharePoint URL from Monday.com in `profiles.sharepoint_url`.
+2. **Phase 2 — Embedded previews**: Render PDFs/images inline; use SharePoint's embed preview URL for Office docs.
+3. **Phase 3 — Upload**: Push documents from the dashboard into the correct SharePoint subfolder.
+
+### Caching Strategy
+
+**Decision**: Cache folder listings for ~5 minutes. Documents don't change frequently enough to justify real-time calls, and this keeps Graph API usage low.
