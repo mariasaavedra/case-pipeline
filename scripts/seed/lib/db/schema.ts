@@ -4,7 +4,7 @@
 
 import type { Database } from "bun:sqlite";
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS profiles (
     priority TEXT,
     group_title TEXT,
     address TEXT,
+    date_of_birth TEXT,
+    place_of_birth TEXT,
+    a_number TEXT,
     raw_column_values TEXT,
     sync_status TEXT NOT NULL DEFAULT 'pending',
     sync_error TEXT,
@@ -342,6 +345,18 @@ export function initializeSchema(db: Database): void {
       }
       db.exec("CREATE INDEX IF NOT EXISTS idx_board_items_group ON board_items(board_key, group_title)");
       db.exec("CREATE INDEX IF NOT EXISTS idx_profiles_group ON profiles(group_title)");
+    }
+
+    // Migration v6 → v7: add date_of_birth, place_of_birth, a_number to profiles
+    if (fromVersion < 7) {
+      for (const col of ["date_of_birth", "place_of_birth", "a_number"]) {
+        const has = db
+          .query(`SELECT COUNT(*) as cnt FROM pragma_table_info('profiles') WHERE name='${col}'`)
+          .get() as { cnt: number };
+        if (!has || has.cnt === 0) {
+          db.exec(`ALTER TABLE profiles ADD COLUMN ${col} TEXT`);
+        }
+      }
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

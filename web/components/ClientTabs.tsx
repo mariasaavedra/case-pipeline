@@ -1,19 +1,24 @@
-export type TabId = "overview" | "documents" | "appointments" | "relations";
+export type TabId = "overview" | "appointments" | "contracts" | "active_cases" | "court_cases" | "documents" | "relations";
 
 interface Props {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
   counts?: {
-    documents: number;
     appointments: number;
+    contracts: number;
+    activeCases: number;
+    courtCases: number;
     relations: number;
   };
 }
 
 const TABS: { id: TabId; label: string; countKey?: keyof NonNullable<Props["counts"]> }[] = [
   { id: "overview", label: "Overview" },
-  { id: "documents", label: "Documents & Notices", countKey: "documents" },
   { id: "appointments", label: "Appointments", countKey: "appointments" },
+  { id: "contracts", label: "Contracts", countKey: "contracts" },
+  { id: "active_cases", label: "Active Cases", countKey: "activeCases" },
+  { id: "court_cases", label: "Court Cases", countKey: "courtCases" },
+  { id: "documents", label: "Documents & Notices" },
   { id: "relations", label: "Relations", countKey: "relations" },
 ];
 

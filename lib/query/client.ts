@@ -93,7 +93,10 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
         phone,
         priority,
         group_title AS groupTitle,
-        address
+        address,
+        date_of_birth AS dateOfBirth,
+        place_of_birth AS placeOfBirth,
+        a_number AS aNumber
       FROM profiles
       WHERE local_id = ?
     `)
@@ -127,7 +130,10 @@ export function getClientByName(db: Database, name: string): ProfileSummary | nu
         phone,
         priority,
         group_title AS groupTitle,
-        address
+        address,
+        date_of_birth AS dateOfBirth,
+        place_of_birth AS placeOfBirth,
+        a_number AS aNumber
       FROM profiles
       WHERE name = ?
     `)

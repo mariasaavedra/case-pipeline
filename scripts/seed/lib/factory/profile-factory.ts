@@ -10,6 +10,7 @@ import {
   generatePhone,
   generateDate,
   generateNotes,
+  generateAddress,
   setFakerSeed,
   faker,
   PRIORITIES,
@@ -21,6 +22,10 @@ export interface GeneratedProfile {
   name: string;
   email: string;
   phone: string;
+  address: string;
+  dateOfBirth: string;
+  placeOfBirth: string;
+  aNumber: string;
   notes: string;
   nextInteraction: string;
   priority: string;
@@ -51,9 +56,20 @@ export class ProfileFactory {
     const localId = faker.string.uuid();
     const email = generateEmail(name);
     const phone = generatePhone();
+    const address = generateAddress();
     const notes = generateNotes();
     const priority = faker.helpers.arrayElement(PRIORITIES);
     const nextInteraction = generateDate(1, 30);
+
+    // Date of birth: age 18–80
+    const dob = faker.date.birthdate({ min: 18, max: 80, mode: "age" });
+    const dateOfBirth = dob.toISOString().split("T")[0] as string;
+
+    // Place of birth: city + country
+    const placeOfBirth = `${faker.location.city()}, ${faker.location.country()}`;
+
+    // A-Number: 9-digit string
+    const aNumber = faker.string.numeric(9);
 
     // Weighted group assignment: mostly Active Clients
     const groupTitle = faker.helpers.weightedArrayElement([
@@ -77,6 +93,10 @@ export class ProfileFactory {
       name,
       email,
       phone,
+      address,
+      dateOfBirth,
+      placeOfBirth,
+      aNumber,
       notes,
       nextInteraction,
       priority,
@@ -112,9 +132,10 @@ export class ProfileFactory {
   persist(profile: GeneratedProfile, batchId: number): void {
     const stmt = this.db.prepare(`
       INSERT INTO profiles (
-        batch_id, local_id, name, email, phone, notes,
-        next_interaction, priority, group_title, raw_column_values
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        batch_id, local_id, name, email, phone, address,
+        date_of_birth, place_of_birth, a_number,
+        notes, next_interaction, priority, group_title, raw_column_values
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -123,6 +144,10 @@ export class ProfileFactory {
       profile.name,
       profile.email,
       profile.phone,
+      profile.address,
+      profile.dateOfBirth,
+      profile.placeOfBirth,
+      profile.aNumber,
       profile.notes,
       profile.nextInteraction,
       profile.priority,

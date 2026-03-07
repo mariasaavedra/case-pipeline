@@ -185,3 +185,44 @@ Without groups, the dashboard cannot reliably answer: "Is this person a client?"
 - Use `profiles.group_title` to filter "real clients" vs consultees in search and browse views
 - Use `board_items.group_title` to determine active vs closed/resolved items per board
 - Expose group as a filter option in the UI where it adds value (e.g., Open Forms: show "Filed" separately from "Open")
+
+---
+
+## 2026-03-07 — Phase 6: UI Improvements & Tab Restructure
+
+### Additional Profile Fields (Schema v7)
+
+**Context**: Attorneys need Date of Birth, Place of Birth, and A-Number visible in the client profile. Address was already in the schema but not populated by the seeder.
+
+**Decision**: Added `date_of_birth`, `place_of_birth`, `a_number` columns to `profiles` table. A-Numbers are stored normalized (9 digits only) because Monday.com sends varied formats (`123456789`, `A123-456-789`, `123 456 789`, etc.). Display format is `A###-###-###`. Utility functions `normalizeANumber()` and `formatANumber()` handle conversion.
+
+### Tab Restructure — Separating Concerns
+
+**Context**: The Overview tab was overloaded with contracts, active cases, and timeline all in one view. Court cases need special attention and should not be mixed with regular USCIS/NVC cases.
+
+**Decision**: Expanded from 4 tabs to 7:
+- **Overview**: Snapshot KPI cards + Timeline only (the client's story)
+- **Appointments**: Appointment entries for this client
+- **Contracts**: Fee K entries (pending highlighted, closed collapsed)
+- **Active Cases**: Case board items (Open Forms, FOIAs, Appeals, etc.) EXCLUDING items linked to court_cases
+- **Court Cases**: Items on the `court_cases` board + any items linked to court cases via `item_relationships`
+- **Documents & Notices**: Reserved as SharePoint placeholder (Phase 7)
+- **Relations**: Unchanged
+
+**Court case separation logic**: The `ClientCaseSummary` API response now includes `courtLinkedItemIds` — an array of board item IDs that have an `item_relationships` link to a `court_cases` board entry. The frontend uses this to partition items between Active Cases and Court Cases tabs. Currently only `court_cases` board items appear in the Court Cases tab (no cross-board relationships in seed data), but the architecture supports it when real Monday.com data flows in.
+
+### Notes Expansion in Appointments
+
+**Context**: The appointments page showed "Recent Notes (N)" but only 1-2 were visible in a 400px scrollable area.
+
+**Decision**: Added two ways to see all notes:
+1. **"Show all" toggle** — removes the max-height limit, showing all notes inline
+2. **"Open in modal" button** — opens a full-screen modal overlay (`NotesModal`) with the complete notes list
+
+Both options appear when a card has more than 2 notes. The modal supports Escape key and click-outside to dismiss.
+
+### Unified Sticky Profile Header
+
+**Context**: The client view had two redundant components showing profile information: a sticky header bar and a separate ProfileCard below it. After adding DOB, Place of Birth, and A-Number to the ProfileCard, the duplication became obvious.
+
+**Decision**: Merged everything into a single sticky header that contains the full profile: avatar, name, priority badge, action buttons, email, phone, address, DOB, place of birth, and A-Number. Removed the separate ProfileCard from the view. The A-Number icon uses an "A#" text label (the standard shorthand for Alien Registration Number) instead of a generic "T" text icon. Added responsive CSS for the tab bar (reduced padding at <=768px) to accommodate 7 tabs on smaller screens.

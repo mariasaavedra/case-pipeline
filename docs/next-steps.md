@@ -25,13 +25,74 @@ at ClientsPage2
 
 ---
 
+## Phase 6: UI Improvements & Tab Restructure
+
+### 6a — Expand Updates/Notes in Appointments
+**Problem**: The standalone Appointments page shows "Recent Notes (N)" but only 1–2 are visible in the collapsed preview (max-height 400px).
+
+**Solution**: Both inline expand + modal.
+- Add a "Show all" toggle on the collapsible section that removes the max-height limit, showing all notes inline
+- Add a "View all in modal" link that opens a full-screen modal overlay with the complete notes list, scrollable, with the same filtering and grouping as `UpdatesTimeline`
+
+**Files**: `web/components/AppointmentsPage.tsx`, `web/components/UpdatesTimeline.tsx`, new `web/components/NotesModal.tsx`
+
+### 6b — Additional Profile Fields
+**Goal**: Show Date of Birth, Place of Birth, and A-Number alongside existing fields (name, email, phone, address, priority).
+
+**Schema changes** (`scripts/seed/lib/db/schema.ts`):
+- Add columns to `profiles`: `date_of_birth TEXT`, `place_of_birth TEXT`, `a_number TEXT`
+
+**A-Number normalization**:
+- Monday.com sends varied formats: `123456789`, `123 456 789`, `A123-456-789`, `A 123 456 789`, etc.
+- Store normalized: strip non-digits, store as 9-digit string
+- Display as `A###-###-###` (e.g., `A123-456-789`)
+- Utility function: `normalizeANumber(raw: string): string` and `formatANumber(normalized: string): string`
+
+**Seeder**: Generate fake DOB (age 18–80), place of birth (city + country), and 9-digit A-numbers.
+
+**Frontend**: Update `ProfileCard.tsx` and `ClientHeaderSticky.tsx` to show new fields.
+
+**API**: Expose new fields in profile endpoints.
+
+### 6c — Tab Restructure (360 View)
+
+**Current tabs**: Overview | Appointments | Documents & Notices | Relations
+
+**New tabs**: Overview | Appointments | Contracts | Active Cases | Court Cases | Documents & Notices | Relations
+
+**Changes**:
+- **Overview**: Keep Snapshot KPI cards + Timeline only. Remove Contracts and Active Cases sections from this tab.
+- **Contracts**: New tab showing all Fee K entries (pending highlighted, closed collapsed) — content currently in Overview.
+- **Active Cases**: New tab showing case items from boards like Open Forms, FOIAs, Appeals, Litigation, I-918B, Motions — but **excluding** items that have an `item_relationships` link to the `court_cases` board.
+- **Court Cases**: New tab showing items that ARE linked to `court_cases` board entries via `item_relationships`. Displays the connected Court Case board values (hearing dates, judge, case number, etc.). These require special attention and are separated from regular USCIS/NVC cases.
+- **Documents & Notices**: Placeholder for future SharePoint integration (Phase 7). Shows a message like "SharePoint integration coming soon" with brief explanation.
+- **Relations**: Unchanged.
+
+**Files**: `web/components/ClientView.tsx`, `web/components/ClientTabs.tsx`, new `web/components/ContractsTab.tsx`, new `web/components/ActiveCasesTab.tsx`, new `web/components/CourtCasesTab.tsx`
+
+### 6d — Appointment Focus Modal
+
+**Goal**: Allow attorney to open a single appointment in a focused modal overlay for deep review.
+
+**Behavior**:
+- Click an appointment row (or a "Focus" button) → opens a large modal overlay
+- Modal shows: full appointment details, client snapshot, all notes/updates, status controls
+- Attorney can read everything without navigating away from current context
+- Modal is dismissible (click outside, Escape key, close button)
+
+**Files**: New `web/components/AppointmentModal.tsx`
+
+**Note**: Detailed design TBD — will discuss specifics in a dedicated session.
+
+---
+
 ## Deferred — Monday.com Write-Back
 
 The appointments page is the first feature that will need editing (update status, add notes, reschedule). `TODO(monday-write)` markers are placed in the query layer and component. See `docs/decisions.md` for the planned write-back architecture.
 
 ---
 
-## Phase 6: SharePoint Document Integration
+## Phase 7: SharePoint Document Integration
 
 ### Goal
 View client e-files and consult files from SharePoint directly in the dashboard, without switching apps.
@@ -43,7 +104,7 @@ View client e-files and consult files from SharePoint directly in the dashboard,
 - Monday.com already stores the direct SharePoint folder URL per client (two columns: e-file link, consult file link)
 - Azure AD app exists with `Files.ReadWrite.All`, `Sites.Read.All`, `User.Read`
 
-### Phase 6a — Read-Only Browsing
+### Phase 7a — Read-Only Browsing
 
 **Schema**:
 - Add `sharepoint_url` column to `profiles` table (stores the Monday.com link value)
@@ -61,12 +122,12 @@ View client e-files and consult files from SharePoint directly in the dashboard,
 - Click file → opens in SharePoint browser
 - Click folder → expands inline
 
-### Phase 6b — Embedded Previews
+### Phase 7b — Embedded Previews
 
 - PDFs/images render inline in the dashboard
 - Office docs use SharePoint's embed preview URL (Graph API provides `@microsoft.graph.downloadUrl` and preview endpoints)
 
-### Phase 6c — Upload
+### Phase 7c — Upload
 
 - Upload from dashboard into the correct SharePoint subfolder
 - Uses existing `Files.ReadWrite.All` permission

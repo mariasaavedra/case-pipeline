@@ -1,4 +1,5 @@
 import type { ProfileSummary } from "../api";
+import { formatANumber } from "../../lib/utils/a-number";
 
 const PRIORITY_STYLES: Record<string, { dot: string; label: string; bg: string; text: string }> = {
   Urgent: { dot: "priority-dot-urgent", label: "Urgent", bg: "#fef2f2", text: "#991b1b" },
@@ -93,6 +94,45 @@ export function ProfileCard({ profile }: { profile: ProfileSummary }) {
                   </svg>
                   <span className="text-sm" style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>
                     {profile.address}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Additional details */}
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5 mt-2">
+              {profile.dateOfBirth && (
+                <div className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-faint)" strokeWidth="1.5">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <path d="M16 2v4M8 2v4M3 10h18" />
+                  </svg>
+                  <span className="text-sm" style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>
+                    DOB: {profile.dateOfBirth}
+                  </span>
+                </div>
+              )}
+              {profile.placeOfBirth && (
+                <div className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-faint)" strokeWidth="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+                  </svg>
+                  <span className="text-sm" style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>
+                    {profile.placeOfBirth}
+                  </span>
+                </div>
+              )}
+              {profile.aNumber && (
+                <div className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-faint)" strokeWidth="1.5">
+                    <path d="M4 7V4h16v3M9 20h6M12 4v16" />
+                  </svg>
+                  <span
+                    className="text-sm"
+                    style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-mono)", fontSize: 13 }}
+                  >
+                    {formatANumber(profile.aNumber)}
                   </span>
                 </div>
               )}

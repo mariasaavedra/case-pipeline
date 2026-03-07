@@ -10,6 +10,9 @@ export interface ProfileSummary {
   priority: string | null;
   groupTitle: string | null;
   address: string | null;
+  dateOfBirth: string | null;
+  placeOfBirth: string | null;
+  aNumber: string | null;
 }
 
 export interface ContractSummary {
@@ -54,6 +57,7 @@ export interface ClientCaseSummary {
   boardItems: Record<string, BoardItemSummary[]>;
   appointments: BoardItemSummary[];
   updates: ClientUpdate[];
+  courtLinkedItemIds: string[];
 }
 
 export interface SearchResult {

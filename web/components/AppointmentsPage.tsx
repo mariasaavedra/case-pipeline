@@ -11,9 +11,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { fetchAppointments } from "../api";
-import type { AppointmentsResult, AppointmentEntry } from "../api";
+import type { AppointmentsResult, AppointmentEntry, ClientUpdate } from "../api";
 import { Link } from "./Link";
 import { UpdatesTimeline } from "./UpdatesTimeline";
+import { NotesModal } from "./NotesModal";
 import { BOARD_DISPLAY_NAMES } from "../../lib/query/types";
 import { clientPath } from "../router";
 
@@ -116,12 +117,15 @@ function AppointmentCard({
   entry,
   detail,
   defaultExpanded,
+  onOpenNotesModal,
 }: {
   entry: AppointmentEntry;
   detail: DetailLevel;
   defaultExpanded: boolean;
+  onOpenNotesModal: (updates: ClientUpdate[], title: string) => void;
 }) {
   const [timelineOpen, setTimelineOpen] = useState(defaultExpanded);
+  const [showAllNotes, setShowAllNotes] = useState(false);
   const { appointment, profile, snapshot, updates, caseSummary } = entry;
   const priorityStyle = profile ? getPriorityStyle(profile.priority) : null;
   const statusStyle = getStatusStyle(appointment.status);
@@ -322,41 +326,83 @@ function AppointmentCard({
       {/* Timeline toggle */}
       {updates.length > 0 && (
         <div>
-          <button
-            onClick={() => setTimelineOpen(!timelineOpen)}
-            className="w-full flex items-center gap-2 px-5 py-2.5 text-left"
+          <div
+            className="flex items-center"
             style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
               borderBottom: timelineOpen ? "1px solid var(--color-border-light)" : "none",
             }}
           >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+            <button
+              onClick={() => setTimelineOpen(!timelineOpen)}
+              className="flex items-center gap-2 px-5 py-2.5 text-left flex-1"
               style={{
-                transform: timelineOpen ? "rotate(90deg)" : "none",
-                transition: "transform 0.15s ease",
-                color: "var(--color-ink-faint)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
               }}
             >
-              <path d="M6 3l5 5-5 5" />
-            </svg>
-            <span
-              className="text-xs font-medium"
-              style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}
-            >
-              Recent Notes ({updates.length})
-            </span>
-          </button>
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                style={{
+                  transform: timelineOpen ? "rotate(90deg)" : "none",
+                  transition: "transform 0.15s ease",
+                  color: "var(--color-ink-faint)",
+                }}
+              >
+                <path d="M6 3l5 5-5 5" />
+              </svg>
+              <span
+                className="text-xs font-medium"
+                style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}
+              >
+                Recent Notes ({updates.length})
+              </span>
+            </button>
+
+            {timelineOpen && updates.length > 2 && (
+              <div className="flex items-center gap-2 pr-5">
+                <button
+                  onClick={() => setShowAllNotes(!showAllNotes)}
+                  className="text-[11px] font-medium px-2 py-1 rounded transition-colors"
+                  style={{
+                    color: "var(--color-amber)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "var(--font-body)",
+                  }}
+                >
+                  {showAllNotes ? "Collapse" : "Show all"}
+                </button>
+                <button
+                  onClick={() =>
+                    onOpenNotesModal(updates, profile?.name ?? "Client Notes")
+                  }
+                  className="text-[11px] font-medium px-2 py-1 rounded transition-colors"
+                  style={{
+                    color: "var(--color-amber)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "var(--font-body)",
+                  }}
+                >
+                  Open in modal
+                </button>
+              </div>
+            )}
+          </div>
 
           {timelineOpen && (
-            <div className="px-5 py-3" style={{ maxHeight: 400, overflowY: "auto" }}>
+            <div
+              className="px-5 py-3"
+              style={showAllNotes ? {} : { maxHeight: 400, overflowY: "auto" }}
+            >
               <UpdatesTimeline updates={updates} last30Days />
             </div>
           )}
@@ -404,6 +450,19 @@ export function AppointmentsPage() {
   const [data, setData] = useState<AppointmentsResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Notes modal state
+  const [modalNotes, setModalNotes] = useState<ClientUpdate[] | null>(null);
+  const [modalTitle, setModalTitle] = useState("");
+
+  const openNotesModal = useCallback((updates: ClientUpdate[], title: string) => {
+    setModalNotes(updates);
+    setModalTitle(title);
+  }, []);
+
+  const closeNotesModal = useCallback(() => {
+    setModalNotes(null);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -652,6 +711,7 @@ export function AppointmentsPage() {
                       entry={entry}
                       detail={detail}
                       defaultExpanded={false}
+                      onOpenNotesModal={openNotesModal}
                     />
                   </div>
                 ))}
@@ -671,6 +731,15 @@ export function AppointmentsPage() {
           {attorney !== "all" ? ` for ${attorney}` : ""}
           {range === "day" ? " today" : range === "week" ? " this week" : range === "upcoming" ? " upcoming" : ""}
         </div>
+      )}
+
+      {/* Notes modal */}
+      {modalNotes && (
+        <NotesModal
+          updates={modalNotes}
+          title={modalTitle}
+          onClose={closeNotesModal}
+        />
       )}
     </div>
   );

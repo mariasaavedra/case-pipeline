@@ -9,7 +9,7 @@ export interface Route {
   params: Record<string, string>;
 }
 
-const VALID_TABS = new Set<string>(["overview", "documents", "appointments", "relations"]);
+const VALID_TABS = new Set<string>(["overview", "appointments", "contracts", "active_cases", "court_cases", "documents", "relations"]);
 
 /**
  * Match a pathname to a route definition.
