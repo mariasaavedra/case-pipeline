@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Component } from "react";
+import type { ReactNode, ErrorInfo } from "react";
 import { createRoot } from "react-dom/client";
 import { ClientView } from "./components/ClientView";
 import { Sidebar } from "./components/Sidebar";
@@ -200,5 +201,27 @@ function App() {
   );
 }
 
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Caught by ErrorBoundary:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: "2rem", textAlign: "center", color: "#666" }}>
+          <h2>Something went wrong</h2>
+          <p>Try refreshing the page.</p>
+          <button onClick={() => window.location.reload()} style={{ marginTop: "1rem", padding: "0.5rem 1rem", cursor: "pointer" }}>
+            Refresh
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const root = createRoot(document.getElementById("root")!);
-root.render(<App />);
+root.render(<ErrorBoundary><App /></ErrorBoundary>);
