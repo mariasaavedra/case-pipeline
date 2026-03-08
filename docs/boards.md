@@ -1,6 +1,6 @@
 # Board Relationship Map
 
-> Last updated: Friday, February 6, 2026
+> Last updated: Sunday, March 8, 2026
 
 ## Structure
 
@@ -30,6 +30,7 @@ flowchart TB
   board_3473957885["Appeals"]
   board_7788520205["Appointments R"]
   board_4299007012["Litigation"]
+  board_9287895872["Calendaring"]
 
   board_8025265377 --> board_7788520205
   board_8025265377 --> board_8025383981
@@ -37,32 +38,71 @@ flowchart TB
   board_8025265377 --> board_8094412694
   board_8025265377 --> board_9283837796
   board_8025265377 --> board_8025467270
+  board_8025265377 --> board_7788520194
+  board_8025265377 --> board_18392565355
+  board_8025265377 --> board_6775627168
   board_8025265377 --> board_8025524218
   board_8025265377 --> board_8025538497
   board_8025265377 --> board_8025546360
+  board_8025265377 --> board_8025556892
   board_8025265377 --> board_8025566986
+  board_8025265377 --> board_8025587356
+  board_8025265377 --> board_8025590516
   board_8025265377 --> board_8025531784
   board_8025265377 --> board_8025618300
   board_8025265377 --> board_4299007012
+  board_8025265377 --> board_3473957885
+  board_8025265377 --> board_8218145698
   board_8025265377 --> board_18392490403
+  board_8025265377 --> board_7788520222
   board_9283837796 --> board_8094412694
+  board_9283837796 --> board_7788520222
   board_9283837796 --> board_8025566986
+  board_8094412694 --> board_6775627168
   board_8094412694 --> board_8025546360
   board_8094412694 --> board_7788520205
   board_8094412694 --> board_8025389724
   board_8094412694 --> board_8025383981
   board_8025618300 --> board_8025566986
   board_8025618300 --> board_8025546360
+  board_8025618300 --> board_7788520222
+  board_8025618300 --> board_18392565355
+  board_8025590516 --> board_7788520194
+  board_8025590516 --> board_8025467270
   board_8025566986 --> board_8025467270
-  board_8025566986 --> board_3473957885
-  board_8025546360 --> board_3473957885
+  board_8025566986 --> board_7864113013
+  board_8025566986 --> board_9287895872
+  board_8025566986 --> board_7788520222
+  board_8025556892 --> board_8025546360
+  board_8025556892 --> board_7788520194
+  board_8025556892 --> board_8025467270
+  board_8025556892 --> board_7788520222
+  board_8025556892 --> board_18392565355
+  board_8025546360 --> board_9287895872
+  board_8025546360 --> board_8844802903
+  board_8025546360 --> board_7864113013
   board_8025546360 --> board_8025467270
+  board_8025538497 --> board_7788520194
   board_8025538497 --> board_8025467270
+  board_8025538497 --> board_7788520222
+  board_8025531784 --> board_7788520222
+  board_8025524218 --> board_7788520194
   board_8025524218 --> board_8025467270
+  board_8025524218 --> board_9287895872
+  board_8025524218 --> board_7788520222
+  board_8025467270 --> board_7788520222
+  board_8025467270 --> board_8025559753
+  board_8025467270 --> board_8025587356
   board_8025467270 --> board_4299007012
+  board_8025389724 --> board_7788520222
   board_8025389724 --> board_8025566986
+  board_8025383981 --> board_7788520222
   board_8025383981 --> board_8025566986
+  board_7788520205 --> board_7788520222
   board_7788520205 --> board_8025566986
+  board_4299007012 --> board_7788520222
+  board_9287895872 --> board_8025556892
+  board_9287895872 --> board_9307986744
 ```
 
 ---
@@ -71,9 +111,9 @@ flowchart TB
 
 **Main Board:** Profiles
 
-- **18** boards
-- **72** connections
-- **146** mirror columns (shared data)
+- **19** boards
+- **126** connections
+- **196** mirror columns (shared data)
 
 ---
 
@@ -85,14 +125,16 @@ flowchart TB
 - Profiles (via "Profile")
 
 **Displays from linked boards:**
-- A Number
 - Phone Number
 - E-mail
+- A Number
+- Paralegal
 
 ### Appointments WH
 
 **Links to:**
 - [FA] Jail Intakes (via "link to Jail Intakes")
+- Board 7788520222 (via "link to Activities")
 - Profiles (via "Profiles")
 - [FA] Jail Intakes (via "Jail Intakes")
 - [FA] Jail Intakes (via "link to Jail Intakes")
@@ -115,6 +157,7 @@ flowchart TB
 ### [FA] Jail Intakes
 
 **Links to:**
+- Board 6775627168 (via "link to Call Log")
 - Court Cases (via "link to Court Cases")
 - Appointments R (via "X Appointments")
 - Appointments LB (via "X Appointments")
@@ -131,6 +174,8 @@ flowchart TB
 - [CD] Open Forms (via "[CD] Open Forms")
 - [CD] Open Forms (via "link to [CD] Open Forms")
 - Court Cases (via "Court Cases")
+- Board 7788520222 (via "link to Activities")
+- Board 18392565355 (via "link to Duplicate of Mail List")
 
 **Displays from linked boards:**
 - Projects
@@ -146,12 +191,33 @@ flowchart TB
 
 ### FOIAs
 
+**Links to:**
+- Board 7788520194 (via "link to Fee Ks")
+- Fee Ks (via "link to Fee Ks")
+- Profiles (via "Profiles")
+
+**Displays from linked boards:**
+- E-File
+- Consults
+- Project
+- Fee Ks
+- E-mail
+- Phone
+- Address
+- A Number
+- Date of Birth
+- Country of Birth
+- Mirror
+
 ### [CD] Open Forms
 
 **Links to:**
 - Fee Ks (via "Fee Ks")
 - Profiles (via "Profiles")
-- Appeals (via "link to Appeals")
+- Board 7864113013 (via "link to Appeals")
+- Calendaring (via "Calendaring")
+- Calendaring (via "link to Calendaring")
+- Board 7788520222 (via "link to Activities")
 
 **Displays from linked boards:**
 - A Number
@@ -172,22 +238,58 @@ flowchart TB
 
 ### Motions
 
+**Links to:**
+- Profiles (via "Profile")
+- Court Cases (via "Court Case")
+- Board 7788520194 (via "link to Fee Ks")
+- Fee Ks (via "link to Fee Ks")
+- Board 7788520222 (via "link to Activities")
+- Board 18392565355 (via "link to Duplicate of Mail List")
+
+**Displays from linked boards:**
+- Judge
+- Hearing Date - CALENDARING
+- App for Relief
+- Motions - Connected
+- Relief
+- Mirror
+- Hearing Type
+- Next Hearing Date
+- IJ
+- E-File
+- E-Mail
+- Phone
+- Consult
+- Project
+- Fee K
+- Profile Status
+- Hire Date*
+- ATTORNEY NOTES
+
 ### Court Cases
 
 **Links to:**
+- Calendaring (via "Calendaring")
+- Board 8844802903 (via "Court Tasks")
+- Calendaring (via "Deadline on Cal- Calendaring")
 - Profiles (via "Profile")
-- Appeals (via "Motions")
+- Board 7864113013 (via "Motions")
+- Motions (via "Motions")
 - [NA] Originals + Cards + Notices (via "link to [NA] Originals + Cards + Notices")
 - Fee Ks (via "link to Fee Ks")
 - [FA] Jail Intakes (via "[FA] Jail Intakes")
 
 **Displays from linked boards:**
 - COUNTRY
+- To-Do Due Date
+- Assigned Date
+- Task Assigned To
+- To-Do Status
 - Motions - Connected
+- Hearing Date - Calendaring
+- Judge - Connected
 - A-Number
 - E-File
-- Judge - Connected
-- Hearing Date - Calendaring
 - Calendaring Status - From Calendaring
 - Deadline List
 - Written - COURT - Calendaring
@@ -212,8 +314,10 @@ flowchart TB
 ### [LT] I918B's
 
 **Links to:**
+- Board 7788520194 (via "link to Fee Ks")
 - Fee Ks (via "link to Fee Ks")
 - Profiles (via "Profile")
+- Board 7788520222 (via "link to Activities")
 
 **Displays from linked boards:**
 - Case No.
@@ -226,6 +330,7 @@ flowchart TB
 
 **Links to:**
 - Profiles (via "Profiles")
+- Board 7788520222 (via "link to Activities")
 
 **Displays from linked boards:**
 - Case No.
@@ -237,12 +342,16 @@ flowchart TB
 - E-File
 - Phone
 - E-mail
+- Mirror
 
 ### RFEs - ALL
 
 **Links to:**
+- Board 7788520194 (via "Fee K")
 - Fee Ks (via "Fee K")
 - Profiles (via "Profile")
+- Calendaring (via "Calendaring")
+- Board 7788520222 (via "link to Activities")
 
 **Displays from linked boards:**
 - E-File
@@ -265,10 +374,15 @@ flowchart TB
 - Court Cases (via "Court Cases - Connected -")
 - Profiles (via "Profile")
 - [CD] Open Forms (via "link to [CD] Open Forms")
+- Board 7788520222 (via "link to Activities")
 - RFEs - ALL (via "Cases")
 - [LT] I918B's (via "Cases")
 - Court Cases (via "Cases")
+- Motions (via "Cases")
+- Board 8025559753 (via "Cases")
 - [CD] Open Forms (via "Cases")
+- Board 8025587356 (via "Cases")
+- FOIAs (via "Cases")
 - Litigation (via "Cases")
 
 **Displays from linked boards:**
@@ -292,6 +406,7 @@ flowchart TB
 
 **Links to:**
 - [FA] Jail Intakes (via "link to Jail Intakes")
+- Board 7788520222 (via "link to Activities")
 - Profiles (via "Profiles")
 - [FA] Jail Intakes (via "Jail Intakes")
 - [FA] Jail Intakes (via "link to Jail Intakes")
@@ -315,6 +430,7 @@ flowchart TB
 **Links to:**
 - Profiles (via "Profiles")
 - [FA] Jail Intakes (via "link to Jail Intakes")
+- Board 7788520222 (via "link to Activities")
 - [FA] Jail Intakes (via "Jail Intakes")
 - Profiles (via "link to Profiles")
 - [CD] Open Forms (via "link to Open Forms")
@@ -341,35 +457,53 @@ flowchart TB
 - [FA] Jail Intakes (via "Appointments")
 - Appointments WH (via "Appointments")
 - Fee Ks (via "Fee Ks")
+- Board 7788520194 (via "Fee Ks")
+- Board 18392565355 (via "link to Duplicate of Mail List")
+- Board 18392565355 (via "link to Duplicate of Mail List")
+- Board 6775627168 (via "Call Log")
 - RFEs - ALL (via "Projects")
 - [LT] I918B's (via "Projects")
 - Court Cases (via "Projects")
+- Motions (via "Projects")
 - [CD] Open Forms (via "Projects")
+- Board 8025587356 (via "Projects")
+- FOIAs (via "Projects")
 - Address Changes (via "Projects")
 - [NA] Originals + Cards + Notices (via "Projects")
 - Litigation (via "Projects")
+- Appeals (via "Projects")
 - Appointments LB (via "Projects")
 - Appointments R (via "Projects")
 - Appointments M (via "Projects")
+- Board 8218145698 (via "Projects")
 - Appointments WH (via "Projects")
 - NVC Notices (via "Projects")
+- Board 7788520222 (via "Activities")
 
 **Displays from linked boards:**
 - Contract Stage
 - Hire Date
 - Last Consult Date
 - Mirror
+- Mirror 1
+- CaseTypes
+- Paralegal
 - IJ
 - Receipt Number(s)
-- Paralegal
-- CaseTypes
 
 ### Appeals
+
+**Links to:**
+- Profiles (via "Profile")
+
+**Displays from linked boards:**
+- Mirror
 
 ### Appointments R
 
 **Links to:**
 - Profiles (via "Profiles")
+- Board 7788520222 (via "link to Activities")
 - [FA] Jail Intakes (via "Jail Intakes")
 - Profiles (via "link to Profiles")
 - [CD] Open Forms (via "link to Open Forms")
@@ -390,7 +524,35 @@ flowchart TB
 **Links to:**
 - Profiles (via "Profile")
 - Fee Ks (via "link to Fee Ks")
+- Board 7788520222 (via "link to Activities")
+
+### Calendaring
+
+**Links to:**
+- Profiles (via "Profiles")
+- Court Cases (via "Connect boards")
+- RFEs - ALL (via "Connect boards")
+- [CD] Open Forms (via "Connect boards")
+- Motions (via "link to Motions")
+- Court Cases (via "add to court to Court Cases")
+- Court Cases (via "link to Court Cases")
+- Board 9307986744 (via "link to Subitems of Calendaring")
+
+**Displays from linked boards:**
+- Deadline Status
+- Method
+- Deadline Type - Connected
+- Email
+- IJ
+- Phone
+- Hearing Fees:
+- MH Fees Paid On: - Connected
+- TP Fees Paid On: - Calendaring
+- Trial Fees Paid On: - Calendaring
+- profile ID
+- NEEDS
+- FILINGS OVERVIEW
 
 ---
 
-<sub>Generated: 2026-02-07T00:29:10.602Z</sub>
+<sub>Generated: 2026-03-08T13:39:04.763Z</sub>
