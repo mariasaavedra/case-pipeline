@@ -15,6 +15,7 @@ import type { AppointmentsResult, AppointmentEntry, ClientUpdate } from "../api"
 import { Link } from "./Link";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { NotesModal } from "./NotesModal";
+import { AppointmentModal } from "./AppointmentModal";
 import { BOARD_DISPLAY_NAMES } from "../../lib/query/types";
 import { clientPath } from "../router";
 
@@ -118,11 +119,13 @@ function AppointmentCard({
   detail,
   defaultExpanded,
   onOpenNotesModal,
+  onFocus,
 }: {
   entry: AppointmentEntry;
   detail: DetailLevel;
   defaultExpanded: boolean;
   onOpenNotesModal: (updates: ClientUpdate[], title: string) => void;
+  onFocus: (entry: AppointmentEntry) => void;
 }) {
   const [timelineOpen, setTimelineOpen] = useState(defaultExpanded);
   const [showAllNotes, setShowAllNotes] = useState(false);
@@ -215,25 +218,45 @@ function AppointmentCard({
           </p>
         </div>
 
-        {/* View 360 button */}
-        {profile && (
-          <Link
-            href={clientPath(profile.localId)}
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg flex-shrink-0 transition-colors"
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => onFocus(entry)}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
             style={{
-              color: "var(--color-amber)",
-              backgroundColor: "var(--color-amber-light)",
+              color: "var(--color-ink-muted)",
+              backgroundColor: "var(--color-surface-warm)",
               fontFamily: "var(--font-body)",
-              border: "none",
-              textDecoration: "none",
+              border: "1px solid var(--color-border-light)",
+              cursor: "pointer",
             }}
           >
-            View 360
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M6 3l5 5-5 5" />
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="8" cy="8" r="5" />
+              <circle cx="8" cy="8" r="1.5" fill="currentColor" />
             </svg>
-          </Link>
-        )}
+            Focus
+          </button>
+
+          {profile && (
+            <Link
+              href={clientPath(profile.localId)}
+              className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+              style={{
+                color: "var(--color-amber)",
+                backgroundColor: "var(--color-amber-light)",
+                fontFamily: "var(--font-body)",
+                border: "none",
+                textDecoration: "none",
+              }}
+            >
+              View 360
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M6 3l5 5-5 5" />
+              </svg>
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Snapshot section — visible in "snapshot" and "full" modes */}
@@ -454,6 +477,9 @@ export function AppointmentsPage() {
   // Notes modal state
   const [modalNotes, setModalNotes] = useState<ClientUpdate[] | null>(null);
   const [modalTitle, setModalTitle] = useState("");
+
+  // Focus modal state
+  const [focusedEntry, setFocusedEntry] = useState<AppointmentEntry | null>(null);
 
   const openNotesModal = useCallback((updates: ClientUpdate[], title: string) => {
     setModalNotes(updates);
@@ -712,6 +738,7 @@ export function AppointmentsPage() {
                       detail={detail}
                       defaultExpanded={false}
                       onOpenNotesModal={openNotesModal}
+                      onFocus={setFocusedEntry}
                     />
                   </div>
                 ))}
@@ -739,6 +766,14 @@ export function AppointmentsPage() {
           updates={modalNotes}
           title={modalTitle}
           onClose={closeNotesModal}
+        />
+      )}
+
+      {/* Focus modal */}
+      {focusedEntry && (
+        <AppointmentModal
+          entry={focusedEntry}
+          onClose={() => setFocusedEntry(null)}
         />
       )}
     </div>
