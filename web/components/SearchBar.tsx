@@ -6,14 +6,14 @@ import { BOARD_DISPLAY_NAMES } from "../../lib/query/types";
 const SEARCH_TYPE_OPTIONS: { value: SearchType; label: string }[] = [
   { value: "profiles", label: "Clients" },
   { value: "contracts", label: "Contracts" },
-  { value: "court_cases", label: BOARD_DISPLAY_NAMES.court_cases },
-  { value: "open_forms", label: BOARD_DISPLAY_NAMES._cd_open_forms },
-  { value: "motions", label: BOARD_DISPLAY_NAMES.motions },
-  { value: "appeals", label: BOARD_DISPLAY_NAMES.appeals },
-  { value: "foias", label: BOARD_DISPLAY_NAMES.foias },
-  { value: "rfes", label: BOARD_DISPLAY_NAMES.rfes_all },
-  { value: "litigation", label: BOARD_DISPLAY_NAMES.litigation },
-  { value: "i918bs", label: BOARD_DISPLAY_NAMES._lt_i918b_s },
+  { value: "court_cases", label: BOARD_DISPLAY_NAMES.court_cases! },
+  { value: "open_forms", label: BOARD_DISPLAY_NAMES._cd_open_forms! },
+  { value: "motions", label: BOARD_DISPLAY_NAMES.motions! },
+  { value: "appeals", label: BOARD_DISPLAY_NAMES.appeals! },
+  { value: "foias", label: BOARD_DISPLAY_NAMES.foias! },
+  { value: "rfes", label: BOARD_DISPLAY_NAMES.rfes_all! },
+  { value: "litigation", label: BOARD_DISPLAY_NAMES.litigation! },
+  { value: "i918bs", label: BOARD_DISPLAY_NAMES._lt_i918b_s! },
 ];
 
 interface Props {

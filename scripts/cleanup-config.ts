@@ -194,6 +194,7 @@ async function main() {
 
     for (const [configKey, match] of resolutions) {
       const resolution = boardConfig.columns[configKey];
+      if (!resolution) continue;
 
       if (match) {
         // Already by_id with correct ID — skip

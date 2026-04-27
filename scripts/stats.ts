@@ -40,6 +40,13 @@ interface BoardStat {
   orphaned: number;
 }
 
+export interface GroupStat {
+  boardKey: string;
+  boardLabel: string;
+  groupTitle: string;
+  count: number;
+}
+
 interface ProfileStat {
   total: number;
   withANumber: number;
@@ -66,6 +73,7 @@ export interface StatsReport {
   contracts: ContractStat;
   updates: UpdateStat;
   boards: BoardStat[];
+  groups: GroupStat[];
   totalItems: number;
   totalOrphaned: number;
 }
@@ -110,12 +118,30 @@ export function gatherStats(db: Database, dbPath: string): StatsReport {
     ORDER BY total DESC
   `).all() as { boardKey: string; total: number; withProfile: number }[];
 
+  // Per-board, per-group breakdown
+  const groupRows = db.query(`
+    SELECT
+      board_key AS boardKey,
+      COALESCE(group_title, '(no group)') AS groupTitle,
+      COUNT(*) AS count
+    FROM board_items
+    GROUP BY board_key, group_title
+    ORDER BY board_key, count DESC
+  `).all() as { boardKey: string; groupTitle: string; count: number }[];
+
   const boards: BoardStat[] = boardRows.map((r) => ({
     boardKey: r.boardKey,
     label: BOARD_LABELS[r.boardKey] ?? r.boardKey,
     total: r.total,
     withProfile: r.withProfile,
     orphaned: r.total - r.withProfile,
+  }));
+
+  const groups: GroupStat[] = groupRows.map((r) => ({
+    boardKey: r.boardKey,
+    boardLabel: BOARD_LABELS[r.boardKey] ?? r.boardKey,
+    groupTitle: r.groupTitle,
+    count: r.count,
   }));
 
   const totalItems = boards.reduce((s, b) => s + b.total, 0);
@@ -141,6 +167,7 @@ export function gatherStats(db: Database, dbPath: string): StatsReport {
       linkedToProfile: updateRow.linkedToProfile,
     },
     boards,
+    groups,
     totalItems,
     totalOrphaned,
   };

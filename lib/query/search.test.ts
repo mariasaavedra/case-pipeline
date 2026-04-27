@@ -102,8 +102,8 @@ describe("searchClients", () => {
 
     const results = searchClients(db, "Maria");
     expect(results.length).toBe(1);
-    expect(results[0].name).toBe("Maria Garcia");
-    expect(results[0].localId).toBe("p1");
+    expect(results[0]!.name).toBe("Maria Garcia");
+    expect(results[0]!.localId).toBe("p1");
   });
 
   test("finds profile by partial phone number (last 4 digits)", () => {
@@ -113,7 +113,7 @@ describe("searchClients", () => {
 
     const results = searchClients(db, "4567");
     expect(results.length).toBe(1);
-    expect(results[0].name).toBe("Maria Garcia");
+    expect(results[0]!.name).toBe("Maria Garcia");
   });
 
   test("finds profile by phone with dashes", () => {
@@ -122,7 +122,7 @@ describe("searchClients", () => {
 
     const results = searchClients(db, "555-123");
     expect(results.length).toBe(1);
-    expect(results[0].name).toBe("Maria Garcia");
+    expect(results[0]!.name).toBe("Maria Garcia");
   });
 
   test("finds profile by email (partial match with @)", () => {
@@ -136,7 +136,7 @@ describe("searchClients", () => {
 
     const results2 = searchClients(db, "@example.com");
     expect(results2.length).toBe(1);
-    expect(results2[0].name).toBe("Maria Garcia");
+    expect(results2[0]!.name).toBe("Maria Garcia");
   });
 
   test("finds profile by address via FTS", () => {
@@ -146,8 +146,8 @@ describe("searchClients", () => {
 
     const results = searchClients(db, "Springfield");
     expect(results.length).toBe(1);
-    expect(results[0].name).toBe("Maria Garcia");
-    expect(results[0].address).toBe("123 Main Street, Springfield IL");
+    expect(results[0]!.name).toBe("Maria Garcia");
+    expect(results[0]!.address).toBe("123 Main Street, Springfield IL");
   });
 
   test("returns address in results", () => {
@@ -155,7 +155,7 @@ describe("searchClients", () => {
     insertProfile(db, { localId: "p1", name: "Maria Garcia", address: "123 Main St" });
 
     const results = searchClients(db, "Maria");
-    expect(results[0].address).toBe("123 Main St");
+    expect(results[0]!.address).toBe("123 Main St");
   });
 
   test("handles FTS reserved words (AND, OR, NOT)", () => {
@@ -194,9 +194,9 @@ describe("searchByType", () => {
 
     const results = searchByType(db, "I-130", "contracts");
     expect(results.length).toBe(1);
-    expect(results[0].name).toBe("I-130 Filing");
-    expect(results[0].clientName).toBe("Maria Garcia");
-    expect(results[0].clientLocalId).toBe("p1");
+    expect(results[0]!.name).toBe("I-130 Filing");
+    expect(results[0]!.clientName).toBe("Maria Garcia");
+    expect(results[0]!.clientLocalId).toBe("p1");
   });
 
   test("searches contracts by case type", () => {
@@ -234,9 +234,9 @@ describe("searchByType", () => {
 
     const results = searchByType(db, "Smith", "court_cases");
     expect(results.length).toBe(1);
-    expect(results[0].name).toBe("Smith v. USCIS");
-    expect(results[0].boardKey).toBe("court_cases");
-    expect(results[0].clientName).toBe("John Smith");
+    expect(results[0]!.name).toBe("Smith v. USCIS");
+    expect(results[0]!.boardKey).toBe("court_cases");
+    expect(results[0]!.clientName).toBe("John Smith");
   });
 
   test("searches open forms board", () => {
@@ -252,7 +252,7 @@ describe("searchByType", () => {
 
     const results = searchByType(db, "EAD", "open_forms");
     expect(results.length).toBe(1);
-    expect(results[0].name).toBe("I-765 EAD");
+    expect(results[0]!.name).toBe("I-765 EAD");
   });
 
   test("returns empty for profiles type", () => {
@@ -290,7 +290,7 @@ describe("listProfilesFiltered", () => {
 
     const result = listProfilesFiltered(db, { priority: "High" });
     expect(result.total).toBe(1);
-    expect(result.profiles[0].name).toBe("Alice");
+    expect(result.profiles[0]!.name).toBe("Alice");
   });
 
   test("filters by contract status", () => {
@@ -307,7 +307,7 @@ describe("listProfilesFiltered", () => {
 
     const result = listProfilesFiltered(db, { status: "Active" });
     expect(result.total).toBe(1);
-    expect(result.profiles[0].name).toBe("Alice");
+    expect(result.profiles[0]!.name).toBe("Alice");
   });
 
   test("filters by virtual status: paid_fee_ks", () => {
@@ -324,7 +324,7 @@ describe("listProfilesFiltered", () => {
 
     const result = listProfilesFiltered(db, { status: "paid_fee_ks" });
     expect(result.total).toBe(1);
-    expect(result.profiles[0].name).toBe("Alice");
+    expect(result.profiles[0]!.name).toBe("Alice");
   });
 
   test("filters by attorney", () => {
@@ -341,7 +341,7 @@ describe("listProfilesFiltered", () => {
 
     const result = listProfilesFiltered(db, { attorney: "R" });
     expect(result.total).toBe(1);
-    expect(result.profiles[0].name).toBe("Alice");
+    expect(result.profiles[0]!.name).toBe("Alice");
   });
 
   test("filters by board type", () => {
@@ -357,7 +357,7 @@ describe("listProfilesFiltered", () => {
 
     const result = listProfilesFiltered(db, { boardType: "_cd_open_forms" });
     expect(result.total).toBe(1);
-    expect(result.profiles[0].name).toBe("Alice");
+    expect(result.profiles[0]!.name).toBe("Alice");
   });
 
   test("filters by date range", () => {
@@ -384,7 +384,7 @@ describe("listProfilesFiltered", () => {
       dateTo: "2026-03-31",
     });
     expect(result.total).toBe(1);
-    expect(result.profiles[0].name).toBe("Alice");
+    expect(result.profiles[0]!.name).toBe("Alice");
   });
 
   test("supports pagination", () => {

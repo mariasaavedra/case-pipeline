@@ -104,7 +104,10 @@ export function getAppointments(
       p.phone AS profilePhone,
       p.priority AS profilePriority,
       p.group_title AS profileGroupTitle,
-      p.address AS profileAddress
+      p.address AS profileAddress,
+      p.date_of_birth AS profileDateOfBirth,
+      p.place_of_birth AS profilePlaceOfBirth,
+      p.a_number AS profileANumber
     FROM board_items bi
     LEFT JOIN profiles p ON p.local_id = bi.profile_local_id
     WHERE bi.board_key IN (${BOARD_KEY_PLACEHOLDERS})
@@ -136,6 +139,9 @@ export function getAppointments(
           priority: row.profilePriority,
           groupTitle: row.profileGroupTitle,
           address: row.profileAddress,
+          dateOfBirth: row.profileDateOfBirth,
+          placeOfBirth: row.profilePlaceOfBirth,
+          aNumber: row.profileANumber,
         }
       : null;
 
@@ -263,6 +269,9 @@ interface RawAppointmentRow {
   profilePriority: string | null;
   profileGroupTitle: string | null;
   profileAddress: string | null;
+  profileDateOfBirth: string | null;
+  profilePlaceOfBirth: string | null;
+  profileANumber: string | null;
 }
 
 function safeParseJson(value: string | null | undefined): Record<string, unknown> {

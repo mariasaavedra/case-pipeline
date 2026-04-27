@@ -50,7 +50,7 @@ function initializeFilters<T extends Record<string, string>>(
       (result as Record<string, string>)[key] = loadFromStorage(
         opts.storagePrefix,
         key,
-        opts.defaults[key]
+        opts.defaults[key]!
       );
     }
   }

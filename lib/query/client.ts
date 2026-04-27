@@ -2,7 +2,7 @@
 // Client / Profile Queries
 // =============================================================================
 
-import type { Database } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite";
 import type { ProfileSummary, SearchResult } from "./types";
 
 /** FTS5 reserved words that must not appear as bare tokens in MATCH queries */
@@ -179,7 +179,7 @@ export function listProfilesFiltered(
 ): FilteredProfileResult {
   const { limit = 50, offset = 0 } = opts;
   const conditions: string[] = [];
-  const params: unknown[] = [];
+  const params: SQLQueryBindings[] = [];
 
   // Direct profile filter
   if (opts.priority) {

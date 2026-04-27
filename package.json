@@ -10,6 +10,8 @@
     "seed": "bun cli.ts seed",
     "sync": "bun cli.ts sync",
     "analyze": "bun cli.ts analyze",
+    "stats": "bun scripts/export-stats.ts",
+    "stats:live": "bun scripts/export-stats.ts --db=live",
     "dev": "bun --hot server.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
@@ -33,6 +35,7 @@
     "pizzip": "^3.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "xlsx": "^0.18.5"
   }
 }
