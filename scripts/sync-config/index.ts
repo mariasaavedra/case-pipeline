@@ -18,10 +18,11 @@
 //
 // =============================================================================
 
-import { setApiToken, fetchBoardStructure, fetchAllBoards } from "../../lib/monday";
-import { loadBoardsConfig } from "../../lib/config";
-import type { BoardConfig } from "../../lib/config/types";
-import type { MondayBoard } from "../../lib/monday/types";
+import { writeFile } from "node:fs/promises";
+import { setApiToken, fetchBoardStructure, fetchAllBoards } from "@case-pipeline/monday";
+import { loadBoardsConfig } from "@case-pipeline/config";
+import type { BoardConfig } from "@case-pipeline/config/types";
+import type { MondayBoard } from "@case-pipeline/monday/types";
 import type { SyncOptions, SyncReport, BoardSyncResult } from "./lib/types";
 import { diffBoardColumns } from "./lib/differ";
 import {
@@ -32,7 +33,7 @@ import {
   writeConfigToFile,
 } from "./lib/yaml-generator";
 import { printBoardDiff, printSummary, printHeader, printHelp, exportBoardsToFile, type BoardExportData } from "./lib/reporter";
-import { generateRelationshipMap } from "../../lib/relationship-map";
+import { generateRelationshipMap } from "@case-pipeline/relationship-map";
 
 const DEFAULT_BOARDS_PATH = "config/boards.yaml";
 
@@ -340,20 +341,20 @@ async function main(): Promise<void> {
         });
 
         // Write markdown (clean version)
-        await Bun.write(options.relationshipMap, output.markdown);
+        await writeFile(options.relationshipMap, output.markdown, "utf-8");
         console.log(`\n\x1b[32mExported relationship map to: ${options.relationshipMap}\x1b[0m`);
 
         // Write illustrated/detailed version
         if (output.illustrated) {
           const illustratedPath = options.relationshipMap.replace(/\.md$/, "-detailed.md");
-          await Bun.write(illustratedPath, output.illustrated);
+          await writeFile(illustratedPath, output.illustrated, "utf-8");
           console.log(`\x1b[32mExported detailed map to: ${illustratedPath}\x1b[0m`);
         }
 
         // Write JSON alongside for future UI consumption
         if (output.json) {
           const jsonPath = options.relationshipMap.replace(/\.md$/, ".json");
-          await Bun.write(jsonPath, output.json);
+          await writeFile(jsonPath, output.json, "utf-8");
           console.log(`\x1b[32mExported JSON data to: ${jsonPath}\x1b[0m`);
         }
       }

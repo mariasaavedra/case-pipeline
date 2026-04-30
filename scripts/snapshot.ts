@@ -5,13 +5,14 @@
 // Usage: bun scripts/snapshot.ts
 // =============================================================================
 
+import { writeFile } from "node:fs/promises";
 import {
   setApiToken,
   fetchBoardStructure,
   fetchAllBoardItems,
-} from "../lib/monday";
-import { loadBoardsConfig } from "../lib/config";
-import type { MondayItem, MondayBoard } from "../lib/monday/types";
+} from "@case-pipeline/monday";
+import { loadBoardsConfig } from "@case-pipeline/config";
+import type { MondayItem, MondayBoard } from "@case-pipeline/monday/types";
 
 // =============================================================================
 // Setup
@@ -83,12 +84,12 @@ async function main() {
   // Generate report
   const report = generateReport(snapshots);
   const reportPath = "data/monday-snapshot.md";
-  await Bun.write(reportPath, report);
+  await writeFile(reportPath, report, "utf-8");
   console.log(`\nReport saved to ${reportPath}`);
 
   // Also save raw JSON for programmatic use
   const jsonPath = "data/monday-snapshot.json";
-  await Bun.write(jsonPath, JSON.stringify(snapshots, null, 2));
+  await writeFile(jsonPath, JSON.stringify(snapshots, null, 2), "utf-8");
   console.log(`Raw data saved to ${jsonPath}`);
 }
 

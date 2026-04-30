@@ -2,8 +2,8 @@
 // Types for sync-config CLI
 // =============================================================================
 
-import type { MondayColumn } from "../../../lib/monday/types";
-import type { ColumnResolution } from "../../../lib/config/types";
+import type { MondayColumn } from "@case-pipeline/monday/types";
+import type { ColumnResolution } from "@case-pipeline/config/types";
 
 export interface ColumnDiff {
   // Columns in Monday.com that are NOT in the YAML config

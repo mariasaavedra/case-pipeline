@@ -3,9 +3,10 @@
 // Colored output for diff visualization
 // =============================================================================
 
+import { writeFile } from "node:fs/promises";
 import type { BoardSyncResult, ColumnDiff } from "./types";
-import type { MondayColumn, MondayBoard } from "../../../lib/monday/types";
-import type { ColumnResolution } from "../../../lib/config/types";
+import type { MondayColumn, MondayBoard } from "@case-pipeline/monday/types";
+import type { ColumnResolution } from "@case-pipeline/config/types";
 
 export interface BoardExportData {
   boardKey: string;
@@ -252,6 +253,6 @@ export async function exportBoardsToFile(
   }
 
   // Write the file
-  await Bun.write(outputPath, lines.join("\n"));
+  await writeFile(outputPath, lines.join("\n"), "utf-8");
   console.log(`\n${COLORS.green}Exported board reference to: ${outputPath}${COLORS.reset}`);
 }

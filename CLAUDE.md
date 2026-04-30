@@ -1,114 +1,71 @@
+# CLAUDE.md
 
-Default to using Bun instead of Node.js.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Bun automatically loads .env, so don't use dotenv.
+## Commands
 
-## APIs
+```bash
+# Development
+npm run dev:api        # Start API server (Express, port 3000)
+npm run dev:web        # Start web dashboard (Vite, port 5173)
+npm run dev:cli        # Run CLI via tsx
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+# Build & Type checking
+npm run build          # Build all workspaces
+npm run typecheck      # Type-check all workspaces
 
-## Testing
+# Testing
+npm run test           # Run all workspace tests
+# Run a single test file:
+npx vitest run apps/api/src/some.test.ts
 
-Use `bun test` to run tests.
-
-```ts#index.test.ts
-import { test, expect } from "bun:test";
-
-test("hello world", () => {
-  expect(1).toBe(1);
-});
+# Other
+npm run preflight      # Pre-flight environment checks
+npm run seed           # Generate local test data (no Monday.com API needed)
+npm run stats          # Export statistics from local DB
+npm run stats:live     # Export statistics from live DB
 ```
 
-## Frontend
+The web app proxies `/api` requests to `localhost:3000`, so both dev servers must be running together.
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+## Architecture
 
-Server:
+**case-pipeline** is a config-driven automation platform for a Monday.com-based immigration law workspace. It syncs Monday.com board data into a local SQLite database and provides a dashboard, document generation, and CLI tooling.
 
-```ts#index.ts
-import index from "./index.html"
+### Monorepo Layout
 
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
+npm workspaces across two top-level directories:
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+- `apps/api` — Express 5 REST API backed by Better-sqlite3
+- `apps/web` — React 19 + Vite 6 + Tailwind 4 dashboard
+- `apps/cli` — CLI with commands: `render`, `seed`, `lookup`, `sync`, `analyze`
+- `libs/core` — Shared utilities and type definitions
+- `libs/config` — Loads `config/boards.yaml` (board IDs, column mappings, relationships)
+- `libs/monday` — Monday.com GraphQL API client with flexible column resolution strategies (`by_type`, `by_title`, `by_id`)
+- `libs/query` — Typed SQLite query layer (exports subpaths: `./types`, `./appointments`, `./client`, `./relationships`)
+- `libs/template` — Document generation via Handlebars + docxtemplater (DOCX output)
+- `libs/relationship-map` — Board relationship analysis
+- `libs/seed` — Faker.js-based local test data generator
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
+TypeScript path aliases (defined in `tsconfig.base.json`) map `@case-pipeline/*` to the corresponding lib.
 
-With the following `frontend.tsx`:
+### Data Flow
 
-```tsx#frontend.tsx
-import React from "react";
+Monday.com boards → `libs/monday` (GraphQL) → SQLite (`libs/query`) → REST API (`apps/api`) → React dashboard (`apps/web`)
 
-// import .css files directly and it works
-import './index.css';
+Document generation: Monday.com item → `libs/template` (Handlebars context) → DOCX via `templates/`
 
-import { createRoot } from "react-dom/client";
+### Configuration
 
-const root = createRoot(document.body);
+Board definitions live in `config/boards.yaml` — board IDs, column mappings, and inter-board relationships are YAML, not hardcoded. The `libs/config` package loads this at runtime.
 
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
+Required environment variables (see `.env.example`):
+- `MONDAY_API_TOKEN` — required for live data
+- `ITEM_ID` — required for the main document render pipeline
 
-root.render(<Frontend />);
-```
+### Key Design Patterns
 
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.md`.
-
-## Workflow
-
-When a big plan is completed, generate a nightly summary in `nightly/YYYY-MM-DD.md`. Use short, plain sentences a non-technical stakeholder can understand. Focus on what was accomplished and why it matters, not implementation details.
-
-## Documentation
-
--Every time a significant decision or path is made, please document the reasoning behind in in docs/decisions.md
+- **Config-over-code:** Board structure is declared in YAML; column resolution supports `by_type`, `by_title`, and `by_id` strategies with fallbacks.
+- **ETL pattern:** Monday.com data is explicitly mapped into SQLite schemas; queries run locally against SQLite, not the live API.
+- **Seed-first development:** `npm run seed` generates realistic local data via Faker.js so the full app can run without Monday.com API calls.
+- **Template-driven documents:** Handlebars templates in `templates/` are logic-light; all data preparation happens in `libs/template` before rendering.

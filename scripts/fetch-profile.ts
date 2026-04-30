@@ -4,7 +4,8 @@
 // Usage: bun scripts/fetch-profile.ts <itemId>
 // Output: data/samples/profile-<name>.json
 
-import { setApiToken, mondayRequest } from "../lib/monday/api";
+import { writeFile } from "node:fs/promises";
+import { setApiToken, mondayRequest } from "@case-pipeline/monday/api";
 
 // All 18 board IDs from boards.yaml → board key
 const BOARD_ID_TO_KEY: Record<string, string> = {
@@ -130,7 +131,7 @@ async function main() {
 
   const safeName = profile.name.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
   const outPath = `data/samples/profile-${safeName}.json`;
-  await Bun.write(outPath, JSON.stringify(result, null, 2));
+  await writeFile(outPath, JSON.stringify(result, null, 2), "utf-8");
   console.log(`\nWrote ${outPath}`);
 }
 

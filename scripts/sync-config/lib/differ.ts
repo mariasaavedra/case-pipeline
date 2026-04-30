@@ -3,8 +3,8 @@
 // Compares Monday.com board structure against YAML config
 // =============================================================================
 
-import type { MondayColumn } from "../../../lib/monday/types";
-import type { BoardConfig, ColumnResolution } from "../../../lib/config/types";
+import type { MondayColumn } from "@case-pipeline/monday/types";
+import type { BoardConfig, ColumnResolution } from "@case-pipeline/config/types";
 import type { ColumnDiff } from "./types";
 
 /**

@@ -4,7 +4,8 @@
 // One-off script — run with: bun scripts/sample-real-data.ts
 // Outputs to data/samples/ (gitignored)
 
-import { setApiToken, mondayRequest } from "../lib/monday/api";
+import { writeFile } from "node:fs/promises";
+import { setApiToken, mondayRequest } from "@case-pipeline/monday/api";
 
 const PROFILES_BOARD_ID = "8025265377";
 const SAMPLE_SIZE = 10;
@@ -323,7 +324,7 @@ async function main() {
   for (const profile of results) {
     const safeName = profile.name.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
     const path = `${outDir}/profile-${safeName}.json`;
-    await Bun.write(path, JSON.stringify(profile, null, 2));
+    await writeFile(path, JSON.stringify(profile, null, 2), "utf-8");
     console.log(`\nWrote ${path}`);
   }
 
@@ -348,7 +349,7 @@ async function main() {
     })),
     activityLogEntries: profileBoardActivity.length,
   };
-  await Bun.write(`${outDir}/summary.json`, JSON.stringify(summary, null, 2));
+  await writeFile(`${outDir}/summary.json`, JSON.stringify(summary, null, 2), "utf-8");
   console.log(`\nWrote summary.json`);
 
   // Print quick stats

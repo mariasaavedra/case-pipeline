@@ -3,7 +3,7 @@
 // =============================================================================
 
 import Handlebars from "handlebars";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
 
 import { loadConfig } from "./lib/config";
@@ -41,11 +41,10 @@ async function renderTemplate(
   vars: Record<string, string>,
   outputPath: string
 ): Promise<void> {
-  const templateFile = Bun.file(templatePath);
-  const templateSource = await templateFile.text();
+  const templateSource = await readFile(templatePath, "utf-8");
   const template = Handlebars.compile(templateSource);
   const content = template(vars);
-  await Bun.write(outputPath, content);
+  await writeFile(outputPath, content, "utf-8");
 }
 
 // =============================================================================

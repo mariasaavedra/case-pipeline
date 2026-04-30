@@ -1,9 +1,10 @@
 // =============================================================================
 // One-off script: Generate Fernando fixture from sampled JSON
 // =============================================================================
-// Usage: bun scripts/gen-fernando-fixture.ts > scripts/seed/lib/fixtures/fernando.ts
+// Usage: tsx scripts/gen-fernando-fixture.ts > scripts/seed/lib/fixtures/fernando.ts
 
-const data = await Bun.file("data/samples/profile-fernando_quezada_ceballos.json").json();
+import { readFile } from "node:fs/promises";
+const data = JSON.parse(await readFile("data/samples/profile-fernando_quezada_ceballos.json", "utf-8"));
 
 const lines: string[] = [];
 const w = (s: string) => lines.push(s);
@@ -14,7 +15,8 @@ w(`// ==========================================================================
 w(`// Auto-generated from data/samples/profile-fernando_quezada_ceballos.json`);
 w(`// 42-B COR case, 50 court case updates + replies, address changes, fee K`);
 w(``);
-w(`import type { Database } from "bun:sqlite";`);
+w(`import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;`);
 w(``);
 w(`const ID = {`);
 w(`  profile: "fixture-fernando-profile",`);
