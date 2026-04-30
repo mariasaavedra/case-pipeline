@@ -18,8 +18,8 @@ import {
   getAppointments,
   searchByType,
   getAlerts,
-} from "../../../../lib/query";
-import type { SearchType } from "../../../../lib/query";
+} from "@case-pipeline/query";
+import type { SearchType } from "@case-pipeline/query";
 
 // =============================================================================
 // Helpers

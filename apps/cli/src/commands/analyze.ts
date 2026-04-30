@@ -3,14 +3,14 @@
 // =============================================================================
 
 import { writeFile } from "node:fs/promises";
-import { setApiToken, fetchBoardStructure } from "../../../../lib/monday";
-import { loadBoardsConfig } from "../../../../lib/config";
+import { setApiToken, fetchBoardStructure } from "@case-pipeline/monday";
+import { loadBoardsConfig } from "@case-pipeline/config";
 import {
   analyzeBoards,
   renderMarkdownDocument,
   renderJSON,
   renderSimpleDiagram,
-} from "../../../../lib/relationship-map";
+} from "@case-pipeline/relationship-map";
 
 // =============================================================================
 // Types

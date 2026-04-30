@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ClientCaseSummary } from "../api";
-import { BOARD_DISPLAY_NAMES } from "../../../../lib/query/types";
+import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 
 interface Props {
   data: ClientCaseSummary;

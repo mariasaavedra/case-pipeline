@@ -1,5 +1,5 @@
 import type { SearchResult, TypedSearchResult } from "../api";
-import { BOARD_DISPLAY_NAMES } from "../../../../lib/query/types";
+import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 
 interface ProfileResultsProps {
   results: SearchResult[];

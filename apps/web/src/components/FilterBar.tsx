@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import { fetchFilterOptions } from "../api";
 import type { FilterOptions } from "../api";
-import { BOARD_DISPLAY_NAMES } from "../../../../lib/query/types";
+import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 
 interface FilterValues {
   status: string;

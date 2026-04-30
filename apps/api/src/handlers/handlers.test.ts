@@ -9,7 +9,7 @@ type DatabaseInstance = InstanceType<typeof Database>;
 function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
   db.prepare(sql).run(...(params as any[]));
 }
-import { initializeSchema } from "../../../../scripts/seed/lib/db/schema";
+import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import {
   handleListClients,
   handleSearch,

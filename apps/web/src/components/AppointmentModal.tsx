@@ -1,8 +1,8 @@
 import { useEffect, useCallback } from "react";
 import type { AppointmentEntry } from "../api";
 import { UpdatesTimeline } from "./UpdatesTimeline";
-import { BOARD_DISPLAY_NAMES } from "../../../../lib/query/types";
-import { formatANumber } from "../../../../lib/utils/a-number";
+import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { formatANumber } from "@case-pipeline/core";
 import { Link } from "./Link";
 import { clientPath } from "../router";
 

@@ -12,7 +12,7 @@ import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 import * as XLSX from "xlsx";
 import { gatherStats } from "./stats";
-import { validateSchema } from "./seed/lib/db/schema";
+import { validateSchema } from "@case-pipeline/seed/db/schema";
 
 // =============================================================================
 // Sheet builders

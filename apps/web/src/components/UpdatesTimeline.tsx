@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import type { ClientUpdate } from "../api";
-import { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS } from "../../../../lib/query/types";
+import { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS } from "@case-pipeline/query/types";
 import { DOCUMENT_BOARD_KEYS } from "../config";
 import type { TimelineFilter } from "./TimelineFilters";
 

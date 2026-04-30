@@ -3,13 +3,13 @@
 // =============================================================================
 
 import Database from "better-sqlite3";
-import { validateSchema } from "../../../../scripts/seed/lib/db/schema";
+import { validateSchema } from "@case-pipeline/seed/db/schema";
 import {
   searchClients,
   getClientCaseSummary,
   BOARD_DISPLAY_NAMES,
-} from "../../../../lib/query";
-import type { ClientCaseSummary, BoardItemSummary } from "../../../../lib/query";
+} from "@case-pipeline/query";
+import type { ClientCaseSummary, BoardItemSummary } from "@case-pipeline/query";
 
 const DB_PATH = "data/seed.db";
 

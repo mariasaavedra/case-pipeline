@@ -14,10 +14,10 @@
 // 4. Remove config entries that have no plausible match (truly deleted columns)
 // =============================================================================
 
-import { setApiToken, fetchBoardStructure } from "../lib/monday";
-import { loadBoardsConfig } from "../lib/config";
-import type { BoardConfig, ColumnResolution } from "../lib/config/types";
-import type { MondayColumn } from "../lib/monday/types";
+import { setApiToken, fetchBoardStructure } from "@case-pipeline/monday";
+import { loadBoardsConfig } from "@case-pipeline/config";
+import type { BoardConfig, ColumnResolution } from "@case-pipeline/config/types";
+import type { MondayColumn } from "@case-pipeline/monday/types";
 import {
   loadRawBoardsConfig,
   writeConfigToFile,

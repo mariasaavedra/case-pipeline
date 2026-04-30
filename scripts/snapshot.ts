@@ -10,9 +10,9 @@ import {
   setApiToken,
   fetchBoardStructure,
   fetchAllBoardItems,
-} from "../lib/monday";
-import { loadBoardsConfig } from "../lib/config";
-import type { MondayItem, MondayBoard } from "../lib/monday/types";
+} from "@case-pipeline/monday";
+import { loadBoardsConfig } from "@case-pipeline/config";
+import type { MondayItem, MondayBoard } from "@case-pipeline/monday/types";
 
 // =============================================================================
 // Setup

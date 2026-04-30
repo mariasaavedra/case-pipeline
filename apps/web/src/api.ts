@@ -2,17 +2,17 @@
 // API Client — Typed fetch wrappers
 // =============================================================================
 
-import type { SearchResult, ClientCaseSummary, ClientUpdate, KpiCard, TypedSearchResult, SearchType } from "../../../lib/query/types";
-import type { RelationshipWithDetails } from "../../../lib/query/relationships";
-import type { AppointmentsResult } from "../../../lib/query/appointments";
-import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "../../../lib/query/client";
-import type { AlertsResult } from "../../../lib/query/types";
+import type { SearchResult, ClientCaseSummary, ClientUpdate, KpiCard, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
+import type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
+import type { AppointmentsResult } from "@case-pipeline/query/appointments";
+import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
+import type { AlertsResult } from "@case-pipeline/query/types";
 
-export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, BoardItemSummary, ClientUpdate, KpiCard, KpiItem, TypedSearchResult, SearchType } from "../../../lib/query/types";
-export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "../../../lib/query/types";
-export type { RelationshipWithDetails } from "../../../lib/query/relationships";
-export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "../../../lib/query/appointments";
-export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "../../../lib/query/client";
+export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, BoardItemSummary, ClientUpdate, KpiCard, KpiItem, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
+export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
+export type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
+export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "@case-pipeline/query/appointments";
+export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 
 async function apiFetch<T>(url: string): Promise<T> {
   const res = await fetch(url);

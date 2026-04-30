@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { fetchDashboard } from "../api";
 import type { KpiCard, KpiItem } from "../api";
 import { Link } from "./Link";
-import { BOARD_DISPLAY_NAMES } from "../../../../lib/query/types";
+import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 
 function getGreeting(): string {
   const hour = new Date().getHours();

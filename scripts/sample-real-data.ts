@@ -5,7 +5,7 @@
 // Outputs to data/samples/ (gitignored)
 
 import { writeFile } from "node:fs/promises";
-import { setApiToken, mondayRequest } from "../lib/monday/api";
+import { setApiToken, mondayRequest } from "@case-pipeline/monday/api";
 
 const PROFILES_BOARD_ID = "8025265377";
 const SAMPLE_SIZE = 10;

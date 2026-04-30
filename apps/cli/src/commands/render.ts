@@ -7,16 +7,16 @@ import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
-import { loadConfig } from "../../../../lib/config";
+import { loadConfig } from "@case-pipeline/config";
 import {
   setApiToken,
   fetchBoardStructure,
   fetchAllBoardItems,
   fetchItem,
   resolveAllColumns,
-} from "../../../../lib/monday";
-import { mapItemToTemplateVars, validateTemplateVars } from "../../../../lib/template";
-import type { MondayItem } from "../../../../lib/monday/types";
+} from "@case-pipeline/monday";
+import { mapItemToTemplateVars, validateTemplateVars } from "@case-pipeline/template";
+import type { MondayItem } from "@case-pipeline/monday/types";
 
 // =============================================================================
 // Types

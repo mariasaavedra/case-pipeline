@@ -1,6 +1,6 @@
 import type { ProfileSummary, ClientCaseSummary } from "../api";
 import { ActionButtons } from "./ActionButtons";
-import { formatANumber } from "../../../../lib/utils/a-number";
+import { formatANumber } from "@case-pipeline/core";
 
 const PRIORITY_STYLES: Record<string, { dot: string; label: string; bg: string; text: string }> = {
   Urgent: { dot: "priority-dot-urgent", label: "Urgent", bg: "#fef2f2", text: "#991b1b" },

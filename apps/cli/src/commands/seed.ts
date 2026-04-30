@@ -2,7 +2,7 @@
 // Seed Command - Generate test data to local SQLite
 // =============================================================================
 
-import { Seeder } from "../../../../scripts/seed/lib/seeder";
+import { Seeder } from "@case-pipeline/seed/seeder";
 
 // =============================================================================
 // Types

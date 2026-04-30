@@ -7,7 +7,7 @@ type DatabaseInstance = InstanceType<typeof Database>;
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateSchema } from "../../../scripts/seed/lib/db/schema";
+import { validateSchema } from "@case-pipeline/seed/db/schema";
 import {
   handleListClients,
   handleSearch,

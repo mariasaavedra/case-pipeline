@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { searchClients, typedSearch } from "../api";
 import type { SearchResult, TypedSearchResult, SearchType } from "../api";
-import { BOARD_DISPLAY_NAMES } from "../../../../lib/query/types";
+import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 
 const SEARCH_TYPE_OPTIONS: { value: SearchType; label: string }[] = [
   { value: "profiles", label: "Clients" },

@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { fetchAlerts } from "../api";
 import type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "../api";
 import { Link } from "./Link";
-import { BOARD_DISPLAY_NAMES } from "../../../../lib/query/types";
+import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { clientPath } from "../router";
 
 type SeverityFilter = "all" | AlertSeverity;

@@ -5,8 +5,8 @@
 
 import yaml from "js-yaml";
 import { readFile, writeFile } from "node:fs/promises";
-import type { MondayColumn } from "../../../lib/monday/types";
-import type { ColumnResolution, BoardConfig } from "../../../lib/config/types";
+import type { MondayColumn } from "@case-pipeline/monday/types";
+import type { ColumnResolution, BoardConfig } from "@case-pipeline/config/types";
 
 /**
  * Column types that are unique enough to resolve by_type reliably.

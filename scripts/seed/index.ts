@@ -16,8 +16,8 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { DEFAULT_CONFIG } from "./lib/constants";
-import { Seeder } from "./lib/seeder";
+import { DEFAULT_CONFIG } from "@case-pipeline/seed/constants";
+import { Seeder } from "@case-pipeline/seed/seeder";
 
 const DEFAULT_DB_PATH = "data/seed.db";
 

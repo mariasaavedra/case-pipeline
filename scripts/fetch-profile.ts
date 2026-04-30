@@ -5,7 +5,7 @@
 // Output: data/samples/profile-<name>.json
 
 import { writeFile } from "node:fs/promises";
-import { setApiToken, mondayRequest } from "../lib/monday/api";
+import { setApiToken, mondayRequest } from "@case-pipeline/monday/api";
 
 // All 18 board IDs from boards.yaml → board key
 const BOARD_ID_TO_KEY: Record<string, string> = {

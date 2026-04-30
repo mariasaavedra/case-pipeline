@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { fetchClientRelationships } from "../api";
 import type { RelationshipWithDetails } from "../api";
-import { BOARD_DISPLAY_NAMES } from "../../../../lib/query/types";
+import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { StatusBadge } from "./StatusBadge";
 
 interface Props {

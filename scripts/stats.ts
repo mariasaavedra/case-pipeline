@@ -10,7 +10,7 @@
 
 import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
-import { validateSchema } from "./seed/lib/db/schema";
+import { validateSchema } from "@case-pipeline/seed/db/schema";
 
 const BOARD_LABELS: Record<string, string> = {
   profiles:                    "Profiles",

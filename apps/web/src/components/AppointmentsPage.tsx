@@ -16,7 +16,7 @@ import { Link } from "./Link";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { NotesModal } from "./NotesModal";
 import { AppointmentModal } from "./AppointmentModal";
-import { BOARD_DISPLAY_NAMES } from "../../../../lib/query/types";
+import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { clientPath } from "../router";
 
 type DetailLevel = "minimal" | "snapshot" | "full";

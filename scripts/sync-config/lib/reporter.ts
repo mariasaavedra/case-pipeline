@@ -5,8 +5,8 @@
 
 import { writeFile } from "node:fs/promises";
 import type { BoardSyncResult, ColumnDiff } from "./types";
-import type { MondayColumn, MondayBoard } from "../../../lib/monday/types";
-import type { ColumnResolution } from "../../../lib/config/types";
+import type { MondayColumn, MondayBoard } from "@case-pipeline/monday/types";
+import type { ColumnResolution } from "@case-pipeline/config/types";
 
 export interface BoardExportData {
   boardKey: string;

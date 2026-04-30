@@ -4,7 +4,7 @@ import { getStatusColor, DOCUMENT_BOARD_KEYS } from "../config";
 import { StatusBadge } from "./StatusBadge";
 import { Popover } from "./Popover";
 import { getMostRelevantUpdate } from "../utils/relevance";
-import { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS } from "../../../../lib/query/types";
+import { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS } from "@case-pipeline/query/types";
 
 type StatusMode = "worst" | "all" | "primary";
 type PopoverId = "status" | "deadline" | "relief" | "action" | null;
