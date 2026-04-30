@@ -28,7 +28,7 @@ import {
 // Database
 // =============================================================================
 
-const DB_PATH = "data/seed.db";
+const DB_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../data/seed.db");
 const db = new Database(DB_PATH, { readonly: true });
 validateSchema(db);
 
@@ -87,7 +87,7 @@ app.use("/api/", (_req, res) => {
 app.use(express.static(webDir));
 
 // SPA catch-all
-app.get("*", (_req, res) => {
+app.get("/*path", (_req, res) => {
   res.sendFile(path.join(webDir, "index.html"));
 });
 

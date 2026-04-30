@@ -19,6 +19,7 @@
     "test": "vitest run && npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "preflight": "bash scripts/preflight.sh",
+    "seed": "tsx scripts/seed/index.ts",
     "stats": "tsx scripts/export-stats.ts",
     "stats:live": "tsx scripts/export-stats.ts --db=live"
   },
