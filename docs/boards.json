@@ -1,0 +1,2964 @@
+{
+  "meta": {
+    "generatedAt": "2026-03-08T13:39:04.763Z",
+    "version": "1.0.0",
+    "mainBoardId": "8025265377"
+  },
+  "nodes": [
+    {
+      "id": "18392490403",
+      "label": "NVC Notices",
+      "type": "linked",
+      "data": {
+        "configKey": "nvc_notices",
+        "columnCount": 13,
+        "groupCount": 4,
+        "mirrors": [
+          "Phone Number",
+          "E-mail",
+          "A Number",
+          "Paralegal"
+        ]
+      }
+    },
+    {
+      "id": "9283837796",
+      "label": "Appointments WH",
+      "type": "linked",
+      "data": {
+        "configKey": "appointments_wh",
+        "columnCount": 43,
+        "groupCount": 5,
+        "mirrors": [
+          "Create Fee K?",
+          "Case Type(s)",
+          "Case No.",
+          "E-File",
+          "Projects",
+          "Fee Ks",
+          "Paralegal",
+          "Files (P)",
+          "PROFILE ID",
+          "Consult File",
+          "Jail intake ID"
+        ]
+      }
+    },
+    {
+      "id": "8094412694",
+      "label": "[FA] Jail Intakes",
+      "type": "linked",
+      "data": {
+        "configKey": "_fa_jail_intakes",
+        "columnCount": 90,
+        "groupCount": 5,
+        "mirrors": [
+          "Profiles"
+        ]
+      }
+    },
+    {
+      "id": "8025618300",
+      "label": "[NA] Originals + Cards + Notices",
+      "type": "linked",
+      "data": {
+        "configKey": "_na_originals_cards_notices",
+        "columnCount": 28,
+        "groupCount": 4,
+        "mirrors": [
+          "Projects",
+          "Fee Ks",
+          "E-mail",
+          "Phone",
+          "Phone number",
+          "Language",
+          "Profile Status",
+          "Address",
+          "Form",
+          "E-File"
+        ]
+      }
+    },
+    {
+      "id": "8025590516",
+      "label": "FOIAs",
+      "type": "linked",
+      "data": {
+        "configKey": "foias",
+        "columnCount": 54,
+        "groupCount": 4,
+        "mirrors": [
+          "E-File",
+          "Consults",
+          "Project",
+          "Fee Ks",
+          "E-mail",
+          "Phone",
+          "Address",
+          "A Number",
+          "Date of Birth",
+          "Country of Birth",
+          "Mirror"
+        ]
+      }
+    },
+    {
+      "id": "8025566986",
+      "label": "[CD] Open Forms",
+      "type": "linked",
+      "data": {
+        "configKey": "_cd_open_forms",
+        "columnCount": 58,
+        "groupCount": 7,
+        "mirrors": [
+          "A Number",
+          "Case No.",
+          "E-File",
+          "Consult",
+          "Project",
+          "Fee Ks",
+          "E-Mail",
+          "Phone",
+          "FF",
+          "Profile",
+          "Profile Status",
+          "Interview Location",
+          "Interview Date - Calendaring",
+          "PS Deadline",
+          "FF from Fee K"
+        ]
+      }
+    },
+    {
+      "id": "8025556892",
+      "label": "Motions",
+      "type": "linked",
+      "data": {
+        "configKey": "motions",
+        "columnCount": 40,
+        "groupCount": 6,
+        "mirrors": [
+          "Judge",
+          "Hearing Date - CALENDARING",
+          "App for Relief",
+          "Motions - Connected",
+          "Relief",
+          "Mirror",
+          "Hearing Type",
+          "Next Hearing Date",
+          "IJ",
+          "E-File",
+          "E-Mail",
+          "Phone",
+          "Consult",
+          "Project",
+          "Fee K",
+          "Profile Status",
+          "Hire Date*",
+          "ATTORNEY NOTES"
+        ]
+      }
+    },
+    {
+      "id": "8025546360",
+      "label": "Court Cases",
+      "type": "linked",
+      "data": {
+        "configKey": "court_cases",
+        "columnCount": 170,
+        "groupCount": 5,
+        "mirrors": [
+          "COUNTRY",
+          "To-Do Due Date",
+          "Assigned Date",
+          "Task Assigned To",
+          "To-Do Status",
+          "Motions - Connected",
+          "Hearing Date - Calendaring",
+          "Judge - Connected",
+          "A-Number",
+          "E-File",
+          "Calendaring Status - From Calendaring",
+          "Deadline List",
+          "Written - COURT - Calendaring",
+          "Due Date - COURT - Calendaring",
+          "Warning - COURT - Calendaring",
+          "TO DO - Deadlines List Update - MR Comment",
+          "Master Fees Due On: - Calendaring",
+          "TP Fees Due: - Calendaring",
+          "Trial Fees Due On: - Calendaring",
+          "Consults",
+          "Projects",
+          "Fee K",
+          "Phone",
+          "E-Mail",
+          "Address",
+          "Profile Status",
+          "Case No.",
+          "Mirror 1",
+          "Create Fee K?",
+          "Mirror"
+        ]
+      }
+    },
+    {
+      "id": "8025538497",
+      "label": "[LT] I918B's",
+      "type": "linked",
+      "data": {
+        "configKey": "_lt_i918b_s",
+        "columnCount": 17,
+        "groupCount": 8,
+        "mirrors": [
+          "Case No.",
+          "E-File",
+          "Consult",
+          "Projects",
+          "Fee Ks"
+        ]
+      }
+    },
+    {
+      "id": "8025531784",
+      "label": "Address Changes",
+      "type": "linked",
+      "data": {
+        "configKey": "address_changes",
+        "columnCount": 23,
+        "groupCount": 4,
+        "mirrors": [
+          "Case No.",
+          "CaseTypes",
+          "Consults",
+          "Projects",
+          "Fee Ks",
+          "Address",
+          "E-File",
+          "Phone",
+          "E-mail",
+          "Mirror"
+        ]
+      }
+    },
+    {
+      "id": "8025524218",
+      "label": "RFEs - ALL",
+      "type": "linked",
+      "data": {
+        "configKey": "rfes_all",
+        "columnCount": 30,
+        "groupCount": 4,
+        "mirrors": [
+          "E-File",
+          "Consults",
+          "Projects",
+          "Fee Ks",
+          "E-mail",
+          "Phone",
+          "Address",
+          "Notice - Calendaring",
+          "Type - Calendaring",
+          "Due Date - Calendaring",
+          "Warning - Calendaring",
+          "Issue Date - Calendaring",
+          "Written - Calendaring"
+        ]
+      }
+    },
+    {
+      "id": "8025467270",
+      "label": "Fee Ks",
+      "type": "linked",
+      "data": {
+        "configKey": "fee_ks",
+        "columnCount": 54,
+        "groupCount": 7,
+        "mirrors": [
+          "Case No.",
+          "E-File",
+          "COURT - Payment History Log",
+          "Address",
+          "E-mail",
+          "Phone",
+          "Consult",
+          "Activities",
+          "Projects",
+          "Jail Intake / Appointment",
+          "A Number",
+          "Projects",
+          "Note Sheet",
+          "PAYMENT LOG",
+          "Language"
+        ]
+      }
+    },
+    {
+      "id": "8025389724",
+      "label": "Appointments LB",
+      "type": "linked",
+      "data": {
+        "configKey": "appointments_lb",
+        "columnCount": 41,
+        "groupCount": 5,
+        "mirrors": [
+          "Create Fee K?",
+          "Case Type(s)",
+          "Case No.",
+          "E-File",
+          "Projects",
+          "Fee Ks",
+          "Paralegal",
+          "Files (P)",
+          "PROFILE ID",
+          "Consult File"
+        ]
+      }
+    },
+    {
+      "id": "8025383981",
+      "label": "Appointments M",
+      "type": "linked",
+      "data": {
+        "configKey": "appointments_m",
+        "columnCount": 42,
+        "groupCount": 5,
+        "mirrors": [
+          "Create Fee K?",
+          "Case Type",
+          "Case No.",
+          "Pronouns",
+          "CLIENT - E-File",
+          "Case Type",
+          "Projects",
+          "Fee Ks",
+          "Paralegal",
+          "PROFILE ID",
+          "Consult File"
+        ]
+      }
+    },
+    {
+      "id": "8025265377",
+      "label": "Profiles",
+      "type": "main",
+      "data": {
+        "configKey": "profiles",
+        "columnCount": 59,
+        "groupCount": 7,
+        "mirrors": [
+          "Contract Stage",
+          "Hire Date",
+          "Last Consult Date",
+          "Mirror",
+          "Mirror 1",
+          "CaseTypes",
+          "Paralegal",
+          "IJ",
+          "Receipt Number(s)"
+        ]
+      }
+    },
+    {
+      "id": "3473957885",
+      "label": "Appeals",
+      "type": "linked",
+      "data": {
+        "configKey": "appeals",
+        "columnCount": 26,
+        "groupCount": 2,
+        "mirrors": [
+          "Mirror"
+        ]
+      }
+    },
+    {
+      "id": "7788520205",
+      "label": "Appointments R",
+      "type": "linked",
+      "data": {
+        "configKey": "appointments_r",
+        "columnCount": 34,
+        "groupCount": 5,
+        "mirrors": [
+          "Create Fee K?",
+          "Case Type(s)",
+          "Case No.",
+          "Projects",
+          "Fee Ks",
+          "Paralegal",
+          "Mirror",
+          "PROFILE ID",
+          "Consult File"
+        ]
+      }
+    },
+    {
+      "id": "4299007012",
+      "label": "Litigation",
+      "type": "linked",
+      "data": {
+        "configKey": "litigation",
+        "columnCount": 13,
+        "groupCount": 1,
+        "mirrors": []
+      }
+    },
+    {
+      "id": "9287895872",
+      "label": "Calendaring",
+      "type": "linked",
+      "data": {
+        "configKey": "calendaring",
+        "columnCount": 60,
+        "groupCount": 8,
+        "mirrors": [
+          "Deadline Status",
+          "Method",
+          "Deadline Type - Connected",
+          "Email",
+          "IJ",
+          "Phone",
+          "Hearing Fees:",
+          "MH Fees Paid On: - Connected",
+          "TP Fees Paid On: - Calendaring",
+          "Trial Fees Paid On: - Calendaring",
+          "profile ID",
+          "NEEDS",
+          "FILINGS OVERVIEW"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-18392490403-8025265377",
+      "source": "18392490403",
+      "target": "8025265377",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Profile",
+        "targetColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-9283837796-8094412694",
+      "source": "9283837796",
+      "target": "8094412694",
+      "label": "link to Jail Intakes",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Jail Intakes",
+        "targetColumn": "X Appointments"
+      }
+    },
+    {
+      "id": "edge-9283837796-7788520222",
+      "source": "9283837796",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-9283837796-8025265377",
+      "source": "9283837796",
+      "target": "8025265377",
+      "label": "Profiles",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Profiles",
+        "targetColumn": "Appointments"
+      }
+    },
+    {
+      "id": "edge-9283837796-8025566986",
+      "source": "9283837796",
+      "target": "8025566986",
+      "label": "link to Open Forms",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Open Forms"
+      }
+    },
+    {
+      "id": "edge-8094412694-6775627168",
+      "source": "8094412694",
+      "target": "6775627168",
+      "label": "link to Call Log",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Call Log"
+      }
+    },
+    {
+      "id": "edge-8094412694-8025546360",
+      "source": "8094412694",
+      "target": "8025546360",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "link to Court Cases",
+        "targetColumn": "[FA] Jail Intakes"
+      }
+    },
+    {
+      "id": "edge-8094412694-7788520205",
+      "source": "8094412694",
+      "target": "7788520205",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "X Appointments",
+        "targetColumn": "Jail Intakes"
+      }
+    },
+    {
+      "id": "edge-8094412694-8025389724",
+      "source": "8094412694",
+      "target": "8025389724",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "X Appointments",
+        "targetColumn": "link to Jail Intakes"
+      }
+    },
+    {
+      "id": "edge-8094412694-8025383981",
+      "source": "8094412694",
+      "target": "8025383981",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "X Appointments",
+        "targetColumn": "link to Jail Intakes"
+      }
+    },
+    {
+      "id": "edge-8025618300-8025265377",
+      "source": "8025618300",
+      "target": "8025265377",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Profiles",
+        "targetColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-8025618300-8025566986",
+      "source": "8025618300",
+      "target": "8025566986",
+      "label": "[CD] Open Forms",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "[CD] Open Forms"
+      }
+    },
+    {
+      "id": "edge-8025618300-8025546360",
+      "source": "8025618300",
+      "target": "8025546360",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Court Cases",
+        "targetColumn": "link to [NA] Originals + Cards + Notices"
+      }
+    },
+    {
+      "id": "edge-8025618300-7788520222",
+      "source": "8025618300",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-8025618300-18392565355",
+      "source": "8025618300",
+      "target": "18392565355",
+      "label": "link to Duplicate of Mail List",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Duplicate of Mail List"
+      }
+    },
+    {
+      "id": "edge-8025590516-7788520194",
+      "source": "8025590516",
+      "target": "7788520194",
+      "label": "link to Fee Ks",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Fee Ks"
+      }
+    },
+    {
+      "id": "edge-8025590516-8025467270",
+      "source": "8025590516",
+      "target": "8025467270",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "link to Fee Ks",
+        "targetColumn": "Cases"
+      }
+    },
+    {
+      "id": "edge-8025590516-8025265377",
+      "source": "8025590516",
+      "target": "8025265377",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Profiles",
+        "targetColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-8025566986-8025467270",
+      "source": "8025566986",
+      "target": "8025467270",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Fee Ks",
+        "targetColumn": "link to [CD] Open Forms"
+      }
+    },
+    {
+      "id": "edge-8025566986-8025265377",
+      "source": "8025566986",
+      "target": "8025265377",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Profiles",
+        "targetColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-8025566986-7864113013",
+      "source": "8025566986",
+      "target": "7864113013",
+      "label": "link to Appeals",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Appeals"
+      }
+    },
+    {
+      "id": "edge-8025566986-9287895872",
+      "source": "8025566986",
+      "target": "9287895872",
+      "label": "Calendaring",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Calendaring",
+        "targetColumn": "Connect boards"
+      }
+    },
+    {
+      "id": "edge-8025566986-7788520222",
+      "source": "8025566986",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-8025556892-8025265377",
+      "source": "8025556892",
+      "target": "8025265377",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Profile",
+        "targetColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-8025556892-8025546360",
+      "source": "8025556892",
+      "target": "8025546360",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Court Case",
+        "targetColumn": "Motions"
+      }
+    },
+    {
+      "id": "edge-8025556892-7788520194",
+      "source": "8025556892",
+      "target": "7788520194",
+      "label": "link to Fee Ks",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Fee Ks"
+      }
+    },
+    {
+      "id": "edge-8025556892-8025467270",
+      "source": "8025556892",
+      "target": "8025467270",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "link to Fee Ks",
+        "targetColumn": "Cases"
+      }
+    },
+    {
+      "id": "edge-8025556892-7788520222",
+      "source": "8025556892",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-8025556892-18392565355",
+      "source": "8025556892",
+      "target": "18392565355",
+      "label": "link to Duplicate of Mail List",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Duplicate of Mail List"
+      }
+    },
+    {
+      "id": "edge-8025546360-9287895872",
+      "source": "8025546360",
+      "target": "9287895872",
+      "label": "Calendaring",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Calendaring",
+        "targetColumn": "Connect boards"
+      }
+    },
+    {
+      "id": "edge-8025546360-8844802903",
+      "source": "8025546360",
+      "target": "8844802903",
+      "label": "Court Tasks",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Court Tasks"
+      }
+    },
+    {
+      "id": "edge-8025546360-8025265377",
+      "source": "8025546360",
+      "target": "8025265377",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Profile",
+        "targetColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-8025546360-7864113013",
+      "source": "8025546360",
+      "target": "7864113013",
+      "label": "Motions",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Motions"
+      }
+    },
+    {
+      "id": "edge-8025546360-8025467270",
+      "source": "8025546360",
+      "target": "8025467270",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "link to Fee Ks",
+        "targetColumn": "Court Cases - Connected -"
+      }
+    },
+    {
+      "id": "edge-8025538497-7788520194",
+      "source": "8025538497",
+      "target": "7788520194",
+      "label": "link to Fee Ks",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Fee Ks"
+      }
+    },
+    {
+      "id": "edge-8025538497-8025467270",
+      "source": "8025538497",
+      "target": "8025467270",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "link to Fee Ks",
+        "targetColumn": "Cases"
+      }
+    },
+    {
+      "id": "edge-8025538497-8025265377",
+      "source": "8025538497",
+      "target": "8025265377",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Profile",
+        "targetColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-8025538497-7788520222",
+      "source": "8025538497",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-8025531784-8025265377",
+      "source": "8025531784",
+      "target": "8025265377",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Profiles",
+        "targetColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-8025531784-7788520222",
+      "source": "8025531784",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-8025524218-7788520194",
+      "source": "8025524218",
+      "target": "7788520194",
+      "label": "Fee K",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Fee K"
+      }
+    },
+    {
+      "id": "edge-8025524218-8025467270",
+      "source": "8025524218",
+      "target": "8025467270",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Fee K",
+        "targetColumn": "Cases"
+      }
+    },
+    {
+      "id": "edge-8025524218-8025265377",
+      "source": "8025524218",
+      "target": "8025265377",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Profile",
+        "targetColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-8025524218-9287895872",
+      "source": "8025524218",
+      "target": "9287895872",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Calendaring",
+        "targetColumn": "Connect boards"
+      }
+    },
+    {
+      "id": "edge-8025524218-7788520222",
+      "source": "8025524218",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-8025467270-8025265377",
+      "source": "8025467270",
+      "target": "8025265377",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Profile",
+        "targetColumn": "Fee Ks"
+      }
+    },
+    {
+      "id": "edge-8025467270-7788520222",
+      "source": "8025467270",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-8025467270-8025559753",
+      "source": "8025467270",
+      "target": "8025559753",
+      "label": "Cases",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Cases"
+      }
+    },
+    {
+      "id": "edge-8025467270-8025587356",
+      "source": "8025467270",
+      "target": "8025587356",
+      "label": "Cases",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Cases"
+      }
+    },
+    {
+      "id": "edge-8025467270-4299007012",
+      "source": "8025467270",
+      "target": "4299007012",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Cases",
+        "targetColumn": "link to Fee Ks"
+      }
+    },
+    {
+      "id": "edge-8025389724-7788520222",
+      "source": "8025389724",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-8025389724-8025265377",
+      "source": "8025389724",
+      "target": "8025265377",
+      "label": "Profiles",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Profiles",
+        "targetColumn": "Appointments"
+      }
+    },
+    {
+      "id": "edge-8025389724-8025566986",
+      "source": "8025389724",
+      "target": "8025566986",
+      "label": "link to Open Forms",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Open Forms"
+      }
+    },
+    {
+      "id": "edge-8025383981-8025265377",
+      "source": "8025383981",
+      "target": "8025265377",
+      "label": "Profiles",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Profiles",
+        "targetColumn": "Appointments"
+      }
+    },
+    {
+      "id": "edge-8025383981-7788520222",
+      "source": "8025383981",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-8025383981-8025566986",
+      "source": "8025383981",
+      "target": "8025566986",
+      "label": "link to Open Forms",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Open Forms"
+      }
+    },
+    {
+      "id": "edge-8025265377-7788520205",
+      "source": "8025265377",
+      "target": "7788520205",
+      "label": "Appointments",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Appointments",
+        "targetColumn": "Profiles"
+      }
+    },
+    {
+      "id": "edge-8025265377-8094412694",
+      "source": "8025265377",
+      "target": "8094412694",
+      "label": "Appointments",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Appointments"
+      }
+    },
+    {
+      "id": "edge-8025265377-7788520194",
+      "source": "8025265377",
+      "target": "7788520194",
+      "label": "Fee Ks",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Fee Ks"
+      }
+    },
+    {
+      "id": "edge-8025265377-18392565355",
+      "source": "8025265377",
+      "target": "18392565355",
+      "label": "link to Duplicate of Mail List",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Duplicate of Mail List"
+      }
+    },
+    {
+      "id": "edge-8025265377-6775627168",
+      "source": "8025265377",
+      "target": "6775627168",
+      "label": "Call Log",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Call Log"
+      }
+    },
+    {
+      "id": "edge-8025265377-8025587356",
+      "source": "8025265377",
+      "target": "8025587356",
+      "label": "Projects",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-8025265377-4299007012",
+      "source": "8025265377",
+      "target": "4299007012",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Projects",
+        "targetColumn": "Profile"
+      }
+    },
+    {
+      "id": "edge-8025265377-3473957885",
+      "source": "8025265377",
+      "target": "3473957885",
+      "label": "Linked",
+      "type": "bidirectional",
+      "data": {
+        "sourceColumn": "Projects",
+        "targetColumn": "Profile"
+      }
+    },
+    {
+      "id": "edge-8025265377-8218145698",
+      "source": "8025265377",
+      "target": "8218145698",
+      "label": "Projects",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Projects"
+      }
+    },
+    {
+      "id": "edge-8025265377-7788520222",
+      "source": "8025265377",
+      "target": "7788520222",
+      "label": "Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Activities"
+      }
+    },
+    {
+      "id": "edge-7788520205-7788520222",
+      "source": "7788520205",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-7788520205-8025566986",
+      "source": "7788520205",
+      "target": "8025566986",
+      "label": "link to Open Forms",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Open Forms"
+      }
+    },
+    {
+      "id": "edge-4299007012-7788520222",
+      "source": "4299007012",
+      "target": "7788520222",
+      "label": "link to Activities",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Activities"
+      }
+    },
+    {
+      "id": "edge-9287895872-8025265377",
+      "source": "9287895872",
+      "target": "8025265377",
+      "label": "Profiles",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "Profiles"
+      }
+    },
+    {
+      "id": "edge-9287895872-8025556892",
+      "source": "9287895872",
+      "target": "8025556892",
+      "label": "link to Motions",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Motions"
+      }
+    },
+    {
+      "id": "edge-9287895872-9307986744",
+      "source": "9287895872",
+      "target": "9307986744",
+      "label": "link to Subitems of Calendaring",
+      "type": "unidirectional",
+      "data": {
+        "sourceColumn": "link to Subitems of Calendaring"
+      }
+    }
+  ],
+  "stats": {
+    "totalBoards": 19,
+    "totalConnections": 126,
+    "totalMirrors": 196,
+    "bidirectionalConnections": 33
+  },
+  "details": {
+    "boards": [
+      {
+        "id": "18392490403",
+        "name": "NVC Notices",
+        "configKey": "nvc_notices",
+        "isMain": false,
+        "columns": 13,
+        "groups": 4,
+        "outgoingConnections": [
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profile",
+            "bidirectional": true
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Phone Number",
+            "id": "lookup_mkzdp7bw"
+          },
+          {
+            "name": "E-mail",
+            "id": "lookup_mkzdvjq5"
+          },
+          {
+            "name": "A Number",
+            "id": "lookup_mkyqg1sy"
+          },
+          {
+            "name": "Paralegal",
+            "id": "lookup_mm0nen6m"
+          }
+        ]
+      },
+      {
+        "id": "9283837796",
+        "name": "Appointments WH",
+        "configKey": "appointments_wh",
+        "isMain": false,
+        "columns": 43,
+        "groups": 5,
+        "outgoingConnections": [
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "link to Jail Intakes",
+            "bidirectional": false
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profiles",
+            "bidirectional": false
+          },
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "Jail Intakes",
+            "bidirectional": false
+          },
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "link to Jail Intakes",
+            "bidirectional": true
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "link to Profiles",
+            "bidirectional": true
+          },
+          {
+            "to": "8025566986",
+            "toName": "[CD] Open Forms",
+            "column": "link to Open Forms",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Create Fee K?",
+            "id": "lookup_mkzrpk9e"
+          },
+          {
+            "name": "Case Type(s)",
+            "id": "mirror_mkm02yqc"
+          },
+          {
+            "name": "Case No.",
+            "id": "mirror_mkm0z593"
+          },
+          {
+            "name": "E-File",
+            "id": "mirror_mkkzv37t"
+          },
+          {
+            "name": "Projects",
+            "id": "mirror_mkm0t9re"
+          },
+          {
+            "name": "Fee Ks",
+            "id": "mirror_mkm08cx8"
+          },
+          {
+            "name": "Paralegal",
+            "id": "mirror_mkmnzqy8"
+          },
+          {
+            "name": "Files (P)",
+            "id": "mirror_mkmq7nm5"
+          },
+          {
+            "name": "PROFILE ID",
+            "id": "lookup_mkxprvz3"
+          },
+          {
+            "name": "Consult File",
+            "id": "lookup_mkxpqyad"
+          },
+          {
+            "name": "Jail intake ID",
+            "id": "lookup_mkybdw09"
+          }
+        ]
+      },
+      {
+        "id": "8094412694",
+        "name": "[FA] Jail Intakes",
+        "configKey": "_fa_jail_intakes",
+        "isMain": false,
+        "columns": 90,
+        "groups": 5,
+        "outgoingConnections": [
+          {
+            "to": "6775627168",
+            "toName": "Board 6775627168",
+            "column": "link to Call Log",
+            "bidirectional": false
+          },
+          {
+            "to": "8025546360",
+            "toName": "Court Cases",
+            "column": "link to Court Cases",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520205",
+            "toName": "Appointments R",
+            "column": "X Appointments",
+            "bidirectional": true
+          },
+          {
+            "to": "8025389724",
+            "toName": "Appointments LB",
+            "column": "X Appointments",
+            "bidirectional": true
+          },
+          {
+            "to": "8025383981",
+            "toName": "Appointments M",
+            "column": "X Appointments",
+            "bidirectional": true
+          },
+          {
+            "to": "9283837796",
+            "toName": "Appointments WH",
+            "column": "X Appointments",
+            "bidirectional": true
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Profiles",
+            "id": "mirror_mkn2s4h8"
+          }
+        ]
+      },
+      {
+        "id": "8025618300",
+        "name": "[NA] Originals + Cards + Notices",
+        "configKey": "_na_originals_cards_notices",
+        "isMain": false,
+        "columns": 28,
+        "groups": 4,
+        "outgoingConnections": [
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profiles",
+            "bidirectional": true
+          },
+          {
+            "to": "8025566986",
+            "toName": "[CD] Open Forms",
+            "column": "[CD] Open Forms",
+            "bidirectional": false
+          },
+          {
+            "to": "8025566986",
+            "toName": "[CD] Open Forms",
+            "column": "link to [CD] Open Forms",
+            "bidirectional": false
+          },
+          {
+            "to": "8025546360",
+            "toName": "Court Cases",
+            "column": "Court Cases",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          },
+          {
+            "to": "18392565355",
+            "toName": "Board 18392565355",
+            "column": "link to Duplicate of Mail List",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Projects",
+            "id": "mirror_mkm08y8t"
+          },
+          {
+            "name": "Fee Ks",
+            "id": "mirror_mkm0nnh8"
+          },
+          {
+            "name": "E-mail",
+            "id": "mirror_mkm0pkky"
+          },
+          {
+            "name": "Phone",
+            "id": "mirror_mkm0gawy"
+          },
+          {
+            "name": "Phone number",
+            "id": "mirror_mkmtgdbk"
+          },
+          {
+            "name": "Language",
+            "id": "mirror_mkmy7yt7"
+          },
+          {
+            "name": "Profile Status",
+            "id": "mirror_mkmyr4j8"
+          },
+          {
+            "name": "Address",
+            "id": "lookup_mknrv1tx"
+          },
+          {
+            "name": "Form",
+            "id": "lookup_mkrnzx0m"
+          },
+          {
+            "name": "E-File",
+            "id": "lookup_mkv2hza2"
+          }
+        ]
+      },
+      {
+        "id": "8025590516",
+        "name": "FOIAs",
+        "configKey": "foias",
+        "isMain": false,
+        "columns": 54,
+        "groups": 4,
+        "outgoingConnections": [
+          {
+            "to": "7788520194",
+            "toName": "Board 7788520194",
+            "column": "link to Fee Ks",
+            "bidirectional": false
+          },
+          {
+            "to": "8025467270",
+            "toName": "Fee Ks",
+            "column": "link to Fee Ks",
+            "bidirectional": true
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profiles",
+            "bidirectional": true
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "E-File",
+            "id": "mirror_mkm0p5dw"
+          },
+          {
+            "name": "Consults",
+            "id": "mirror_mkm0ff6g"
+          },
+          {
+            "name": "Project",
+            "id": "mirror_mkm0frks"
+          },
+          {
+            "name": "Fee Ks",
+            "id": "mirror_mkm0fkc3"
+          },
+          {
+            "name": "E-mail",
+            "id": "lookup_mknajxyc"
+          },
+          {
+            "name": "Phone",
+            "id": "lookup_mknabxdn"
+          },
+          {
+            "name": "Address",
+            "id": "lookup_mknacn91"
+          },
+          {
+            "name": "A Number",
+            "id": "lookup_mkrc7qq7"
+          },
+          {
+            "name": "Date of Birth",
+            "id": "lookup_mkrcrpg3"
+          },
+          {
+            "name": "Country of Birth",
+            "id": "lookup_mkrc2hkd"
+          },
+          {
+            "name": "Mirror",
+            "id": "lookup_mkrvr4wn"
+          }
+        ]
+      },
+      {
+        "id": "8025566986",
+        "name": "[CD] Open Forms",
+        "configKey": "_cd_open_forms",
+        "isMain": false,
+        "columns": 58,
+        "groups": 7,
+        "outgoingConnections": [
+          {
+            "to": "8025467270",
+            "toName": "Fee Ks",
+            "column": "Fee Ks",
+            "bidirectional": true
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profiles",
+            "bidirectional": true
+          },
+          {
+            "to": "7864113013",
+            "toName": "Board 7864113013",
+            "column": "link to Appeals",
+            "bidirectional": false
+          },
+          {
+            "to": "9287895872",
+            "toName": "Calendaring",
+            "column": "Calendaring",
+            "bidirectional": false
+          },
+          {
+            "to": "9287895872",
+            "toName": "Calendaring",
+            "column": "link to Calendaring",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "A Number",
+            "id": "lookup_mkqnw731"
+          },
+          {
+            "name": "Case No.",
+            "id": "mirror_mkkzxbdd"
+          },
+          {
+            "name": "E-File",
+            "id": "mirror_mkkycrfp"
+          },
+          {
+            "name": "Consult",
+            "id": "mirror_mkm0rg4j"
+          },
+          {
+            "name": "Project",
+            "id": "mirror_mkm06fss"
+          },
+          {
+            "name": "Fee Ks",
+            "id": "mirror_mkm02139"
+          },
+          {
+            "name": "E-Mail",
+            "id": "mirror_mkm09120"
+          },
+          {
+            "name": "Phone",
+            "id": "mirror_mkm0xwxt"
+          },
+          {
+            "name": "FF",
+            "id": "mirror_mkmqnn8f"
+          },
+          {
+            "name": "Profile",
+            "id": "mirror_mkmy3kmg"
+          },
+          {
+            "name": "Profile Status",
+            "id": "mirror_mkn1w26d"
+          },
+          {
+            "name": "Interview Location",
+            "id": "lookup_mkyx87tr"
+          },
+          {
+            "name": "Interview Date - Calendaring",
+            "id": "lookup_mkyxekw4"
+          },
+          {
+            "name": "PS Deadline",
+            "id": "lookup_mkrzf76k"
+          },
+          {
+            "name": "FF from Fee K",
+            "id": "lookup_mkxbnkvf"
+          }
+        ]
+      },
+      {
+        "id": "8025556892",
+        "name": "Motions",
+        "configKey": "motions",
+        "isMain": false,
+        "columns": 40,
+        "groups": 6,
+        "outgoingConnections": [
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profile",
+            "bidirectional": true
+          },
+          {
+            "to": "8025546360",
+            "toName": "Court Cases",
+            "column": "Court Case",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520194",
+            "toName": "Board 7788520194",
+            "column": "link to Fee Ks",
+            "bidirectional": false
+          },
+          {
+            "to": "8025467270",
+            "toName": "Fee Ks",
+            "column": "link to Fee Ks",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          },
+          {
+            "to": "18392565355",
+            "toName": "Board 18392565355",
+            "column": "link to Duplicate of Mail List",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Judge",
+            "id": "lookup_mm0hnatd"
+          },
+          {
+            "name": "Hearing Date - CALENDARING",
+            "id": "lookup_mm0hy34j"
+          },
+          {
+            "name": "App for Relief",
+            "id": "lookup_mkzw9vw5"
+          },
+          {
+            "name": "Motions - Connected",
+            "id": "lookup_mkyqyz8e"
+          },
+          {
+            "name": "Relief",
+            "id": "lookup_mkv07v57"
+          },
+          {
+            "name": "Mirror",
+            "id": "lookup_mkv0da2n"
+          },
+          {
+            "name": "Hearing Type",
+            "id": "lookup_mkrmx2np"
+          },
+          {
+            "name": "Next Hearing Date",
+            "id": "lookup_mkrmcbpt"
+          },
+          {
+            "name": "IJ",
+            "id": "lookup_mkrmgag6"
+          },
+          {
+            "name": "E-File",
+            "id": "mirror_mkm0gwe8"
+          },
+          {
+            "name": "E-Mail",
+            "id": "mirror_mkn8vkax"
+          },
+          {
+            "name": "Phone",
+            "id": "mirror_1_mkn8zktc"
+          },
+          {
+            "name": "Consult",
+            "id": "mirror_mkm0wyk7"
+          },
+          {
+            "name": "Project",
+            "id": "mirror_mkm0539n"
+          },
+          {
+            "name": "Fee K",
+            "id": "mirror_1_mkm0p1t8"
+          },
+          {
+            "name": "Profile Status",
+            "id": "mirror_mkn53s4j"
+          },
+          {
+            "name": "Hire Date*",
+            "id": "lookup_mkrmj4xw"
+          },
+          {
+            "name": "ATTORNEY NOTES",
+            "id": "lookup_mkvmbvhj"
+          }
+        ]
+      },
+      {
+        "id": "8025546360",
+        "name": "Court Cases",
+        "configKey": "court_cases",
+        "isMain": false,
+        "columns": 170,
+        "groups": 5,
+        "outgoingConnections": [
+          {
+            "to": "9287895872",
+            "toName": "Calendaring",
+            "column": "Calendaring",
+            "bidirectional": false
+          },
+          {
+            "to": "8844802903",
+            "toName": "Board 8844802903",
+            "column": "Court Tasks",
+            "bidirectional": false
+          },
+          {
+            "to": "9287895872",
+            "toName": "Calendaring",
+            "column": "Deadline on Cal- Calendaring",
+            "bidirectional": true
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profile",
+            "bidirectional": true
+          },
+          {
+            "to": "7864113013",
+            "toName": "Board 7864113013",
+            "column": "Motions",
+            "bidirectional": false
+          },
+          {
+            "to": "8025556892",
+            "toName": "Motions",
+            "column": "Motions",
+            "bidirectional": true
+          },
+          {
+            "to": "8025618300",
+            "toName": "[NA] Originals + Cards + Notices",
+            "column": "link to [NA] Originals + Cards + Notices",
+            "bidirectional": true
+          },
+          {
+            "to": "8025467270",
+            "toName": "Fee Ks",
+            "column": "link to Fee Ks",
+            "bidirectional": true
+          },
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "[FA] Jail Intakes",
+            "bidirectional": true
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "COUNTRY",
+            "id": "lookup_mkvdyxk8"
+          },
+          {
+            "name": "To-Do Due Date",
+            "id": "lookup_mm0yv9pc"
+          },
+          {
+            "name": "Assigned Date",
+            "id": "lookup_mm0ypvfn"
+          },
+          {
+            "name": "Task Assigned To",
+            "id": "lookup_mm0yq0rn"
+          },
+          {
+            "name": "To-Do Status",
+            "id": "lookup_mm0y8vp7"
+          },
+          {
+            "name": "Motions - Connected",
+            "id": "lookup_mkyqhpsr"
+          },
+          {
+            "name": "Hearing Date - Calendaring",
+            "id": "lookup_mky8eyqq"
+          },
+          {
+            "name": "Judge - Connected",
+            "id": "lookup_mky8q7sf"
+          },
+          {
+            "name": "A-Number",
+            "id": "lookup_mknkm1kb"
+          },
+          {
+            "name": "E-File",
+            "id": "mirror_mkkyt0dr"
+          },
+          {
+            "name": "Calendaring Status - From Calendaring",
+            "id": "lookup_mkyrze53"
+          },
+          {
+            "name": "Deadline List",
+            "id": "lookup_mkyegkja"
+          },
+          {
+            "name": "Written - COURT - Calendaring",
+            "id": "lookup_mkye8s59"
+          },
+          {
+            "name": "Due Date - COURT - Calendaring",
+            "id": "lookup_mky8fccs"
+          },
+          {
+            "name": "Warning - COURT - Calendaring",
+            "id": "lookup_mky83z0v"
+          },
+          {
+            "name": "TO DO - Deadlines List Update - MR Comment",
+            "id": "lookup_mkysmh9r"
+          },
+          {
+            "name": "Master Fees Due On: - Calendaring",
+            "id": "lookup_mkyrat1z"
+          },
+          {
+            "name": "TP Fees Due: - Calendaring",
+            "id": "lookup_mkyrexzc"
+          },
+          {
+            "name": "Trial Fees Due On: - Calendaring",
+            "id": "lookup_mkyrjgjn"
+          },
+          {
+            "name": "Consults",
+            "id": "mirror_mkm0gne4"
+          },
+          {
+            "name": "Projects",
+            "id": "mirror_mkm0pwv8"
+          },
+          {
+            "name": "Fee K",
+            "id": "mirror_mkm0vzpj"
+          },
+          {
+            "name": "Phone",
+            "id": "mirror_mkmvd5b6"
+          },
+          {
+            "name": "E-Mail",
+            "id": "mirror_1_mkmvc40e"
+          },
+          {
+            "name": "Address",
+            "id": "mirror_mkmwvsvc"
+          },
+          {
+            "name": "Profile Status",
+            "id": "mirror_mkn1qcgh"
+          },
+          {
+            "name": "Case No.",
+            "id": "lookup_mknkktcc"
+          },
+          {
+            "name": "Mirror 1",
+            "id": "lookup_mkvdxwf7"
+          },
+          {
+            "name": "Create Fee K?",
+            "id": "lookup_mkwy78ry"
+          },
+          {
+            "name": "Mirror",
+            "id": "lookup_mkzw1ch5"
+          }
+        ]
+      },
+      {
+        "id": "8025538497",
+        "name": "[LT] I918B's",
+        "configKey": "_lt_i918b_s",
+        "isMain": false,
+        "columns": 17,
+        "groups": 8,
+        "outgoingConnections": [
+          {
+            "to": "7788520194",
+            "toName": "Board 7788520194",
+            "column": "link to Fee Ks",
+            "bidirectional": false
+          },
+          {
+            "to": "8025467270",
+            "toName": "Fee Ks",
+            "column": "link to Fee Ks",
+            "bidirectional": true
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profile",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Case No.",
+            "id": "mirror_mkm07jwy"
+          },
+          {
+            "name": "E-File",
+            "id": "mirror_mkkyjj5h"
+          },
+          {
+            "name": "Consult",
+            "id": "mirror_mkm0hkgp"
+          },
+          {
+            "name": "Projects",
+            "id": "mirror_mkm05taw"
+          },
+          {
+            "name": "Fee Ks",
+            "id": "mirror_mkm0y6n8"
+          }
+        ]
+      },
+      {
+        "id": "8025531784",
+        "name": "Address Changes",
+        "configKey": "address_changes",
+        "isMain": false,
+        "columns": 23,
+        "groups": 4,
+        "outgoingConnections": [
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profiles",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Case No.",
+            "id": "mirror_mkm01pyh"
+          },
+          {
+            "name": "CaseTypes",
+            "id": "lookup_mm06tecr"
+          },
+          {
+            "name": "Consults",
+            "id": "mirror_mkm07nqz"
+          },
+          {
+            "name": "Projects",
+            "id": "mirror_mkm01qn9"
+          },
+          {
+            "name": "Fee Ks",
+            "id": "mirror_mkm024tn"
+          },
+          {
+            "name": "Address",
+            "id": "mirror_mkn8e9wn"
+          },
+          {
+            "name": "E-File",
+            "id": "mirror_mkm07wv1"
+          },
+          {
+            "name": "Phone",
+            "id": "lookup_mm07z88x"
+          },
+          {
+            "name": "E-mail",
+            "id": "lookup_mm08j7p9"
+          },
+          {
+            "name": "Mirror",
+            "id": "lookup_mm0fgta0"
+          }
+        ]
+      },
+      {
+        "id": "8025524218",
+        "name": "RFEs - ALL",
+        "configKey": "rfes_all",
+        "isMain": false,
+        "columns": 30,
+        "groups": 4,
+        "outgoingConnections": [
+          {
+            "to": "7788520194",
+            "toName": "Board 7788520194",
+            "column": "Fee K",
+            "bidirectional": false
+          },
+          {
+            "to": "8025467270",
+            "toName": "Fee Ks",
+            "column": "Fee K",
+            "bidirectional": true
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profile",
+            "bidirectional": true
+          },
+          {
+            "to": "9287895872",
+            "toName": "Calendaring",
+            "column": "Calendaring",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "E-File",
+            "id": "mirror_mkm0eh9c"
+          },
+          {
+            "name": "Consults",
+            "id": "mirror_mkm0wa3h"
+          },
+          {
+            "name": "Projects",
+            "id": "mirror_mkm0rgpj"
+          },
+          {
+            "name": "Fee Ks",
+            "id": "mirror_mkm0735z"
+          },
+          {
+            "name": "E-mail",
+            "id": "lookup_mknc2kwv"
+          },
+          {
+            "name": "Phone",
+            "id": "lookup_mkncqkgj"
+          },
+          {
+            "name": "Address",
+            "id": "lookup_mknc7adf"
+          },
+          {
+            "name": "Notice - Calendaring",
+            "id": "lookup_mkzbr3gg"
+          },
+          {
+            "name": "Type - Calendaring",
+            "id": "lookup_mkye5sd9"
+          },
+          {
+            "name": "Due Date - Calendaring",
+            "id": "lookup_mkyewxga"
+          },
+          {
+            "name": "Warning - Calendaring",
+            "id": "lookup_mkyebdj5"
+          },
+          {
+            "name": "Issue Date - Calendaring",
+            "id": "lookup_mkye8frh"
+          },
+          {
+            "name": "Written - Calendaring",
+            "id": "lookup_mkyedehv"
+          }
+        ]
+      },
+      {
+        "id": "8025467270",
+        "name": "Fee Ks",
+        "configKey": "fee_ks",
+        "isMain": false,
+        "columns": 54,
+        "groups": 7,
+        "outgoingConnections": [
+          {
+            "to": "8025546360",
+            "toName": "Court Cases",
+            "column": "Court Cases - Connected -",
+            "bidirectional": false
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profile",
+            "bidirectional": true
+          },
+          {
+            "to": "8025566986",
+            "toName": "[CD] Open Forms",
+            "column": "link to [CD] Open Forms",
+            "bidirectional": false
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          },
+          {
+            "to": "8025524218",
+            "toName": "RFEs - ALL",
+            "column": "Cases",
+            "bidirectional": true
+          },
+          {
+            "to": "8025538497",
+            "toName": "[LT] I918B's",
+            "column": "Cases",
+            "bidirectional": true
+          },
+          {
+            "to": "8025546360",
+            "toName": "Court Cases",
+            "column": "Cases",
+            "bidirectional": true
+          },
+          {
+            "to": "8025556892",
+            "toName": "Motions",
+            "column": "Cases",
+            "bidirectional": true
+          },
+          {
+            "to": "8025559753",
+            "toName": "Board 8025559753",
+            "column": "Cases",
+            "bidirectional": false
+          },
+          {
+            "to": "8025566986",
+            "toName": "[CD] Open Forms",
+            "column": "Cases",
+            "bidirectional": true
+          },
+          {
+            "to": "8025587356",
+            "toName": "Board 8025587356",
+            "column": "Cases",
+            "bidirectional": false
+          },
+          {
+            "to": "8025590516",
+            "toName": "FOIAs",
+            "column": "Cases",
+            "bidirectional": true
+          },
+          {
+            "to": "4299007012",
+            "toName": "Litigation",
+            "column": "Cases",
+            "bidirectional": true
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Case No.",
+            "id": "mirror_mkm03c1x"
+          },
+          {
+            "name": "E-File",
+            "id": "mirror_mkky191t"
+          },
+          {
+            "name": "COURT - Payment History Log",
+            "id": "lookup_mkzdf690"
+          },
+          {
+            "name": "Address",
+            "id": "mirror_mkmg7aea"
+          },
+          {
+            "name": "E-mail",
+            "id": "mirror_mkmgzhz3"
+          },
+          {
+            "name": "Phone",
+            "id": "mirror_mkmghwqg"
+          },
+          {
+            "name": "Consult",
+            "id": "mirror_mkm0vy9v"
+          },
+          {
+            "name": "Activities",
+            "id": "mirror_mkm0fyp3"
+          },
+          {
+            "name": "Projects",
+            "id": "mirror_mkm03r4p"
+          },
+          {
+            "name": "Jail Intake / Appointment",
+            "id": "mirror_mkn2vc6"
+          },
+          {
+            "name": "A Number",
+            "id": "mirror_mkn36ay0"
+          },
+          {
+            "name": "Projects",
+            "id": "lookup_mknhbnv3"
+          },
+          {
+            "name": "Note Sheet",
+            "id": "lookup_mks1vzjz"
+          },
+          {
+            "name": "PAYMENT LOG",
+            "id": "lookup_mkxmm5w9"
+          },
+          {
+            "name": "Language",
+            "id": "lookup_mkzw9yzj"
+          }
+        ]
+      },
+      {
+        "id": "8025389724",
+        "name": "Appointments LB",
+        "configKey": "appointments_lb",
+        "isMain": false,
+        "columns": 41,
+        "groups": 5,
+        "outgoingConnections": [
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "link to Jail Intakes",
+            "bidirectional": false
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profiles",
+            "bidirectional": false
+          },
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "Jail Intakes",
+            "bidirectional": false
+          },
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "link to Jail Intakes",
+            "bidirectional": true
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "link to Profiles",
+            "bidirectional": true
+          },
+          {
+            "to": "8025566986",
+            "toName": "[CD] Open Forms",
+            "column": "link to Open Forms",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Create Fee K?",
+            "id": "lookup_mkzrj1k6"
+          },
+          {
+            "name": "Case Type(s)",
+            "id": "mirror_mkm02yqc"
+          },
+          {
+            "name": "Case No.",
+            "id": "mirror_mkm0z593"
+          },
+          {
+            "name": "E-File",
+            "id": "mirror_mkkzv37t"
+          },
+          {
+            "name": "Projects",
+            "id": "mirror_mkm0t9re"
+          },
+          {
+            "name": "Fee Ks",
+            "id": "mirror_mkm08cx8"
+          },
+          {
+            "name": "Paralegal",
+            "id": "mirror_mkmnzqy8"
+          },
+          {
+            "name": "Files (P)",
+            "id": "mirror_mkmq7nm5"
+          },
+          {
+            "name": "PROFILE ID",
+            "id": "lookup_mkxp51ds"
+          },
+          {
+            "name": "Consult File",
+            "id": "lookup_mkxpsapr"
+          }
+        ]
+      },
+      {
+        "id": "8025383981",
+        "name": "Appointments M",
+        "configKey": "appointments_m",
+        "isMain": false,
+        "columns": 42,
+        "groups": 5,
+        "outgoingConnections": [
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profiles",
+            "bidirectional": false
+          },
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "link to Jail Intakes",
+            "bidirectional": false
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          },
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "Jail Intakes",
+            "bidirectional": true
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "link to Profiles",
+            "bidirectional": true
+          },
+          {
+            "to": "8025566986",
+            "toName": "[CD] Open Forms",
+            "column": "link to Open Forms",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Create Fee K?",
+            "id": "lookup_mkzr8dme"
+          },
+          {
+            "name": "Case Type",
+            "id": "mirror_mkm0vyty"
+          },
+          {
+            "name": "Case No.",
+            "id": "mirror_mkm0rr7g"
+          },
+          {
+            "name": "Pronouns",
+            "id": "lookup_mm0aedf8"
+          },
+          {
+            "name": "CLIENT - E-File",
+            "id": "mirror_mkkz5py9"
+          },
+          {
+            "name": "Case Type",
+            "id": "mirror_mkkzgqsx"
+          },
+          {
+            "name": "Projects",
+            "id": "mirror_mkm0vggy"
+          },
+          {
+            "name": "Fee Ks",
+            "id": "mirror_mkm0a3nx"
+          },
+          {
+            "name": "Paralegal",
+            "id": "mirror_mkmnh620"
+          },
+          {
+            "name": "PROFILE ID",
+            "id": "lookup_mkxpqm68"
+          },
+          {
+            "name": "Consult File",
+            "id": "lookup_mkxpm30e"
+          }
+        ]
+      },
+      {
+        "id": "8025265377",
+        "name": "Profiles",
+        "configKey": "profiles",
+        "isMain": true,
+        "columns": 59,
+        "groups": 7,
+        "outgoingConnections": [
+          {
+            "to": "7788520205",
+            "toName": "Appointments R",
+            "column": "Appointments",
+            "bidirectional": false
+          },
+          {
+            "to": "8025383981",
+            "toName": "Appointments M",
+            "column": "Appointments",
+            "bidirectional": false
+          },
+          {
+            "to": "8025389724",
+            "toName": "Appointments LB",
+            "column": "Appointments",
+            "bidirectional": false
+          },
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "Appointments",
+            "bidirectional": false
+          },
+          {
+            "to": "9283837796",
+            "toName": "Appointments WH",
+            "column": "Appointments",
+            "bidirectional": false
+          },
+          {
+            "to": "8025467270",
+            "toName": "Fee Ks",
+            "column": "Fee Ks",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520194",
+            "toName": "Board 7788520194",
+            "column": "Fee Ks",
+            "bidirectional": false
+          },
+          {
+            "to": "18392565355",
+            "toName": "Board 18392565355",
+            "column": "link to Duplicate of Mail List",
+            "bidirectional": false
+          },
+          {
+            "to": "18392565355",
+            "toName": "Board 18392565355",
+            "column": "link to Duplicate of Mail List",
+            "bidirectional": false
+          },
+          {
+            "to": "6775627168",
+            "toName": "Board 6775627168",
+            "column": "Call Log",
+            "bidirectional": false
+          },
+          {
+            "to": "8025524218",
+            "toName": "RFEs - ALL",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "8025538497",
+            "toName": "[LT] I918B's",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "8025546360",
+            "toName": "Court Cases",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "8025556892",
+            "toName": "Motions",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "8025566986",
+            "toName": "[CD] Open Forms",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "8025587356",
+            "toName": "Board 8025587356",
+            "column": "Projects",
+            "bidirectional": false
+          },
+          {
+            "to": "8025590516",
+            "toName": "FOIAs",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "8025531784",
+            "toName": "Address Changes",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "8025618300",
+            "toName": "[NA] Originals + Cards + Notices",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "4299007012",
+            "toName": "Litigation",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "3473957885",
+            "toName": "Appeals",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "8025389724",
+            "toName": "Appointments LB",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520205",
+            "toName": "Appointments R",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "8025383981",
+            "toName": "Appointments M",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "8218145698",
+            "toName": "Board 8218145698",
+            "column": "Projects",
+            "bidirectional": false
+          },
+          {
+            "to": "9283837796",
+            "toName": "Appointments WH",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "18392490403",
+            "toName": "NVC Notices",
+            "column": "Projects",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "Activities",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Contract Stage",
+            "id": "mirror_mkmxtr7s"
+          },
+          {
+            "name": "Hire Date",
+            "id": "lookup_mkrmpjc"
+          },
+          {
+            "name": "Last Consult Date",
+            "id": "lookup_mks7nwws"
+          },
+          {
+            "name": "Mirror",
+            "id": "lookup_mkzenex6"
+          },
+          {
+            "name": "Mirror 1",
+            "id": "lookup_mm0h789j"
+          },
+          {
+            "name": "CaseTypes",
+            "id": "lookup_mm06p1nv"
+          },
+          {
+            "name": "Paralegal",
+            "id": "mirror_mkmneb8r"
+          },
+          {
+            "name": "IJ",
+            "id": "lookup_mksx83wq"
+          },
+          {
+            "name": "Receipt Number(s)",
+            "id": "lookup_mks0784c"
+          }
+        ]
+      },
+      {
+        "id": "3473957885",
+        "name": "Appeals",
+        "configKey": "appeals",
+        "isMain": false,
+        "columns": 26,
+        "groups": 2,
+        "outgoingConnections": [
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profile",
+            "bidirectional": true
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Mirror",
+            "id": "lookup_mkq8tf7h"
+          }
+        ]
+      },
+      {
+        "id": "7788520205",
+        "name": "Appointments R",
+        "configKey": "appointments_r",
+        "isMain": false,
+        "columns": 34,
+        "groups": 5,
+        "outgoingConnections": [
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profiles",
+            "bidirectional": false
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          },
+          {
+            "to": "8094412694",
+            "toName": "[FA] Jail Intakes",
+            "column": "Jail Intakes",
+            "bidirectional": true
+          },
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "link to Profiles",
+            "bidirectional": true
+          },
+          {
+            "to": "8025566986",
+            "toName": "[CD] Open Forms",
+            "column": "link to Open Forms",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Create Fee K?",
+            "id": "lookup_mkzrjg9a"
+          },
+          {
+            "name": "Case Type(s)",
+            "id": "mirror_mkm0qyvt"
+          },
+          {
+            "name": "Case No.",
+            "id": "mirror_mkkzsk0v"
+          },
+          {
+            "name": "Projects",
+            "id": "mirror_mkm0mdr5"
+          },
+          {
+            "name": "Fee Ks",
+            "id": "mirror_mkm0e8ca"
+          },
+          {
+            "name": "Paralegal",
+            "id": "mirror_mkmn594v"
+          },
+          {
+            "name": "Mirror",
+            "id": "lookup_mkp567br"
+          },
+          {
+            "name": "PROFILE ID",
+            "id": "lookup_mkxpfkxv"
+          },
+          {
+            "name": "Consult File",
+            "id": "lookup_mkxpznxx"
+          }
+        ]
+      },
+      {
+        "id": "4299007012",
+        "name": "Litigation",
+        "configKey": "litigation",
+        "isMain": false,
+        "columns": 13,
+        "groups": 1,
+        "outgoingConnections": [
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profile",
+            "bidirectional": true
+          },
+          {
+            "to": "8025467270",
+            "toName": "Fee Ks",
+            "column": "link to Fee Ks",
+            "bidirectional": true
+          },
+          {
+            "to": "7788520222",
+            "toName": "Board 7788520222",
+            "column": "link to Activities",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": []
+      },
+      {
+        "id": "9287895872",
+        "name": "Calendaring",
+        "configKey": "calendaring",
+        "isMain": false,
+        "columns": 60,
+        "groups": 8,
+        "outgoingConnections": [
+          {
+            "to": "8025265377",
+            "toName": "Profiles",
+            "column": "Profiles",
+            "bidirectional": false
+          },
+          {
+            "to": "8025546360",
+            "toName": "Court Cases",
+            "column": "Connect boards",
+            "bidirectional": false
+          },
+          {
+            "to": "8025524218",
+            "toName": "RFEs - ALL",
+            "column": "Connect boards",
+            "bidirectional": true
+          },
+          {
+            "to": "8025566986",
+            "toName": "[CD] Open Forms",
+            "column": "Connect boards",
+            "bidirectional": true
+          },
+          {
+            "to": "8025556892",
+            "toName": "Motions",
+            "column": "link to Motions",
+            "bidirectional": false
+          },
+          {
+            "to": "8025546360",
+            "toName": "Court Cases",
+            "column": "add to court to Court Cases",
+            "bidirectional": false
+          },
+          {
+            "to": "8025546360",
+            "toName": "Court Cases",
+            "column": "link to Court Cases",
+            "bidirectional": true
+          },
+          {
+            "to": "9307986744",
+            "toName": "Board 9307986744",
+            "column": "link to Subitems of Calendaring",
+            "bidirectional": false
+          }
+        ],
+        "mirrors": [
+          {
+            "name": "Deadline Status",
+            "id": "lookup_mkyxgzkj"
+          },
+          {
+            "name": "Method",
+            "id": "lookup_mkyq1410"
+          },
+          {
+            "name": "Deadline Type - Connected",
+            "id": "lookup_mkyrhaam"
+          },
+          {
+            "name": "Email",
+            "id": "lookup_mksac2en"
+          },
+          {
+            "name": "IJ",
+            "id": "lookup_mksx704g"
+          },
+          {
+            "name": "Phone",
+            "id": "lookup_mksmjwc4"
+          },
+          {
+            "name": "Hearing Fees:",
+            "id": "lookup_mkyry74v"
+          },
+          {
+            "name": "MH Fees Paid On: - Connected",
+            "id": "lookup_mkyrjjnn"
+          },
+          {
+            "name": "TP Fees Paid On: - Calendaring",
+            "id": "lookup_mkyr88y4"
+          },
+          {
+            "name": "Trial Fees Paid On: - Calendaring",
+            "id": "lookup_mkyr8gc4"
+          },
+          {
+            "name": "profile ID",
+            "id": "lookup_mksmvbcw"
+          },
+          {
+            "name": "NEEDS",
+            "id": "lookup_mkzmygpj"
+          },
+          {
+            "name": "FILINGS OVERVIEW",
+            "id": "lookup_mkzmtt64"
+          }
+        ]
+      }
+    ]
+  }
+}

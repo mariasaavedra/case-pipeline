@@ -1,0 +1,93 @@
+# =============================================================================
+# Template Configuration
+# =============================================================================
+#
+# Defines how Monday.com data maps to template variables.
+#
+# Variable sources:
+#   item.name       - The item's name
+#   item.id         - The item's ID
+#   item.board.id   - The board's ID
+#   item.board.name - The board's name
+#   item.group.id   - The group's ID
+#   item.group.title - The group's title
+#   column          - A column value (requires 'column' key referencing boards.yaml)
+#
+# =============================================================================
+
+templates:
+  client_letter:
+    path: "templates/client.txt"
+    description: "Client information confirmation letter"
+    source_board: profiles
+
+    variables:
+      # Item metadata
+      contact_name:
+        source: item.name
+
+      item_id:
+        source: item.id
+
+      board_id:
+        source: item.board.id
+
+      board_name:
+        source: item.board.name
+
+      group_id:
+        source: item.group.id
+
+      group_name:
+        source: item.group.title
+
+      # Direct columns
+      email:
+        source: column
+        column: email
+
+      phone:
+        source: column
+        column: phone
+
+      priority:
+        source: column
+        column: priority
+
+      next_interaction:
+        source: column
+        column: next_interaction
+
+      notes:
+        source: column
+        column: notes
+
+      # Board relation (displays linked item names)
+      contracts:
+        source: column
+        column: contracts_relation
+
+      # Mirror columns
+      caseType:
+        source: column
+        column: case_type_mirror
+
+      contractValue:
+        source: column
+        column: contract_value_mirror
+
+      contractCasetype:
+        source: column
+        column: contract_casetype_mirror
+
+      contractID:
+        source: column
+        column: contract_id_mirror
+
+    validation:
+      required:
+        - contact_name
+        - email
+      warn_if_empty:
+        - phone
+        - notes

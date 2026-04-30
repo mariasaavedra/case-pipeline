@@ -1,110 +1,50 @@
+// =============================================================================
+// Case Pipeline - Config-driven document generation from Monday.com
+// =============================================================================
+
 import Handlebars from "handlebars";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
+import { loadConfig } from "./lib/config";
+import {
+  setApiToken,
+  fetchBoardStructure,
+  fetchItem,
+  resolveAllColumns,
+} from "./lib/monday";
+import { mapItemToTemplateVars, validateTemplateVars } from "./lib/template";
+
 // =============================================================================
-// STEP A: Read config
+// Configuration
 // =============================================================================
 
-const config = {
+const envConfig = {
   mondayApiToken: process.env.MONDAY_API_TOKEN!,
   itemId: process.env.ITEM_ID!,
-  templatePath: process.env.TEMPLATE_PATH || "templates/client.txt",
+  templateName: process.env.TEMPLATE_NAME || "client_letter",
   outputDir: process.env.OUTPUT_DIR || "output",
+  debug: process.argv.includes("--debug"),
 };
 
-if (!config.mondayApiToken || !config.itemId) {
+if (!envConfig.mondayApiToken || !envConfig.itemId) {
   console.error("Error: MONDAY_API_TOKEN and ITEM_ID are required in .env");
   process.exit(1);
 }
 
 // =============================================================================
-// STEP B: Fetch the Monday item
+// Template rendering
 // =============================================================================
 
-async function fetchMondayItem(itemId: string, token: string) {
-  const query = `
-    query {
-      items(ids: [${itemId}]) {
-        id
-        name
-        column_values {
-          id
-          text
-        }
-      }
-    }
-  `;
-
-  const response = await fetch("https://api.monday.com/v2", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: token,
-      "API-Version": "2023-04",
-    },
-    body: JSON.stringify({ query }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Monday API error: ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json() as {
-    data?: { items?: any[] };
-    errors?: any[];
-  };
-
-  if (data.errors) {
-    throw new Error(`Monday API errors: ${JSON.stringify(data.errors)}`);
-  }
-
-  const item = data.data?.items?.[0];
-  if (!item) {
-    throw new Error(`Item ${itemId} not found`);
-  }
-
-  return item;
-}
-
-// =============================================================================
-// STEP C: Map Monday response → template vars
-// =============================================================================
-
-function mapItemToTemplateVars(item: any) {
-  // Create a lookup map for columns
-  const col = Object.fromEntries(
-    item.column_values.map((c: any) => [c.id, c.text ?? ""])
-  );
-
-  const vars = {
-    contact_name: item.name,
-    email: col["email"] || "",
-    phone: col["phone"] || "",
-    priority: col["status5"] || "",
-    next_interaction: col["date"] || "",
-    notes: col["text4"] || "",
-  };
-
-  return vars;
-}
-
-// =============================================================================
-// STEP D: Render template + write output
-// =============================================================================
-
-async function renderTemplate(templatePath: string, vars: Record<string, string>, outputPath: string) {
-  // Read template as text
+async function renderTemplate(
+  templatePath: string,
+  vars: Record<string, string>,
+  outputPath: string
+): Promise<void> {
   const templateFile = Bun.file(templatePath);
   const templateSource = await templateFile.text();
-
-  // Compile template with Handlebars
   const template = Handlebars.compile(templateSource);
-
-  // Render with vars
   const content = template(vars);
-
-  // Write output
   await Bun.write(outputPath, content);
 }
 
@@ -113,28 +53,89 @@ async function renderTemplate(templatePath: string, vars: Record<string, string>
 // =============================================================================
 
 async function main() {
+  const startTime = performance.now();
+
   try {
-    console.log(`Fetching item ${config.itemId} from Monday...`);
-    const item = await fetchMondayItem(config.itemId, config.mondayApiToken);
-    console.log(`Fetched item: ${item.name}`);
+    // Step 1: Load configuration
+    console.log("Loading configuration...");
+    const config = await loadConfig();
 
-    const vars = mapItemToTemplateVars(item);
-    console.log("\nTemplate variables:");
-    console.log(JSON.stringify(vars, null, 2));
+    const templateConfig = config.templates[envConfig.templateName];
+    if (!templateConfig) {
+      throw new Error(`Template "${envConfig.templateName}" not found in config`);
+    }
 
-    // Ensure output directory exists
-    await mkdir(config.outputDir, { recursive: true });
+    const boardConfig = config.boards[templateConfig.source_board];
+    if (!boardConfig) {
+      throw new Error(`Board "${templateConfig.source_board}" not found in config`);
+    }
 
-    // Generate output filename with timestamp
+    if (envConfig.debug) {
+      console.log(`  Template: ${envConfig.templateName}`);
+      console.log(`  Source board: ${templateConfig.source_board} (${boardConfig.id})`);
+    }
+
+    // Step 2: Initialize API
+    setApiToken(envConfig.mondayApiToken);
+
+    // Step 3: Fetch board structure for column resolution
+    console.log(`\nFetching board structure...`);
+    const board = await fetchBoardStructure(boardConfig.id);
+    console.log(`  Board: "${board.name}" (${board.columns.length} columns)`);
+
+    // Step 4: Resolve columns dynamically
+    console.log("\nResolving columns...");
+    const resolvedColumns = resolveAllColumns(board.columns, boardConfig, {
+      debug: envConfig.debug,
+    });
+
+    if (envConfig.debug) {
+      const resolved = Object.entries(resolvedColumns).filter(([_, col]) => col);
+      const unresolved = Object.entries(resolvedColumns).filter(([_, col]) => !col);
+      console.log(`  Resolved: ${resolved.length}, Unresolved: ${unresolved.length}`);
+    }
+
+    // Step 5: Fetch the item
+    console.log(`\nFetching item ${envConfig.itemId}...`);
+    const item = await fetchItem(envConfig.itemId);
+    console.log(`  Item: "${item.name}"`);
+
+    // Step 6: Map to template variables
+    console.log("\nMapping to template variables...");
+    const vars = mapItemToTemplateVars(item, templateConfig, resolvedColumns);
+
+    if (envConfig.debug) {
+      console.log("\nTemplate variables:");
+      console.log(JSON.stringify(vars, null, 2));
+    }
+
+    // Step 7: Validate variables
+    const validation = validateTemplateVars(vars, templateConfig);
+    if (validation.warnings.length > 0) {
+      console.log("\nWarnings:");
+      validation.warnings.forEach((w) => console.log(`  ⚠ ${w}`));
+    }
+    if (!validation.valid) {
+      console.error("\nValidation errors:");
+      validation.errors.forEach((e) => console.error(`  ✗ ${e}`));
+      throw new Error("Template validation failed");
+    }
+
+    // Step 8: Render template
+    await mkdir(envConfig.outputDir, { recursive: true });
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const outputFilename = `rendered-${config.itemId}-${timestamp}.txt`;
-    const outputPath = join(config.outputDir, outputFilename);
+    const outputFilename = `rendered-${envConfig.itemId}-${timestamp}.txt`;
+    const outputPath = join(envConfig.outputDir, outputFilename);
 
     console.log("\nRendering template...");
-    await renderTemplate(config.templatePath, vars, outputPath);
-    console.log(`Rendered: ${outputPath}`);
+    await renderTemplate(templateConfig.path, vars, outputPath);
+    console.log(`  Output: ${outputPath}`);
+
+    const elapsed = (performance.now() - startTime).toFixed(0);
+    console.log(`\nDone in ${elapsed}ms`);
   } catch (error) {
-    console.error("Error:", error);
+    console.error("\nError:", error);
     process.exit(1);
   }
 }

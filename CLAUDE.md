@@ -104,3 +104,11 @@ bun --hot ./index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.md`.
+
+## Workflow
+
+When a big plan is completed, generate a nightly summary in `nightly/YYYY-MM-DD.md`. Use short, plain sentences a non-technical stakeholder can understand. Focus on what was accomplished and why it matters, not implementation details.
+
+## Documentation
+
+-Every time a significant decision or path is made, please document the reasoning behind in in docs/decisions.md

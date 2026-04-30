@@ -1,0 +1,2706 @@
+# =============================================================================
+# Monday.com Board Configuration
+# =============================================================================
+#
+# Board IDs can be overridden via environment variables.
+#
+# Column resolution strategies:
+#   by_type  - Match by column type (email, phone, status, date, etc.)
+#   by_title - Match by title regex pattern
+#   by_id    - Exact column ID (fallback for edge cases)
+#
+# =============================================================================
+
+boards:
+  nvc_notices:
+    id: "18392490403"
+    name: NVC Notices
+    columns:
+      subitems:
+        resolve: by_id
+        id: subtasks_mm08ebzb
+      person:
+        resolve: by_id
+        id: person
+      profile:
+        resolve: by_id
+        id: board_relation_mkyqwk7p
+      a_number:
+        resolve: by_id
+        id: lookup_mkyqg1sy
+      notice_type:
+        resolve: by_id
+        id: status
+      status:
+        resolve: by_id
+        id: color_mm087zk8
+      notice_date:
+        resolve: by_id
+        id: date4
+      phone_number:
+        resolve: by_id
+        id: lookup_mkzdp7bw
+      e_mail:
+        resolve: by_id
+        id: lookup_mkzdvjq5
+      nvc_case_number:
+        resolve: by_id
+        id: text_mm0ewfxk
+      invoice_id_number:
+        resolve: by_id
+        id: text_mm0er18y
+      paralegal:
+        resolve: by_id
+        id: lookup_mm0nen6m
+  appointments_wh:
+    id: "9283837796"
+    name: Appointments WH
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems__1
+      status:
+        resolve: by_id
+        id: status
+      create_fee_k:
+        resolve: by_id
+        id: lookup_mkzrpk9e
+      case_type_s:
+        resolve: by_id
+        id: mirror_mkm02yqc
+      attorney:
+        resolve: by_id
+        id: people__1
+      case_no:
+        resolve: by_id
+        id: mirror_mkm0z593
+      consult_date:
+        resolve: by_id
+        id: date3__1
+      alien_number:
+        resolve: by_id
+        id: dup__of_first_name2__1
+      date_of_birth:
+        resolve: by_id
+        id: date_of_birth_mkmqyeaf
+      country_of_birth:
+        resolve: by_id
+        id: country_of_birth__1
+      phone:
+        resolve: by_id
+        id: text2
+      email:
+        resolve: by_id
+        id: text
+      first_name:
+        resolve: by_id
+        id: text8
+      last_name:
+        resolve: by_id
+        id: dup__of_first_name__1
+      description:
+        resolve: by_id
+        id: long_text
+      description_2:
+        resolve: by_id
+        id: long_text_mkm6v8x
+      address:
+        resolve: by_id
+        id: text0__1
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2__1
+      consult_id:
+        resolve: by_id
+        id: item_id__1
+      consult_uuid:
+        resolve: by_id
+        id: text2__1
+      calendly:
+        resolve: by_id
+        id: status_1_Mjj3Ia2N
+      consult_created_on:
+        resolve: by_id
+        id: date_1__1
+      link_to_jail_intakes:
+        resolve: by_id
+        id: link_to_jail_intakes_mkkgrtmq
+      e_file:
+        resolve: by_id
+        id: mirror_mkkzv37t
+      projects:
+        resolve: by_id
+        id: mirror_mkm0t9re
+      fee_ks:
+        resolve: by_id
+        id: mirror_mkm08cx8
+      language:
+        resolve: by_id
+        id: status_1__1
+      profiles:
+        resolve: by_id
+        id: connect_boards4__1
+      paralegal:
+        resolve: by_id
+        id: mirror_mkmnzqy8
+      files_p:
+        resolve: by_id
+        id: mirror_mkmq7nm5
+      files_nm:
+        resolve: by_id
+        id: files_mkmq8htx
+      jail_intakes:
+        resolve: by_id
+        id: connect_boards_mkn2e8ct
+      link_to_jail_intakes_1:
+        resolve: by_id
+        id: link_to_jail_intakes_mkn2f86p
+      consult_sharepoint:
+        resolve: by_id
+        id: text_mkn3br7k
+      files:
+        resolve: by_id
+        id: file_mknrt3bq
+      link_to_profiles:
+        resolve: by_id
+        id: board_relation_mknzg600
+      link_to_open_forms:
+        resolve: by_id
+        id: board_relation_mkpkpk8c
+      intake_sheet:
+        resolve: by_id
+        id: doc_mkxfqxq6
+      profile_id:
+        resolve: by_id
+        id: lookup_mkxprvz3
+      consult_file:
+        resolve: by_id
+        id: lookup_mkxpqyad
+      jail_intake_id:
+        resolve: by_id
+        id: lookup_mkybdw09
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0107k
+  _fa_jail_intakes:
+    id: "8094412694"
+    name: "[FA] Jail Intakes"
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems__1
+      status:
+        resolve: by_id
+        id: status
+      appt_with:
+        resolve: by_id
+        id: status_1_mkkghdn7
+      create_appt:
+        resolve: by_id
+        id: button_mkkg80fa
+      intake_created_on:
+        resolve: by_id
+        id: date_1__1
+      detention_facility:
+        resolve: by_id
+        id: color_mkqy8vfa
+      jail:
+        resolve: by_id
+        id: text_mkkg24xy
+      det_facility:
+        resolve: by_id
+        id: color_mkqyxrt5
+      consult_date:
+        resolve: by_id
+        id: date3__1
+      alien_number:
+        resolve: by_id
+        id: dup__of_first_name2__1
+      date_of_nta:
+        resolve: by_id
+        id: date_mkrs9jce
+      date_nta_docketed:
+        resolve: by_id
+        id: date_mkrs6ftr
+      date_of_birth:
+        resolve: by_id
+        id: date_of_birth_mkn33y83
+      country_of_citizenship:
+        resolve: by_id
+        id: country_mkqyk13c
+      country_of_birth:
+        resolve: by_id
+        id: country_of_birth__1
+      country_ies_of_citizenship:
+        resolve: by_id
+        id: text_mkrsz919
+      what_date_did_you_get_picked_up_by_ice:
+        resolve: by_id
+        id: date_mkkg7br7
+      is_this_your_first_interaction_with_ice:
+        resolve: by_id
+        id: color_mkqygy7m
+      have_you_seen_an_immigration_judge:
+        resolve: by_id
+        id: color_mkqy9jha
+      when_is_your_next_hearing:
+        resolve: by_id
+        id: date_mkqyjedm
+      have_you_ever_been_ordered_removed:
+        resolve: by_id
+        id: color_mkqyy2b9
+      have_you_ever_been_back_to_your_country_since_this_interaction_with_ice:
+        resolve: by_id
+        id: color_mkqy8ekn
+      do_you_have_someone_to_pay_the_consult_fee:
+        resolve: by_id
+        id: color_mkqy17d5
+      point_of_contact_phone_number:
+        resolve: by_id
+        id: phone_mkqyjvw5
+      do_you_give_permission_to_speak_to_this_person_about_details_of_your_case:
+        resolve: by_id
+        id: color_mkqy7enb
+      have_you_ever_been_arrested:
+        resolve: by_id
+        id: color_mkqytr6s
+      why_did_ice_pick_you_up:
+        resolve: by_id
+        id: long_text_mkqynpsb
+      have_you_ever_plead_guilty_in_front_of_a_judge:
+        resolve: by_id
+        id: color_mkqy8fca
+      did_you_pay_any_fines:
+        resolve: by_id
+        id: color_mkqymf3
+      poc_name_and_relationship_with_detained:
+        resolve: by_id
+        id: text_mkkgcg74
+      nta:
+        resolve: by_id
+        id: file_mkqy5kyx
+      relationship:
+        resolve: by_id
+        id: dropdown_mkqy183k
+      callers_name:
+        resolve: by_id
+        id: text_mkqye6t8
+      poc_phone:
+        resolve: by_id
+        id: text2
+      poc_email:
+        resolve: by_id
+        id: text
+      description:
+        resolve: by_id
+        id: long_text
+      language:
+        resolve: by_id
+        id: status_1__1
+      have_you_even_been_removed:
+        resolve: by_id
+        id: status_1_mkkgm2z6
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2__1
+      in_contact_with:
+        resolve: by_id
+        id: multi_selectz059g6e2
+      racial_profiling:
+        resolve: by_id
+        id: single_selectjaqr133
+      arrest_warrant:
+        resolve: by_id
+        id: single_selectm0xiw8u
+      circumstances_of_detention:
+        resolve: by_id
+        id: long_texthv952soh
+      immigration_history:
+        resolve: by_id
+        id: multi_selectmapbv7t8
+      criminal_history_additional_details:
+        resolve: by_id
+        id: long_text6bvq3ozf
+      criminal_history:
+        resolve: by_id
+        id: single_selectpsxrptr
+      which_criminal_history:
+        resolve: by_id
+        id: multi_selectvbfj6yxz
+      attorney_phone_number:
+        resolve: by_id
+        id: phone2ilxufxb
+      attorney_name:
+        resolve: by_id
+        id: short_textoe9mwzl5
+      do_you_have_an_attorney:
+        resolve: by_id
+        id: single_selectdqj76cx
+      authority_that_made_the_arrest:
+        resolve: by_id
+        id: single_selectnkc004h
+      last_interaction_date:
+        resolve: by_id
+        id: date_mkpjz6f2
+      point_of_contact_name_and_relationship:
+        resolve: by_id
+        id: short_textf6ik4n62
+      has_any_illnesses:
+        resolve: by_id
+        id: short_text27umczxe
+      require_medication:
+        resolve: by_id
+        id: short_textbas90r4r
+      link_to_court_cases:
+        resolve: by_id
+        id: board_relation_mkzwf9ga
+      any_prior_contact_with_immigration:
+        resolve: by_id
+        id: short_text1ccmkrkf
+      have_you_ever_left_the_u_s:
+        resolve: by_id
+        id: single_selectq4x4b4k
+      date_left_the_u_s:
+        resolve: by_id
+        id: short_texth6b50uk7
+      date_return_the_u_s:
+        resolve: by_id
+        id: short_texttyi3krbt
+      reason_for_leaving_the_u_s:
+        resolve: by_id
+        id: short_textx7jvw2ay
+      detention_facility_other:
+        resolve: by_id
+        id: short_text5yx0tgkl
+      driver_s_license:
+        resolve: by_id
+        id: single_selectawtbfrl
+      next_immigration_court_date:
+        resolve: by_id
+        id: short_texthp2whxcr
+      last_updated:
+        resolve: by_id
+        id: pulse_updated_mkny828z
+      intake_created:
+        resolve: by_id
+        id: date_mknx427s
+      profiles:
+        resolve: by_id
+        id: mirror_mkn2s4h8
+      x_appointments:
+        resolve: by_id
+        id: connect_boards_mkn25bv2
+      consult_date_1:
+        resolve: by_id
+        id: date_mkmv3cwf
+      created_by:
+        resolve: by_id
+        id: people_mkkzs2f3
+      mx_consulate_intake:
+        resolve: by_id
+        id: monday_doc_mkkgr7wq
+      files:
+        resolve: by_id
+        id: file_mkrkabx7
+      jail_intake_id:
+        resolve: by_id
+        id: pulse_id_mkybhmf2
+      state_of_origin_mexico:
+        resolve: by_id
+        id: short_text1hf0t6ac
+      children_how_many_birthplaces_ages:
+        resolve: by_id
+        id: short_textc0fa0ytj
+      educational_professional_background:
+        resolve: by_id
+        id: short_text3s5fj2ls
+      industry:
+        resolve: by_id
+        id: multi_selectt9vmh1ii
+      education_level:
+        resolve: by_id
+        id: multi_selectvfruij2w
+      english_proficiency:
+        resolve: by_id
+        id: multi_selectniqdzmu8
+      indigenous_language_spoken:
+        resolve: by_id
+        id: short_text5j5u7z8x
+      speaks_an_indigenous_language:
+        resolve: by_id
+        id: single_selectatnkcbz
+      time_in_the_u_s:
+        resolve: by_id
+        id: single_selectthx4vix
+      immigration_status:
+        resolve: by_id
+        id: single_selectrm2ciov
+      how_did_you_enter_to_the_u_s:
+        resolve: by_id
+        id: single_selectrbldh23
+      city_and_state_of_detention:
+        resolve: by_id
+        id: short_texttmlfuvka
+      place_of_detention:
+        resolve: by_id
+        id: single_selectesjk5mn
+      place_of_detention_other:
+        resolve: by_id
+        id: short_textmi3yqdpg
+      time_range_of_detention:
+        resolve: by_id
+        id: single_selecth72zyla
+      link_to_call_log:
+        resolve: by_id
+        id: board_relation_mm0xdg80
+  _na_originals_cards_notices:
+    id: "8025618300"
+    name: "[NA] Originals + Cards + Notices"
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems
+      sherpa:
+        resolve: by_id
+        id: project_owner
+      status:
+        resolve: by_id
+        id: project_status
+      date_received:
+        resolve: by_id
+        id: date_mkkw4qz7
+      what_we_have:
+        resolve: by_id
+        id: dropdown__1
+      cyf_appt_date:
+        resolve: by_id
+        id: date_mkt6jyrm
+      profiles:
+        resolve: by_id
+        id: link_to_profiles_Mjj3d7YI
+      projects:
+        resolve: by_id
+        id: mirror_mkm08y8t
+      fee_ks:
+        resolve: by_id
+        id: mirror_mkm0nnh8
+      e_mail:
+        resolve: by_id
+        id: mirror_mkm0pkky
+      phone:
+        resolve: by_id
+        id: mirror_mkm0gawy
+      phone_number:
+        resolve: by_id
+        id: mirror_mkmtgdbk
+      language:
+        resolve: by_id
+        id: mirror_mkmy7yt7
+      profile_status:
+        resolve: by_id
+        id: mirror_mkmyr4j8
+      address:
+        resolve: by_id
+        id: lookup_mknrv1tx
+      last_updated:
+        resolve: by_id
+        id: pulse_updated_mkpebbfy
+      cd_open_forms:
+        resolve: by_id
+        id: board_relation_mkrnp75g
+      receipt_number:
+        resolve: by_id
+        id: text_mkrn5124
+      received_priority_date:
+        resolve: by_id
+        id: date_mkrnrbsd
+      form:
+        resolve: by_id
+        id: lookup_mkrnzx0m
+      receipt_type:
+        resolve: by_id
+        id: color_mkrnxvcx
+      link_to_cd_open_forms:
+        resolve: by_id
+        id: board_relation_mkrnr3b2
+      e_file:
+        resolve: by_id
+        id: lookup_mkv2hza2
+      creation_log:
+        resolve: by_id
+        id: pulse_log_mkyh3zj3
+      court_cases:
+        resolve: by_id
+        id: board_relation_mkyjz7hr
+      link_to_duplicate_of_mail_list:
+        resolve: by_id
+        id: board_relation_mkyrvhr5
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0595y
+  foias:
+    id: "8025590516"
+    name: FOIAs
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems
+      paralegal:
+        resolve: by_id
+        id: project_owner
+      status:
+        resolve: by_id
+        id: project_status
+      link_to_fee_ks:
+        resolve: by_id
+        id: link_to_fee_ks__1
+      profile:
+        resolve: by_id
+        id: link_to_profiles__1
+      on_foias_since:
+        resolve: by_id
+        id: date_mkm6ds0m
+      hire_date:
+        resolve: by_id
+        id: date_mkrczwa7
+      foias_quoted:
+        resolve: by_id
+        id: dropdown_mkx0gz73
+      foias_filed:
+        resolve: by_id
+        id: dropdown_mksa3kw6
+      case_strat:
+        resolve: by_id
+        id: long_text_mkxee79s
+      payment_ref:
+        resolve: by_id
+        id: long_text_mkxeh1y7
+      werk_notes:
+        resolve: by_id
+        id: long_text_mkxe3vq6
+      where_to_file:
+        resolve: by_id
+        id: link_mkxe84m6
+      items_needed:
+        resolve: by_id
+        id: dropdown_mkrc2z2
+      e_file:
+        resolve: by_id
+        id: mirror_mkm0p5dw
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2_mkkw5npn
+      consults:
+        resolve: by_id
+        id: mirror_mkm0ff6g
+      project:
+        resolve: by_id
+        id: mirror_mkm0frks
+      fee_ks:
+        resolve: by_id
+        id: mirror_mkm0fkc3
+      e_mail:
+        resolve: by_id
+        id: lookup_mknajxyc
+      phone:
+        resolve: by_id
+        id: lookup_mknabxdn
+      address:
+        resolve: by_id
+        id: lookup_mknacn91
+      a_number:
+        resolve: by_id
+        id: lookup_mkrc7qq7
+      date_of_birth:
+        resolve: by_id
+        id: lookup_mkrcrpg3
+      country_of_birth:
+        resolve: by_id
+        id: lookup_mkrc2hkd
+      ssn:
+        resolve: by_id
+        id: text_mkrcxjtj
+      north_pole_until:
+        resolve: by_id
+        id: date_mkxmma1k
+      mothers_name:
+        resolve: by_id
+        id: text_mkrvj290
+      fathers_name:
+        resolve: by_id
+        id: text_mkrvcsm
+      fbi_pin:
+        resolve: by_id
+        id: text_mkrc26cy
+      request_number:
+        resolve: by_id
+        id: text_mkreav2b
+      uscis_receipt_old_filing:
+        resolve: by_id
+        id: text_mkrcb45n
+      nrc_request_number:
+        resolve: by_id
+        id: text_mkxnzp17
+      other_parties:
+        resolve: by_id
+        id: text_mkrcg9z2
+      court:
+        resolve: by_id
+        id: dropdown_mkrcszw6
+      forms_appt_date:
+        resolve: by_id
+        id: date_mkxeasfy
+      inquiry_eligible:
+        resolve: by_id
+        id: date_mkpprx2v
+      fp_appt_date:
+        resolve: by_id
+        id: date_mkppbsqw
+      fps:
+        resolve: by_id
+        id: file_mkppdnvb
+      filed_on:
+        resolve: by_id
+        id: date_mkppmq3f
+      file_copy:
+        resolve: by_id
+        id: file_mkrcemyf
+      results_received:
+        resolve: by_id
+        id: date_mkppxjpa
+      results:
+        resolve: by_id
+        id: color_mkrve5k7
+      follow_up_appt:
+        resolve: by_id
+        id: color_mkxe212q
+      follow_up_note:
+        resolve: by_id
+        id: long_text_mkxehpev
+      mirror:
+        resolve: by_id
+        id: lookup_mkrvr4wn
+      this_entry:
+        resolve: by_id
+        id: color_mkxe4dk7
+      attorney:
+        resolve: by_id
+        id: people_mkkz7yjz
+      forms_appt_status:
+        resolve: by_id
+        id: color_mkxeek25
+      fp_status:
+        resolve: by_id
+        id: color_mkppdskv
+      forms_completion_status:
+        resolve: by_id
+        id: color_mkxembxd
+  _cd_open_forms:
+    id: "8025566986"
+    name: "[CD] Open Forms"
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems
+      target_date:
+        resolve: by_id
+        id: date_mkkws221
+      a_number:
+        resolve: by_id
+        id: lookup_mkqnw731
+      paralegal:
+        resolve: by_id
+        id: project_owner
+      forms:
+        resolve: by_id
+        id: tags__1
+      nvc_case:
+        resolve: by_id
+        id: color_mkze1ec7
+      ds_160_or_ds_260:
+        resolve: by_id
+        id: color_mkzeztd3
+      nvc_notice_type:
+        resolve: by_id
+        id: color_mkzerrt2
+      nvc_notice:
+        resolve: by_id
+        id: file_mkze3den
+      nvc_case_id:
+        resolve: by_id
+        id: text_mkzegvcc
+      invoice_id:
+        resolve: by_id
+        id: text_mkzec8a6
+      sponsor_name:
+        resolve: by_id
+        id: text_mkzew0cq
+      case_no:
+        resolve: by_id
+        id: mirror_mkkzxbdd
+      attorney:
+        resolve: by_id
+        id: people__1
+      status:
+        resolve: by_id
+        id: project_status
+      interview_status:
+        resolve: by_id
+        id: color_mkt31qrx
+      forms_sent_date:
+        resolve: by_id
+        id: date_mknhv4v7
+      location:
+        resolve: by_id
+        id: dropdown_mkrd9bnw
+      assignment_date:
+        resolve: by_id
+        id: date4__1
+      on_open_forms_since:
+        resolve: by_id
+        id: pulse_log_mktmke7r
+      translations:
+        resolve: by_id
+        id: status_1__1
+      urgent:
+        resolve: by_id
+        id: status_1_mkmeve91
+      fee_ks:
+        resolve: by_id
+        id: link_to_fee_ks__1
+      profiles:
+        resolve: by_id
+        id: link_to_profiles__1
+      e_file:
+        resolve: by_id
+        id: mirror_mkkycrfp
+      forms_appt_date:
+        resolve: by_id
+        id: date_mkkwqnd4
+      link_to_appeals:
+        resolve: by_id
+        id: link_to_appeals__1
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2_mkkw1965
+      hire_date:
+        resolve: by_id
+        id: date_mkkw85yp
+      interview_date:
+        resolve: by_id
+        id: date_mknpf8g6
+      north_pole_until:
+        resolve: by_id
+        id: date_mkkz9t8t
+      consult:
+        resolve: by_id
+        id: mirror_mkm0rg4j
+      project:
+        resolve: by_id
+        id: mirror_mkm06fss
+      fee_ks_1:
+        resolve: by_id
+        id: mirror_mkm02139
+      e_mail:
+        resolve: by_id
+        id: mirror_mkm09120
+      phone:
+        resolve: by_id
+        id: mirror_mkm0xwxt
+      ff:
+        resolve: by_id
+        id: mirror_mkmqnn8f
+      profile:
+        resolve: by_id
+        id: mirror_mkmy3kmg
+      profile_status:
+        resolve: by_id
+        id: mirror_mkn1w26d
+      file_copy:
+        resolve: by_id
+        id: file_mkrm5bhj
+      calendaring:
+        resolve: by_id
+        id: board_relation_mkyxrstw
+      interview_location:
+        resolve: by_id
+        id: lookup_mkyx87tr
+      interview_date_calendaring:
+        resolve: by_id
+        id: lookup_mkyxekw4
+      received_priority_date:
+        resolve: by_id
+        id: date_mkrnfht4
+      ps_deadline:
+        resolve: by_id
+        id: lookup_mkrzf76k
+      receipt_status:
+        resolve: by_id
+        id: color_mkrzddj2
+      receipt_no:
+        resolve: by_id
+        id: text_mkrzbmt1
+      cvp_status:
+        resolve: by_id
+        id: color_mkv7cqm8
+      documentarily_qualified_date:
+        resolve: by_id
+        id: date_mkv73pct
+      ff_from_fee_k:
+        resolve: by_id
+        id: lookup_mkxbnkvf
+      ff_1:
+        resolve: by_id
+        id: numeric_mkxbgch9
+      results:
+        resolve: by_id
+        id: color_mkyrz8fc
+      mail_list_date:
+        resolve: by_id
+        id: date_mkyrqztq
+      link_to_calendaring:
+        resolve: by_id
+        id: board_relation_mkyxczs6
+      link_to_nvc:
+        resolve: by_id
+        id: board_relation_mkze2hs7
+      cvp:
+        resolve: by_id
+        id: color_mm0xtj6
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0541f
+  motions:
+    id: "8025556892"
+    name: Motions
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems
+      profile:
+        resolve: by_id
+        id: link_to_profiles__1
+      court_case:
+        resolve: by_id
+        id: connect_boards88__1
+      motion:
+        resolve: by_id
+        id: tags__1
+      attorney:
+        resolve: by_id
+        id: people__1
+      paralegal:
+        resolve: by_id
+        id: project_owner
+      status:
+        resolve: by_id
+        id: project_status
+      hearing_type:
+        resolve: by_id
+        id: lookup_mkrmx2np
+      next_hearing_date:
+        resolve: by_id
+        id: lookup_mkrmcbpt
+      link_to_fee_ks:
+        resolve: by_id
+        id: link_to_fee_ks__1
+      judge:
+        resolve: by_id
+        id: lookup_mm0hnatd
+      hearing_date_calendaring:
+        resolve: by_id
+        id: lookup_mm0hy34j
+      app_for_relief:
+        resolve: by_id
+        id: lookup_mkzw9vw5
+      bond:
+        resolve: by_id
+        id: color_mkzdmem4
+      motions_connected:
+        resolve: by_id
+        id: lookup_mkyqyz8e
+      relief:
+        resolve: by_id
+        id: lookup_mkv07v57
+      mirror:
+        resolve: by_id
+        id: lookup_mkv0da2n
+      court:
+        resolve: by_id
+        id: dropdown_mksdrgtq
+      file_copy:
+        resolve: by_id
+        id: file_mkrmkvjr
+      judge_order:
+        resolve: by_id
+        id: file_mkrm4v5g
+      ij:
+        resolve: by_id
+        id: lookup_mkrmgag6
+      e_file:
+        resolve: by_id
+        id: mirror_mkm0gwe8
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2_mkkw7ad8
+      e_mail:
+        resolve: by_id
+        id: mirror_mkn8vkax
+      phone:
+        resolve: by_id
+        id: mirror_1_mkn8zktc
+      consult:
+        resolve: by_id
+        id: mirror_mkm0wyk7
+      project:
+        resolve: by_id
+        id: mirror_mkm0539n
+      fee_k:
+        resolve: by_id
+        id: mirror_1_mkm0p1t8
+      profile_status:
+        resolve: by_id
+        id: mirror_mkn53s4j
+      hire_date:
+        resolve: by_id
+        id: lookup_mkrmj4xw
+      factors:
+        resolve: by_id
+        id: dropdown_mm0wx15a
+      ff:
+        resolve: by_id
+        id: numeric_mkxbs9k0
+      mtn_hire_date:
+        resolve: by_id
+        id: date_mkqgq7hb
+      mtn_filed_on:
+        resolve: by_id
+        id: date_mkqg8972
+      dec_date:
+        resolve: by_id
+        id: date_mkqyjq82
+      north_pole_until:
+        resolve: by_id
+        id: date_mkyr4q60
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0pb2b
+      link_to_duplicate_of_mail_list:
+        resolve: by_id
+        id: board_relation_mkyrm4wf
+      attorney_notes:
+        resolve: by_id
+        id: lookup_mkvmbvhj
+  court_cases:
+    id: "8025546360"
+    name: Court Cases
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems
+      attorney:
+        resolve: by_id
+        id: people__1
+      paralegal:
+        resolve: by_id
+        id: project_owner
+      relief:
+        resolve: by_id
+        id: tags__1
+      country:
+        resolve: by_id
+        id: lookup_mkvdyxk8
+      relief_for_oppositions:
+        resolve: by_id
+        id: dropdown_mkttfwrn
+      rider:
+        resolve: by_id
+        id: color_mkwqxcj2
+      motions_connected:
+        resolve: by_id
+        id: lookup_mkyqhpsr
+      motions:
+        resolve: by_id
+        id: tag_mkp8mc8c
+      our_motions:
+        resolve: by_id
+        id: file_mkws47y2
+      mtn_filed:
+        resolve: by_id
+        id: date_mkwsa3es
+      nta_date:
+        resolve: by_id
+        id: date_mkqgsbnr
+      nta:
+        resolve: by_id
+        id: file_mks7vzp9
+      nta_validity:
+        resolve: by_id
+        id: color_mkx7qb8s
+      entry:
+        resolve: by_id
+        id: color_mkx0m597
+      i213:
+        resolve: by_id
+        id: file_mkx71cjf
+      a_number:
+        resolve: by_id
+        id: lookup_mknkm1kb
+      e_file:
+        resolve: by_id
+        id: mirror_mkkyt0dr
+      hearing_type:
+        resolve: by_id
+        id: status_1__1
+      year:
+        resolve: by_id
+        id: color_mkz7dayj
+      judge_connected:
+        resolve: by_id
+        id: lookup_mky8q7sf
+      hearing_date_calendaring:
+        resolve: by_id
+        id: lookup_mky8eyqq
+      x_next_hearing_date:
+        resolve: by_id
+        id: date__1
+      x_calendar_connected:
+        resolve: by_id
+        id: color_mkwrczzp
+      calendaring:
+        resolve: by_id
+        id: board_relation_mky8zka2
+      deadline_on_cal_calendaring:
+        resolve: by_id
+        id: board_relation_mkyxt7qw
+      calendaring_status_from_calendaring:
+        resolve: by_id
+        id: lookup_mkyrze53
+      deadline_list:
+        resolve: by_id
+        id: lookup_mkyegkja
+      month:
+        resolve: by_id
+        id: color_mm02bqdr
+      hearing_notice:
+        resolve: by_id
+        id: file_mkx1gewa
+      judge_sched_order:
+        resolve: by_id
+        id: file_mks82h38
+      method:
+        resolve: by_id
+        id: color_mkx1pc6k
+      webexnotice:
+        resolve: by_id
+        id: file_mkx7ys7h
+      hearing_status:
+        resolve: by_id
+        id: project_status
+      deadline_status:
+        resolve: by_id
+        id: color_mkx7d09m
+      deadline_type:
+        resolve: by_id
+        id: color_mkp888rz
+      ij:
+        resolve: by_id
+        id: text6__1
+      written_court_calendaring:
+        resolve: by_id
+        id: lookup_mkye8s59
+      due_date_court_calendaring:
+        resolve: by_id
+        id: lookup_mky8fccs
+      warning_court_calendaring:
+        resolve: by_id
+        id: lookup_mky83z0v
+      motion_to_recal:
+        resolve: by_id
+        id: color_mkta708f
+      responding_to_mtrc:
+        resolve: by_id
+        id: color_mktbpa2e
+      appt_priority:
+        resolve: by_id
+        id: color_mktdbtt5
+      ecas_or_eservice:
+        resolve: by_id
+        id: status_152__1
+      seeking:
+        resolve: by_id
+        id: project_prority
+      criminal:
+        resolve: by_id
+        id: dropdown_mks8w3q5
+      ina_charge:
+        resolve: by_id
+        id: dropdown_mkx7a1gm
+      case_strat:
+        resolve: by_id
+        id: long_text_mkrh9d6c
+      filing_history:
+        resolve: by_id
+        id: monday_doc_1_mkkzrqyk
+      trial_file:
+        resolve: by_id
+        id: link_mkkyrqg5
+      tf_status:
+        resolve: by_id
+        id: color_mkwrz8mn
+      case_prep_status:
+        resolve: by_id
+        id: color_mkp7t3ds
+      pendings:
+        resolve: by_id
+        id: color_mkqgfy0g
+      filings_overview:
+        resolve: by_id
+        id: dropdown_mkpejam7
+      needs:
+        resolve: by_id
+        id: dropdown_mkqgv41x
+      lm_fees_needs:
+        resolve: by_id
+        id: dropdown_mkz7m8fp
+      strat_meeting_notes:
+        resolve: by_id
+        id: long_text_mkyqg4y9
+      to_do_due:
+        resolve: by_id
+        id: date_mkx7mkz8
+      to_do_assignee:
+        resolve: by_id
+        id: multiple_person_mkx7zxqr
+      receptionist:
+        resolve: by_id
+        id: multiple_person_mkz7bdab
+      to_do_done:
+        resolve: by_id
+        id: boolean_mkt6amjg
+      to_do_deadlines_list_update_mr_comment:
+        resolve: by_id
+        id: lookup_mkysmh9r
+      para_action:
+        resolve: by_id
+        id: color_mkp76vem
+      client_notification:
+        resolve: by_id
+        id: color_mkp7wfk7
+      client_action:
+        resolve: by_id
+        id: color_mkp7f4ne
+      client_communication:
+        resolve: by_id
+        id: color_mkp75wwn
+      life_updates:
+        resolve: by_id
+        id: doc_mks89qfr
+      language:
+        resolve: by_id
+        id: label_mkm06n5e
+      appointments:
+        resolve: by_id
+        id: color_mkp7kdb
+      recept_appt_sched_note:
+        resolve: by_id
+        id: long_text_mkyx428
+      attorney_notes:
+        resolve: by_id
+        id: doc_mks8j5qf
+      last_meeting_w_atty:
+        resolve: by_id
+        id: date_mks1gh13
+      initial_meeting:
+        resolve: by_id
+        id: date_mkqnktq9
+      to_do_per_atty:
+        resolve: by_id
+        id: dropdown_mkqneg4j
+      evid_requested:
+        resolve: by_id
+        id: text_mkwz5vte
+      evid_deadline:
+        resolve: by_id
+        id: date_mkpdxeqn
+      tp_1:
+        resolve: by_id
+        id: date_mkp7wv8q
+      tp_2:
+        resolve: by_id
+        id: date_mkp7fhaa
+      tp_3:
+        resolve: by_id
+        id: date_mkp735qv
+      hearing_fees:
+        resolve: by_id
+        id: color_mkp7xmax
+      payment_history_log:
+        resolve: by_id
+        id: doc_mks8bwp7
+      payment_ref:
+        resolve: by_id
+        id: long_text_mkrzb70x
+      fees_quoted:
+        resolve: by_id
+        id: text_mkwz9gn0
+      fees_deadline:
+        resolve: by_id
+        id: date_mkwzqc12
+      fees_deadline_1:
+        resolve: by_id
+        id: long_text_mkyxjz9t
+      mh_fees_owed:
+        resolve: by_id
+        id: numbers__1
+      master_fees_due_on_calendaring:
+        resolve: by_id
+        id: lookup_mkyrat1z
+      mh_fees_paid:
+        resolve: by_id
+        id: date_mks8xf5c
+      tp_fees_owed:
+        resolve: by_id
+        id: numeric_mkp749m1
+      tp_fees_due_calendaring:
+        resolve: by_id
+        id: lookup_mkyrexzc
+      tp_fees_paid:
+        resolve: by_id
+        id: date_mks88xkd
+      trial_fees_owed:
+        resolve: by_id
+        id: numeric_mkp71mq
+      trial_fees_due_on_calendaring:
+        resolve: by_id
+        id: lookup_mkyrjgjn
+      trial_fees_paid:
+        resolve: by_id
+        id: date_mks88wh4
+      pending_order:
+        resolve: by_id
+        id: color_mkxa2368
+      ordered:
+        resolve: by_id
+        id: dropdown_mkx7m9bf
+      warning_due:
+        resolve: by_id
+        id: date_mkx7rj0x
+      x_due_date:
+        resolve: by_id
+        id: date_mknsp6cr
+      prep_time_stage:
+        resolve: by_id
+        id: color_mkqnz5es
+      atty_brief_mtn:
+        resolve: by_id
+        id: color_mkp7rznd
+      brief:
+        resolve: by_id
+        id: file_mkxfxy19
+      brief_filed_on:
+        resolve: by_id
+        id: date_mkxfcgrp
+      translations:
+        resolve: by_id
+        id: status_158__1
+      e28_s:
+        resolve: by_id
+        id: color_mkp7kz60
+      written_pleadings:
+        resolve: by_id
+        id: status_13__1
+      wps:
+        resolve: by_id
+        id: file_mks821jr
+      wps_due:
+        resolve: by_id
+        id: date_mkxammtv
+      wps_filed_on:
+        resolve: by_id
+        id: date_mks84k7x
+      app_for_relief:
+        resolve: by_id
+        id: color_mkp74cv2
+      app:
+        resolve: by_id
+        id: file_mks89887
+      app_due:
+        resolve: by_id
+        id: date_mkxaa5t9
+      app_filed:
+        resolve: by_id
+        id: date_mks8a6px
+      receipt_notice:
+        resolve: by_id
+        id: color_mkp71nnx
+      rn:
+        resolve: by_id
+        id: file_mks8v1k3
+      rn_filed:
+        resolve: by_id
+        id: date_mks8pdvp
+      fingerprints:
+        resolve: by_id
+        id: color_mkp7qzr6
+      fps:
+        resolve: by_id
+        id: file_mks8j25n
+      fp_date:
+        resolve: by_id
+        id: date_mks8wyr4
+      updated_app:
+        resolve: by_id
+        id: color_mkqn6gdb
+      upd_app:
+        resolve: by_id
+        id: file_mks8jt9n
+      upd_app_due:
+        resolve: by_id
+        id: date_mkxab4v4
+      upd_app_filed:
+        resolve: by_id
+        id: date_mks8r012
+      our_evidence:
+        resolve: by_id
+        id: color_mkp73fne
+      our_evid_due:
+        resolve: by_id
+        id: date_mkxap9k3
+      our_evid:
+        resolve: by_id
+        id: file_mks8p9q3
+      table_of_cont:
+        resolve: by_id
+        id: doc_mks8chps
+      filings_quick_ref:
+        resolve: by_id
+        id: long_text_mks8ewkg
+      witnesses:
+        resolve: by_id
+        id: dropdown_mkp8mkk2
+      witness_list:
+        resolve: by_id
+        id: color_mkqnseaz
+      wl:
+        resolve: by_id
+        id: file_mks8rrwn
+      wl_due:
+        resolve: by_id
+        id: date_mkxaryh2
+      wl_filed:
+        resolve: by_id
+        id: date_mks861e8
+      dhs_filings:
+        resolve: by_id
+        id: file_mkwsm4b7
+      exh_toc:
+        resolve: by_id
+        id: color_mkp7d53w
+      paid_on:
+        resolve: by_id
+        id: date_mkrv72cm
+      profile:
+        resolve: by_id
+        id: link_to_profiles__1
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2__1
+      consults:
+        resolve: by_id
+        id: mirror_mkm0gne4
+      projects:
+        resolve: by_id
+        id: mirror_mkm0pwv8
+      fee_k:
+        resolve: by_id
+        id: mirror_mkm0vzpj
+      motions_1:
+        resolve: by_id
+        id: link_to_motions__1
+      phone:
+        resolve: by_id
+        id: mirror_mkmvd5b6
+      e_mail:
+        resolve: by_id
+        id: mirror_1_mkmvc40e
+      address:
+        resolve: by_id
+        id: mirror_mkmwvsvc
+      profile_status:
+        resolve: by_id
+        id: mirror_mkn1qcgh
+      case_no:
+        resolve: by_id
+        id: lookup_mknkktcc
+      hire_for_bond_by:
+        resolve: by_id
+        id: date_mkqhyppy
+      det_facility:
+        resolve: by_id
+        id: color_mkqjj0zk
+      ead:
+        resolve: by_id
+        id: status_15__1
+      item_id:
+        resolve: by_id
+        id: pulse_id_mkrha67f
+      motion:
+        resolve: by_id
+        id: button_mks0jhwn
+      mirror_1:
+        resolve: by_id
+        id: lookup_mkvdxwf7
+      create_fee_k:
+        resolve: by_id
+        id: lookup_mkwy78ry
+      generate_doc_type:
+        resolve: by_id
+        id: dropdown_mkxn2z2e
+      generate_doc:
+        resolve: by_id
+        id: color_mkxnkggy
+      link_to_team_tasks:
+        resolve: by_id
+        id: board_relation_mkybeg8z
+      link_to_na_originals_cards_notices:
+        resolve: by_id
+        id: board_relation_mkyj179p
+      link_to_fee_ks:
+        resolve: by_id
+        id: board_relation_mkzdgjj7
+      last_updated:
+        resolve: by_id
+        id: pulse_updated_mkzwfd3w
+      fa_jail_intakes:
+        resolve: by_id
+        id: board_relation_mkzwpkqf
+      mirror:
+        resolve: by_id
+        id: lookup_mkzw1ch5
+      to_do_due_date:
+        resolve: by_id
+        id: lookup_mm0yv9pc
+      assigned_date:
+        resolve: by_id
+        id: lookup_mm0ypvfn
+      task_assigned_to:
+        resolve: by_id
+        id: lookup_mm0yq0rn
+      to_do_status:
+        resolve: by_id
+        id: lookup_mm0y8vp7
+      i213_issued:
+        resolve: by_id
+        id: color_mm0q44tm
+      fee_k_status:
+        resolve: by_id
+        id: color_mm0nbnnn
+      court_work_file:
+        resolve: by_id
+        id: link_mm0qn018
+      court_tasks:
+        resolve: by_id
+        id: board_relation_mm07h03f
+  _lt_i918b_s:
+    id: "8025538497"
+    name: "[LT] I918B's"
+    columns:
+      attorney:
+        resolve: by_id
+        id: person
+      paralegal:
+        resolve: by_id
+        id: people__1
+      case_no:
+        resolve: by_id
+        id: mirror_mkm07jwy
+      status:
+        resolve: by_id
+        id: status
+      hire_date_for_i918b_request:
+        resolve: by_id
+        id: date4
+      signed_date:
+        resolve: by_id
+        id: date__1
+      due_date_for_u_visa_hire:
+        resolve: by_id
+        id: date2__1
+      expiration_date:
+        resolve: by_id
+        id: date6__1
+      link_to_fee_ks:
+        resolve: by_id
+        id: link_to_fee_ks__1
+      profile:
+        resolve: by_id
+        id: link_to_profiles__1
+      subitems:
+        resolve: by_id
+        id: subitems_mkk9tpxc
+      e_file:
+        resolve: by_id
+        id: mirror_mkkyjj5h
+      consult:
+        resolve: by_id
+        id: mirror_mkm0hkgp
+      projects:
+        resolve: by_id
+        id: mirror_mkm05taw
+      fee_ks:
+        resolve: by_id
+        id: mirror_mkm0y6n8
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0ya3
+  address_changes:
+    id: "8025531784"
+    name: Address Changes
+    columns:
+      assistant:
+        resolve: by_id
+        id: person
+      case_no:
+        resolve: by_id
+        id: mirror_mkm01pyh
+      status:
+        resolve: by_id
+        id: status
+      court_or_uscis:
+        resolve: by_id
+        id: color_mkpj8g02
+      ecas_or_paper:
+        resolve: by_id
+        id: color_mkpj57j4
+      uscis:
+        resolve: by_id
+        id: color_mkpjdx50
+      humanitarian:
+        resolve: by_id
+        id: color_mkpjp5vc
+      bia:
+        resolve: by_id
+        id: color_mkpjrgq5
+      date_received:
+        resolve: by_id
+        id: date4
+      date_sent:
+        resolve: by_id
+        id: date__1
+      casetypes:
+        resolve: by_id
+        id: lookup_mm06tecr
+      profiles:
+        resolve: by_id
+        id: link_to_profiles_Mjj3hDyr
+      subitems:
+        resolve: by_id
+        id: subitems_mkkwp27m
+      consults:
+        resolve: by_id
+        id: mirror_mkm07nqz
+      projects:
+        resolve: by_id
+        id: mirror_mkm01qn9
+      fee_ks:
+        resolve: by_id
+        id: mirror_mkm024tn
+      address:
+        resolve: by_id
+        id: mirror_mkn8e9wn
+      e_file:
+        resolve: by_id
+        id: mirror_mkm07wv1
+      phone:
+        resolve: by_id
+        id: lookup_mm07z88x
+      e_mail:
+        resolve: by_id
+        id: lookup_mm08j7p9
+      mirror:
+        resolve: by_id
+        id: lookup_mm0fgta0
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0zyef
+  rfes_all:
+    id: "8025524218"
+    name: RFEs - ALL
+    columns:
+      attorney:
+        resolve: by_id
+        id: person
+      paralegal:
+        resolve: by_id
+        id: people__1
+      type:
+        resolve: by_id
+        id: dropdown__1
+      status:
+        resolve: by_id
+        id: status
+      received_date:
+        resolve: by_id
+        id: date4
+      warning:
+        resolve: by_id
+        id: date_mkwb3vsm
+      due_date:
+        resolve: by_id
+        id: date__1
+      client_due_date:
+        resolve: by_id
+        id: date2__1
+      sent_out_date:
+        resolve: by_id
+        id: date_mkr7gbfk
+      notice:
+        resolve: by_id
+        id: file__1
+      e_file:
+        resolve: by_id
+        id: mirror_mkm0eh9c
+      fee_k:
+        resolve: by_id
+        id: link_to_fee_ks__1
+      profile:
+        resolve: by_id
+        id: link_to_profiles__1
+      subitems:
+        resolve: by_id
+        id: subitems_mkkxpnwa
+      consults:
+        resolve: by_id
+        id: mirror_mkm0wa3h
+      projects:
+        resolve: by_id
+        id: mirror_mkm0rgpj
+      fee_ks:
+        resolve: by_id
+        id: mirror_mkm0735z
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2_mkmnm6vn
+      e_mail:
+        resolve: by_id
+        id: lookup_mknc2kwv
+      phone:
+        resolve: by_id
+        id: lookup_mkncqkgj
+      address:
+        resolve: by_id
+        id: lookup_mknc7adf
+      calendaring:
+        resolve: by_id
+        id: board_relation_mkyebxdf
+      notice_calendaring:
+        resolve: by_id
+        id: lookup_mkzbr3gg
+      type_calendaring:
+        resolve: by_id
+        id: lookup_mkye5sd9
+      due_date_calendaring:
+        resolve: by_id
+        id: lookup_mkyewxga
+      warning_calendaring:
+        resolve: by_id
+        id: lookup_mkyebdj5
+      issue_date_calendaring:
+        resolve: by_id
+        id: lookup_mkye8frh
+      written_calendaring:
+        resolve: by_id
+        id: lookup_mkyedehv
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0ppp0
+  fee_ks:
+    id: "8025467270"
+    name: Fee Ks
+    columns:
+      tasks:
+        resolve: by_id
+        id: subitems
+      fee_k_id:
+        resolve: by_id
+        id: pulse_id_mks3ewr5
+      contract_stage:
+        resolve: by_id
+        id: deal_stage
+      case_no:
+        resolve: by_id
+        id: mirror_mkm03c1x
+      ps_stage:
+        resolve: by_id
+        id: status6__1
+      contract_for:
+        resolve: by_id
+        id: dropdown_mkv1db6z
+      north_pole_until:
+        resolve: by_id
+        id: date_mkpcgk6n
+      it_will_go_to:
+        resolve: by_id
+        id: status__1
+      attorney:
+        resolve: by_id
+        id: deal_owner
+      assistant:
+        resolve: by_id
+        id: people__1
+      paralegal:
+        resolve: by_id
+        id: people_mkkw3twh
+      urgent:
+        resolve: by_id
+        id: status_mkm594tv
+      e_file:
+        resolve: by_id
+        id: mirror_mkky191t
+      af:
+        resolve: by_id
+        id: deal_value
+      ff:
+        resolve: by_id
+        id: numbers__1
+      pf:
+        resolve: by_id
+        id: numbers5__1
+      contract_added_on:
+        resolve: by_id
+        id: date__1
+      contract_sent_on:
+        resolve: by_id
+        id: date1__1
+      signed_contract_received_on:
+        resolve: by_id
+        id: date8__1
+      reminder_sent_checked_on:
+        resolve: by_id
+        id: date_mkzktfv1
+      payment_link_sent_on:
+        resolve: by_id
+        id: date_mkzjh7f2
+      hire_date:
+        resolve: by_id
+        id: date_mkmvcse2
+      court_cases_connected:
+        resolve: by_id
+        id: board_relation_mkzdhqye
+      court_payment_history_log:
+        resolve: by_id
+        id: lookup_mkzdf690
+      lm_date:
+        resolve: by_id
+        id: date_mkwczbpg
+      address:
+        resolve: by_id
+        id: mirror_mkmg7aea
+      e_mail:
+        resolve: by_id
+        id: mirror_mkmgzhz3
+      phone:
+        resolve: by_id
+        id: mirror_mkmghwqg
+      profile:
+        resolve: by_id
+        id: link_to_profiles__1
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2_mkkwe497
+      ps_deadline:
+        resolve: by_id
+        id: date_mkkw9qs0
+      open_e_file:
+        resolve: by_id
+        id: status_mkky5b2
+      sherpa:
+        resolve: by_id
+        id: people_mkkyw5qa
+      consult:
+        resolve: by_id
+        id: mirror_mkm0vy9v
+      projects:
+        resolve: by_id
+        id: mirror_mkm03r4p
+      urgent_cases:
+        resolve: by_id
+        id: connect_boards_mkmer5cs
+      jail_intake_appointment:
+        resolve: by_id
+        id: mirror_mkn2vc6
+      a_number:
+        resolve: by_id
+        id: mirror_mkn36ay0
+      projects_1:
+        resolve: by_id
+        id: lookup_mknhbnv3
+      link_to_cd_open_forms:
+        resolve: by_id
+        id: board_relation_mkrnbg3n
+      paralegal_assignment_date:
+        resolve: by_id
+        id: date_mkrn7pfv
+      note_sheet:
+        resolve: by_id
+        id: lookup_mks1vzjz
+      link:
+        resolve: by_id
+        id: link_mks1n4ax
+      on_contracts_since:
+        resolve: by_id
+        id: pulse_log_mksnw32s
+      af_ff_deadline_date:
+        resolve: by_id
+        id: date_mkx7n2de
+      evidence_received_date:
+        resolve: by_id
+        id: date_mkx8stcx
+      payment_log:
+        resolve: by_id
+        id: lookup_mkxmm5w9
+      language:
+        resolve: by_id
+        id: lookup_mkzw9yzj
+      cases:
+        resolve: by_id
+        id: connect_boards6__1
+      activities:
+        resolve: by_id
+        id: mirror_mkm0fyp3
+      af_surcharge_fee:
+        resolve: by_id
+        id: numeric_mm0gfccq
+      ff_surcharge_fee:
+        resolve: by_id
+        id: numeric_mm0gc5x9
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0qqyf
+  appointments_lb:
+    id: "8025389724"
+    name: Appointments LB
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems__1
+      status:
+        resolve: by_id
+        id: status
+      create_fee_k:
+        resolve: by_id
+        id: lookup_mkzrj1k6
+      case_type_s:
+        resolve: by_id
+        id: mirror_mkm02yqc
+      attorney:
+        resolve: by_id
+        id: people__1
+      case_no:
+        resolve: by_id
+        id: mirror_mkm0z593
+      consult_date:
+        resolve: by_id
+        id: date3__1
+      alien_number:
+        resolve: by_id
+        id: dup__of_first_name2__1
+      date_of_birth:
+        resolve: by_id
+        id: date_of_birth_mkmqyeaf
+      country_of_birth:
+        resolve: by_id
+        id: country_of_birth__1
+      phone:
+        resolve: by_id
+        id: text2
+      email:
+        resolve: by_id
+        id: text
+      first_name:
+        resolve: by_id
+        id: text8
+      last_name:
+        resolve: by_id
+        id: dup__of_first_name__1
+      description:
+        resolve: by_id
+        id: long_text
+      description_2:
+        resolve: by_id
+        id: long_text_mkm6v8x
+      address:
+        resolve: by_id
+        id: text0__1
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2__1
+      consult_id:
+        resolve: by_id
+        id: item_id__1
+      consult_uuid:
+        resolve: by_id
+        id: text2__1
+      calendly:
+        resolve: by_id
+        id: status_1_Mjj3Ia2N
+      consult_created_on:
+        resolve: by_id
+        id: date_1__1
+      link_to_jail_intakes:
+        resolve: by_id
+        id: link_to_jail_intakes_mkkgrtmq
+      e_file:
+        resolve: by_id
+        id: mirror_mkkzv37t
+      projects:
+        resolve: by_id
+        id: mirror_mkm0t9re
+      fee_ks:
+        resolve: by_id
+        id: mirror_mkm08cx8
+      language:
+        resolve: by_id
+        id: status_1__1
+      profiles:
+        resolve: by_id
+        id: connect_boards4__1
+      paralegal:
+        resolve: by_id
+        id: mirror_mkmnzqy8
+      files_p:
+        resolve: by_id
+        id: mirror_mkmq7nm5
+      files_nm:
+        resolve: by_id
+        id: files_mkmq8htx
+      jail_intakes:
+        resolve: by_id
+        id: connect_boards_mkn2e8ct
+      link_to_jail_intakes_1:
+        resolve: by_id
+        id: link_to_jail_intakes_mkn2f86p
+      consult_sharepoint:
+        resolve: by_id
+        id: text_mkn3br7k
+      files:
+        resolve: by_id
+        id: file_mknrt3bq
+      link_to_profiles:
+        resolve: by_id
+        id: board_relation_mknzg600
+      link_to_open_forms:
+        resolve: by_id
+        id: board_relation_mkpkpk8c
+      profile_id:
+        resolve: by_id
+        id: lookup_mkxp51ds
+      consult_file:
+        resolve: by_id
+        id: lookup_mkxpsapr
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0107k
+  appointments_m:
+    id: "8025383981"
+    name: Appointments M
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems__1
+      status:
+        resolve: by_id
+        id: status
+      consult_date:
+        resolve: by_id
+        id: date3__1
+      create_fee_k:
+        resolve: by_id
+        id: lookup_mkzr8dme
+      case_type:
+        resolve: by_id
+        id: mirror_mkm0vyty
+      attorney:
+        resolve: by_id
+        id: people__1
+      case_no:
+        resolve: by_id
+        id: mirror_mkm0rr7g
+      alien_number:
+        resolve: by_id
+        id: dup__of_first_name2__1
+      date_of_birth:
+        resolve: by_id
+        id: date_of_birth_mkmqmrv
+      country_of_birth:
+        resolve: by_id
+        id: country_of_birth__1
+      phone:
+        resolve: by_id
+        id: text2
+      email:
+        resolve: by_id
+        id: text
+      description:
+        resolve: by_id
+        id: long_text
+      address:
+        resolve: by_id
+        id: text0__1
+      language:
+        resolve: by_id
+        id: status_1__1
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2__1
+      consult_id:
+        resolve: by_id
+        id: item_id__1
+      profiles:
+        resolve: by_id
+        id: connect_boards4__1
+      pronouns:
+        resolve: by_id
+        id: lookup_mm0aedf8
+      consult_uuid:
+        resolve: by_id
+        id: text2__1
+      calendly:
+        resolve: by_id
+        id: status_1_Mjj3Ia2N
+      consult_created_on:
+        resolve: by_id
+        id: date_1__1
+      link_to_jail_intakes:
+        resolve: by_id
+        id: link_to_jail_intakes_mkkgxq4a
+      client_e_file:
+        resolve: by_id
+        id: mirror_mkkz5py9
+      case_type_1:
+        resolve: by_id
+        id: mirror_mkkzgqsx
+      projects:
+        resolve: by_id
+        id: mirror_mkm0vggy
+      fee_ks:
+        resolve: by_id
+        id: mirror_mkm0a3nx
+      paralegal:
+        resolve: by_id
+        id: mirror_mkmnh620
+      jail_intakes:
+        resolve: by_id
+        id: link_to_jail_intakes_mkn2zsy5
+      consult_sharepoint:
+        resolve: by_id
+        id: text_mkn3gp82
+      link_to_profiles:
+        resolve: by_id
+        id: board_relation_mknznp7x
+      link_to_open_forms:
+        resolve: by_id
+        id: board_relation_mkpkrjkm
+      profile_id:
+        resolve: by_id
+        id: lookup_mkxpqm68
+      consult_file:
+        resolve: by_id
+        id: lookup_mkxpm30e
+      paid:
+        resolve: by_id
+        id: boolean_mm07h8ct
+      docs:
+        resolve: by_id
+        id: boolean_mm07cjs3
+      call_reminder:
+        resolve: by_id
+        id: boolean_mm07zyg1
+      m_consult_note:
+        resolve: by_id
+        id: long_text_mm0af4tz
+      method:
+        resolve: by_id
+        id: dropdown_mm0anrrq
+      zoom_link:
+        resolve: by_id
+        id: link_mm0fyc43
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm033kc
+  profiles:
+    id: "8025265377"
+    name: Profiles
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems__1
+      create_fee_k:
+        resolve: by_id
+        id: button__1
+      company_profile:
+        resolve: by_id
+        id: company_profile
+      status:
+        resolve: by_id
+        id: status_mkk94wz2
+      attorney:
+        resolve: by_id
+        id: people__1
+      case_type_s:
+        resolve: by_id
+        id: case_type__1
+      a_number:
+        resolve: by_id
+        id: text__1
+      date_of_birth:
+        resolve: by_id
+        id: text2__1
+      email:
+        resolve: by_id
+        id: email__1
+      phone:
+        resolve: by_id
+        id: phone7__1
+      physical_address:
+        resolve: by_id
+        id: text_mkrkrsgj
+      country_of_birth:
+        resolve: by_id
+        id: country_of_birth__1
+      e_file:
+        resolve: by_id
+        id: e_file__1
+      rfe_d:
+        resolve: by_id
+        id: button1__1
+      uscis_originals:
+        resolve: by_id
+        id: button_1__1
+      address_change:
+        resolve: by_id
+        id: button5__1
+      preferred_language:
+        resolve: by_id
+        id: status__1
+      last_consult_date:
+        resolve: by_id
+        id: lookup_mks7nwws
+      projects:
+        resolve: by_id
+        id: connect_boards8__1
+      fee_ks:
+        resolve: by_id
+        id: connect_boards80__1
+      consult_uuid:
+        resolve: by_id
+        id: text5__1
+      case_no:
+        resolve: by_id
+        id: dms_number_mkkvj2ft
+      e_mail_2:
+        resolve: by_id
+        id: email_mkt3pcg3
+      mailing_address:
+        resolve: by_id
+        id: physical_address8__1
+      appt:
+        resolve: by_id
+        id: button_Mjj3AbpF
+      i918b:
+        resolve: by_id
+        id: button_mkn84prc
+      interview:
+        resolve: by_id
+        id: button_mknfgkhx
+      court_case:
+        resolve: by_id
+        id: button_mkncd51f
+      inactive_court_case:
+        resolve: by_id
+        id: button_mkta3mat
+      button:
+        resolve: by_id
+        id: button_mkyqqnqa
+      consultation_notes:
+        resolve: by_id
+        id: long_text_mksdbeew
+      dms_url:
+        resolve: by_id
+        id: text_mkkvfjrh
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2_mkkz1yzr
+      files:
+        resolve: by_id
+        id: files_mkmq860c
+      contract_stage:
+        resolve: by_id
+        id: mirror_mkmxtr7s
+      case_history:
+        resolve: by_id
+        id: doc_mkpndtm9
+      hire_date:
+        resolve: by_id
+        id: lookup_mkrmpjc
+      note_sheet:
+        resolve: by_id
+        id: doc_mks14ac3
+      payment_log:
+        resolve: by_id
+        id: text_mkxm5kp3
+      consult_file:
+        resolve: by_id
+        id: text_mkxphk77
+      atty_jail_intakes_only:
+        resolve: by_id
+        id: color_mkzdre4b
+      log:
+        resolve: by_id
+        id: doc_mkzdx089
+      mirror:
+        resolve: by_id
+        id: lookup_mkzenex6
+      mirror_1:
+        resolve: by_id
+        id: lookup_mm0h789j
+      casetypes:
+        resolve: by_id
+        id: lookup_mm06p1nv
+      paralegal:
+        resolve: by_id
+        id: mirror_mkmneb8r
+      ij:
+        resolve: by_id
+        id: lookup_mksx83wq
+      receipt_number_s:
+        resolve: by_id
+        id: lookup_mks0784c
+      pronouns:
+        resolve: by_id
+        id: dropdown_mm0am7ej
+      phone_2:
+        resolve: by_id
+        id: text_mkpd32
+      appointments:
+        resolve: by_id
+        id: link_to_r__1
+      link_to_duplicate_of_mail_list:
+        resolve: by_id
+        id: board_relation_mkyrp7as
+      link_to_duplicate_of_mail_list_1:
+        resolve: by_id
+        id: board_relation_mkyr9c3w
+      call_log:
+        resolve: by_id
+        id: board_relation_mm0h5h4q
+      item_id_1:
+        resolve: by_id
+        id: pulse_id_mm0p1j9r
+      activities:
+        resolve: by_id
+        id: connect_boards82__1
+  appeals:
+    id: "3473957885"
+    name: Appeals
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems
+      profile:
+        resolve: by_id
+        id: link_to_profiles_mkkwamp3
+      attorney:
+        resolve: by_id
+        id: person
+      decision_date:
+        resolve: by_id
+        id: date_1
+      appeal_due:
+        resolve: by_id
+        id: date_11
+      second_half_due:
+        resolve: by_id
+        id: date_12
+      status:
+        resolve: by_id
+        id: status
+      relief_denied:
+        resolve: by_id
+        id: relief_denied_mkkwvcee
+      para_sherpa:
+        resolve: by_id
+        id: people
+      ij_decision:
+        resolve: by_id
+        id: file_mkxfsqp0
+      appeal_file_copy:
+        resolve: by_id
+        id: file_mkxf7qbs
+      brief_sched_file_copy:
+        resolve: by_id
+        id: file_mkxftbf8
+      brief_file_copy:
+        resolve: by_id
+        id: file_mkxf19z9
+      mirror:
+        resolve: by_id
+        id: lookup_mkq8tf7h
+      staff_action:
+        resolve: by_id
+        id: color_mkpc4ys9
+      appeal_filed_on:
+        resolve: by_id
+        id: date_mkpchaw2
+      receipt_received_on:
+        resolve: by_id
+        id: date_mkqw2a2a
+      brief_sched_received:
+        resolve: by_id
+        id: date_mkqwmgf
+      brief_sched_due:
+        resolve: by_id
+        id: date_mkqw8rf1
+      brief_filed_on:
+        resolve: by_id
+        id: date_mkpc3hez
+      dhs_brief_filed_on:
+        resolve: by_id
+        id: date_mkpcec2
+      bia_decision_date:
+        resolve: by_id
+        id: date_mkpctfv1
+      case_status:
+        resolve: by_id
+        id: status0
+      date:
+        resolve: by_id
+        id: date4
+      deadline:
+        resolve: by_id
+        id: date_14
+  appointments_r:
+    id: "7788520205"
+    name: Appointments R
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems__1
+      status:
+        resolve: by_id
+        id: status
+      create_fee_k:
+        resolve: by_id
+        id: lookup_mkzrjg9a
+      case_type_s:
+        resolve: by_id
+        id: mirror_mkm0qyvt
+      consult_date:
+        resolve: by_id
+        id: date3__1
+      case_no:
+        resolve: by_id
+        id: mirror_mkkzsk0v
+      attorney:
+        resolve: by_id
+        id: people__1
+      alien_number:
+        resolve: by_id
+        id: dup__of_first_name2__1
+      date_of_birth:
+        resolve: by_id
+        id: date_of_birth_mkkvs9xh
+      country_of_birth:
+        resolve: by_id
+        id: country_of_birth__1
+      phone:
+        resolve: by_id
+        id: text2
+      email:
+        resolve: by_id
+        id: text
+      description:
+        resolve: by_id
+        id: long_text
+      address:
+        resolve: by_id
+        id: text0__1
+      e_file:
+        resolve: by_id
+        id: link_mkk97r86
+      language:
+        resolve: by_id
+        id: status_1__1
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2__1
+      consult_id:
+        resolve: by_id
+        id: item_id__1
+      profiles:
+        resolve: by_id
+        id: connect_boards4__1
+      projects:
+        resolve: by_id
+        id: mirror_mkm0mdr5
+      fee_ks:
+        resolve: by_id
+        id: mirror_mkm0e8ca
+      calendly:
+        resolve: by_id
+        id: status_1_Mjj3Ia2N
+      consult_created_on:
+        resolve: by_id
+        id: date_1__1
+      consult_uuid:
+        resolve: by_id
+        id: text2__1
+      paralegal:
+        resolve: by_id
+        id: mirror_mkmn594v
+      jail_intakes:
+        resolve: by_id
+        id: link_to_jail_intakes_mkn2ckr3
+      consult_sharepoint:
+        resolve: by_id
+        id: text_mkn3jmhc
+      link_to_profiles:
+        resolve: by_id
+        id: board_relation_mknzm1as
+      mirror:
+        resolve: by_id
+        id: lookup_mkp567br
+      link_to_open_forms:
+        resolve: by_id
+        id: board_relation_mkpk5vwk
+      profile_id:
+        resolve: by_id
+        id: lookup_mkxpfkxv
+      consult_file:
+        resolve: by_id
+        id: lookup_mkxpznxx
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0kx85
+  litigation:
+    id: "4299007012"
+    name: Litigation
+    columns:
+      profile:
+        resolve: by_id
+        id: link_to_profiles_mkkwhtv
+      case_no:
+        resolve: by_id
+        id: text
+      subitems:
+        resolve: by_id
+        id: subitems
+      type_of_case:
+        resolve: by_id
+        id: text4
+      status_of_complaint:
+        resolve: by_id
+        id: status5
+      work_due:
+        resolve: by_id
+        id: text1
+      due_date:
+        resolve: by_id
+        id: date_mkrn5kn6
+      current_status:
+        resolve: by_id
+        id: status_1
+      hearing_date:
+        resolve: by_id
+        id: date
+      link_to_fee_ks:
+        resolve: by_id
+        id: board_relation_mkpfcaxm
+      monday_doc_v2:
+        resolve: by_id
+        id: direct_doc_mkwc3pfj
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm0e438
+  calendaring:
+    id: "9287895872"
+    name: Calendaring
+    columns:
+      subitems:
+        resolve: by_id
+        id: subtasks_mkrmr03x
+      status:
+        resolve: by_id
+        id: color_mkrjc7n8
+      court_cases:
+        resolve: by_id
+        id: board_relation_mkyrycjz
+      due_date:
+        resolve: by_id
+        id: date_mkrzrqxn
+      warning:
+        resolve: by_id
+        id: date_mkrzhgg6
+      notice:
+        resolve: by_id
+        id: file_mkrjww2y
+      creation_log:
+        resolve: by_id
+        id: pulse_log_mksav8f3
+      calendaring_quick_note:
+        resolve: by_id
+        id: long_text_mkyx3p9a
+      calendaring_person:
+        resolve: by_id
+        id: multiple_person_mkyrweej
+      deadline_status:
+        resolve: by_id
+        id: lookup_mkyxgzkj
+      method:
+        resolve: by_id
+        id: lookup_mkyq1410
+      judge_calendaring:
+        resolve: by_id
+        id: text_mky82mpp
+      x_priority_court:
+        resolve: by_id
+        id: dropdown_mkrjkv5j
+      deadline_type_connected:
+        resolve: by_id
+        id: lookup_mkyrhaam
+      uscis_notice_type:
+        resolve: by_id
+        id: dropdown_mksya60
+      interview_location:
+        resolve: by_id
+        id: dropdown_mksxdgsf
+      notify:
+        resolve: by_id
+        id: button_mkyrajkp
+      email:
+        resolve: by_id
+        id: lookup_mksac2en
+      ij:
+        resolve: by_id
+        id: lookup_mksx704g
+      phone:
+        resolve: by_id
+        id: lookup_mksmjwc4
+      why_court:
+        resolve: by_id
+        id: dropdown_mkszazys
+      mr_confirmed:
+        resolve: by_id
+        id: boolean_mkrj3cgx
+      hearing_fees:
+        resolve: by_id
+        id: lookup_mkyry74v
+      mh_fees_paid_on_connected:
+        resolve: by_id
+        id: lookup_mkyrjjnn
+      tp_fees_paid_on_calendaring:
+        resolve: by_id
+        id: lookup_mkyr88y4
+      trial_fees_paid_on_calendaring:
+        resolve: by_id
+        id: lookup_mkyr8gc4
+      outlook_calendar_event:
+        resolve: by_id
+        id: integration_mkrjpcfq
+      item_id:
+        resolve: by_id
+        id: pulse_id_mks3k7kh
+      profile_id:
+        resolve: by_id
+        id: lookup_mksmvbcw
+      deadline_list_update_mr_comments:
+        resolve: by_id
+        id: long_text_mkysdmf2
+      needs:
+        resolve: by_id
+        id: lookup_mkzmygpj
+      filings_overview:
+        resolve: by_id
+        id: lookup_mkzmtt64
+      last_updated:
+        resolve: by_id
+        id: pulse_updated_mkzt709d
+      type:
+        resolve: by_id
+        id: color_mkrjp51q
+      attorney:
+        resolve: by_id
+        id: color_mks7vb46
+      profiles:
+        resolve: by_id
+        id: board_relation_mksabcm2
+      connect_boards:
+        resolve: by_id
+        id: board_relation_mky2rj04
+      hearing_date_calendaring:
+        resolve: by_id
+        id: date_mkrjnbth
+      due_date_deadlines_list:
+        resolve: by_id
+        id: color_mky24h7g
+      written_court:
+        resolve: by_id
+        id: date_mkrzv8rw
+      rfe_issue_date:
+        resolve: by_id
+        id: date_mkrjv9fa
+      warning_uscis:
+        resolve: by_id
+        id: date_mkrzefme
+      due_date_uscis:
+        resolve: by_id
+        id: date_mkrzq8q0
+      written_uscis:
+        resolve: by_id
+        id: date_mkrzr21e
+      interview_date:
+        resolve: by_id
+        id: date_mksx49q1
+      client_rfe_fees_evid:
+        resolve: by_id
+        id: date_mkrzsaw6
+      mr_confirmed_on:
+        resolve: by_id
+        id: date_mkyrnvd1
+      master_fees_due_on_calendaring:
+        resolve: by_id
+        id: date_mkrzgqbv
+      tp_fees_due_on_calendaring:
+        resolve: by_id
+        id: date_mkrzdd9d
+      trial_fees_due_on_calendaring:
+        resolve: by_id
+        id: date_mkrzb5d4
+      completion_date:
+        resolve: by_id
+        id: date_mkrjmjrz
+      initial_meeting:
+        resolve: by_id
+        id: date_mkrzwrnc
+      tp_1:
+        resolve: by_id
+        id: date_mkrzy7tz
+      tp_2:
+        resolve: by_id
+        id: date_mkrzyp6s
+      tp_3:
+        resolve: by_id
+        id: date_mkrzmvb2
+      link_to_team_tasks:
+        resolve: by_id
+        id: board_relation_mkyb4jaw
+      link_to_motions:
+        resolve: by_id
+        id: board_relation_mkynms9x
+      link_to_court_cases:
+        resolve: by_id
+        id: board_relation_mkyxxzs1
+      link_to_subitems_of_calendaring:
+        resolve: by_id
+        id: board_relation_mm0acqtv

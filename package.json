@@ -1,18 +1,41 @@
 {
   "name": "case-pipeline",
-  "module": "index.ts",
+  "module": "cli.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "preflight": "bash scripts/preflight.sh",
+    "cli": "bun cli.ts",
+    "render": "bun cli.ts render",
+    "seed": "bun cli.ts seed",
+    "sync": "bun cli.ts sync",
+    "analyze": "bun cli.ts analyze",
+    "stats": "bun scripts/export-stats.ts",
+    "stats:live": "bun scripts/export-stats.ts --db=live",
+    "dev": "bun --hot server.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
+    "@faker-js/faker": "^10.2.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "bun-plugin-tailwind": "^0.1.2",
     "docxtemplater": "^3.67.6",
-    "dotenv": "^17.2.3",
     "handlebars": "^4.7.8",
-    "pizzip": "^3.2.0"
+    "js-yaml": "^4.1.1",
+    "pizzip": "^3.2.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.1.18",
+    "xlsx": "^0.18.5"
   }
 }

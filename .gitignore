@@ -32,3 +32,14 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Seed data factory database
+data/
+
+# Audit notes
+note.md
+
+# Real client fixture data (PII — local only)
+scripts/seed/lib/fixtures/real-profiles.ts
+scripts/seed/lib/fixtures/fernando.ts
+.dmux/
