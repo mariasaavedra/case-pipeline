@@ -2,7 +2,7 @@
 // Lookup Command — Client 360 View from CLI
 // =============================================================================
 
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 import { validateSchema } from "../../scripts/seed/lib/db/schema";
 import {
   searchClients,

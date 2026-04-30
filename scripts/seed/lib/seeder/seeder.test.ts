@@ -3,8 +3,9 @@
 // =============================================================================
 // Validates relationship integrity, extracted columns, FTS, and data quality.
 
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { Database } from "bun:sqlite";
+import { test, expect, describe, beforeEach, afterEach } from "vitest";
+import Database from "better-sqlite3";
+type DatabaseInstance = InstanceType<typeof Database>;
 import { initializeSchema } from "../db/schema";
 import { BoardItemFactory } from "../factory/board-item-factory";
 import { UpdateFactory } from "../factory/update-factory";
@@ -23,7 +24,7 @@ const STUB_BOARD_CONFIG: BoardConfig = {
   },
 };
 
-function createTestDb(): Database {
+function createTestDb(): DatabaseInstance {
   const db = new Database(":memory:");
   initializeSchema(db);
   db.prepare(
@@ -37,7 +38,7 @@ function createTestDb(): Database {
 // =============================================================================
 
 describe("Seeder relationship integrity", () => {
-  let db: Database;
+  let db: DatabaseInstance;
   let factory: BoardItemFactory;
 
   beforeEach(() => {
@@ -147,7 +148,7 @@ describe("Seeder relationship integrity", () => {
 // =============================================================================
 
 describe("Extracted queryable columns", () => {
-  let db: Database;
+  let db: DatabaseInstance;
   let factory: BoardItemFactory;
 
   beforeEach(() => {
@@ -276,7 +277,7 @@ describe("Extracted queryable columns", () => {
 // =============================================================================
 
 describe("Override-only column values", () => {
-  let db: Database;
+  let db: DatabaseInstance;
   let factory: BoardItemFactory;
 
   beforeEach(() => {
@@ -328,7 +329,7 @@ describe("Override-only column values", () => {
 // =============================================================================
 
 describe("FTS5 profile search", () => {
-  let db: Database;
+  let db: DatabaseInstance;
 
   beforeEach(() => {
     db = createTestDb();
@@ -370,7 +371,7 @@ describe("FTS5 profile search", () => {
 // =============================================================================
 
 describe("UpdateFactory", () => {
-  let db: Database;
+  let db: DatabaseInstance;
 
   beforeEach(() => {
     setFakerSeed(42);

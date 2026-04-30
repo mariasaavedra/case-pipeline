@@ -2,7 +2,11 @@
 // Case Pipeline — Web Server
 // =============================================================================
 
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
+type DatabaseInstance = InstanceType<typeof Database>;
+import express from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { validateSchema } from "./scripts/seed/lib/db/schema";
 import {
   handleListClients,
@@ -19,7 +23,6 @@ import {
   handleAppointments,
   handleAlerts,
 } from "./lib/api/handlers";
-import homepage from "./web/index.html";
 
 // =============================================================================
 // Database
@@ -32,67 +35,64 @@ validateSchema(db);
 console.log(`Database loaded: ${DB_PATH}`);
 
 // =============================================================================
+// Express adapter
+// Handlers expect (Request, Database) → Response (Fetch API style).
+// We adapt them to Express req/res.
+// =============================================================================
+
+type Handler = (req: Request, db: DatabaseInstance) => Response;
+
+function adapt(handler: Handler) {
+  return async (req: express.Request, res: express.Response) => {
+    const url = `http://localhost${req.originalUrl}`;
+    const fetchReq = Object.assign(new Request(url, { method: req.method }), {
+      params: req.params,
+    });
+    const fetchRes = handler(fetchReq, db);
+    const body = await fetchRes.text();
+    const contentType = fetchRes.headers.get("content-type") ?? "application/json";
+    res.status(fetchRes.status).type(contentType).send(body);
+  };
+}
+
+// =============================================================================
 // Server
 // =============================================================================
 
-const server = Bun.serve({
-  port: 3000,
-  routes: {
-    "/": homepage,
+const app = express();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const webDir = path.join(__dirname, "web");
 
-    "/api/dashboard": {
-      GET: (req) => handleDashboard(req, db),
-    },
-    "/api/appointments": {
-      GET: (req) => handleAppointments(req, db),
-    },
-    "/api/alerts": {
-      GET: (req) => handleAlerts(req, db),
-    },
-    "/api/search": {
-      GET: (req) => handleTypedSearch(req, db),
-    },
-    "/api/filter-options": {
-      GET: (req) => handleFilterOptions(req, db),
-    },
-    "/api/clients": {
-      GET: (req) => handleListClients(req, db),
-    },
-    "/api/clients/search": {
-      GET: (req) => handleSearch(req, db),
-    },
-    "/api/clients/:localId": {
-      GET: (req) => handleClientDetail(req, db),
-    },
-    "/api/clients/:localId/contracts": {
-      GET: (req) => handleClientContracts(req, db),
-    },
-    "/api/clients/:localId/board-items": {
-      GET: (req) => handleClientBoardItems(req, db),
-    },
-    "/api/clients/:localId/updates": {
-      GET: (req) => handleClientUpdates(req, db),
-    },
-    "/api/clients/:localId/relationships": {
-      GET: (req) => handleClientRelationships(req, db),
-    },
-    "/api/board-items/:localId": {
-      GET: (req) => handleBoardItemDetail(req, db),
-    },
-  },
-  fetch(req) {
-    const url = new URL(req.url);
-    // Unmatched /api/ routes → 404 JSON
-    if (url.pathname.startsWith("/api/")) {
-      return Response.json({ error: "Not found" }, { status: 404 });
-    }
-    // SPA catch-all: serve index.html for all other paths
-    return new Response(Bun.file("web/index.html"));
-  },
-  development: {
-    hmr: true,
-    console: true,
-  },
+// API routes
+app.get("/api/dashboard", adapt(handleDashboard));
+app.get("/api/appointments", adapt(handleAppointments));
+app.get("/api/alerts", adapt(handleAlerts));
+app.get("/api/search", adapt(handleTypedSearch));
+app.get("/api/filter-options", adapt(handleFilterOptions));
+app.get("/api/clients", adapt(handleListClients));
+app.get("/api/clients/search", adapt(handleSearch));
+app.get("/api/clients/:localId", adapt(handleClientDetail));
+app.get("/api/clients/:localId/contracts", adapt(handleClientContracts));
+app.get("/api/clients/:localId/board-items", adapt(handleClientBoardItems));
+app.get("/api/clients/:localId/updates", adapt(handleClientUpdates));
+app.get("/api/clients/:localId/relationships", adapt(handleClientRelationships));
+app.get("/api/board-items/:localId", adapt(handleBoardItemDetail));
+
+// Unknown /api/ routes → 404
+app.use("/api/", (_req, res) => {
+  res.status(404).json({ error: "Not found" });
 });
 
-console.log(`Server running at http://localhost:${server.port}`);
+// Static web assets (built frontend)
+app.use(express.static(webDir));
+
+// SPA catch-all
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(webDir, "index.html"));
+});
+
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Note: frontend requires a separate Vite build (added in Phase 3)`);
+});

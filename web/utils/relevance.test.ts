@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import { filterRelevantUpdates, getMostRelevantUpdate } from "./relevance";
 import type { ClientUpdate } from "../api";
 

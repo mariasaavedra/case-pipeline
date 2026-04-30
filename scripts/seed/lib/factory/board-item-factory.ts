@@ -5,7 +5,8 @@
 // Override-only mode: column_values contains only explicitly set overrides,
 // no auto-generated noise.
 
-import type { Database } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
 import type { BoardConfig } from "../../../../lib/config/types";
 import { faker } from "./column-generators";
 

@@ -2,7 +2,8 @@
 // Case Summary — Aggregated 360 View
 // =============================================================================
 
-import type { Database } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
 import type { ClientCaseSummary } from "./types";
 import { getClientProfile } from "./client";
 import { getClientContracts } from "./contracts";
@@ -15,7 +16,7 @@ import { getClientUpdates } from "./updates";
  */
 function getCourtLinkedItemIds(db: Database, profileLocalId: string): string[] {
   const rows = db
-    .query(
+    .prepare(
       `SELECT DISTINCT bi.local_id
        FROM board_items bi
        JOIN item_relationships ir

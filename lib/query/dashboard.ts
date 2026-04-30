@@ -2,7 +2,8 @@
 // Dashboard KPI Queries
 // =============================================================================
 
-import type { Database } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
 import type { KpiCard, KpiItem } from "./types";
 import { CLOSED_CONTRACT_STATUSES, PAID_CONTRACT_STATUSES } from "./types";
 import { getAlerts } from "./alerts";

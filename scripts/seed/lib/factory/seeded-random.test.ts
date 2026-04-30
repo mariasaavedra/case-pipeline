@@ -2,7 +2,7 @@
 // Tests for Seeded Random Number Generator
 // =============================================================================
 
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import { SeededRandom } from "./seeded-random";
 
 // =============================================================================

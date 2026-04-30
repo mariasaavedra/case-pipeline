@@ -2,7 +2,8 @@
 // Database Schema Initialization
 // =============================================================================
 
-import type { Database } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
 
 const SCHEMA_VERSION = 7;
 
@@ -173,7 +174,7 @@ CREATE INDEX IF NOT EXISTS idx_relationships_target ON item_relationships(target
 export function initializeSchema(db: Database): void {
   // Check if schema exists
   const versionRow = db
-    .query("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
     .get();
 
   if (!versionRow) {
@@ -185,7 +186,7 @@ export function initializeSchema(db: Database): void {
   }
 
   // Check version for migrations
-  const currentVersion = db.query("SELECT version FROM schema_version").get() as { version: number } | null;
+  const currentVersion = db.prepare("SELECT version FROM schema_version").get() as { version: number } ?? null;
 
   if (!currentVersion || currentVersion.version < SCHEMA_VERSION) {
     const fromVersion = currentVersion?.version ?? 0;
@@ -193,7 +194,7 @@ export function initializeSchema(db: Database): void {
     // Migration v1 → v2: add group_title to board_items
     if (fromVersion < 2) {
       const hasColumn = db
-        .query("SELECT COUNT(*) as cnt FROM pragma_table_info('board_items') WHERE name='group_title'")
+        .prepare("SELECT COUNT(*) as cnt FROM pragma_table_info('board_items') WHERE name='group_title'")
         .get() as { cnt: number };
       if (!hasColumn || hasColumn.cnt === 0) {
         db.exec("ALTER TABLE board_items ADD COLUMN group_title TEXT");
@@ -205,7 +206,7 @@ export function initializeSchema(db: Database): void {
       const cols = ["status", "next_date", "attorney", "profile_local_id"];
       for (const col of cols) {
         const has = db
-          .query(`SELECT COUNT(*) as cnt FROM pragma_table_info('board_items') WHERE name='${col}'`)
+          .prepare(`SELECT COUNT(*) as cnt FROM pragma_table_info('board_items') WHERE name='${col}'`)
           .get() as { cnt: number };
         if (!has || has.cnt === 0) {
           db.exec(`ALTER TABLE board_items ADD COLUMN ${col} TEXT`);
@@ -219,7 +220,7 @@ export function initializeSchema(db: Database): void {
 
       // FTS5 virtual table for client search
       const hasFts = db
-        .query("SELECT name FROM sqlite_master WHERE type='table' AND name='profiles_fts'")
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='profiles_fts'")
         .get();
       if (!hasFts) {
         db.exec(`
@@ -271,7 +272,7 @@ export function initializeSchema(db: Database): void {
     // Migration v3 → v4: client_updates table
     if (fromVersion < 4) {
       const hasTable = db
-        .query("SELECT name FROM sqlite_master WHERE type='table' AND name='client_updates'")
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='client_updates'")
         .get();
       if (!hasTable) {
         db.exec(`
@@ -338,7 +339,7 @@ export function initializeSchema(db: Database): void {
     // Migration v5 → v6: add group_title to profiles + index on board_items group
     if (fromVersion < 6) {
       const hasColumn = db
-        .query("SELECT COUNT(*) as cnt FROM pragma_table_info('profiles') WHERE name='group_title'")
+        .prepare("SELECT COUNT(*) as cnt FROM pragma_table_info('profiles') WHERE name='group_title'")
         .get() as { cnt: number };
       if (!hasColumn || hasColumn.cnt === 0) {
         db.exec("ALTER TABLE profiles ADD COLUMN group_title TEXT");
@@ -351,7 +352,7 @@ export function initializeSchema(db: Database): void {
     if (fromVersion < 7) {
       for (const col of ["date_of_birth", "place_of_birth", "a_number"]) {
         const has = db
-          .query(`SELECT COUNT(*) as cnt FROM pragma_table_info('profiles') WHERE name='${col}'`)
+          .prepare(`SELECT COUNT(*) as cnt FROM pragma_table_info('profiles') WHERE name='${col}'`)
           .get() as { cnt: number };
         if (!has || has.cnt === 0) {
           db.exec(`ALTER TABLE profiles ADD COLUMN ${col} TEXT`);
@@ -370,7 +371,7 @@ export function initializeSchema(db: Database): void {
  */
 export function validateSchema(db: Database): void {
   const versionRow = db
-    .query("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
     .get();
 
   if (!versionRow) {
@@ -379,7 +380,7 @@ export function validateSchema(db: Database): void {
     );
   }
 
-  const row = db.query("SELECT version FROM schema_version").get() as { version: number } | null;
+  const row = db.prepare("SELECT version FROM schema_version").get() as { version: number } ?? null;
   const current = row?.version ?? 0;
 
   if (current < SCHEMA_VERSION) {

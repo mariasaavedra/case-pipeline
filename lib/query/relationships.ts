@@ -2,7 +2,8 @@
 // Item Relationships Query
 // =============================================================================
 
-import type { Database } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
 
 export interface RelationshipWithDetails {
   sourceTable: string;
@@ -43,7 +44,7 @@ export function getClientRelationships(
   profileLocalId: string
 ): RelationshipWithDetails[] {
   const rows = db
-    .query(
+    .prepare(
       `SELECT
         ir.source_table,
         ir.source_local_id,

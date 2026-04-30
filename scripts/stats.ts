@@ -8,7 +8,8 @@
 // Also importable as a module — call printStats(db) after a sync run.
 // =============================================================================
 
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
+type DatabaseInstance = InstanceType<typeof Database>;
 import { validateSchema } from "./seed/lib/db/schema";
 
 const BOARD_LABELS: Record<string, string> = {
@@ -78,9 +79,9 @@ export interface StatsReport {
   totalOrphaned: number;
 }
 
-export function gatherStats(db: Database, dbPath: string): StatsReport {
+export function gatherStats(db: DatabaseInstance, dbPath: string): StatsReport {
   // Profile stats
-  const profileRow = db.query(`
+  const profileRow = db.prepare(`
     SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN a_number IS NOT NULL AND a_number != '' THEN 1 ELSE 0 END) AS withANumber,
@@ -91,7 +92,7 @@ export function gatherStats(db: Database, dbPath: string): StatsReport {
   `).get() as any;
 
   // Contract stats
-  const contractRow = db.query(`
+  const contractRow = db.prepare(`
     SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN status NOT IN ('Closed','Paid','Cancelled','Done') THEN 1 ELSE 0 END) AS active,
@@ -100,7 +101,7 @@ export function gatherStats(db: Database, dbPath: string): StatsReport {
   `).get() as any;
 
   // Update stats
-  const updateRow = db.query(`
+  const updateRow = db.prepare(`
     SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN profile_local_id IS NOT NULL AND profile_local_id != '' THEN 1 ELSE 0 END) AS linkedToProfile
@@ -108,7 +109,7 @@ export function gatherStats(db: Database, dbPath: string): StatsReport {
   `).get() as any;
 
   // Per-board stats
-  const boardRows = db.query(`
+  const boardRows = db.prepare(`
     SELECT
       board_key AS boardKey,
       COUNT(*) AS total,
@@ -119,7 +120,7 @@ export function gatherStats(db: Database, dbPath: string): StatsReport {
   `).all() as { boardKey: string; total: number; withProfile: number }[];
 
   // Per-board, per-group breakdown
-  const groupRows = db.query(`
+  const groupRows = db.prepare(`
     SELECT
       board_key AS boardKey,
       COALESCE(group_title, '(no group)') AS groupTitle,
@@ -229,7 +230,7 @@ if (import.meta.main) {
   const dbArg = args.find((a) => a.startsWith("--db="))?.split("=")[1] ?? "seed";
   const dbPath = dbArg === "live" ? "data/live.db" : "data/seed.db";
 
-  let db: Database;
+  let db: DatabaseInstance;
   try {
     db = new Database(dbPath, { readonly: true });
     validateSchema(db);

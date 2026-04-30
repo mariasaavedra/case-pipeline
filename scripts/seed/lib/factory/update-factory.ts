@@ -2,7 +2,8 @@
 // Update Factory — Generates realistic client update/case note data
 // =============================================================================
 
-import type { Database } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
 import { faker } from "./column-generators";
 
 // Staff pool based on real sampled Monday.com data
@@ -199,7 +200,7 @@ export class UpdateFactory {
   }
 
   persist(batchId: number, update: GeneratedUpdate): void {
-    this.insertStmt.run(
+    (this.insertStmt as any).run(
       batchId,
       update.localId,
       update.profileLocalId,

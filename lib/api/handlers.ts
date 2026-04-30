@@ -2,7 +2,8 @@
 // API Route Handlers
 // =============================================================================
 
-import type { Database } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
 import {
   searchClients,
   listProfilesFiltered,
@@ -200,7 +201,7 @@ export function handleFilterOptions(_req: Request, db: Database): Response {
 
 /**
  * Extract a route parameter from the request.
- * Bun.serve() attaches params to the request object.
+ * Express attaches params to the request object.
  */
 function extractParam(req: Request, name: string): string | undefined {
   return (req as any).params?.[name];

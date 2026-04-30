@@ -2,17 +2,19 @@
 // SQLite Database Connection Manager
 // =============================================================================
 
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
+
+type DatabaseInstance = InstanceType<typeof Database>;
 
 export interface DatabaseOptions {
   path: string;
   readonly?: boolean;
 }
 
-let instance: Database | null = null;
+let instance: DatabaseInstance | null = null;
 let instancePath: string | null = null;
 
-export function initializeDatabase(options: DatabaseOptions): Database {
+export function initializeDatabase(options: DatabaseOptions): DatabaseInstance {
   if (instance) {
     if (options.path !== instancePath) {
       throw new Error(
@@ -25,9 +27,7 @@ export function initializeDatabase(options: DatabaseOptions): Database {
 
   instancePath = options.path;
 
-  // Bun's SQLite: use create: true to allow database creation
   instance = new Database(options.path, {
-    create: !options.readonly,
     readonly: options.readonly ?? false,
   });
 
@@ -41,7 +41,7 @@ export function initializeDatabase(options: DatabaseOptions): Database {
   return instance;
 }
 
-export function getDatabase(): Database {
+export function getDatabase(): DatabaseInstance {
   if (!instance) {
     throw new Error("Database not initialized. Call initializeDatabase() first.");
   }

@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    // Environment setup & latest features
+    // Environment
     "lib": ["ESNext", "DOM"],
     "target": "ESNext",
     "module": "Preserve",
@@ -8,10 +8,13 @@
     "jsx": "react-jsx",
     "allowJs": true,
 
-    // Bundler mode
+    // Bundler mode (tsx-compatible; NodeNext paths deferred to workspace tsconfig.base.json)
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+
+    // Type checking only
     "noEmit": true,
 
     // Best practices
@@ -20,8 +23,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
+    "forceConsistentCasingInFileNames": true,
 
-    // Some stricter flags (disabled by default)
+    // Some stricter flags (disabled)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false

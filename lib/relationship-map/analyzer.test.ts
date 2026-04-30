@@ -2,7 +2,7 @@
 // Tests for Relationship Map Analyzer
 // =============================================================================
 
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import { analyzeBoards } from "./analyzer";
 import type { MondayBoard } from "../monday/types";
 

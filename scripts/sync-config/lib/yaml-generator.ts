@@ -4,6 +4,7 @@
 // =============================================================================
 
 import yaml from "js-yaml";
+import { readFile, writeFile } from "node:fs/promises";
 import type { MondayColumn } from "../../../lib/monday/types";
 import type { ColumnResolution, BoardConfig } from "../../../lib/config/types";
 
@@ -125,8 +126,7 @@ export function generateConfigsForNewColumns(
  * Read the raw YAML file content.
  */
 export async function readRawYaml(path: string): Promise<string> {
-  const file = Bun.file(path);
-  return await file.text();
+  return readFile(path, "utf-8");
 }
 
 /**
@@ -225,5 +225,5 @@ export async function writeConfigToFile(
   config: { boards: Record<string, BoardConfig> }
 ): Promise<void> {
   const yamlContent = dumpConfigToYaml(config);
-  await Bun.write(path, yamlContent);
+  await writeFile(path, yamlContent, "utf-8");
 }

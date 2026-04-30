@@ -3,8 +3,9 @@
 // =============================================================================
 
 import Handlebars from "handlebars";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
 
 import { loadConfig } from "../../lib/config";
 import {
@@ -151,16 +152,13 @@ async function selectProfile(
 }
 
 async function promptUser(question: string): Promise<string> {
-  process.stdout.write(question);
-
-  // Use readline for cross-platform stdin reading
-  const reader = Bun.stdin.stream().getReader();
-  const { value } = await reader.read();
-  reader.releaseLock();
-
-  if (!value) return "";
-
-  return new TextDecoder().decode(value).trim();
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
 }
 
 // =============================================================================
@@ -172,16 +170,15 @@ async function renderTemplate(
   vars: Record<string, string>,
   outputPath: string
 ): Promise<void> {
-  const templateFile = Bun.file(templatePath);
-
-  if (!(await templateFile.exists())) {
+  const exists = await access(templatePath).then(() => true).catch(() => false);
+  if (!exists) {
     throw new Error(`Template file not found: ${templatePath}`);
   }
 
-  const templateSource = await templateFile.text();
+  const templateSource = await readFile(templatePath, "utf-8");
   const template = Handlebars.compile(templateSource);
   const content = template(vars);
-  await Bun.write(outputPath, content);
+  await writeFile(outputPath, content, "utf-8");
 }
 
 // =============================================================================

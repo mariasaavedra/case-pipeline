@@ -1,4 +1,4 @@
-import { test, expect, describe, afterEach } from "bun:test";
+import { test, expect, describe, afterEach } from "vitest";
 import { initializeDatabase, closeDatabase } from "./connection";
 
 afterEach(() => {

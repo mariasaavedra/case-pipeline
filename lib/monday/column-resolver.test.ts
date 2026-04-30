@@ -2,7 +2,7 @@
 // Tests for Column Resolver
 // =============================================================================
 
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import { resolveColumn, resolveAllColumns, validateResolvedColumns } from "./column-resolver";
 import type { MondayColumn } from "./types";
 import type { ColumnResolution, BoardConfig } from "../config/types";

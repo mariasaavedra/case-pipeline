@@ -2,7 +2,7 @@
 // Tests for Column Value Generators
 // =============================================================================
 
-import { test, expect, describe, beforeEach } from "bun:test";
+import { test, expect, describe, beforeEach } from "vitest";
 import {
   setFakerSeed,
   getFakerSeed,

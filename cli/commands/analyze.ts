@@ -2,6 +2,7 @@
 // Analyze Command - Analyze board relationships and generate documentation
 // =============================================================================
 
+import { writeFile } from "node:fs/promises";
 import { setApiToken, fetchBoardStructure } from "../../lib/monday";
 import { loadBoardsConfig } from "../../lib/config";
 import {
@@ -154,7 +155,7 @@ export async function analyzeCommand(args: string[]): Promise<void> {
 
   // Output
   if (options.output) {
-    await Bun.write(options.output, output);
+    await writeFile(options.output, output, "utf-8");
     console.log(`Written to: ${options.output}`);
 
     // Print summary

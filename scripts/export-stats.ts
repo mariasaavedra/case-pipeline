@@ -8,7 +8,8 @@
 // Output: data/stats-YYYY-MM-DD.xlsx
 // =============================================================================
 
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
+type DatabaseInstance = InstanceType<typeof Database>;
 import * as XLSX from "xlsx";
 import { gatherStats } from "./stats";
 import { validateSchema } from "./seed/lib/db/schema";
@@ -120,7 +121,7 @@ async function main() {
   const dbArg = args.find((a) => a.startsWith("--db="))?.split("=")[1] ?? "seed";
   const dbPath = dbArg === "live" ? "data/live.db" : "data/seed.db";
 
-  let db: Database;
+  let db: DatabaseInstance;
   try {
     db = new Database(dbPath, { readonly: true });
     validateSchema(db);

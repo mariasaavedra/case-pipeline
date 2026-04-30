@@ -2,7 +2,8 @@
 // Client Updates Query
 // =============================================================================
 
-import type { Database } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
 import type { ClientUpdate } from "./types";
 
 interface UpdateRow {
@@ -29,7 +30,7 @@ export function getClientUpdates(
   offset = 0
 ): ClientUpdate[] {
   const rows = db
-    .query(
+    .prepare(
       `SELECT local_id, profile_local_id, board_item_local_id, board_key,
               author_name, author_email, text_body, body_html,
               source_type, reply_to_update_id, created_at_source

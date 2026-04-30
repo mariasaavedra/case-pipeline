@@ -2,7 +2,7 @@
 // Tests for Monday.com API utilities
 // =============================================================================
 
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import {
   getLinkedItemIds,
   findColumnByType,

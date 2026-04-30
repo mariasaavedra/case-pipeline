@@ -2,8 +2,13 @@
 // Search Query Tests — Enhanced profile search + typed cross-entity search
 // =============================================================================
 
-import { test, expect, describe } from "bun:test";
-import { Database } from "bun:sqlite";
+import { test, expect, describe } from "vitest";
+import Database from "better-sqlite3";
+type DatabaseInstance = InstanceType<typeof Database>;
+
+function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
+  db.prepare(sql).run(...(params as any[]));
+}
 import { initializeSchema } from "../../scripts/seed/lib/db/schema";
 import { searchClients, listProfilesFiltered, getFilterOptions } from "./client";
 import { searchByType } from "./search";
@@ -12,17 +17,17 @@ import { searchByType } from "./search";
 // Helpers
 // =============================================================================
 
-function freshDb(): Database {
+function freshDb(): DatabaseInstance {
   const db = new Database(":memory:");
   initializeSchema(db);
-  db.run(
+  run(db, 
     "INSERT INTO seed_batches (batch_name, seed_value, status) VALUES ('test', 1, 'complete')",
   );
   return db;
 }
 
 function insertProfile(
-  db: Database,
+  db: DatabaseInstance,
   opts: {
     localId: string;
     name: string;
@@ -32,7 +37,7 @@ function insertProfile(
     priority?: string;
   },
 ) {
-  db.run(
+  run(db, 
     `INSERT INTO profiles (batch_id, local_id, name, email, phone, address, priority)
      VALUES (1, ?, ?, ?, ?, ?, ?)`,
     [
@@ -47,7 +52,7 @@ function insertProfile(
 }
 
 function insertContract(
-  db: Database,
+  db: DatabaseInstance,
   opts: {
     localId: string;
     profileLocalId: string;
@@ -56,7 +61,7 @@ function insertContract(
     status: string;
   },
 ) {
-  db.run(
+  run(db, 
     `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id)
      VALUES (1, ?, ?, ?, ?, ?, 1000, ?)`,
     [opts.localId, opts.profileLocalId, opts.name, opts.caseType, opts.status, `CT-${opts.localId}`],
@@ -64,7 +69,7 @@ function insertContract(
 }
 
 function insertBoardItem(
-  db: Database,
+  db: DatabaseInstance,
   opts: {
     localId: string;
     boardKey: string;
@@ -75,7 +80,7 @@ function insertBoardItem(
     nextDate?: string;
   },
 ) {
-  db.run(
+  run(db, 
     `INSERT INTO board_items (batch_id, local_id, board_key, name, status, attorney, profile_local_id, next_date, column_values)
      VALUES (1, ?, ?, ?, ?, ?, ?, ?, '{}')`,
     [

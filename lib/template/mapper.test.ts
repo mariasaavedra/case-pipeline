@@ -2,7 +2,7 @@
 // Tests for Template Mapper
 // =============================================================================
 
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import { mapItemToTemplateVars, validateTemplateVars } from "./mapper";
 import type { MondayItem } from "../monday/types";
 import type { TemplateConfig } from "../config/types";

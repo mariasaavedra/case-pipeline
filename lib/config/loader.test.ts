@@ -2,9 +2,9 @@
 // Tests for Configuration Loader
 // =============================================================================
 
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll } from "vitest";
 import { loadConfig, loadBoardsConfig, loadTemplatesConfig } from "./loader";
-import { unlink } from "node:fs/promises";
+import { unlink, writeFile } from "node:fs/promises";
 
 // =============================================================================
 // Test fixtures
@@ -68,10 +68,10 @@ const tempNestedEnvPath = "/tmp/test-boards-nested.yaml";
 // =============================================================================
 
 beforeAll(async () => {
-  await Bun.write(tempBoardsPath, TEST_BOARDS_YAML);
-  await Bun.write(tempTemplatesPath, TEST_TEMPLATES_YAML);
-  await Bun.write(tempEnvBoardsPath, TEST_BOARDS_WITH_ENV);
-  await Bun.write(tempNestedEnvPath, TEST_NESTED_ENV);
+  await writeFile(tempBoardsPath, TEST_BOARDS_YAML, "utf-8");
+  await writeFile(tempTemplatesPath, TEST_TEMPLATES_YAML, "utf-8");
+  await writeFile(tempEnvBoardsPath, TEST_BOARDS_WITH_ENV, "utf-8");
+  await writeFile(tempNestedEnvPath, TEST_NESTED_ENV, "utf-8");
 });
 
 afterAll(async () => {

@@ -2,8 +2,13 @@
 // Dashboard KPI Query Tests
 // =============================================================================
 
-import { test, expect, describe } from "bun:test";
-import { Database } from "bun:sqlite";
+import { test, expect, describe } from "vitest";
+import Database from "better-sqlite3";
+type DatabaseInstance = InstanceType<typeof Database>;
+
+function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
+  db.prepare(sql).run(...(params as any[]));
+}
 import { initializeSchema } from "../../scripts/seed/lib/db/schema";
 import { getDashboardKpis } from "./dashboard";
 
@@ -11,31 +16,31 @@ import { getDashboardKpis } from "./dashboard";
 // Helpers
 // =============================================================================
 
-function freshDb(): Database {
+function freshDb(): DatabaseInstance {
   const db = new Database(":memory:");
   initializeSchema(db);
   insertBatch(db);
   return db;
 }
 
-function insertBatch(db: Database) {
-  db.run(
+function insertBatch( db: DatabaseInstance) {
+  run(db, 
     "INSERT INTO seed_batches (batch_name, seed_value, status) VALUES ('test', 1, 'complete')",
   );
 }
 
 function insertProfile(
-  db: Database,
+  db: DatabaseInstance,
   opts: { localId: string; name: string },
 ) {
-  db.run(
+  run(db, 
     `INSERT INTO profiles (batch_id, local_id, name) VALUES (1, ?, ?)`,
     [opts.localId, opts.name],
   );
 }
 
 function insertContract(
-  db: Database,
+  db: DatabaseInstance,
   opts: {
     localId: string;
     profileLocalId: string;
@@ -43,7 +48,7 @@ function insertContract(
     status: string;
   },
 ) {
-  db.run(
+  run(db, 
     `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id)
      VALUES (1, ?, ?, ?, ?, ?, 1000, ?)`,
     [opts.localId, opts.profileLocalId, opts.caseType, opts.caseType, opts.status, `CT-${opts.localId}`],
@@ -51,7 +56,7 @@ function insertContract(
 }
 
 function insertBoardItem(
-  db: Database,
+  db: DatabaseInstance,
   opts: {
     localId: string;
     boardKey: string;
@@ -62,7 +67,7 @@ function insertBoardItem(
     groupTitle?: string;
   },
 ) {
-  db.run(
+  run(db, 
     `INSERT INTO board_items (batch_id, local_id, board_key, name, status, next_date, profile_local_id, group_title, column_values)
      VALUES (1, ?, ?, ?, ?, ?, ?, ?, '{}')`,
     [

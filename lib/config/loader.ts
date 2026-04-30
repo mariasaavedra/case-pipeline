@@ -3,6 +3,7 @@
 // =============================================================================
 
 import yaml from "js-yaml";
+import { readFile, access } from "node:fs/promises";
 import type { AppConfig, BoardConfig, TemplateConfig } from "./types";
 
 // =============================================================================
@@ -44,14 +45,13 @@ function substituteEnvVarsInObject<T>(obj: T): T {
 // =============================================================================
 
 async function loadYamlFile<T>(filePath: string): Promise<T> {
-  const file = Bun.file(filePath);
-  const exists = await file.exists();
+  const exists = await access(filePath).then(() => true).catch(() => false);
 
   if (!exists) {
     throw new Error(`Config file not found: ${filePath}`);
   }
 
-  const content = await file.text();
+  const content = await readFile(filePath, "utf-8");
   const parsed = yaml.load(content) as T;
   return substituteEnvVarsInObject(parsed);
 }

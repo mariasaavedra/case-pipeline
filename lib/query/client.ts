@@ -2,7 +2,10 @@
 // Client / Profile Queries
 // =============================================================================
 
-import type { Database, SQLQueryBindings } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
+
+type SQLQueryBindings = string | number | bigint | Buffer | null;
 import type { ProfileSummary, SearchResult } from "./types";
 
 /** FTS5 reserved words that must not appear as bare tokens in MATCH queries */
@@ -100,7 +103,7 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
       FROM profiles
       WHERE local_id = ?
     `)
-    .get(localId) as ProfileSummary | null;
+    .get(localId) as ProfileSummary ?? null;
 }
 
 /**
@@ -137,7 +140,7 @@ export function getClientByName(db: Database, name: string): ProfileSummary | nu
       FROM profiles
       WHERE name = ?
     `)
-    .get(name) as ProfileSummary | null;
+    .get(name) as ProfileSummary ?? null;
 }
 
 // =============================================================================

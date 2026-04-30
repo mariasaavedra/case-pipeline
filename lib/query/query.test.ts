@@ -2,8 +2,13 @@
 // Query Layer Unit Tests
 // =============================================================================
 
-import { test, expect, describe, beforeEach } from "bun:test";
-import { Database } from "bun:sqlite";
+import { test, expect, describe, beforeEach } from "vitest";
+import Database from "better-sqlite3";
+type DatabaseInstance = InstanceType<typeof Database>;
+
+function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
+  db.prepare(sql).run(...(params as any[]));
+}
 import { initializeSchema } from "../../scripts/seed/lib/db/schema";
 import {
   searchClients,
@@ -20,21 +25,21 @@ import {
 // Helpers
 // =============================================================================
 
-function freshDb(): Database {
+function freshDb(): DatabaseInstance {
   const db = new Database(":memory:");
   initializeSchema(db);
   return db;
 }
 
-function insertBatch(db: Database): number {
-  db.run("INSERT INTO seed_batches (batch_name, seed_value, status) VALUES ('test', 1, 'complete')");
-  return db.query("SELECT last_insert_rowid() as id").get() as any as number
-    ? (db.query("SELECT id FROM seed_batches ORDER BY id DESC LIMIT 1").get() as { id: number }).id
+function insertBatch( db: DatabaseInstance): number {
+  run(db, "INSERT INTO seed_batches (batch_name, seed_value, status) VALUES ('test', 1, 'complete')");
+  return db.prepare("SELECT last_insert_rowid() as id").get() as any as number
+    ? (db.prepare("SELECT id FROM seed_batches ORDER BY id DESC LIMIT 1").get() as { id: number }).id
     : 1;
 }
 
 function insertProfile(
-  db: Database,
+  db: DatabaseInstance,
   batchId: number,
   opts: {
     localId: string;
@@ -45,7 +50,7 @@ function insertProfile(
     address?: string;
   }
 ) {
-  db.run(
+  run(db, 
     `INSERT INTO profiles (batch_id, local_id, name, email, phone, priority, address)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [batchId, opts.localId, opts.name, opts.email ?? null, opts.phone ?? null, opts.priority ?? null, opts.address ?? null]
@@ -53,7 +58,7 @@ function insertProfile(
 }
 
 function insertContract(
-  db: Database,
+  db: DatabaseInstance,
   batchId: number,
   opts: {
     localId: string;
@@ -65,7 +70,7 @@ function insertContract(
     contractId: string;
   }
 ) {
-  db.run(
+  run(db, 
     `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [batchId, opts.localId, opts.profileLocalId, opts.name, opts.caseType, opts.status, opts.value, opts.contractId]
@@ -73,7 +78,7 @@ function insertContract(
 }
 
 function insertBoardItem(
-  db: Database,
+  db: DatabaseInstance,
   batchId: number,
   opts: {
     localId: string;
@@ -87,7 +92,7 @@ function insertBoardItem(
     columnValues?: Record<string, unknown>;
   }
 ) {
-  db.run(
+  run(db, 
     `INSERT INTO board_items (batch_id, local_id, board_key, name, status, next_date, attorney, profile_local_id, group_title, column_values)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
@@ -106,7 +111,7 @@ function insertBoardItem(
 }
 
 function insertUpdate(
-  db: Database,
+  db: DatabaseInstance,
   batchId: number,
   opts: {
     localId: string;
@@ -122,7 +127,7 @@ function insertUpdate(
     createdAtSource: string;
   }
 ) {
-  db.run(
+  run(db, 
     `INSERT INTO client_updates (batch_id, local_id, profile_local_id, board_item_local_id, board_key,
       author_name, author_email, text_body, body_html, source_type, reply_to_update_id, created_at_source)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

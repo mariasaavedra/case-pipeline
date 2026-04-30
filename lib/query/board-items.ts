@@ -2,7 +2,8 @@
 // Board Item Queries
 // =============================================================================
 
-import type { Database } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
 import type { BoardItemSummary } from "./types";
 import { APPOINTMENT_BOARD_KEYS } from "./types";
 
@@ -89,7 +90,7 @@ export function getBoardItemDetail(
       FROM board_items
       WHERE local_id = ?
     `)
-    .get(localId) as RawBoardItemRow | null;
+    .get(localId) as RawBoardItemRow ?? null;
 
   if (!row) return null;
 

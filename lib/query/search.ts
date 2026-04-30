@@ -2,7 +2,8 @@
 // Cross-Entity Typed Search
 // =============================================================================
 
-import type { Database } from "bun:sqlite";
+import type BetterSqlite3 from "better-sqlite3";
+type Database = BetterSqlite3.Database;
 import type { SearchType, TypedSearchResult } from "./types";
 
 /** Board keys that map to each SearchType */

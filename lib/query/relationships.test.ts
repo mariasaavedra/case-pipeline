@@ -1,60 +1,65 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
-import { Database } from "bun:sqlite";
+import { test, expect, describe, beforeAll, afterAll } from "vitest";
+import Database from "better-sqlite3";
+type DatabaseInstance = InstanceType<typeof Database>;
+
+function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
+  db.prepare(sql).run(...(params as any[]));
+}
 import { initializeSchema } from "../../scripts/seed/lib/db/schema";
 import { getClientRelationships } from "./relationships";
 
-let db: Database;
+let db: DatabaseInstance;
 let batchId: number;
 
 beforeAll(() => {
   db = new Database(":memory:");
   initializeSchema(db);
 
-  db.run("INSERT INTO seed_batches (batch_name, seed_value, status) VALUES ('test', 1, 'complete')");
-  batchId = (db.query("SELECT id FROM seed_batches ORDER BY id DESC LIMIT 1").get() as { id: number }).id;
+  run(db, "INSERT INTO seed_batches (batch_name, seed_value, status) VALUES ('test', 1, 'complete')");
+  batchId = (db.prepare("SELECT id FROM seed_batches ORDER BY id DESC LIMIT 1").get() as { id: number }).id;
 
   // Profile p1
-  db.run(
+  run(db, 
     `INSERT INTO profiles (batch_id, local_id, name, email, phone, priority, address)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [batchId, "p1", "Maria Garcia", "maria@test.com", "555-1234", "High", "123 Main St"]
   );
 
   // Profile p2
-  db.run(
+  run(db, 
     `INSERT INTO profiles (batch_id, local_id, name, email, phone, priority, address)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [batchId, "p2", "Carlos Lopez", "carlos@test.com", "555-5678", null, null]
   );
 
   // Board items for p1
-  db.run(
+  run(db, 
     `INSERT INTO board_items (batch_id, local_id, board_key, name, status, profile_local_id, column_values)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [batchId, "bi1", "court_cases", "WH - Maria Garcia [A123]", "Set for Hearing", "p1", "{}"]
   );
-  db.run(
+  run(db, 
     `INSERT INTO board_items (batch_id, local_id, board_key, name, status, profile_local_id, column_values)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [batchId, "bi2", "motions", "Motion to Reopen - Maria", "Filed", "p1", "{}"]
   );
 
   // Board item for p2
-  db.run(
+  run(db, 
     `INSERT INTO board_items (batch_id, local_id, board_key, name, status, profile_local_id, column_values)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [batchId, "bi3", "court_cases", "WH - Carlos Lopez", "Active", "p2", "{}"]
   );
 
   // Relationship: motion bi2 linked to court case bi1 (both p1)
-  db.run(
+  run(db, 
     `INSERT INTO item_relationships (batch_id, source_table, source_local_id, target_table, target_local_id, relationship_type, column_key)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [batchId, "board_items", "bi2", "board_items", "bi1", "linked_to", "court_case"]
   );
 
   // Relationship for p2 only (should not appear in p1 results)
-  db.run(
+  run(db, 
     `INSERT INTO item_relationships (batch_id, source_table, source_local_id, target_table, target_local_id, relationship_type, column_key)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [batchId, "board_items", "bi3", "board_items", "bi3", "self_ref", "test"]
