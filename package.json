@@ -2,26 +2,30 @@
   "name": "case-pipeline",
   "type": "module",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "libs/*"
+  ],
   "engines": {
     "node": ">=22",
     "npm": ">=10"
   },
   "scripts": {
+    "dev:api": "npm run dev -w @case-pipeline/api",
+    "dev:cli": "npm run dev -w @case-pipeline/cli",
+    "dev:web": "npm run dev -w @case-pipeline/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run && npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
     "preflight": "bash scripts/preflight.sh",
-    "cli": "tsx cli.ts",
-    "render": "tsx cli.ts render",
-    "seed": "tsx cli.ts seed",
-    "sync": "tsx cli.ts sync",
-    "analyze": "tsx cli.ts analyze",
     "stats": "tsx scripts/export-stats.ts",
-    "stats:live": "tsx scripts/export-stats.ts --db=live",
-    "dev": "tsx server.ts",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "stats:live": "tsx scripts/export-stats.ts --db=live"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/express": "^5.0.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -31,7 +35,6 @@
   },
   "dependencies": {
     "@faker-js/faker": "^10.2.0",
-    "@types/js-yaml": "^4.0.9",
     "better-sqlite3": "^11.10.0",
     "docxtemplater": "^3.67.6",
     "express": "^5.1.0",
