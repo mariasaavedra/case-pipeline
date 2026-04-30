@@ -60,8 +60,6 @@ function adapt(handler: Handler) {
 // =============================================================================
 
 const app = express();
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const webDir = path.join(__dirname, "../../web/dist");
 
 // API routes
 app.get("/api/dashboard", adapt(handleDashboard));
@@ -83,13 +81,6 @@ app.use("/api/", (_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
 
-// Static web assets (built frontend)
-app.use(express.static(webDir));
-
-// SPA catch-all
-app.get("/*path", (_req, res) => {
-  res.sendFile(path.join(webDir, "index.html"));
-});
 
 const PORT = 3000;
 app.listen(PORT, () => {
