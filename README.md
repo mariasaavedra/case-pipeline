@@ -60,6 +60,7 @@ Both `dev:api` and `dev:web` must be running together — the web app proxies `/
 npm run preflight   # Pre-flight environment checks
 npm run test        # Run all tests
 npm run typecheck   # Type-check all workspaces
+npm run lint        # Lint all workspaces
 ```
 
 ---
@@ -135,6 +136,7 @@ libs/
   seed/              # Faker.js test data generation
 config/
   boards.yaml        # Board IDs, column mappings, relationships
+  templates.yaml     # Template variable mappings and validation
 templates/           # Handlebars document templates
 ```
 

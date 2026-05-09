@@ -15,6 +15,7 @@ This is the first thing users see at `/`.
 | Paid Fee Ks | `contracts` table | `status IN PAID_CONTRACT_STATUSES` | `created_at DESC` |
 | Upcoming Deadlines | All `board_items` | `next_date` between today and today+7d | `next_date ASC` |
 | Upcoming Hearings | `board_items` where `board_key = "court_cases"` | `next_date` in range (toggle) | `next_date ASC` |
+| Alerts | Computed on-the-fly from `board_items` + `client_updates` | Overdue deadlines / stale cases / idle contracts | count only, links to `/alerts` |
 
 ## Behavior
 - Each card shows a count (large number) and a top-5 item list
@@ -28,11 +29,11 @@ This is the first thing users see at `/`.
 - Passes `hearingRange=7d|month` query param to `GET /api/dashboard`
 
 ## Key Files
-- `lib/query/dashboard.ts` — `getDashboardKpis(db, opts)`
-- `lib/query/dashboard.test.ts` — 10 unit tests
-- `lib/api/handlers.ts` — `handleDashboard()`
-- `web/components/LandingPage.tsx` — React component
-- `web/api.ts` — `fetchDashboard()`
+- `libs/query/src/dashboard.ts` — `getDashboardKpis(db, opts)`
+- `libs/query/src/dashboard.test.ts` — unit tests
+- `apps/api/src/handlers/handlers.ts` — `handleDashboard()`
+- `apps/web/src/components/LandingPage.tsx` — React component
+- `apps/web/src/api.ts` — `fetchDashboard()`
 
 ## Resolved Questions
 - Hearings: implemented both 7-day and month range with a toggle (user picks)

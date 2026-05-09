@@ -1,102 +1,92 @@
 # case-pipeline — Onboarding Checklist
 
-This checklist is designed to onboard an engineer into the **concepts, architecture, and intent** behind the `case-pipeline` repo and the broader goal of building an internal Zapier/Retool-style automation platform.
+This checklist onboards an engineer into the **concepts, architecture, and intent** behind `case-pipeline` — a config-driven automation platform for a Monday.com-based immigration law workspace.
 
-Completion of this checklist means the person understands **what this repo does, why it exists, and how it fits into a larger system**.
+Completion means the person understands what the repo does, why it exists, and how to extend it safely.
 
 ---
 
-## Phase 1 — Runtime & Execution Model (Bun)
+## Phase 1 — Runtime & Project Setup
 
-**Goal:** Understand how this project runs as a deterministic, one-shot automation.
+**Goal:** Get the project running locally without Monday.com API access.
 
 ### Read
-- Bun overview  
-  https://bun.com/docs
-- Bun runtime APIs  
-  https://bun.com/docs/runtime/nodejs-apis
+- Node.js 22 release notes — https://nodejs.org/en/blog/release/v22.0.0
+- npm workspaces — https://docs.npmjs.com/cli/v10/using-npm/workspaces
+- tsx (TypeScript execute) — https://tsx.is/
 
 ### Do
-- [X] Install Bun
-- [X] Run the project successfully (`bun run index.ts`)
-- [X] Confirm an output file is generated
-- [X] Add a console log showing total execution time
+- [ ] Install Node.js 22+ and npm 10+
+- [ ] Run `npm install` at the repo root
+- [ ] Run `npm run seed` to generate local test data
+- [ ] Run `npm run dev:api` and `npm run dev:web` together and open the dashboard
+- [ ] Confirm client data appears without a Monday.com API token
 
 ### Should Understand
-- What a JS runtime is (vs a framework)
-- Why Bun is used instead of Node
-- How short-lived automation scripts execute
+- Why a monorepo with `apps/` and `libs/` is better than a single script
+- What `tsx` does (runs TypeScript directly without a separate compile step)
+- Why seed-first development matters for a live-data system
 
 ---
 
 ## Phase 2 — Environment-Based Configuration
 
-**Goal:** Understand why configuration is externalized via `.env`.
+**Goal:** Understand why configuration is externalized via `.env` and YAML.
 
 ### Read
-- The Twelve-Factor App: Config  
-  https://12factor.net/config
-- Bun environment variables  
-  https://bun.com/docs/runtime/env
+- The Twelve-Factor App: Config — https://12factor.net/config
 
 ### Do
-- [X] Copy `.env.example` → `.env`
-- [X] Identify which values are required vs optional
-- [ ] Add a new env var (e.g. `RUN_MODE=dry-run`)
-- [ ] Change script behavior based on that variable
+- [ ] Copy `.env.example` → `.env`
+- [ ] Identify which env vars are required vs optional
+- [ ] Open `config/boards.yaml` and trace a column definition end-to-end into the query layer
 
 ### Should Understand
 - Why secrets never live in code
-- How this mirrors production automation systems
-- Tradeoffs Zapier abstracts away
+- Why board structure lives in YAML (`config/boards.yaml`) rather than TypeScript
+- The difference between `by_type`, `by_title`, and `by_id` column resolution strategies
 
 ---
 
 ## Phase 3 — APIs & Connectors (Monday.com)
 
-**Goal:** Understand how “connectors” work under the hood.
+**Goal:** Understand how the Monday.com connector works under the hood.
 
 ### Read
-- Monday API authentication  
-  https://developer.monday.com/api-reference/docs/authentication
-- Monday GraphQL intro  
-  https://developer.monday.com/api-reference/docs/introduction-to-graphql
-- GraphQL basics  
-  https://graphql.org/learn/queries/
+- Monday API authentication — https://developer.monday.com/api-reference/docs/authentication
+- Monday GraphQL intro — https://developer.monday.com/api-reference/docs/introduction-to-graphql
+- GraphQL basics — https://graphql.org/learn/queries/
 
 ### Do
-- [X] Inspect the GraphQL query in `fetchMondayItem`
-- [X] Add one additional column to the query
-- [X] Log the raw API response
-- [X] Add explicit error handling for missing columns
+- [ ] Inspect the GraphQL client in `libs/monday/src/`
+- [ ] Add one additional column to a board definition in `config/boards.yaml`
+- [ ] Run `npm run dev:cli -- sync --dry-run` and observe what changes would be applied
+- [ ] Add explicit error handling for a missing column
 
 ### Should Understand
 - GraphQL vs REST
 - API tokens and scopes
-- What a “connector” is responsible for
+- What a "connector" is responsible for vs what the ETL layer does
 
 ---
 
-## Phase 4 — Data Mapping & Transformation
+## Phase 4 — Data Mapping & Transformation (ETL)
 
 **Goal:** Understand explicit mapping and why it is intentional.
 
 ### Read
-- ETL fundamentals  
-  https://www.ibm.com/topics/etl
-- Why glue code matters  
-  https://www.honeycomb.io/blog/why-glue-code-matters
+- ETL fundamentals — https://www.ibm.com/topics/etl
 
 ### Do
-- [ ] Modify `mapItemToTemplateVars`
-- [ ] Rename one template variable end-to-end
-- [ ] Add a derived field (e.g. formatted phone number)
-- [ ] Add a default value strategy
+- [ ] Trace data from `libs/monday` → `libs/query` → `apps/api` → `apps/web`
+- [ ] Modify a column mapping in `config/boards.yaml` and observe the effect in the dashboard
+- [ ] Add a derived field in the query layer (`libs/query/src/`)
+- [ ] Add a default value for a missing column
 
 ### Should Understand
-- Schema mismatch
+- Schema mismatch between Monday.com's flexible columns and a typed SQLite schema
 - Why implicit mappings fail at scale
-- Deterministic vs “magic” automations
+- Why queries run against local SQLite instead of the live API
 
 ---
 
@@ -105,48 +95,35 @@ Completion of this checklist means the person understands **what this repo does,
 **Goal:** Understand logic-light, versioned document generation.
 
 ### Read
-- Handlebars guide  
-  https://handlebarsjs.com/guide/
-- Why Handlebars  
-  https://handlebarsjs.com/guide/#why-handlebars
+- Handlebars guide — https://handlebarsjs.com/guide/
+- docxtemplater — https://docxtemplater.com/docs/
 
 ### Do
-- [ ] Add a conditional section to the template
-- [ ] Add a loop (hypothetical multiple notes)
-- [ ] Split template into partials
+- [ ] Run `npm run dev:cli -- render` and generate a document interactively
+- [ ] Open `config/templates.yaml` and trace a variable mapping into `libs/template/src/`
+- [ ] Add a conditional section to a Handlebars template in `templates/`
+- [ ] Add a new template variable and wire it end-to-end
 
 ### Should Understand
 - Separation of logic and presentation
 - Why templates belong in source control
-- How this replaces no-code document builders
+- How `config/templates.yaml` drives variable resolution without hardcoding
 
 ---
 
-## Phase 6 — Automation Architecture Context
+## Phase 6 — CLI & Tooling
 
-**Goal:** Understand where this repo fits in the larger platform.
-
-### Read
-- Zapier platform overview  
-  https://platform.zapier.com/overview
-- Retool mental model  
-  https://docs.retool.com/docs
-- Job queues (BullMQ example)  
-  https://docs.bullmq.io/
+**Goal:** Understand the CLI as the primary operator interface.
 
 ### Do
-- [ ] Diagram this script as a single “workflow step”
-- [ ] Identify which logic belongs in:
-  - connector
-  - step
-  - runner
-  - UI
-- [ ] Propose how retries would be implemented
+- [ ] Run each CLI command with `--help`: `render`, `seed`, `sync`, `analyze`, `lookup`
+- [ ] Run `npm run dev:cli -- lookup <name>` to pull a 360 case summary
+- [ ] Run `npm run dev:cli -- analyze --tracked-only -o=docs/boards.md` and open the output
+- [ ] Run `npm run dev:cli -- sync --discover` and review the board list
 
 ### Should Understand
-- Step-based automation
-- Control plane vs execution plane
-- Why internal tooling scales better than Zapier
+- Why the CLI exists alongside the dashboard (operator automation vs human browsing)
+- How `apps/cli` delegates to `libs/` without duplicating logic
 
 ---
 
@@ -155,15 +132,13 @@ Completion of this checklist means the person understands **what this repo does,
 **Goal:** Think like an automation platform owner, not a script author.
 
 ### Read
-- Choose boring technology  
-  https://boringtechnology.club/
-- Alerting and failure modes  
-  https://www.honeycomb.io/blog/stop-alerting-on-call/
+- Choose boring technology — https://boringtechnology.club/
+- Alerting and failure modes — https://www.honeycomb.io/blog/stop-alerting-on-call/
 
 ### Do
-- [ ] Identify all failure points in the script
+- [ ] Identify all failure points in the sync → query → render pipeline
 - [ ] Decide which failures should page a human
-- [ ] Add structured logs for each major step
+- [ ] Add structured logs for each major step in a command
 - [ ] Propose where run history should live
 
 ### Should Understand
@@ -177,18 +152,8 @@ Completion of this checklist means the person understands **what this repo does,
 
 Someone who completes this checklist should be able to:
 
-- Explain exactly what this repo does
-- Explain why it exists instead of Zapier
-- Extend it safely
-- Design the next workflow step
-- Contribute meaningfully to the internal automation platform
-
----
-
-## Optional Extensions
-
-- Turn this script into a reusable CLI
-- Add SharePoint as a second connector
-- Add DOCX/PDF rendering
-- Persist execution history to Postgres
-- Define a YAML-based workflow spec
+- Explain exactly what this repo does and why it exists
+- Add a new board definition to `config/boards.yaml` without touching TypeScript
+- Add a new template variable end-to-end
+- Extend the CLI with a new command
+- Design the next workflow step on top of this platform

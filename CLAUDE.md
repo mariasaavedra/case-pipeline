@@ -19,6 +19,9 @@ npm run test           # Run all workspace tests
 # Run a single test file:
 npx vitest run apps/api/src/some.test.ts
 
+# Linting
+npm run lint           # Lint all workspaces
+
 # Other
 npm run preflight      # Pre-flight environment checks
 npm run seed           # Generate local test data (no Monday.com API needed)

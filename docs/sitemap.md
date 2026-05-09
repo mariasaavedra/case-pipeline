@@ -25,15 +25,16 @@
 |
 /clients/:localId          Client 360 View
 |
-|-- Profile Header (name, email, phone, priority, address)
+|-- Profile Header (sticky: name, email, phone, address, DOB, place of birth, A-Number, priority)
 |-- Tabs
 |   |-- overview       Overview tab
 |   |   |-- Client Snapshot (active cases, pending contracts, next deadline)
-|   |   |-- Contracts Section (active / closed)
-|   |   |-- Board Items (grouped by board type)
 |   |   '-- Updates Timeline
-|   |-- documents      Documents tab
 |   |-- appointments   Appointments tab
+|   |-- contracts      Contracts tab (pending highlighted, closed collapsed)
+|   |-- active-cases   Active Cases tab (all case boards except court-linked items)
+|   |-- court-cases    Court Cases tab (court_cases board + cross-board linked items)
+|   |-- documents      Documents & Notices tab (SharePoint — Phase 7)
 |   '-- relations      Relationships tab
 |
 /appointments              Appointments Page

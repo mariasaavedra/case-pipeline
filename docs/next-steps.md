@@ -19,8 +19,8 @@ Phases 1 through 6d are complete. The app has:
 344 tests passing. All code on the `read-only` branch.
 
 Also built:
-- `scripts/stats.ts` — internal DB diagnostic tool, runs against `seed.db` or `live.db`, importable as a module so the sync script can call it post-run
-- `scripts/snapshot.ts` — already existed, fetches all 18 boards from Monday.com and produces `data/monday-snapshot.md` + `data/monday-snapshot.json`. **Run this first next session** to get real board counts before building the sync.
+- `scripts/export-stats.ts` — internal DB diagnostic tool (`npm run stats` / `npm run stats:live`), runs against `seed.db` or `live.db`
+- `scripts/snapshot.ts` — fetches all boards from Monday.com and produces `data/monday-snapshot.md` + `data/monday-snapshot.json`. Run this to get real board counts before building the sync.
 
 ---
 
@@ -65,9 +65,9 @@ Use real Monday.com data for testing alongside the existing fake seeder data, wi
 4. **Document in `.env.example`** the `DB_SOURCE` and `MONDAY_API_TOKEN` vars
 
 ### Existing Building Blocks
-- API client with retry/rate-limit handling: `lib/monday/api.ts`
-- Board config with all 18 board IDs: `config/boards.yaml`
-- Column resolver: `lib/monday/column-resolver.ts`
+- API client with retry/rate-limit handling: `libs/monday/src/api.ts`
+- Board config with all 19 board IDs: `config/boards.yaml`
+- Column resolver: `libs/monday/src/column-resolver.ts`
 - Real data samples already fetched: `data/samples/*.json`
 - Snapshot script as reference for fetching all boards: `scripts/snapshot.ts`
 

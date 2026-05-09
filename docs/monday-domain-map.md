@@ -36,7 +36,7 @@
    Note: Motions link to an existing court case but don't create one
 ```
 
-## Board Inventory (18 boards)
+## Board Inventory (19 boards)
 
 | Board Key | Description | Links To |
 |-----------|-------------|----------|
@@ -58,6 +58,7 @@
 | `appointments_lb` | Lucy's appointments | Profile |
 | `appointments_wh` | William's appointments | Profile |
 | `_fa_jail_intakes` | Detention facility intakes | — |
+| `calendaring` | Cross-cutting deadline management (hearing notices, RFEs, interview dates) | Court Cases, RFEs, Open Forms |
 
 ## Flow Details
 
