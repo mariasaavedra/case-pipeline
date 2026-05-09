@@ -4,6 +4,13 @@
 // Delegates to the existing sync-config script
 
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../../",
+);
 
 // =============================================================================
 // Help Text
@@ -46,8 +53,14 @@ export async function syncCommand(args: string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const proc = spawn(
       process.execPath,
-      ["--import", "tsx/esm", "scripts/sync-config/index.ts", ...args],
-      { stdio: "inherit", env: process.env },
+      [
+        `--env-file=${path.join(repoRoot, ".env")}`,
+        "--import",
+        "tsx/esm",
+        path.join(repoRoot, "scripts/sync-config/index.ts"),
+        ...args,
+      ],
+      { stdio: "inherit", env: process.env, cwd: repoRoot },
     );
     proc.on("close", (code) => {
       if (code !== 0) process.exit(code ?? 1);

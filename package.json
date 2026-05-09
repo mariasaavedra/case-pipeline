@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev:api": "npm run dev -w @case-pipeline/api",
-    "dev:cli": "npm run dev -w @case-pipeline/cli",
+    "dev:cli": "tsx apps/cli/src/cli.ts",
     "dev:web": "npm run dev -w @case-pipeline/web",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
