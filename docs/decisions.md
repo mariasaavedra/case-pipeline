@@ -259,3 +259,13 @@ Updated in: `config/boards.yaml`, `scripts/fetch-profile.ts`, `scripts/sample-re
 **Decision**: Added as the 19th board in `config/boards.yaml` with a minimal column config (status, board_relation links, dates, file). The full column structure will be discovered via snapshot or `sync-config`. Calendaring items go into `board_items` with `board_key = 'calendaring'` — no schema changes needed. Relationships stored in `item_relationships`.
 
 **Dashboard implications**: Calendaring enables a unified "Deadlines" view without stitching together queries across multiple boards. Also provides access to uploaded notice documents that live on Calendaring items (not on the case boards themselves).
+
+---
+
+## 2026-05-09 — Column Type Changes (sync audit)
+
+### `litigation.type_of_case`: text → dropdown
+
+**Context**: During the 2026-05-09 board sync audit, `type_of_case` on the Litigation board was found to have changed from a `text` column (old ID: `text4`) to a `dropdown` column (new ID: `dropdown_mm2few38`). Config was updated to reflect the new ID and type.
+
+**Impact on write-back**: When Monday.com write-back is implemented for Litigation, `type_of_case` must use the dropdown mutation API (`change_simple_column_value` with a dropdown label string), not the plain text mutation. The seed generator at `libs/seed/src/factory/board-generators.ts` already assigns a plain string value (`"Mandamus"`) which maps correctly to a dropdown label — no seed changes needed.

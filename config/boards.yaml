@@ -1947,9 +1947,6 @@ boards:
       court_payment_history_log:
         resolve: by_id
         id: lookup_mkzdf690
-      lm_date:
-        resolve: by_id
-        id: date_mkwczbpg
       address:
         resolve: by_id
         id: mirror_mkmg7aea
