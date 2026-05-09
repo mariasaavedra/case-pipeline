@@ -2814,21 +2814,12 @@ boards:
       calendaring_person:
         resolve: by_id
         id: multiple_person_mkyrweej
-      deadline_status:
-        resolve: by_id
-        id: lookup_mkyxgzkj
-      method:
-        resolve: by_id
-        id: lookup_mkyq1410
       judge_calendaring:
         resolve: by_id
         id: text_mky82mpp
       x_priority_court:
         resolve: by_id
         id: dropdown_mkrjkv5j
-      deadline_type_connected:
-        resolve: by_id
-        id: lookup_mkyrhaam
       uscis_notice_type:
         resolve: by_id
         id: dropdown_mksya60
@@ -2853,18 +2844,6 @@ boards:
       mr_confirmed:
         resolve: by_id
         id: boolean_mkrj3cgx
-      hearing_fees:
-        resolve: by_id
-        id: lookup_mkyry74v
-      mh_fees_paid_on_connected:
-        resolve: by_id
-        id: lookup_mkyrjjnn
-      tp_fees_paid_on_calendaring:
-        resolve: by_id
-        id: lookup_mkyr88y4
-      trial_fees_paid_on_calendaring:
-        resolve: by_id
-        id: lookup_mkyr8gc4
       outlook_calendar_event:
         resolve: by_id
         id: integration_mkrjpcfq
@@ -2895,9 +2874,6 @@ boards:
       profiles:
         resolve: by_id
         id: board_relation_mksabcm2
-      connect_boards:
-        resolve: by_id
-        id: board_relation_mky2rj04
       hearing_date_calendaring:
         resolve: by_id
         id: date_mkrjnbth
