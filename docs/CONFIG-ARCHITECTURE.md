@@ -179,16 +179,16 @@ No code changes required.
 
 ## Config Synchronization
 
-The `sync` CLI command keeps your YAML configuration in sync with Monday.com board structures.
+The `sync` CLI command keeps your YAML configuration in sync with Monday.com board structures. It requires `MONDAY_API_TOKEN` and automatically loads `.env` from the repo root — no manual sourcing needed.
 
 ### Usage
 
 ```bash
-# Sync all boards — detect new/missing columns
-npm run dev:cli -- sync
-
-# Preview changes without writing
+# Preview changes without writing (always run this first)
 npm run dev:cli -- sync --dry-run
+
+# Apply changes
+npm run dev:cli -- sync
 
 # Add a new board to config
 npm run dev:cli -- sync --add-board=123456789 --board-key=new_board
@@ -196,6 +196,8 @@ npm run dev:cli -- sync --add-board=123456789 --board-key=new_board
 # Verbose output showing all matched columns
 npm run dev:cli -- sync --verbose
 ```
+
+> **Important:** Auto-generated resolvers for new `board_relation` columns default to `by_type`, which is ambiguous when a board has multiple board_relation columns. After any sync that adds board_relation columns, review those entries and change them to `by_id` with the specific column ID shown in the sync output.
 
 ### What It Does
 

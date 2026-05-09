@@ -269,3 +269,25 @@ Updated in: `config/boards.yaml`, `scripts/fetch-profile.ts`, `scripts/sample-re
 **Context**: During the 2026-05-09 board sync audit, `type_of_case` on the Litigation board was found to have changed from a `text` column (old ID: `text4`) to a `dropdown` column (new ID: `dropdown_mm2few38`). Config was updated to reflect the new ID and type.
 
 **Impact on write-back**: When Monday.com write-back is implemented for Litigation, `type_of_case` must use the dropdown mutation API (`change_simple_column_value` with a dropdown label string), not the plain text mutation. The seed generator at `libs/seed/src/factory/board-generators.ts` already assigns a plain string value (`"Mandamus"`) which maps correctly to a dropdown label — no seed changes needed.
+
+---
+
+## 2026-05-09 — Board Config Sync Audit
+
+**Context**: First live sync run against all 19 boards after the monorepo migration revealed several config issues.
+
+**Findings and fixes:**
+
+1. **`--dry-run` consumed by npm** — `dev:cli` was `npm run dev -w @case-pipeline/cli`, causing a nested npm invocation that parsed `--dry-run` and `--verbose` as its own flags before they reached the script. Fixed by changing `dev:cli` to `tsx apps/cli/src/cli.ts` directly, eliminating the nested npm call.
+
+2. **14 ambiguous `by_type: board_relation` resolvers** — Auto-generated resolvers for new board_relation columns defaulted to `by_type`, which is ambiguous on boards with multiple board_relation columns. Fixed with specific `by_id` entries using the column IDs from the sync output. Affected boards: `_na_originals_cards_notices`, `_cd_open_forms`, `court_cases`, `profiles`, `calendaring`.
+
+3. **`profiles.e_mail_2`** — Auto-generated as `by_type: email`, colliding with the primary `email` column. Fixed to `by_id: email_mm263d18`.
+
+4. **`profiles.last_consult_date`** — Auto-generated as `by_type: date`, which would resolve to `date_of_birth` first. Fixed to `by_id: consulted_date__1`.
+
+5. **Calendaring board lost 8 columns** — `deadline_status`, `method`, `deadline_type_connected`, `hearing_fees`, `mh_fees_paid_on_connected`, `tp_fees_paid_on_calendaring`, `trial_fees_paid_on_calendaring`, and `connect_boards` were confirmed deleted via live API fetch. The fee mirrors were replaced with direct date columns (`Master Fees Due On`, `TP Fees Due On`, `Trial Fees Due On`); `connect_boards` was replaced by named board_relation links. Stale entries removed from config.
+
+6. **`fee_ks.lm_date`** — Dead config entry pointing to a deleted column (`date_mkwczbpg`). Removed.
+
+**Rule established**: After every sync that adds board_relation columns, review those entries and replace `by_type: board_relation` with `by_id` using the specific column ID from the sync output.
