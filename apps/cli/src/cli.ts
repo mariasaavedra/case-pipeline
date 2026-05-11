@@ -46,7 +46,7 @@ function showHelp(): void {
   console.log(`
 Case Pipeline CLI
 
-Usage: bun cli.ts <command> [options]
+Usage: npm run dev:cli -- <command> [options]
 
 Commands:
 ${Object.entries(COMMANDS)
@@ -54,13 +54,13 @@ ${Object.entries(COMMANDS)
   .join("\n")}
 
 Examples:
-  bun cli.ts render              # Interactive profile selector
-  bun cli.ts render --item=123   # Render specific item
-  bun cli.ts seed --profiles=5   # Seed 5 test profiles
-  bun cli.ts sync --dry-run      # Preview config changes
-  bun cli.ts analyze             # Generate relationship map
+  npm run dev:cli -- render              # Interactive profile selector
+  npm run dev:cli -- render --item=123   # Render specific item
+  npm run dev:cli -- seed --profiles=5   # Seed 5 test profiles
+  npm run dev:cli -- sync --dry-run      # Preview config changes
+  npm run dev:cli -- analyze             # Generate relationship map
 
-Run 'bun cli.ts <command> --help' for command-specific help.
+Run 'npm run dev:cli -- <command> --help' for command-specific help.
 `);
 }
 
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
 
   if (!isValidCommand(command)) {
     console.error(`Unknown command: ${command}`);
-    console.error(`Run 'bun cli.ts --help' for available commands.`);
+    console.error(`Run 'npm run dev:cli -- --help' for available commands.`);
     process.exit(1);
   }
 

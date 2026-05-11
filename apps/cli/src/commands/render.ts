@@ -62,7 +62,7 @@ function showHelp(): void {
   console.log(`
 Render Command - Generate documents from Monday.com items
 
-Usage: bun cli.ts render [options]
+Usage: npm run dev:cli -- render [options]
 
 Options:
   --item=<id>        Item ID to render (optional, interactive if not provided)
@@ -72,9 +72,9 @@ Options:
   --help, -h         Show this help
 
 Examples:
-  bun cli.ts render                      # Interactive profile selector
-  bun cli.ts render --item=123456789     # Render specific item
-  bun cli.ts render --template=contract  # Use different template
+  npm run dev:cli -- render                      # Interactive profile selector
+  npm run dev:cli -- render --item=123456789     # Render specific item
+  npm run dev:cli -- render --template=contract  # Use different template
 `);
 }
 

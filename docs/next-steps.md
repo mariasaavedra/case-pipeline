@@ -1,22 +1,24 @@
 # Next Steps — What to Pick Up
 
-## Current State (after Phase 6d, 2026-04-18)
+## Current State (after bug audit + N+1 refactor, 2026-05-11)
 
-Phases 1 through 6d are complete. The app has:
-- Client-side routing with sidebar nav (`web/router.ts`)
-- 360-degree client detail with restructured tabs: Overview | Appointments | Contracts | Active Cases | Court Cases | Documents & Notices | Relations (`web/components/ClientView.tsx`)
-- Landing page with 6 KPI cards (incl. Alerts), clickable counts → filtered view (`web/components/LandingPage.tsx`)
-- Attorney Daily Appointments page at `/appointments` with "Show all" notes toggle, "Open in modal", and **Focus modal** for deep single-appointment review (`web/components/AppointmentsPage.tsx`, `web/components/NotesModal.tsx`, `web/components/AppointmentModal.tsx`)
+Phases 1 through 6d are complete and production-quality bugs have been resolved. The app has:
+- Client-side routing with sidebar nav (`apps/web/src/router.ts`)
+- 360-degree client detail with 7 tabs: Overview | Appointments | Contracts | Active Cases | Court Cases | Documents & Notices | Relations (`apps/web/src/components/ClientView.tsx`)
+- Landing page with 6 KPI cards (incl. Alerts), clickable counts → filtered view (`apps/web/src/components/LandingPage.tsx`)
+- Attorney Daily Appointments page at `/appointments` with "Show all" notes toggle, "Open in modal", and **Focus modal** for deep single-appointment review (`apps/web/src/components/AppointmentsPage.tsx`, `NotesModal.tsx`, `AppointmentModal.tsx`)
 - Enhanced search: type dropdown (Clients/Contracts/Court Cases/etc.), phone/email/address partial matching
-- Filtered Clients page with priority chips, status/attorney/board type dropdowns, date range (`web/components/ClientsPage.tsx`)
-- Smart Alerts page at `/alerts` — overdue deadlines, stale cases, idle contracts, grouped by severity (`web/components/AlertsPage.tsx`)
-- Reusable `useUrlFilters` hook for URL-driven filter persistence
-- REST API at `server.ts` serving all data from read-only SQLite
+- Filtered Clients page with priority chips, status/attorney/board type dropdowns, date range (`apps/web/src/components/ClientsPage.tsx`)
+- Smart Alerts page at `/alerts` — overdue deadlines, stale cases, idle contracts, grouped by severity (`apps/web/src/components/AlertsPage.tsx`)
+- Reusable `useUrlFilters` hook with popstate listener for URL-driven filter persistence + browser back/forward support (`apps/web/src/hooks/useUrlFilters.ts`)
+- REST API at `apps/api/src/server.ts` serving all data from read-only SQLite
 - Profile fields: name, email, phone, address, priority, DOB, place of birth, A-Number (formatted as `A###-###-###`)
-- Contracts tab, Active Cases tab, Court Cases tab all wired with real data (`web/components/ContractsTab.tsx`, `web/components/ActiveCasesTab.tsx`, `web/components/CourtCasesTab.tsx`)
-- Documents & Notices tab showing board-based docs; SharePoint placeholder stub in place (`web/components/DocumentsTab.tsx`, `web/components/SharePointPlaceholder.tsx`)
+- Contracts tab, Active Cases tab, Court Cases tab all wired with real data
+- Documents & Notices tab wired to `DocumentsTab` component (board-based docs from `DOCUMENT_BOARD_KEYS`); `SharePointPlaceholder` available for when Graph API integration lands (`apps/web/src/components/DocumentsTab.tsx`)
+- Appointments query uses batch-preload pattern — 9 flat queries regardless of result count (was 9N+1); see `libs/query/src/appointments.ts` and batch functions in `updates.ts`, `contracts.ts`, `board-items.ts`, `case-summary.ts`
+- Dashboard KPI "upcoming" windows are exactly 7 days inclusive (`libs/query/src/dashboard.ts`)
 
-344 tests passing. All code on the `read-only` branch.
+344 tests passing.
 
 Also built:
 - `scripts/export-stats.ts` — internal DB diagnostic tool (`npm run stats` / `npm run stats:live`), runs against `seed.db` or `live.db`

@@ -19,8 +19,8 @@ import type {
   ClientCaseSummary,
 } from "./types";
 import { APPOINTMENT_BOARD_KEYS, CLOSED_CONTRACT_STATUSES } from "./types";
-import { getClientCaseSummary } from "./case-summary";
-import { getClientUpdates } from "./updates";
+import { batchGetClientCaseSummaries } from "./case-summary";
+import { batchGetClientUpdates } from "./updates";
 
 // =============================================================================
 // Types
@@ -127,37 +127,33 @@ export function getAppointments(
 
   const rows = db.prepare(sql).all(...params) as RawAppointmentRow[];
 
-  // Enrich each appointment with snapshot + updates
+  // Collect unique profile IDs for batch loading
+  const profileIds = [
+    ...new Set(rows.map((r) => r.profileLocalId).filter((id): id is string => !!id)),
+  ];
+
+  // Batch-prefetch all enrichment data — 9 queries total regardless of row count
+  const snapshotMap = batchGetSnapshots(db, profileIds);
+  // Fetch with limit 50 (larger budget); case summary reuses this map, appointment
+  // entries get the first 20 via the mapping below.
+  const updatesMap = batchGetClientUpdates(db, profileIds, 50);
+  const profileMap = new Map<string, ProfileSummary>(
+    rows
+      .filter((r): r is RawAppointmentRow & { profileLocalId: string; profileName: string } =>
+        !!r.profileLocalId && !!r.profileName
+      )
+      .map((r) => [r.profileLocalId, buildProfileSummary(r)])
+  );
+  const caseSummaryMap = batchGetClientCaseSummaries(db, profileIds, profileMap, updatesMap);
+
+  const defaultSnapshot: AppointmentSnapshot = {
+    activeCaseCount: 0,
+    pendingContractCount: 0,
+    nextDeadline: null,
+  };
+
   const entries: AppointmentEntry[] = rows.map((row) => {
     const profileLocalId = row.profileLocalId;
-
-    const profile: ProfileSummary | null = row.profileName
-      ? {
-          localId: profileLocalId ?? "",
-          name: row.profileName,
-          email: row.profileEmail,
-          phone: row.profilePhone,
-          priority: row.profilePriority,
-          groupTitle: row.profileGroupTitle,
-          address: row.profileAddress,
-          dateOfBirth: row.profileDateOfBirth,
-          placeOfBirth: row.profilePlaceOfBirth,
-          aNumber: row.profileANumber,
-        }
-      : null;
-
-    const snapshot = profileLocalId
-      ? getClientSnapshot(db, profileLocalId)
-      : { activeCaseCount: 0, pendingContractCount: 0, nextDeadline: null };
-
-    const updates = profileLocalId
-      ? getClientUpdates(db, profileLocalId, 20, 0)
-      : [];
-
-    const caseSummary = profileLocalId
-      ? getClientCaseSummary(db, profileLocalId)
-      : null;
-
     return {
       appointment: {
         localId: row.localId,
@@ -169,10 +165,14 @@ export function getAppointments(
         groupTitle: row.groupTitle,
         columnValues: safeParseJson(row.column_values),
       },
-      profile,
-      snapshot,
-      updates,
-      caseSummary,
+      profile: row.profileName ? buildProfileSummary(row) : null,
+      snapshot: profileLocalId
+        ? (snapshotMap.get(profileLocalId) ?? defaultSnapshot)
+        : defaultSnapshot,
+      updates: profileLocalId
+        ? (updatesMap.get(profileLocalId) ?? []).slice(0, 20)
+        : [],
+      caseSummary: profileLocalId ? (caseSummaryMap.get(profileLocalId) ?? null) : null,
     };
   });
 
@@ -203,50 +203,86 @@ export function getAttorneyList(db: Database): string[] {
 }
 
 // =============================================================================
-// Client Snapshot (lightweight counts for appointment cards)
+// Batch Snapshot (lightweight counts for appointment cards)
 // =============================================================================
 
-function getClientSnapshot(
+function batchGetSnapshots(
   db: Database,
-  profileLocalId: string,
-): AppointmentSnapshot {
-  // Active cases: non-appointment board items
-  const caseRow = db
-    .prepare(
-      `SELECT COUNT(*) AS cnt FROM board_items
-       WHERE profile_local_id = ?
-         AND board_key NOT IN (${BOARD_KEY_PLACEHOLDERS})`,
-    )
-    .get(profileLocalId, ...BOARD_KEY_LIST) as { cnt: number };
+  profileLocalIds: string[],
+): Map<string, AppointmentSnapshot> {
+  if (profileLocalIds.length === 0) return new Map();
 
-  // Pending contracts: not closed
+  const todayStr = formatDate(new Date());
+  const idPlaceholders = profileLocalIds.map(() => "?").join(",");
   const closedStatuses = [...CLOSED_CONTRACT_STATUSES];
   const closedPlaceholders = closedStatuses.map(() => "?").join(",");
-  const contractRow = db
-    .prepare(
-      `SELECT COUNT(*) AS cnt FROM contracts
-       WHERE profile_local_id = ?
-         AND status NOT IN (${closedPlaceholders})`,
-    )
-    .get(profileLocalId, ...closedStatuses) as { cnt: number };
 
-  // Next deadline: earliest future next_date across non-appointment items
-  const todayStr = formatDate(new Date());
-  const deadlineRow = db
+  // Active cases per profile
+  const caseRows = db
     .prepare(
-      `SELECT MIN(next_date) AS nextDeadline FROM board_items
-       WHERE profile_local_id = ?
+      `SELECT profile_local_id, COUNT(*) AS cnt FROM board_items
+       WHERE profile_local_id IN (${idPlaceholders})
          AND board_key NOT IN (${BOARD_KEY_PLACEHOLDERS})
-         AND next_date >= ?`,
+       GROUP BY profile_local_id`,
     )
-    .get(profileLocalId, ...BOARD_KEY_LIST, todayStr) as {
-    nextDeadline: string | null;
-  };
+    .all(...profileLocalIds, ...BOARD_KEY_LIST) as { profile_local_id: string; cnt: number }[];
 
+  // Pending contract count per profile
+  const contractRows = db
+    .prepare(
+      `SELECT profile_local_id, COUNT(*) AS cnt FROM contracts
+       WHERE profile_local_id IN (${idPlaceholders})
+         AND status NOT IN (${closedPlaceholders})
+       GROUP BY profile_local_id`,
+    )
+    .all(...profileLocalIds, ...closedStatuses) as { profile_local_id: string; cnt: number }[];
+
+  // Next deadline per profile
+  const deadlineRows = db
+    .prepare(
+      `SELECT profile_local_id, MIN(next_date) AS nextDeadline FROM board_items
+       WHERE profile_local_id IN (${idPlaceholders})
+         AND board_key NOT IN (${BOARD_KEY_PLACEHOLDERS})
+         AND next_date >= ?
+       GROUP BY profile_local_id`,
+    )
+    .all(...profileLocalIds, ...BOARD_KEY_LIST, todayStr) as {
+    profile_local_id: string;
+    nextDeadline: string | null;
+  }[];
+
+  const caseCounts = new Map(caseRows.map((r) => [r.profile_local_id, r.cnt]));
+  const contractCounts = new Map(contractRows.map((r) => [r.profile_local_id, r.cnt]));
+  const deadlines = new Map(deadlineRows.map((r) => [r.profile_local_id, r.nextDeadline]));
+
+  return new Map(
+    profileLocalIds.map((id) => [
+      id,
+      {
+        activeCaseCount: caseCounts.get(id) ?? 0,
+        pendingContractCount: contractCounts.get(id) ?? 0,
+        nextDeadline: deadlines.get(id) ?? null,
+      },
+    ])
+  );
+}
+
+// =============================================================================
+// Profile Builder
+// =============================================================================
+
+function buildProfileSummary(row: RawAppointmentRow): ProfileSummary {
   return {
-    activeCaseCount: caseRow.cnt,
-    pendingContractCount: contractRow.cnt,
-    nextDeadline: deadlineRow.nextDeadline,
+    localId: row.profileLocalId ?? "",
+    name: row.profileName!,
+    email: row.profileEmail,
+    phone: row.profilePhone,
+    priority: row.profilePriority,
+    groupTitle: row.profileGroupTitle,
+    address: row.profileAddress,
+    dateOfBirth: row.profileDateOfBirth,
+    placeOfBirth: row.profilePlaceOfBirth,
+    aNumber: row.profileANumber,
   };
 }
 

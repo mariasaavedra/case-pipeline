@@ -142,7 +142,7 @@ function getPaidFeeKs(db: Database): KpiCard {
 }
 
 function getUpcomingDeadlines(db: Database, todayStr: string): KpiCard {
-  const endDate = addDays(todayStr, 7);
+  const endDate = addDays(todayStr, 6);
 
   const countRow = db
     .prepare(
@@ -190,7 +190,7 @@ function getUpcomingHearings(
       new Date(d.getFullYear(), d.getMonth() + 1, 0),
     );
   } else {
-    endDate = addDays(todayStr, 7);
+    endDate = addDays(todayStr, 6);
   }
 
   const countRow = db

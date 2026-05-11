@@ -291,3 +291,38 @@ Updated in: `config/boards.yaml`, `scripts/fetch-profile.ts`, `scripts/sample-re
 6. **`fee_ks.lm_date`** — Dead config entry pointing to a deleted column (`date_mkwczbpg`). Removed.
 
 **Rule established**: After every sync that adds board_relation columns, review those entries and replace `by_type: board_relation` with `by_id` using the specific column ID from the sync output.
+
+---
+
+## 2026-05-11 — Appointments N+1 Query Refactor
+
+**Context**: `getAppointments` in `libs/query/src/appointments.ts` enriched each appointment row with three separate per-row function calls: `getClientSnapshot` (3 queries), `getClientUpdates` (1 query), and `getClientCaseSummary` (5 queries). With N rows, the total was `9N + 1` queries. For a typical day with 20 appointments that's 181 queries — a user-facing latency risk on production-sized boards. Additionally, `getClientUpdates` was called twice per profile (once directly, once inside `getClientCaseSummary`), wasting one query per profile.
+
+**Decision**: Batch-preload pattern. After the main SELECT, collect all unique `profileLocalId` values and pass them to five new batch functions that each run one `IN (...)` query with `GROUP BY profile_local_id`. Results are stored in Maps and looked up O(1) per row — no DB calls inside the enrichment loop. Total query budget: **9 queries flat, independent of N**.
+
+**New batch functions added:**
+- `batchGetClientUpdates` — `libs/query/src/updates.ts`
+- `batchGetClientContracts` — `libs/query/src/contracts.ts`
+- `batchGetClientBoardItems` — `libs/query/src/board-items.ts`
+- `batchGetClientCaseSummaries` — `libs/query/src/case-summary.ts` (accepts a pre-built `profileMap` from the main SELECT and a pre-fetched `updatesMap` to eliminate the duplicate updates fetch)
+- `batchGetSnapshots` — private to `appointments.ts` (3 GROUP BY queries for active case count, pending contract count, next deadline)
+
+**Unchanged**: All single-profile variants (`getClientSnapshot`, `getClientUpdates`, `getClientContracts`, `getClientBoardItems`, `getClientCaseSummary`) remain in place. They are used by the Client 360 route (`/api/clients/:id`) which always queries a single profile.
+
+**No interface changes**: `AppointmentEntry`, `AppointmentsResult`, `ClientCaseSummary`, and all API routes are unchanged.
+
+---
+
+## 2026-05-11 — Bug Fixes: 7-day Window Off-by-One & CLI Help Text
+
+### 7-day Window Off-by-One (`libs/query/src/dashboard.ts`)
+
+**Context**: `getUpcomingDeadlines` and `getUpcomingHearings` computed `endDate = addDays(todayStr, 7)` and queried `next_date >= today AND next_date <= endDate`. With `addDays(7)` and inclusive `<=`, the window was 8 days (today through today+7 = 8 calendar days), not 7.
+
+**Fix**: Changed to `addDays(6)` so the window is today through today+6 = exactly 7 days inclusive.
+
+### CLI Help Text Still Referenced Bun (`apps/cli/src/cli.ts`, `apps/cli/src/commands/render.ts`)
+
+**Context**: The help text, usage strings, and error messages still showed `bun cli.ts <command>` after the monorepo migrated from Bun to Node/npm/tsx. This would confuse anyone following the help output.
+
+**Fix**: Replaced all `bun cli.ts` references with `npm run dev:cli --` across both files.
