@@ -9,7 +9,7 @@ import { AppointmentSection } from "./AppointmentSection";
 import { ContractsTab } from "./ContractsTab";
 import { ActiveCasesTab } from "./ActiveCasesTab";
 import { CourtCasesTab } from "./CourtCasesTab";
-import { SharePointPlaceholder } from "./SharePointPlaceholder";
+import { DocumentsTab } from "./DocumentsTab";
 import { TimelineFilters, type TimelineFilter } from "./TimelineFilters";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { RelationsView } from "./RelationsView";
@@ -140,7 +140,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
           )}
 
           {activeTab === "documents" && (
-            <SharePointPlaceholder />
+            <DocumentsTab boardItems={data.boardItems} />
           )}
 
           {activeTab === "relations" && (
