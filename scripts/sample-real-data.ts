@@ -5,6 +5,8 @@
 // Outputs to data/samples/ (gitignored)
 
 import { writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { setApiToken, mondayRequest } from "@case-pipeline/monday/api";
 
 const PROFILES_BOARD_ID = "8025265377";
@@ -320,7 +322,7 @@ async function main() {
   }
 
   // Write individual files
-  const outDir = `${import.meta.dir}/../data/samples`;
+  const outDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../data/samples");
   for (const profile of results) {
     const safeName = profile.name.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
     const path = `${outDir}/profile-${safeName}.json`;
