@@ -5,7 +5,7 @@
 // Priority: URL params → localStorage → defaults
 // On change: replaceState + persist to localStorage
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface UseUrlFiltersOptions<T extends Record<string, string>> {
   /** Default values for each filter key */
@@ -86,6 +86,17 @@ export function useUrlFilters<T extends Record<string, string>>(
   const [filters, setFiltersState] = useState<T>(() =>
     initializeFilters(opts)
   );
+
+  // Re-read from URL on popstate so KPI card navigation updates filters
+  // while the page stays mounted. replaceState (user-driven changes) does
+  // not fire popstate, so this only triggers on pushState navigation.
+  useEffect(() => {
+    const handlePopState = () => {
+      setFiltersState(initializeFilters(optsRef.current));
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const setFilter = useCallback((key: keyof T & string, value: string) => {
     setFiltersState((prev) => {

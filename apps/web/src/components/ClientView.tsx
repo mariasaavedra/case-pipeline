@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { ClientCaseSummary } from "../api";
 import { BOARD_CONFIG, DOCUMENT_BOARD_KEYS } from "../config";
 import { navigate, clientPath } from "../router";
@@ -23,6 +23,11 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
   const [last30Days, setLast30Days] = useState(false);
+
+  // Sync activeTab when the route changes (back/forward, direct URL load)
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   const handleTabChange = (tab: TabId) => {
     setActiveTab(tab);
