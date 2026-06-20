@@ -1,0 +1,67 @@
+# Live Data Sync Engine
+
+**Status:** Planned — not started  
+**Last updated:** 2026-05-25  
+**Priority:** 🔴 Foundation — prerequisite for all other features to work with real data
+
+---
+
+## Goal
+
+Build the sync engine that pulls live Monday.com board data into a local `data/live.db` SQLite database, and wire an env switch (`DB_SOURCE=seed|live`) so the app can run against either fake or real data without code changes.
+
+---
+
+## Why This First
+
+Every other planned feature is currently running on Faker.js seed data. Nothing is validated against real cases, real column values, or real edge cases until this exists. Building auth, the active cases board, or reporting on top of fake data means discovering real-data surprises at the worst possible time.
+
+---
+
+## Approach
+
+Two databases, one switch:
+- `data/seed.db` — Faker.js data, default, safe to regenerate, used by CI
+- `data/live.db` — real Monday.com data, gitignored, never leaves the developer's machine
+- `DB_SOURCE=seed|live` env var selects which DB the API reads from
+- Same schema, same query layer, same UI — just different data underneath
+
+---
+
+## What Needs to Be Built
+
+1. **`DB_SOURCE` env switch** — `apps/api/src/server.ts` currently hardcodes `data/seed.db`. Read `DB_SOURCE` env var and resolve path to the correct database.
+
+2. **Sync script** — `scripts/sync-live.ts` (or extend existing `apps/cli/src/commands/sync.ts`):
+   - Iterates all boards in `config/boards.yaml`
+   - Fetches items via `libs/monday/src/api.ts`
+   - Maps `MondayItem` column values → SQLite row fields using `libs/monday/src/column-resolver.ts`
+   - Upserts into `live.db` (create if not exists, using same schema as `seed.db`)
+   - Handles rate limits, retries, pagination
+
+3. **Gitignore** — add `data/live.db`, `data/live.db-wal`, `data/live.db-shm`
+
+4. **`.env.example` update** — document `DB_SOURCE` and `MONDAY_API_TOKEN`
+
+---
+
+## Existing Building Blocks
+
+All of these are already in the codebase and working:
+
+| Building block | Location |
+|---|---|
+| Monday.com API client (retry, rate-limit) | `libs/monday/src/api.ts` |
+| Column resolver (`by_type`, `by_title`, `by_id`) | `libs/monday/src/column-resolver.ts` |
+| All 19 board IDs + column mappings | `config/boards.yaml` |
+| Real data samples (already fetched) | `data/samples/*.json` |
+| Snapshot script (reference for fetching all boards) | `scripts/snapshot.ts` |
+| Schema + migration system | `libs/seed/src/db/schema.ts` |
+
+---
+
+## Open Questions
+
+- Should sync be incremental (only changed items since last run) or full replace? Incremental is faster but more complex. Start with full replace, optimize later.
+- How often should sync run? Manual trigger via CLI for now; scheduled sync (cron) is a later phase.
+- What happens to `live.db` schema when `seed.db` schema gets a new migration? Sync script should run migrations on `live.db` before syncing data.

@@ -326,3 +326,42 @@ Updated in: `config/boards.yaml`, `scripts/fetch-profile.ts`, `scripts/sample-re
 **Context**: The help text, usage strings, and error messages still showed `bun cli.ts <command>` after the monorepo migrated from Bun to Node/npm/tsx. This would confuse anyone following the help output.
 
 **Fix**: Replaced all `bun cli.ts` references with `npm run dev:cli --` across both files.
+
+---
+
+## 2026-06-20 — Containerization & Caching: Docker (Conditional) / Redis (Deferred)
+
+**Context**: Evaluating whether to introduce Docker and Redis into the stack. The current architecture is `Monday.com → SQLite (local) → read-only Express API → React/Vite dashboard`. SQLite is opened in-process and `readonly` (`apps/api/src/server.ts`) via `better-sqlite3` (synchronous, embedded). There are no Docker artifacts, no Redis/BullMQ/ioredis dependencies, and no background scheduling (`node-cron`/`setInterval`) anywhere in the codebase today. The deployment scale is a single immigration law firm: one admin, a handful of attorneys/staff, low concurrency, single instance.
+
+### Decision 1 — Redis: Deferred (do not add now)
+
+Redis is **not** justified at the current stage. Each common Redis use case is already covered or absent:
+
+| Typical Redis role | Why it does not apply here (yet) |
+|---|---|
+| Read cache | SQLite *is* the cache. `live.db`/`seed.db` are a locally materialized snapshot of Monday.com; queries never hit the live API at request time. Adding Redis would be caching a cache. Local SQLite reads are sub-millisecond. |
+| Session store | No auth exists yet. The planned auth ([[project_auth_plan]]) is Azure AD SSO, which is JWT/stateless and needs no shared session store. |
+| Job queue | No background jobs exist today (zero `cron`/`setInterval`). |
+| Pub/sub, distributed rate-limiting | Single instance, low concurrency — no multi-process coordination problem to solve. |
+
+**Rationale**: Redis would add an operational dependency (a service to run, monitor, persist, and back up) in exchange for ~zero benefit at this scale. It is complexity without a corresponding problem.
+
+**Revisit Redis when any of these become true:**
+1. **Background work grows** — when the Live Data Sync engine ([[project_live_data_sync]]) and the Notifications/Digest feature ([[project_notifications]]) need retries, scheduling, and observability beyond what an in-process scheduler gives. At that point evaluate **BullMQ (Redis-backed)** vs. plain **`node-cron`**. Start with `node-cron`; only graduate to BullMQ when durability/retry/visibility demands it.
+2. **Multi-instance deployment** — if the API is ever scaled horizontally, a shared store is needed for rate-limiting, locks, or session state.
+3. **Real-time dashboard updates** — if live push to the UI is added and requires cross-process pub/sub.
+
+### Decision 2 — Docker: Adopt at deployment time (not blocking for local dev)
+
+Docker is reasonable and recommended **specifically for reproducible deployment to the team**, not as a prerequisite for local development (which already works via `npm run dev:*`). There is currently no reproducible way to ship this to a shared server.
+
+**Target topology** (when implemented):
+- A `docker-compose.yml` with two services:
+  - **api** — Node 22 image running the Express server (port 3000).
+  - **web** — multi-stage build: Vite `build`, then nginx serving the static bundle and proxying `/api` to the api service (mirrors the existing Vite dev proxy described in CLAUDE.md).
+- **SQLite persistence is the critical detail**: `data/` must live on a mounted named volume, *not* inside the image layer. Writing the `.db` file into the image would mean data loss on every redeploy. The `live.db` path passed to `new Database(...)` must point at the mounted volume.
+- Pin Node 22 (matches the CI migration in commit `7fd0253`) and lockfile-based installs for reproducibility.
+
+**Why now-ish, not urgent**: if usage is still local-only, Docker can wait. The moment attorneys/staff start using the dashboard from a shared deployment, containerize first to get a consistent runtime independent of any one machine.
+
+**Explicit non-goal**: Docker here is about deployment packaging only. It does **not** pull Redis in with it — the two decisions are independent, and Decision 1 stands regardless of whether Docker is adopted.
