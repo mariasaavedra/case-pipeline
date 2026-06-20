@@ -7,7 +7,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:3000",
+      // Match the API's IPv4 loopback bind (127.0.0.1). Using "localhost" here
+      // can resolve to IPv6 ::1 and fail to connect.
+      "/api": "http://127.0.0.1:3000",
     },
   },
   build: {

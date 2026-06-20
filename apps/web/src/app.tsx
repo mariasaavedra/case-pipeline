@@ -7,6 +7,7 @@ import { LandingPage } from "./components/LandingPage";
 import { AppointmentsPage } from "./components/AppointmentsPage";
 import { ClientsPage } from "./components/ClientsPage";
 import { AlertsPage } from "./components/AlertsPage";
+import { ActiveCasesPage } from "./components/ActiveCasesPage";
 import type { TabId } from "./components/ClientTabs";
 import { matchRoute, navigate } from "./router";
 import { getClient } from "./api";
@@ -186,6 +187,7 @@ function App() {
 
           {/* Appointments page */}
           {route.page === "appointments" && !loading && <AppointmentsPage />}
+          {route.page === "active-cases" && !loading && <ActiveCasesPage />}
 
           {/* Alerts page */}
           {route.page === "alerts" && !loading && <AlertsPage />}

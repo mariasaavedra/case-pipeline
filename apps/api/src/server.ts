@@ -21,6 +21,7 @@ import {
   handleClientRelationships,
   handleDashboard,
   handleAppointments,
+  handleActiveCases,
   handleAlerts,
 } from "./handlers/handlers";
 
@@ -64,6 +65,7 @@ const app = express();
 // API routes
 app.get("/api/dashboard", adapt(handleDashboard));
 app.get("/api/appointments", adapt(handleAppointments));
+app.get("/api/active-cases", adapt(handleActiveCases));
 app.get("/api/alerts", adapt(handleAlerts));
 app.get("/api/search", adapt(handleTypedSearch));
 app.get("/api/filter-options", adapt(handleFilterOptions));
@@ -83,7 +85,10 @@ app.use("/api/", (_req, res) => {
 
 
 const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+// Bind to loopback only. The API is unauthenticated and serves client PII,
+// so it must not be reachable from other hosts on the network.
+const HOST = "127.0.0.1";
+app.listen(PORT, HOST, () => {
+  console.log(`Server running at http://${HOST}:${PORT}`);
   console.log(`Note: frontend requires a separate Vite build (added in Phase 3)`);
 });

@@ -1,6 +1,6 @@
 # Next Steps — What to Pick Up
 
-## Current State (after bug audit + N+1 refactor, 2026-05-11)
+## Current State (after Active Cases Board + schema v8, 2026-05-26)
 
 Phases 1 through 6d are complete and production-quality bugs have been resolved. The app has:
 - Client-side routing with sidebar nav (`apps/web/src/router.ts`)
@@ -10,19 +10,27 @@ Phases 1 through 6d are complete and production-quality bugs have been resolved.
 - Enhanced search: type dropdown (Clients/Contracts/Court Cases/etc.), phone/email/address partial matching
 - Filtered Clients page with priority chips, status/attorney/board type dropdowns, date range (`apps/web/src/components/ClientsPage.tsx`)
 - Smart Alerts page at `/alerts` — overdue deadlines, stale cases, idle contracts, grouped by severity (`apps/web/src/components/AlertsPage.tsx`)
+- **Active Cases Board at `/active-cases`** — swim-lane grid (paralegal rows × urgency columns), color-coded cards, COURT badge for Court Forms cases, countdown labels, client name links (`apps/web/src/components/ActiveCasesPage.tsx`)
 - Reusable `useUrlFilters` hook with popstate listener for URL-driven filter persistence + browser back/forward support (`apps/web/src/hooks/useUrlFilters.ts`)
-- REST API at `apps/api/src/server.ts` serving all data from read-only SQLite
+- REST API at `apps/api/src/server.ts` serving all data from read-only SQLite, including `GET /api/active-cases`
 - Profile fields: name, email, phone, address, priority, DOB, place of birth, A-Number (formatted as `A###-###-###`)
 - Contracts tab, Active Cases tab, Court Cases tab all wired with real data
 - Documents & Notices tab wired to `DocumentsTab` component (board-based docs from `DOCUMENT_BOARD_KEYS`); `SharePointPlaceholder` available for when Graph API integration lands (`apps/web/src/components/DocumentsTab.tsx`)
 - Appointments query uses batch-preload pattern — 9 flat queries regardless of result count (was 9N+1); see `libs/query/src/appointments.ts` and batch functions in `updates.ts`, `contracts.ts`, `board-items.ts`, `case-summary.ts`
 - Dashboard KPI "upcoming" windows are exactly 7 days inclusive (`libs/query/src/dashboard.ts`)
 
-344 tests passing.
+354 tests passing.
 
 Also built:
 - `scripts/export-stats.ts` — internal DB diagnostic tool (`npm run stats` / `npm run stats:live`), runs against `seed.db` or `live.db`
 - `scripts/snapshot.ts` — fetches all boards from Monday.com and produces `data/monday-snapshot.md` + `data/monday-snapshot.json`. Run this to get real board counts before building the sync.
+
+### Schema
+
+Database at **v8** (`libs/seed/src/db/schema.ts`). Key changes from v7:
+- `board_items.paralegals TEXT` — promoted from `column_values` JSON for indexed queries
+- `board_items.next_date` backfill extended to cover `$.target_date.date` for open forms (was missing from v3 migration)
+- Index: `idx_board_items_paralegals ON board_items(board_key, paralegals)`
 
 ---
 

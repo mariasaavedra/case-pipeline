@@ -18,6 +18,7 @@ import {
   getAppointments,
   searchByType,
   getAlerts,
+  getActiveCases,
 } from "@case-pipeline/query";
 import type { SearchType } from "@case-pipeline/query";
 
@@ -187,6 +188,11 @@ export function handleAlerts(req: Request, db: Database): Response {
   const url = new URL(req.url);
   const attorney = url.searchParams.get("attorney") ?? undefined;
   const result = getAlerts(db, { attorney });
+  return json(result);
+}
+
+export function handleActiveCases(_req: Request, db: Database): Response {
+  const result = getActiveCases(db);
   return json(result);
 }
 

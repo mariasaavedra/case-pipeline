@@ -7,12 +7,14 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
+import type { ActiveCasesResult } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, BoardItemSummary, ClientUpdate, KpiCard, KpiItem, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
 export type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
 export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "@case-pipeline/query/appointments";
 export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
+export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
 
 async function apiFetch<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -125,6 +127,10 @@ export async function fetchAppointments(
   if (date) params.set("date", date);
   const qs = params.toString();
   return apiFetch<AppointmentsResult>(`/api/appointments${qs ? `?${qs}` : ""}`);
+}
+
+export async function fetchActiveCases(): Promise<ActiveCasesResult> {
+  return apiFetch<ActiveCasesResult>("/api/active-cases");
 }
 
 export async function fetchAlerts(attorney?: string): Promise<AlertsResult> {

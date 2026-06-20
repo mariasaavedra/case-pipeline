@@ -22,6 +22,7 @@ export interface GeneratedBoardItem {
   status?: string;
   nextDate?: string;
   attorney?: string;
+  paralegals?: string;
   profileLocalId?: string;
   columnValues: Record<string, unknown>;
 }
@@ -106,6 +107,10 @@ export class BoardItemFactory {
       nextDate = dateObj?.date ?? undefined;
     }
 
+    // Extract paralegals label (open forms only, but harmless for others)
+    const paralegalObj = columnValues.paralegals as { label?: string } | undefined;
+    const paralegals = paralegalObj?.label ?? undefined;
+
     const item: GeneratedBoardItem = {
       localId,
       boardKey: options.boardKey,
@@ -114,6 +119,7 @@ export class BoardItemFactory {
       status,
       nextDate,
       attorney: options.attorney,
+      paralegals,
       profileLocalId: options.profileLocalId,
       columnValues,
     };
@@ -150,9 +156,9 @@ export class BoardItemFactory {
     this.db.prepare(`
       INSERT INTO board_items (
         batch_id, local_id, board_key, group_title, name,
-        status, next_date, attorney, profile_local_id,
+        status, next_date, attorney, paralegals, profile_local_id,
         column_values
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       batchId,
       item.localId,
@@ -162,6 +168,7 @@ export class BoardItemFactory {
       item.status ?? null,
       item.nextDate ?? null,
       item.attorney ?? null,
+      item.paralegals ?? null,
       item.profileLocalId ?? null,
       JSON.stringify(item.columnValues)
     );

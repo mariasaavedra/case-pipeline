@@ -39,7 +39,16 @@ import {
   JAIL_INTAKE_ATTORNEYS,
   DETENTION_FACILITIES,
   JAIL_EVER_REMOVED,
+  PARALEGAL_NAMES,
 } from "../constants";
+
+// Terminal groups for open forms — items in these groups are filed/closed and excluded
+// from the Active Cases Board. ~35% of seeded open forms land here for realism.
+const OPEN_FORM_TERMINAL_GROUPS = [
+  { value: "Filed",      weight: 50 },
+  { value: "Interview",  weight: 30 },
+  { value: "Filed PIPS", weight: 20 },
+];
 
 // =============================================================================
 // Weighted group distributions per board (derived from production snapshot)
@@ -161,16 +170,49 @@ export function generateOpenFormData(
 ): BoardGenResult {
   const status = faker.helpers.weightedArrayElement(OPEN_FORM_STATUSES);
 
+  // Paralegal assignment — 10% unassigned. Otherwise one primary, with a
+  // ~25% chance of 1–2 co-assignees (shared cases, e.g. trainees). Stored as a
+  // comma-separated list to mirror Monday's people-column text ("A, B").
+  const primaryParalegal = faker.helpers.weightedArrayElement([...PARALEGAL_NAMES]);
+  let paralegal: string | null = primaryParalegal;
+  if (primaryParalegal && faker.number.float({ min: 0, max: 1 }) < 0.25) {
+    const pool = PARALEGAL_NAMES
+      .map((p) => p.value)
+      .filter((v) => v !== null && v !== primaryParalegal) as string[];
+    const extras = faker.helpers.arrayElements(pool, faker.number.int({ min: 1, max: 2 }));
+    paralegal = [primaryParalegal, ...extras].join(", ");
+  }
+
+  // Target date spread across all urgency buckets (overdue → no date)
+  const targetDateScenario = faker.helpers.weightedArrayElement([
+    { value: "overdue",  weight: 20 },
+    { value: "critical", weight: 15 },
+    { value: "soon",     weight: 20 },
+    { value: "later",    weight: 35 },
+    { value: "none",     weight: 10 },
+  ]);
+  const targetDate =
+    targetDateScenario === "overdue"  ? generateDate(-30, -1) :
+    targetDateScenario === "critical" ? generateDate(1, 3)    :
+    targetDateScenario === "soon"     ? generateDate(4, 7)    :
+    targetDateScenario === "later"    ? generateDate(8, 90)   :
+    null;
+
+  // ~35% of items land in terminal groups (Filed, Interview, etc.) for realism
+  const activeGroup = group ?? "Open Forms";
+  const resolvedGroup = faker.number.float({ min: 0, max: 1 }) < 0.35
+    ? faker.helpers.weightedArrayElement(OPEN_FORM_TERMINAL_GROUPS)
+    : activeGroup;
+
   return {
     name: `${profile.name} - ${feeK.caseType}`,
-    group: group ?? "Open Forms",
+    group: resolvedGroup,
     overrides: {
-      // Status (project_status)
       status: { label: status },
-      // Dates
-      target_date: { date: generateDate(14, 90) },
+      ...(targetDate ? { target_date: { date: targetDate } } : {}),
       assignment_date: { date: generateDate(-30, -1) },
       hire_date: { date: generateDate(-90, -1) },
+      ...(paralegal ? { paralegals: { label: paralegal } } : {}),
     },
   };
 }

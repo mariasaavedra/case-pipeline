@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS board_items (
     status TEXT,
     next_date TEXT,
     attorney TEXT,
+    paralegals TEXT,
     profile_local_id TEXT,
     column_values TEXT NOT NULL,
     sync_status TEXT NOT NULL DEFAULT 'pending',
@@ -166,6 +167,7 @@ CREATE INDEX IF NOT EXISTS idx_board_items_status ON board_items(status);
 CREATE INDEX IF NOT EXISTS idx_board_items_profile ON board_items(profile_local_id);
 CREATE INDEX IF NOT EXISTS idx_board_items_next_date ON board_items(next_date);
 CREATE INDEX IF NOT EXISTS idx_board_items_group ON board_items(board_key, group_title);
+CREATE INDEX IF NOT EXISTS idx_board_items_paralegals ON board_items(board_key, paralegals);
 CREATE INDEX IF NOT EXISTS idx_profiles_group ON profiles(group_title);
 CREATE INDEX IF NOT EXISTS idx_relationships_source ON item_relationships(source_local_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_target ON item_relationships(target_local_id);
@@ -358,6 +360,31 @@ export function initializeSchema(db: Database): void {
           db.exec(`ALTER TABLE profiles ADD COLUMN ${col} TEXT`);
         }
       }
+    }
+
+    // Migration v7 → v8: add paralegals column + fix next_date backfill for open forms
+    if (fromVersion < 8) {
+      const hasParalegals = db
+        .prepare("SELECT COUNT(*) as cnt FROM pragma_table_info('board_items') WHERE name='paralegals'")
+        .get() as { cnt: number };
+      if (!hasParalegals || hasParalegals.cnt === 0) {
+        db.exec("ALTER TABLE board_items ADD COLUMN paralegals TEXT");
+      }
+      // Close the backfill gap: open forms use target_date, not the paths covered in v3
+      db.exec(`
+        UPDATE board_items
+        SET next_date = json_extract(column_values, '$.target_date.date')
+        WHERE board_key = '_cd_open_forms' AND next_date IS NULL
+          AND json_extract(column_values, '$.target_date.date') IS NOT NULL
+      `);
+      // Backfill paralegals from existing JSON
+      db.exec(`
+        UPDATE board_items
+        SET paralegals = json_extract(column_values, '$.paralegals.label')
+        WHERE board_key = '_cd_open_forms'
+          AND json_extract(column_values, '$.paralegals.label') IS NOT NULL
+      `);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_board_items_paralegals ON board_items(board_key, paralegals)");
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

@@ -46,6 +46,19 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    id: "active-cases",
+    label: "Active Cases",
+    path: "/active-cases",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="2" y="2" width="7" height="7" rx="1" />
+        <rect x="11" y="2" width="7" height="7" rx="1" />
+        <rect x="2" y="11" width="7" height="7" rx="1" />
+        <rect x="11" y="11" width="7" height="7" rx="1" />
+      </svg>
+    ),
+  },
+  {
     id: "calendar",
     label: "Calendar",
     path: "/calendar",

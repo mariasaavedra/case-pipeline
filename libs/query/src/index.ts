@@ -15,6 +15,8 @@ export { getAppointments, getAttorneyList } from "./appointments";
 export type { AppointmentEntry, AppointmentsResult, AppointmentSnapshot } from "./appointments";
 export { searchByType } from "./search";
 export { getAlerts, getAlertsTotalCount } from "./alerts";
+export { getActiveCases } from "./active-cases";
+export type { ActiveCase, ActiveCasesAssignee, ActiveCasesResult, Urgency } from "./active-cases";
 export type {
   ProfileSummary,
   ContractSummary,

@@ -259,6 +259,15 @@ export const CONTRACT_VALUES = [...new Set(CASE_FEE_SCHEDULE.map((c) => c.fee))]
 
 export const PRIORITIES = ["High", "Medium", "Low", "No priority"];
 
+export const PARALEGAL_NAMES = [
+  { value: "Laura Torres",       weight: 22 },
+  { value: "Walter Taborda",     weight: 20 },
+  { value: "Cynthia De La Cruz", weight: 20 },
+  { value: "Mayra Ruiz",         weight: 18 },
+  { value: "Rafael Contreras",   weight: 10 },
+  { value: null,                 weight: 10 },
+] as const;
+
 export const SAMPLE_NOTES = [
   "Initial consultation completed. Client is responsive and engaged.",
   "Awaiting documentation from client. Follow up scheduled.",
