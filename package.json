@@ -20,6 +20,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "preflight": "bash scripts/preflight.sh",
     "seed": "tsx scripts/seed/index.ts",
+    "sync:live": "tsx --env-file-if-exists=.env scripts/sync/index.ts",
     "stats": "tsx scripts/export-stats.ts",
     "stats:live": "tsx scripts/export-stats.ts --db=live"
   },

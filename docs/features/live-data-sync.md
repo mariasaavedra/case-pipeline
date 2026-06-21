@@ -1,8 +1,26 @@
 # Live Data Sync Engine
 
-**Status:** Planned — not started  
-**Last updated:** 2026-05-25  
+**Status:** In progress — switch + mapper done, awaiting live-token validation  
+**Last updated:** 2026-06-20  
 **Priority:** 🔴 Foundation — prerequisite for all other features to work with real data
+
+## Progress (2026-06-20)
+
+- ✅ **`DB_SOURCE` env switch** — `apps/api/src/server.ts` resolves `seed`/`live`,
+  validates the value, and fails fast with an actionable message if the DB is
+  missing. Documented in `.env.example`. (`data/` is already gitignored.)
+- ✅ **Column mapper** — `scripts/sync/mapper.ts` reshapes Monday column values
+  into the exact JSON the query layer reads (`$.status.label`, `$.<key>.date`,
+  `$.type.labels`, etc.), plus first-class field extraction and profile-relation
+  resolution. Unit-tested offline in `scripts/sync/mapper.test.ts` (14 tests).
+- ✅ **Sync orchestrator** — `scripts/sync/index.ts` (`npm run sync:live`):
+  full-replace into `data/live.db`, two-pass profile linking, reuses the
+  Monday client's pagination/retry/rate-limit handling.
+- ⏳ **Needs a live run with `MONDAY_API_TOKEN`** to validate per-board specifics
+  (esp. the `fee_ks` → contracts field mapping and profile relation keys) against
+  real board structures. Cannot be verified end-to-end without the token.
+- ⬜ Client updates (Monday item updates → `client_updates`) and cross-board
+  `item_relationships` population are not yet wired (board_items profile link is).
 
 ---
 
