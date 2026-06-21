@@ -21,6 +21,7 @@
     "preflight": "bash scripts/preflight.sh",
     "seed": "tsx scripts/seed/index.ts",
     "sync:live": "tsx --env-file-if-exists=.env scripts/sync/index.ts",
+    "backup:live": "tsx scripts/backup-db.ts --db=live",
     "stats": "tsx scripts/export-stats.ts",
     "stats:live": "tsx scripts/export-stats.ts --db=live"
   },

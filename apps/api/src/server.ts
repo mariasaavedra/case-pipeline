@@ -102,16 +102,30 @@ app.get("/api/clients/:localId/updates", adapt(handleClientUpdates));
 app.get("/api/clients/:localId/relationships", adapt(handleClientRelationships));
 app.get("/api/board-items/:localId", adapt(handleBoardItemDetail));
 
+// Health check — cheap liveness/readiness probe for container orchestration.
+// Confirms the DB handle is alive; intentionally outside /api so it is trivial
+// to point a Docker HEALTHCHECK / load balancer at it.
+app.get("/health", (_req, res) => {
+  try {
+    db.prepare("SELECT 1").get();
+    res.status(200).json({ status: "ok", db: DB_SOURCE });
+  } catch (err) {
+    res.status(503).json({ status: "error", error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // Unknown /api/ routes → 404
 app.use("/api/", (_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
 
 
-const PORT = 3000;
-// Bind to loopback only. The API is unauthenticated and serves client PII,
-// so it must not be reachable from other hosts on the network.
-const HOST = "127.0.0.1";
+const PORT = Number(process.env.PORT ?? 3000);
+// Bind to loopback by default. The API is unauthenticated and serves client
+// PII, so locally it must not be reachable from other hosts. Inside a container
+// (behind nginx, with no published port) set HOST=0.0.0.0 so the proxy can reach
+// it on the compose network.
+const HOST = process.env.HOST ?? "127.0.0.1";
 app.listen(PORT, HOST, () => {
   console.log(`Server running at http://${HOST}:${PORT}`);
   console.log(`Note: frontend requires a separate Vite build (added in Phase 3)`);
