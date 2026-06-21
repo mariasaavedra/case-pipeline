@@ -75,6 +75,13 @@ function labelOf(v: unknown): string | null {
 function rawOf(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
+function labelsOf(v: unknown): string | null {
+  if (v && typeof v === "object" && "labels" in v) {
+    const arr = (v as { labels?: unknown[] }).labels;
+    if (Array.isArray(arr) && arr.length) return arr.join(", ");
+  }
+  return null;
+}
 function dateOf(v: unknown): string | null {
   if (v && typeof v === "object" && "date" in v) return (v as { date?: string }).date ?? null;
   return null;
@@ -101,9 +108,13 @@ async function main() {
 
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
-  initializeSchema(db);
-  // Full replace: start from a clean, current-schema database every run.
-  resetDatabase(db);
+  if (onlyBoards) {
+    // Partial (--boards) run: keep the database, replace only targeted boards.
+    initializeSchema(db);
+  } else {
+    // Full run: full replace from a clean, current-schema database.
+    resetDatabase(db);
+  }
 
   const batchInfo = db
     .prepare("INSERT INTO seed_batches (batch_name, status, metadata) VALUES (?, 'running', ?)")
@@ -118,9 +129,30 @@ async function main() {
   console.log("=".repeat(60));
   console.log(`Batch ${batchId} · boards: ${boardKeys.length} · max items/board: ${maxItems}\n`);
 
-  // monday_item_id → local profile id, built during the profiles pass.
+  // monday_item_id → local profile id, used to resolve profile relations.
   const profilesByMondayId = new Map<string, string>();
+  // Preload existing mappings so partial runs that skip the profiles board can
+  // still resolve relations (harmless on a full run — table was just reset).
+  for (const row of db
+    .prepare("SELECT monday_item_id, local_id FROM profiles WHERE monday_item_id IS NOT NULL")
+    .all() as Array<{ monday_item_id: string; local_id: string }>) {
+    profilesByMondayId.set(row.monday_item_id, row.local_id);
+  }
   const counts: Record<string, number> = {};
+  const errors: Array<{ board: string; error: string }> = [];
+  let orphanContracts = 0;
+
+  // Run one board's sync in isolation: a failure logs and is skipped so one bad
+  // board never aborts the rest of the sync.
+  async function runPass(key: string, fn: () => Promise<void>): Promise<void> {
+    try {
+      await fn();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`\n  ✗ ${key} failed: ${msg}`);
+      errors.push({ board: key, error: msg });
+    }
+  }
 
   // ---- Helper: resolve a board's columns once ----
   async function resolveBoard(key: string) {
@@ -143,104 +175,126 @@ async function main() {
     return null;
   }
 
-  // ---- Pass 1: profiles ----
+  // ---- Pass 1: profiles (first, so later passes can resolve relations) ----
   if (boardKeys.includes(PROFILE_BOARD)) {
-    const { resolved, items } = await resolveBoard(PROFILE_BOARD);
-    const insert = db.prepare(`
-      INSERT INTO profiles (
-        batch_id, local_id, monday_item_id, name, email, phone, address,
-        date_of_birth, place_of_birth, a_number, priority, group_title,
-        raw_column_values, sync_status, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
-    `);
-    const tx = db.transaction((rows: MondayItem[]) => {
-      for (const item of rows) {
-        const cvs = buildColumnValues(item, resolved);
-        const localId = randomUUID();
-        profilesByMondayId.set(item.id, localId);
-        insert.run(
-          batchId, localId, item.id, item.name,
-          rawOf(cvs.email), rawOf(cvs.phone), rawOf(cvs.physical_address),
-          rawOf(cvs.date_of_birth) ?? dateOf(cvs.date_of_birth),
-          labelOf(cvs.country_of_birth) ?? rawOf(cvs.country_of_birth),
-          normalizeANumber(rawOf(cvs.a_number)),
-          labelOf(cvs.status),
-          item.group?.title ?? null,
-          JSON.stringify(cvs),
-        );
-      }
+    await runPass(PROFILE_BOARD, async () => {
+      const { resolved, items } = await resolveBoard(PROFILE_BOARD);
+      if (onlyBoards) db.prepare("DELETE FROM profiles").run();
+      const insert = db.prepare(`
+        INSERT INTO profiles (
+          batch_id, local_id, monday_item_id, name, email, phone, address,
+          date_of_birth, place_of_birth, a_number, priority, group_title,
+          raw_column_values, sync_status, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
+      `);
+      const tx = db.transaction((rows: MondayItem[]) => {
+        for (const item of rows) {
+          const cvs = buildColumnValues(item, resolved);
+          const localId = randomUUID();
+          profilesByMondayId.set(item.id, localId);
+          insert.run(
+            batchId, localId, item.id, item.name,
+            rawOf(cvs.email), rawOf(cvs.phone), rawOf(cvs.physical_address),
+            rawOf(cvs.date_of_birth) ?? dateOf(cvs.date_of_birth),
+            labelOf(cvs.country_of_birth) ?? rawOf(cvs.country_of_birth),
+            normalizeANumber(rawOf(cvs.a_number)),
+            labelOf(cvs.status),
+            item.group?.title ?? null,
+            JSON.stringify(cvs),
+          );
+        }
+      });
+      tx(items);
+      counts[PROFILE_BOARD] = items.length;
     });
-    tx(items);
-    counts[PROFILE_BOARD] = items.length;
   }
 
   // ---- Pass 2: contracts (fee_ks) ----
   if (boardKeys.includes(CONTRACT_BOARD)) {
-    const { resolved, items } = await resolveBoard(CONTRACT_BOARD);
-    const insert = db.prepare(`
-      INSERT INTO contracts (
-        batch_id, local_id, monday_item_id, profile_local_id, profile_monday_id,
-        name, case_type, contract_id, status, raw_column_values, sync_status, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
-    `);
-    const tx = db.transaction((rows: MondayItem[]) => {
-      for (const item of rows) {
-        const cvs = buildColumnValues(item, resolved);
-        const profileMondayId = firstLinkedId(cvs.profile);
-        insert.run(
-          batchId, randomUUID(), item.id,
-          findProfileLocalId(cvs), profileMondayId,
-          item.name,
-          rawOf(cvs.contract_for) ?? labelOf(cvs.contract_for),
-          rawOf(cvs.fee_k_id),
-          labelOf(cvs.contract_stage) ?? labelOf(cvs.ps_stage),
-          JSON.stringify(cvs),
-        );
-      }
+    await runPass(CONTRACT_BOARD, async () => {
+      const { resolved, items } = await resolveBoard(CONTRACT_BOARD);
+      if (onlyBoards) db.prepare("DELETE FROM contracts").run();
+      const insert = db.prepare(`
+        INSERT INTO contracts (
+          batch_id, local_id, monday_item_id, profile_local_id, profile_monday_id,
+          name, case_type, contract_id, status, raw_column_values, sync_status, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
+      `);
+      const tx = db.transaction((rows: MondayItem[]) => {
+        for (const item of rows) {
+          const cvs = buildColumnValues(item, resolved);
+          const profileMondayId = firstLinkedId(cvs.profile);
+          const profileLocalId = findProfileLocalId(cvs);
+          if (!profileLocalId) orphanContracts++;
+          insert.run(
+            batchId, randomUUID(), item.id,
+            // contracts.profile_local_id is NOT NULL; orphans (no resolvable
+            // profile link) get "" so they still sync without breaking joins.
+            profileLocalId ?? "", profileMondayId,
+            item.name,
+            // case type: "contract_for" is a dropdown → { labels: [...] }
+            labelsOf(cvs.contract_for) ?? labelOf(cvs.contract_for) ?? rawOf(cvs.contract_for),
+            rawOf(cvs.fee_k_id),
+            labelOf(cvs.contract_stage) ?? labelOf(cvs.ps_stage),
+            JSON.stringify(cvs),
+          );
+        }
+      });
+      tx(items);
+      counts[CONTRACT_BOARD] = items.length;
     });
-    tx(items);
-    counts[CONTRACT_BOARD] = items.length;
   }
 
   // ---- Pass 3: all other boards → board_items ----
   for (const key of boardKeys) {
     if (key === PROFILE_BOARD || key === CONTRACT_BOARD) continue;
-    const { resolved, items } = await resolveBoard(key);
-    const insert = db.prepare(`
-      INSERT INTO board_items (
-        batch_id, local_id, monday_item_id, board_key, group_title, name,
-        status, next_date, attorney, paralegals, profile_local_id,
-        column_values, sync_status, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
-    `);
-    const tx = db.transaction((rows: MondayItem[]) => {
-      for (const item of rows) {
-        const cvs = buildColumnValues(item, resolved);
-        const fields = extractBoardItemFields(key, cvs);
-        insert.run(
-          batchId, randomUUID(), item.id, key, item.group?.title ?? null, item.name,
-          fields.status, fields.nextDate, fields.attorney, fields.paralegals,
-          findProfileLocalId(cvs),
-          JSON.stringify(cvs),
-        );
-      }
+    await runPass(key, async () => {
+      const { resolved, items } = await resolveBoard(key);
+      if (onlyBoards) db.prepare("DELETE FROM board_items WHERE board_key = ?").run(key);
+      const insert = db.prepare(`
+        INSERT INTO board_items (
+          batch_id, local_id, monday_item_id, board_key, group_title, name,
+          status, next_date, attorney, paralegals, profile_local_id,
+          column_values, sync_status, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
+      `);
+      const tx = db.transaction((rows: MondayItem[]) => {
+        for (const item of rows) {
+          const cvs = buildColumnValues(item, resolved);
+          const fields = extractBoardItemFields(key, cvs);
+          insert.run(
+            batchId, randomUUID(), item.id, key, item.group?.title ?? null, item.name,
+            fields.status, fields.nextDate, fields.attorney, fields.paralegals,
+            findProfileLocalId(cvs),
+            JSON.stringify(cvs),
+          );
+        }
+      });
+      tx(items);
+      counts[key] = items.length;
     });
-    tx(items);
-    counts[key] = items.length;
   }
 
-  db.prepare("UPDATE seed_batches SET status = 'synced' WHERE id = ?").run(batchId);
+  db.prepare("UPDATE seed_batches SET status = ? WHERE id = ?")
+    .run(errors.length ? "partial" : "synced", batchId);
 
   // ---- Summary ----
   console.log("\n" + "=".repeat(60));
-  console.log("Sync complete");
+  console.log(errors.length ? "Sync finished with errors" : "Sync complete");
   console.log("=".repeat(60));
   console.log(`  Profiles: ${counts[PROFILE_BOARD] ?? 0}`);
-  console.log(`  Contracts: ${counts[CONTRACT_BOARD] ?? 0}`);
+  console.log(
+    `  Contracts: ${counts[CONTRACT_BOARD] ?? 0}` +
+      (orphanContracts ? ` (${orphanContracts} without a resolved profile)` : ""),
+  );
   const boardItemTotal = Object.entries(counts)
     .filter(([k]) => k !== PROFILE_BOARD && k !== CONTRACT_BOARD)
     .reduce((sum, [, n]) => sum + n, 0);
   console.log(`  Board items: ${boardItemTotal}`);
+  if (errors.length) {
+    console.log(`\n  Failed boards (${errors.length}):`);
+    for (const e of errors) console.log(`    - ${e.board}: ${e.error}`);
+  }
   console.log(`  → ${dbPath}`);
   console.log(`\nRun the API against it with: DB_SOURCE=live npm run dev:api`);
 

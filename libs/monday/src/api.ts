@@ -408,6 +408,10 @@ export async function fetchBoardItems(
             column_values {
               id
               text
+              ... on BoardRelationValue {
+                linked_item_ids
+                display_value
+              }
               ... on MirrorValue {
                 display_value
               }

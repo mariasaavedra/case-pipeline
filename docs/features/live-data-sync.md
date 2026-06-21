@@ -1,8 +1,30 @@
 # Live Data Sync Engine
 
-**Status:** In progress — switch + mapper done, awaiting live-token validation  
+**Status:** Working — validated end-to-end against real Monday.com data  
 **Last updated:** 2026-06-20  
 **Priority:** 🔴 Foundation — prerequisite for all other features to work with real data
+
+## Validated live run (2026-06-20)
+
+First full sync against production: **2892 profiles · 1399 contracts** (13 without
+a resolvable profile) **· 7007 board items** across 17 boards. The API serves it
+with `DB_SOURCE=live` (dashboard KPIs, client 360, contracts/board-items joins
+all resolve). Two bugs found and fixed during this run:
+
+1. **Bulk fetch dropped relations** — `fetchBoardItems` in `libs/monday/src/api.ts`
+   was missing the `BoardRelationValue` fragment, so `linked_item_ids` never came
+   back and *every* profile link resolved to null. Added the fragment; profile
+   resolution is now 79–99% per board.
+2. **`contracts.case_type`** — `contract_for` is a dropdown (`{labels:[...]}`),
+   not text; the sync now reads `.labels`.
+
+Sync hardening also added: per-board error isolation (one bad board no longer
+aborts the run), orphan-contract handling (`profile_local_id` NOT NULL → `""`),
+and non-destructive partial runs (`--boards` preserves other boards; only a full
+run does a full replace).
+
+**Domain notes:** `_fa_jail_intakes` (0% profile link) and `calendaring` (82%)
+link to cases/are standalone rather than to profiles directly — expected, not a bug.
 
 ## Progress (2026-06-20)
 
