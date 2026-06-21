@@ -5,6 +5,7 @@
 import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 import express from "express";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateSchema } from "@case-pipeline/seed/db/schema";
@@ -29,11 +30,34 @@ import {
 // Database
 // =============================================================================
 
-const DB_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../data/seed.db");
+// DB_SOURCE selects which local database the API reads from:
+//   seed (default) → data/seed.db (Faker.js data, safe, used by CI)
+//   live           → data/live.db (real Monday.com data, gitignored)
+// Both share the same schema, query layer, and UI — only the data differs.
+const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../data");
+const DB_SOURCE = (process.env.DB_SOURCE ?? "seed").toLowerCase();
+
+if (DB_SOURCE !== "seed" && DB_SOURCE !== "live") {
+  console.error(`Invalid DB_SOURCE="${process.env.DB_SOURCE}". Expected "seed" or "live".`);
+  process.exit(1);
+}
+
+const DB_PATH = path.join(DATA_DIR, `${DB_SOURCE}.db`);
+
+if (!fs.existsSync(DB_PATH)) {
+  console.error(`Database not found: ${DB_PATH}`);
+  console.error(
+    DB_SOURCE === "live"
+      ? `Run the live sync first (requires MONDAY_API_TOKEN): npm run sync:live`
+      : `Generate seed data first: npm run seed`,
+  );
+  process.exit(1);
+}
+
 const db = new Database(DB_PATH, { readonly: true });
 validateSchema(db);
 
-console.log(`Database loaded: ${DB_PATH}`);
+console.log(`Database loaded (DB_SOURCE=${DB_SOURCE}): ${DB_PATH}`);
 
 // =============================================================================
 // Express adapter
