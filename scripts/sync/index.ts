@@ -26,6 +26,7 @@ import {
   setApiToken,
   fetchBoardStructure,
   fetchAllBoardItems,
+  fetchItemUpdatesBatch,
   resolveAllColumns,
 } from "@case-pipeline/monday";
 import type { MondayItem } from "@case-pipeline/monday";
@@ -275,6 +276,105 @@ async function main() {
     });
   }
 
+  // ---- Pass 4: updates (comments + replies on every profile and board item) ----
+  if (!onlyBoards) {
+    await runPass("updates", async () => {
+      // Build a lookup: monday_item_id → { profile_local_id, board_item_local_id, board_key }
+      type ItemMeta = { profile_local_id: string; board_item_local_id: string | null; board_key: string | null };
+      const itemMeta = new Map<string, ItemMeta>();
+
+      for (const row of db.prepare(
+        "SELECT monday_item_id, local_id FROM profiles WHERE monday_item_id IS NOT NULL"
+      ).all() as { monday_item_id: string; local_id: string }[]) {
+        itemMeta.set(row.monday_item_id, {
+          profile_local_id: row.local_id,
+          board_item_local_id: null,
+          board_key: null,
+        });
+      }
+
+      for (const row of db.prepare(
+        "SELECT monday_item_id, local_id, profile_local_id, board_key FROM board_items WHERE monday_item_id IS NOT NULL AND profile_local_id != ''"
+      ).all() as { monday_item_id: string; local_id: string; profile_local_id: string; board_key: string }[]) {
+        itemMeta.set(row.monday_item_id, {
+          profile_local_id: row.profile_local_id,
+          board_item_local_id: row.local_id,
+          board_key: row.board_key,
+        });
+      }
+
+      const allIds = [...itemMeta.keys()];
+      const BATCH = 25;
+      const DELAY_MS = 300;
+      let totalUpdates = 0;
+
+      const insertUpdate = db.prepare(`
+        INSERT INTO client_updates (
+          batch_id, local_id, monday_update_id, profile_local_id,
+          board_item_local_id, board_key, author_name, author_email,
+          text_body, body_html, source_type, reply_to_update_id,
+          created_at_source, raw_json, sync_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+      `);
+
+      function stripHtml(html: string): string {
+        return html
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/﻿/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      for (let i = 0; i < allIds.length; i += BATCH) {
+        const batch = allIds.slice(i, i + BATCH);
+        const updatesMap = await fetchItemUpdatesBatch(batch, 100);
+
+        const tx = db.transaction(() => {
+          for (const [mondayItemId, updates] of updatesMap) {
+            const meta = itemMeta.get(mondayItemId);
+            if (!meta) continue;
+
+            for (const update of updates) {
+              insertUpdate.run(
+                batchId, randomUUID(), update.id,
+                meta.profile_local_id, meta.board_item_local_id, meta.board_key,
+                update.creator?.name ?? "Unknown", update.creator?.email ?? null,
+                stripHtml(update.body), update.body,
+                "update", null,
+                update.created_at, JSON.stringify(update),
+              );
+              totalUpdates++;
+
+              for (const reply of update.replies ?? []) {
+                insertUpdate.run(
+                  batchId, randomUUID(), reply.id,
+                  meta.profile_local_id, meta.board_item_local_id, meta.board_key,
+                  reply.creator?.name ?? "Unknown", reply.creator?.email ?? null,
+                  stripHtml(reply.body), reply.body,
+                  "reply", update.id,
+                  reply.created_at, JSON.stringify(reply),
+                );
+                totalUpdates++;
+              }
+            }
+          }
+        });
+        tx();
+
+        process.stdout.write(`\r  updates: ${Math.min(i + BATCH, allIds.length)}/${allIds.length} items (${totalUpdates} notes)`);
+        if (i + BATCH < allIds.length) await new Promise((r) => setTimeout(r, DELAY_MS));
+      }
+
+      process.stdout.write(`\r  updates: ${allIds.length}/${allIds.length} items (${totalUpdates} notes) ✓\n`);
+      counts["updates"] = totalUpdates;
+    });
+  }
+
   db.prepare("UPDATE seed_batches SET status = ? WHERE id = ?")
     .run(errors.length ? "partial" : "synced", batchId);
 
@@ -288,9 +388,10 @@ async function main() {
       (orphanContracts ? ` (${orphanContracts} without a resolved profile)` : ""),
   );
   const boardItemTotal = Object.entries(counts)
-    .filter(([k]) => k !== PROFILE_BOARD && k !== CONTRACT_BOARD)
+    .filter(([k]) => k !== PROFILE_BOARD && k !== CONTRACT_BOARD && k !== "updates")
     .reduce((sum, [, n]) => sum + n, 0);
   console.log(`  Board items: ${boardItemTotal}`);
+  console.log(`  Notes (updates + replies): ${counts["updates"] ?? 0}`);
   if (errors.length) {
     console.log(`\n  Failed boards (${errors.length}):`);
     for (const e of errors) console.log(`    - ${e.board}: ${e.error}`);

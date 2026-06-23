@@ -2,7 +2,7 @@
 // Monday.com API utilities
 // =============================================================================
 
-import type { MondayBoard, MondayColumn, MondayItem, ColumnLabels } from "./types";
+import type { MondayBoard, MondayColumn, MondayItem, ColumnLabels, MondayUpdate } from "./types";
 
 // =============================================================================
 // Custom Error Types
@@ -579,5 +579,51 @@ export function parseColumnLabels(column: MondayColumn): ColumnLabels {
 export function getExistingLabelNames(column: MondayColumn): string[] {
   const labels = parseColumnLabels(column);
   return Object.values(labels);
+}
+
+// =============================================================================
+// Updates fetching
+// =============================================================================
+
+/**
+ * Fetch updates (and their replies) for a batch of item IDs in one request.
+ * Returns a map of monday_item_id → updates array.
+ * Batch size should stay at or below 25 to avoid complexity limits.
+ */
+export async function fetchItemUpdatesBatch(
+  itemIds: string[],
+  updatesLimit = 100
+): Promise<Map<string, MondayUpdate[]>> {
+  if (itemIds.length === 0) return new Map();
+
+  const query = `
+    query ($ids: [ID!], $limit: Int!) {
+      items(ids: $ids) {
+        id
+        updates(limit: $limit) {
+          id
+          body
+          created_at
+          creator { name email }
+          replies {
+            id
+            body
+            created_at
+            creator { name email }
+          }
+        }
+      }
+    }
+  `;
+
+  const result = await mondayRequest<{
+    data: { items: Array<{ id: string; updates: MondayUpdate[] }> };
+  }>(query, { ids: itemIds, limit: updatesLimit });
+
+  const map = new Map<string, MondayUpdate[]>();
+  for (const item of result.data.items ?? []) {
+    map.set(item.id, item.updates ?? []);
+  }
+  return map;
 }
 

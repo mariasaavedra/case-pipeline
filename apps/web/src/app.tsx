@@ -8,12 +8,19 @@ import { AppointmentsPage } from "./components/AppointmentsPage";
 import { ClientsPage } from "./components/ClientsPage";
 import { AlertsPage } from "./components/AlertsPage";
 import { ActiveCasesPage } from "./components/ActiveCasesPage";
+import { LoginPage } from "./pages/LoginPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import type { TabId } from "./components/ClientTabs";
 import { matchRoute, navigate } from "./router";
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
+import { AuthProvider } from "./auth/AuthProvider";
+import { useAuth } from "./auth/useAuth";
+import { usePreferences } from "./hooks/usePreferences";
 
 function App() {
+  const { user, isLoading: authLoading, logout } = useAuth();
+  const { prefs } = usePreferences();
   const [client, setClient] = useState<ClientCaseSummary | null>(null);
   const [initialTab, setInitialTab] = useState<TabId>("overview");
   const [loading, setLoading] = useState(false);
@@ -98,9 +105,48 @@ function App() {
   const isClientDetail = route.page === "client-detail";
   const sidebarWidth = sidebarCollapsed ? 60 : 220;
 
+  // Auth loading — wait before showing anything to avoid flash.
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-bg)" }}>
+        <div style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", fontSize: "14px" }}>Loading…</div>
+      </div>
+    );
+  }
+
+  // Route guard — unauthenticated users only see /login.
+  if (!user && route.page !== "login") {
+    navigate("/login");
+    return null;
+  }
+
+  if (user && route.page === "login") {
+    navigate(prefs.defaultPage);
+    return null;
+  }
+
+  // Legacy /admin → redirect to /settings
+  if (route.page === "admin") {
+    navigate("/settings");
+    return null;
+  }
+
+  if (route.page === "login") return <LoginPage />;
+
+  if (route.page === "settings") {
+    return (
+      <div className="app-layout">
+        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} user={user} onLogout={logout} />
+        <div className="app-content" style={{ marginLeft: sidebarWidth }}>
+          <SettingsPage />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-layout">
-      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} user={user} onLogout={logout} />
 
       <div className="app-content" style={{ marginLeft: sidebarWidth }}>
         {/* Header */}
@@ -226,4 +272,10 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 }
 
 const root = createRoot(document.getElementById("root")!);
-root.render(<ErrorBoundary><App /></ErrorBoundary>);
+root.render(
+  <ErrorBoundary>
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  </ErrorBoundary>
+);

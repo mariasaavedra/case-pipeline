@@ -5,7 +5,7 @@
 import type { TabId } from "./components/ClientTabs";
 
 export interface Route {
-  page: "landing" | "clients" | "client-detail" | "appointments" | "active-cases" | "alerts";
+  page: "landing" | "clients" | "client-detail" | "appointments" | "active-cases" | "alerts" | "login" | "admin" | "settings";
   params: Record<string, string>;
 }
 
@@ -17,6 +17,19 @@ const VALID_TABS = new Set<string>(["overview", "appointments", "contracts", "ac
 export function matchRoute(pathname: string): Route {
   // Normalize: strip trailing slash (except root)
   const path = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
+
+  if (path === "/login") {
+    return { page: "login", params: {} };
+  }
+
+  if (path === "/settings") {
+    return { page: "settings", params: {} };
+  }
+
+  // Legacy /admin → redirect handled in app.tsx
+  if (path === "/admin") {
+    return { page: "admin", params: {} };
+  }
 
   if (path === "/") {
     return { page: "landing", params: {} };

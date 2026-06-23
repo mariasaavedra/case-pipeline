@@ -8,6 +8,8 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
+import cron from "node-cron";
 import { validateSchema } from "@case-pipeline/seed/db/schema";
 import {
   handleListClients,
@@ -25,6 +27,9 @@ import {
   handleActiveCases,
   handleAlerts,
 } from "./handlers/handlers";
+import { requireAuth } from "./auth/middleware.js";
+import { handleAuthMe } from "./routes/auth.js";
+import { handleAdminListUsers, handleAdminUpdateRole } from "./routes/admin.js";
 
 // =============================================================================
 // Database
@@ -85,6 +90,17 @@ function adapt(handler: Handler) {
 // =============================================================================
 
 const app = express();
+app.use(express.json());
+
+// Auth — unauthenticated entry point (validates token + upserts user)
+app.get("/api/auth/me", requireAuth, handleAuthMe);
+
+// Admin
+app.get("/api/admin/users", requireAuth, handleAdminListUsers);
+app.patch("/api/admin/users/:id/role", requireAuth, handleAdminUpdateRole);
+
+// Protect all remaining /api/* routes
+app.use("/api/", requireAuth);
 
 // API routes
 app.get("/api/dashboard", adapt(handleDashboard));
@@ -128,5 +144,44 @@ const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? "127.0.0.1";
 app.listen(PORT, HOST, () => {
   console.log(`Server running at http://${HOST}:${PORT}`);
-  console.log(`Note: frontend requires a separate Vite build (added in Phase 3)`);
+
+  if (DB_SOURCE === "live") {
+    scheduleNightlySync();
+  }
 });
+
+// =============================================================================
+// Nightly sync — Monday.com → live.db (runs at midnight, live mode only)
+// =============================================================================
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+function runSync(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    console.log("[sync] Starting nightly sync from Monday.com…");
+    const child = spawn("npm", ["run", "sync:live"], {
+      cwd: REPO_ROOT,
+      stdio: "inherit",
+      env: process.env,
+      shell: true,
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        console.log("[sync] Nightly sync complete.");
+        resolve();
+      } else {
+        console.error(`[sync] Nightly sync failed (exit code ${code}).`);
+        reject(new Error(`sync exited with code ${code}`));
+      }
+    });
+    child.on("error", reject);
+  });
+}
+
+function scheduleNightlySync() {
+  // Runs every day at midnight (server local time).
+  cron.schedule("0 0 * * *", () => {
+    runSync().catch((err) => console.error("[sync] Error:", err));
+  });
+  console.log("[sync] Nightly sync scheduled — runs every day at midnight.");
+}

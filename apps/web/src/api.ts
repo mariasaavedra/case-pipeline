@@ -16,8 +16,21 @@ export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "
 export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
 
-async function apiFetch<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+let _tokenGetter: (() => Promise<string | null>) | null = null;
+
+export function setTokenGetter(fn: () => Promise<string | null>) {
+  _tokenGetter = fn;
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  if (!_tokenGetter) return {};
+  const token = await _tokenGetter();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
+  const headers = { ...(await authHeaders()), ...(init?.headers as Record<string, string> ?? {}) };
+  const res = await fetch(url, { ...init, headers });
 
   let body: { data?: T; error?: string } | null = null;
   const contentType = res.headers.get("content-type") ?? "";
@@ -61,7 +74,7 @@ export async function searchClients(
   signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   const url = `/api/clients/search?q=${encodeURIComponent(query)}`;
-  const res = await fetch(url, signal ? { signal } : undefined);
+  const res = await fetch(url, { headers: await authHeaders(), ...(signal ? { signal } : {}) });
 
   const contentType = res.headers.get("content-type") ?? "";
   let body: { data?: SearchResult[]; error?: string } | null = null;
@@ -85,7 +98,7 @@ export async function typedSearch(
 ): Promise<TypedSearchResult[]> {
   const params = new URLSearchParams({ q: query, type });
   const url = `/api/search?${params.toString()}`;
-  const res = await fetch(url, signal ? { signal } : undefined);
+  const res = await fetch(url, { headers: await authHeaders(), ...(signal ? { signal } : {}) });
 
   const contentType = res.headers.get("content-type") ?? "";
   let body: { data?: TypedSearchResult[]; error?: string } | null = null;
@@ -142,7 +155,7 @@ export async function fetchAlerts(attorney?: string): Promise<AlertsResult> {
 
 export async function fetchDashboard(hearingRange?: string): Promise<KpiCard[]> {
   const params = hearingRange ? `?hearingRange=${encodeURIComponent(hearingRange)}` : "";
-  const res = await fetch(`/api/dashboard${params}`);
+  const res = await fetch(`/api/dashboard${params}`, { headers: await authHeaders() });
 
   const contentType = res.headers.get("content-type") ?? "";
   let body: { data?: KpiCard[] } | null = null;

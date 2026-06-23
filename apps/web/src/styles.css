@@ -41,6 +41,28 @@
   --font-mono: "JetBrains Mono", "Menlo", monospace;
 }
 
+/* =============================================================================
+   Dark theme overrides — toggled via data-theme="dark" on <html>
+   ============================================================================= */
+
+[data-theme="dark"] {
+  --color-surface: #0e1018;
+  --color-surface-warm: #131620;
+  --color-card: #161a24;
+  --color-ink: #e2e0ee;
+  --color-ink-muted: #8d8ba8;
+  --color-ink-faint: #56546e;
+  --color-border: #252838;
+  --color-border-light: #1c1f2c;
+  --color-amber-light: rgba(180, 83, 9, 0.15);
+  --color-status-green-bg: rgba(6, 95, 70, 0.15);
+  --color-status-blue-bg: rgba(30, 64, 175, 0.15);
+  --color-status-yellow-bg: rgba(146, 64, 14, 0.15);
+  --color-status-red-bg: rgba(153, 27, 27, 0.15);
+  --color-status-gray-bg: rgba(107, 114, 128, 0.15);
+  --color-status-purple-bg: rgba(107, 33, 168, 0.15);
+}
+
 /* Base */
 body {
   font-family: var(--font-body);

@@ -12,12 +12,15 @@
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "jose": "^6.2.3",
+    "node-cron": "^4.5.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
+    "@types/node-cron": "^3.0.11",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3",
     "vitest": "^4.1.5"

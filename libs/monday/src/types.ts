@@ -41,3 +41,23 @@ export interface MondayItem {
 export interface ColumnLabels {
   [key: string]: string;
 }
+
+export interface MondayUpdateCreator {
+  name: string;
+  email: string;
+}
+
+export interface MondayReply {
+  id: string;
+  body: string;
+  created_at: string;
+  creator: MondayUpdateCreator | null;
+}
+
+export interface MondayUpdate {
+  id: string;
+  body: string;
+  created_at: string;
+  creator: MondayUpdateCreator | null;
+  replies: MondayReply[];
+}

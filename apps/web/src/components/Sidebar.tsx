@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { navigate, matchRoute } from "../router";
+import type { AuthUser } from "../auth/AuthProvider";
 
 const COLLAPSED_KEY = "sidebar-collapsed";
 
@@ -93,9 +94,11 @@ function isActiveItem(item: NavItem, pathname: string): boolean {
 interface Props {
   mobileOpen: boolean;
   onMobileClose: () => void;
+  user: AuthUser | null;
+  onLogout: () => void;
 }
 
-export function Sidebar({ mobileOpen, onMobileClose }: Props) {
+export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSED_KEY) === "true";
@@ -182,6 +185,74 @@ export function Sidebar({ mobileOpen, onMobileClose }: Props) {
             );
           })}
         </nav>
+
+        {/* Settings */}
+        <button
+          onClick={() => { navigate("/settings"); onMobileClose(); }}
+          className={`sidebar-item ${pathname === "/settings" ? "sidebar-item-active" : ""}`}
+          title={collapsed ? "Settings" : undefined}
+          style={{ justifyContent: collapsed ? "center" : "flex-start" }}
+        >
+          <span className="sidebar-icon">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="10" cy="10" r="3" />
+              <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4" />
+            </svg>
+          </span>
+          {!collapsed && <span className="sidebar-label">Settings</span>}
+        </button>
+
+        {/* User info + logout */}
+        {user && (
+          <div
+            style={{
+              padding: collapsed ? "12px 8px" : "12px 16px",
+              borderTop: "1px solid rgba(255,255,255,0.07)",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+            }}
+          >
+            <div
+              style={{
+                width: "28px",
+                height: "28px",
+                borderRadius: "50%",
+                backgroundColor: "var(--color-amber)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontFamily: "var(--font-body)",
+                fontWeight: 600,
+                fontSize: "11px",
+                color: "#fff",
+                flexShrink: 0,
+              }}
+            >
+              {user.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
+            </div>
+            {!collapsed && (
+              <>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "var(--font-body)", fontSize: "12px", fontWeight: 500, color: "rgba(255,255,255,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.name}
+                  </div>
+                </div>
+                <button
+                  onClick={onLogout}
+                  title="Sign out"
+                  style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: "rgba(255,255,255,0.4)", flexShrink: 0 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.8)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M10 3h3a1 1 0 011 1v8a1 1 0 01-1 1h-3M7 11l3-3-3-3M10 8H2" />
+                  </svg>
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Collapse toggle */}
         <button

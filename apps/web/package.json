@@ -10,6 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.14.0",
+    "@azure/msal-react": "^5.4.5",
     "@tailwindcss/vite": "^4.2.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
