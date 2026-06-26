@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 10;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS contracts (
     value INTEGER,
     contract_id TEXT,
     status TEXT,
+    group_title TEXT,
     raw_column_values TEXT,
     sync_status TEXT NOT NULL DEFAULT 'pending',
     sync_error TEXT,
@@ -78,6 +79,7 @@ CREATE TABLE IF NOT EXISTS board_items (
     name TEXT NOT NULL,
     status TEXT,
     next_date TEXT,
+    next_time TEXT,
     attorney TEXT,
     paralegals TEXT,
     profile_local_id TEXT,
@@ -385,6 +387,34 @@ export function initializeSchema(db: Database): void {
           AND json_extract(column_values, '$.paralegals.label') IS NOT NULL
       `);
       db.exec("CREATE INDEX IF NOT EXISTS idx_board_items_paralegals ON board_items(board_key, paralegals)");
+    }
+
+    // Migration v8 → v9: add group_title to contracts
+    if (fromVersion < 9) {
+      const has = db
+        .prepare("SELECT COUNT(*) as cnt FROM pragma_table_info('contracts') WHERE name='group_title'")
+        .get() as { cnt: number };
+      if (!has || has.cnt === 0) {
+        db.exec("ALTER TABLE contracts ADD COLUMN group_title TEXT");
+      }
+    }
+
+    // Migration v9 → v10: add next_time to board_items (time portion of consult_date)
+    if (fromVersion < 10) {
+      const has = db
+        .prepare("SELECT COUNT(*) as cnt FROM pragma_table_info('board_items') WHERE name='next_time'")
+        .get() as { cnt: number };
+      if (!has || has.cnt === 0) {
+        db.exec("ALTER TABLE board_items ADD COLUMN next_time TEXT");
+      }
+      // Backfill from column_values JSON for appointment boards
+      db.exec(`
+        UPDATE board_items
+        SET next_time = json_extract(column_values, '$.consult_date.time')
+        WHERE board_key LIKE 'appointments_%'
+          AND next_time IS NULL
+          AND json_extract(column_values, '$.consult_date.time') IS NOT NULL
+      `);
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

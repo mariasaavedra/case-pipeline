@@ -66,17 +66,12 @@ function getOpenForms(db: Database): KpiCard {
 }
 
 function getPendingContracts(db: Database): KpiCard {
-  const closedStatuses = [...CLOSED_CONTRACT_STATUSES];
-  const paidStatuses = [...PAID_CONTRACT_STATUSES];
-  const excludeStatuses = [...closedStatuses, ...paidStatuses];
-  const placeholders = excludeStatuses.map(() => "?").join(",");
-
   const countRow = db
     .prepare(
       `SELECT COUNT(*) AS cnt FROM contracts
-       WHERE status NOT IN (${placeholders})`,
+       WHERE group_title = 'Pending Fee Ks'`,
     )
-    .get(...excludeStatuses) as { cnt: number };
+    .get() as { cnt: number };
 
   const items = db
     .prepare(
@@ -90,11 +85,11 @@ function getPendingContracts(db: Database): KpiCard {
          c.status
        FROM contracts c
        LEFT JOIN profiles p ON p.local_id = c.profile_local_id
-       WHERE c.status NOT IN (${placeholders})
+       WHERE c.group_title = 'Pending Fee Ks'
        ORDER BY c.created_at DESC
        LIMIT 5`,
     )
-    .all(...excludeStatuses) as KpiItem[];
+    .all() as KpiItem[];
 
   return {
     key: "pending_contracts",
@@ -105,15 +100,12 @@ function getPendingContracts(db: Database): KpiCard {
 }
 
 function getPaidFeeKs(db: Database): KpiCard {
-  const statuses = [...PAID_CONTRACT_STATUSES];
-  const placeholders = statuses.map(() => "?").join(",");
-
   const countRow = db
     .prepare(
       `SELECT COUNT(*) AS cnt FROM contracts
-       WHERE status IN (${placeholders})`,
+       WHERE group_title = 'Paid Fee Ks'`,
     )
-    .get(...statuses) as { cnt: number };
+    .get() as { cnt: number };
 
   const items = db
     .prepare(
@@ -127,15 +119,15 @@ function getPaidFeeKs(db: Database): KpiCard {
          c.status
        FROM contracts c
        LEFT JOIN profiles p ON p.local_id = c.profile_local_id
-       WHERE c.status IN (${placeholders})
+       WHERE c.group_title = 'Paid Fee Ks'
        ORDER BY c.created_at DESC
        LIMIT 5`,
     )
-    .all(...statuses) as KpiItem[];
+    .all() as KpiItem[];
 
   return {
     key: "paid_fee_ks",
-    label: "Paid Fee Ks",
+    label: "Prescheduling",
     count: countRow.cnt,
     items,
   };

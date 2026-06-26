@@ -123,6 +123,31 @@ async function main() {
   const batchId = Number(batchInfo.lastInsertRowid);
 
   const boardsConfig = await loadBoardsConfig();
+
+  // Merge attorney boards from data/attorney-boards.json into the boards config.
+  // New boards added via Settings UI get their Monday.com ID here; they inherit
+  // the column resolution of appointments_r (all appointment boards share the
+  // same Monday board structure).
+  const attorneyBoardsPath = path.join(dataDir, "attorney-boards.json");
+  if (fs.existsSync(attorneyBoardsPath)) {
+    try {
+      const attorneyBoards = JSON.parse(fs.readFileSync(attorneyBoardsPath, "utf-8")) as Array<{
+        boardKey: string;
+        mondayBoardId: string;
+        displayName: string;
+        active: boolean;
+      }>;
+      const templateConfig = boardsConfig["appointments_r"];
+      for (const ab of attorneyBoards) {
+        if (ab.active && ab.mondayBoardId && !boardsConfig[ab.boardKey] && templateConfig) {
+          boardsConfig[ab.boardKey] = { ...templateConfig, id: ab.mondayBoardId, name: ab.displayName };
+        }
+      }
+    } catch {
+      // Non-fatal — if the file is malformed, skip it.
+    }
+  }
+
   let boardKeys = Object.keys(boardsConfig);
   if (onlyBoards) boardKeys = boardKeys.filter((k) => onlyBoards.includes(k));
 
@@ -218,8 +243,8 @@ async function main() {
       const insert = db.prepare(`
         INSERT INTO contracts (
           batch_id, local_id, monday_item_id, profile_local_id, profile_monday_id,
-          name, case_type, contract_id, status, raw_column_values, sync_status, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
+          name, case_type, contract_id, status, group_title, raw_column_values, sync_status, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
       `);
       const tx = db.transaction((rows: MondayItem[]) => {
         for (const item of rows) {
@@ -237,6 +262,7 @@ async function main() {
             labelsOf(cvs.contract_for) ?? labelOf(cvs.contract_for) ?? rawOf(cvs.contract_for),
             rawOf(cvs.fee_k_id),
             labelOf(cvs.contract_stage) ?? labelOf(cvs.ps_stage),
+            item.group?.title ?? null,
             JSON.stringify(cvs),
           );
         }
@@ -255,9 +281,9 @@ async function main() {
       const insert = db.prepare(`
         INSERT INTO board_items (
           batch_id, local_id, monday_item_id, board_key, group_title, name,
-          status, next_date, attorney, paralegals, profile_local_id,
+          status, next_date, next_time, attorney, paralegals, profile_local_id,
           column_values, sync_status, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
       `);
       const tx = db.transaction((rows: MondayItem[]) => {
         for (const item of rows) {
@@ -265,7 +291,7 @@ async function main() {
           const fields = extractBoardItemFields(key, cvs);
           insert.run(
             batchId, randomUUID(), item.id, key, item.group?.title ?? null, item.name,
-            fields.status, fields.nextDate, fields.attorney, fields.paralegals,
+            fields.status, fields.nextDate, fields.nextTime, fields.attorney, fields.paralegals,
             findProfileLocalId(cvs),
             JSON.stringify(cvs),
           );

@@ -8,6 +8,7 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import cron from "node-cron";
 import { validateSchema } from "@case-pipeline/seed/db/schema";
@@ -23,13 +24,15 @@ import {
   handleClientUpdates,
   handleClientRelationships,
   handleDashboard,
-  handleAppointments,
   handleActiveCases,
   handleAlerts,
 } from "./handlers/handlers";
+import { getAppointments } from "@case-pipeline/query";
+import { setApiToken, createUpdate } from "@case-pipeline/monday";
 import { requireAuth } from "./auth/middleware.js";
 import { handleAuthMe } from "./routes/auth.js";
 import { handleAdminListUsers, handleAdminUpdateRole } from "./routes/admin.js";
+import { registerMondayOAuth, getUserMondayToken } from "./routes/monday-oauth.js";
 
 // =============================================================================
 // Database
@@ -59,10 +62,47 @@ if (!fs.existsSync(DB_PATH)) {
   process.exit(1);
 }
 
-const db = new Database(DB_PATH, { readonly: true });
+const db = new Database(DB_PATH);
 validateSchema(db);
 
+// Wire up Monday.com write-back (only needed when MONDAY_API_TOKEN is present)
+const MONDAY_API_TOKEN = process.env.MONDAY_API_TOKEN;
+if (MONDAY_API_TOKEN) {
+  setApiToken(MONDAY_API_TOKEN);
+}
+
 console.log(`Database loaded (DB_SOURCE=${DB_SOURCE}): ${DB_PATH}`);
+
+// =============================================================================
+// Attorney Boards Config
+// =============================================================================
+
+export interface AttorneyBoard {
+  boardKey: string;
+  mondayBoardId: string;
+  displayName: string;
+  active: boolean;
+}
+
+const ATTORNEY_BOARDS_PATH = path.join(DATA_DIR, "attorney-boards.json");
+
+function loadAttorneyBoards(): AttorneyBoard[] {
+  try {
+    return JSON.parse(fs.readFileSync(ATTORNEY_BOARDS_PATH, "utf-8")) as AttorneyBoard[];
+  } catch {
+    return [];
+  }
+}
+
+function saveAttorneyBoards(boards: AttorneyBoard[]): void {
+  fs.writeFileSync(ATTORNEY_BOARDS_PATH, JSON.stringify(boards, null, 2));
+}
+
+function activeBoardKeys(): string[] {
+  return loadAttorneyBoards()
+    .filter((b) => b.active)
+    .map((b) => b.boardKey);
+}
 
 // =============================================================================
 // Express adapter
@@ -95,6 +135,9 @@ app.use(express.json());
 // Auth — unauthenticated entry point (validates token + upserts user)
 app.get("/api/auth/me", requireAuth, handleAuthMe);
 
+// Monday.com OAuth (callback is intentionally unauthenticated — browser redirect)
+registerMondayOAuth(app);
+
 // Admin
 app.get("/api/admin/users", requireAuth, handleAdminListUsers);
 app.patch("/api/admin/users/:id/role", requireAuth, handleAdminUpdateRole);
@@ -104,7 +147,22 @@ app.use("/api/", requireAuth);
 
 // API routes
 app.get("/api/dashboard", adapt(handleDashboard));
-app.get("/api/appointments", adapt(handleAppointments));
+
+// Appointments — inline to inject dynamic board keys from attorney-boards.json
+app.get("/api/appointments", (req, res) => {
+  const url = new URL(`http://localhost${req.originalUrl}`);
+  const attorney = url.searchParams.get("attorney") ?? undefined;
+  const rangeParam = url.searchParams.get("range");
+  const validRanges = ["day", "week", "upcoming", "all"] as const;
+  const range = validRanges.includes(rangeParam as (typeof validRanges)[number])
+    ? (rangeParam as (typeof validRanges)[number])
+    : "day";
+  const date = url.searchParams.get("date") ?? undefined;
+  const boardKeys = activeBoardKeys();
+  const result = getAppointments(db, { attorney, range, date, boardKeys });
+  res.json({ data: result });
+});
+
 app.get("/api/active-cases", adapt(handleActiveCases));
 app.get("/api/alerts", adapt(handleAlerts));
 app.get("/api/search", adapt(handleTypedSearch));
@@ -117,6 +175,125 @@ app.get("/api/clients/:localId/board-items", adapt(handleClientBoardItems));
 app.get("/api/clients/:localId/updates", adapt(handleClientUpdates));
 app.get("/api/clients/:localId/relationships", adapt(handleClientRelationships));
 app.get("/api/board-items/:localId", adapt(handleBoardItemDetail));
+
+// =============================================================================
+// Profile Write-Back — Post update to Monday.com + persist locally
+// =============================================================================
+
+app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
+  if (!MONDAY_API_TOKEN) {
+    res.status(503).json({ error: "Monday.com write-back not configured (MONDAY_API_TOKEN missing)" });
+    return;
+  }
+
+  const localId = req.params.localId;
+  const text = ((req.body as { text?: unknown }).text ?? "").toString().trim();
+  if (!text) {
+    res.status(400).json({ error: "text is required" });
+    return;
+  }
+
+  const profile = db
+    .prepare("SELECT monday_item_id, batch_id FROM profiles WHERE local_id = ?")
+    .get(localId) as { monday_item_id: string | null; batch_id: number } | null;
+
+  if (!profile) {
+    res.status(404).json({ error: "Profile not found" });
+    return;
+  }
+  if (!profile.monday_item_id) {
+    res.status(400).json({ error: "Profile has no Monday.com item ID — cannot post update" });
+    return;
+  }
+
+  try {
+    // Prefer the posting user's personal Monday.com token; fall back to shared token
+    const userToken = getUserMondayToken(req.user?.oid ?? "");
+    const mondayUpdateId = await createUpdate(profile.monday_item_id, text, userToken ?? undefined);
+
+    const newLocalId = randomUUID();
+    const now = new Date().toISOString();
+    const authorName = req.user?.name ?? req.user?.preferred_username ?? "Staff";
+    const authorEmail = req.user?.email ?? req.user?.preferred_username ?? null;
+
+    db.prepare(`
+      INSERT INTO client_updates
+        (batch_id, local_id, monday_update_id, profile_local_id, board_item_local_id,
+         board_key, author_name, author_email, text_body, body_html, source_type,
+         reply_to_update_id, created_at_source, sync_status)
+      VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL, 'update', NULL, ?, 'synced')
+    `).run(profile.batch_id, newLocalId, mondayUpdateId, localId, authorName, authorEmail, text, now);
+
+    res.json({
+      data: {
+        localId: newLocalId,
+        profileLocalId: localId,
+        boardItemLocalId: null,
+        boardKey: null,
+        authorName,
+        authorEmail,
+        textBody: text,
+        bodyHtml: null,
+        sourceType: "update" as const,
+        replyToUpdateId: null,
+        createdAtSource: now,
+      }
+    });
+  } catch (err) {
+    console.error("[write-back] createUpdate failed:", err);
+    res.status(502).json({ error: "Failed to post update to Monday.com" });
+  }
+});
+
+// =============================================================================
+// Settings — Attorney Boards
+// =============================================================================
+
+app.get("/api/settings/attorney-boards", (_req, res) => {
+  res.json({ data: loadAttorneyBoards() });
+});
+
+app.post("/api/settings/attorney-boards", (req, res) => {
+  const { boardKey, mondayBoardId, displayName } = req.body as Partial<AttorneyBoard>;
+
+  if (!boardKey || !displayName) {
+    res.status(400).json({ error: "boardKey and displayName are required" });
+    return;
+  }
+  if (!/^appointments_[a-z0-9_]+$/.test(boardKey)) {
+    res.status(400).json({ error: "boardKey must match appointments_<letters> (e.g. appointments_js)" });
+    return;
+  }
+
+  const boards = loadAttorneyBoards();
+  if (boards.find((b) => b.boardKey === boardKey)) {
+    res.status(409).json({ error: `Board key "${boardKey}" already exists` });
+    return;
+  }
+
+  const newBoard: AttorneyBoard = {
+    boardKey,
+    mondayBoardId: mondayBoardId ?? "",
+    displayName,
+    active: true,
+  };
+  boards.push(newBoard);
+  saveAttorneyBoards(boards);
+  res.json({ data: boards });
+});
+
+app.delete("/api/settings/attorney-boards/:boardKey", (req, res) => {
+  const { boardKey } = req.params;
+  const boards = loadAttorneyBoards();
+  const idx = boards.findIndex((b) => b.boardKey === boardKey);
+  if (idx === -1) {
+    res.status(404).json({ error: `Board key "${boardKey}" not found` });
+    return;
+  }
+  boards.splice(idx, 1);
+  saveAttorneyBoards(boards);
+  res.json({ data: boards });
+});
 
 // Health check — cheap liveness/readiness probe for container orchestration.
 // Confirms the DB handle is alive; intentionally outside /api so it is trivial

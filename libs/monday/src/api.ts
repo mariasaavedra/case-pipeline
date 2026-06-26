@@ -203,9 +203,10 @@ async function executeRequest(
 
 export async function mondayRequest<T>(
   query: string,
-  variables?: Record<string, unknown>
+  variables?: Record<string, unknown>,
+  tokenOverride?: string
 ): Promise<T> {
-  const token = getApiToken();
+  const token = tokenOverride ?? getApiToken();
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= apiConfig.maxRetries; attempt++) {
@@ -625,5 +626,20 @@ export async function fetchItemUpdatesBatch(
     map.set(item.id, item.updates ?? []);
   }
   return map;
+}
+
+/**
+ * Post a new update (comment) to a Monday.com item.
+ * Returns the Monday.com update ID of the newly created update.
+ */
+export async function createUpdate(itemId: string, body: string, tokenOverride?: string): Promise<string> {
+  const result = await mondayRequest<{ data: { create_update: { id: string } } }>(
+    `mutation CreateUpdate($itemId: ID!, $body: String!) {
+       create_update(item_id: $itemId, body: $body) { id }
+     }`,
+    { itemId, body },
+    tokenOverride
+  );
+  return result.data.create_update.id;
 }
 

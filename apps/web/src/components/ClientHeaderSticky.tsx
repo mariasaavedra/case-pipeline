@@ -47,10 +47,13 @@ export function ClientHeaderSticky({ profile, data, onViewRelations }: Props) {
           </div>
 
           <div className="flex-1 min-w-0">
-            {/* Name + priority + actions */}
-            <div className="flex items-center gap-3 mb-1">
+            {/* Name + priority + actions.
+                On phones (<=640px) `client-header-namerow` lets this row wrap so the
+                full name keeps the top line and the priority pill + actions drop below
+                instead of squeezing the name. See styles.css. */}
+            <div className="client-header-namerow flex items-center gap-3 mb-1">
               <h2
-                className="text-2xl font-semibold tracking-tight truncate"
+                className="client-header-name text-2xl font-semibold tracking-tight truncate"
                 style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
               >
                 {profile.name}
@@ -64,7 +67,30 @@ export function ClientHeaderSticky({ profile, data, onViewRelations }: Props) {
                   {priority.label}
                 </span>
               )}
-              <div className="flex-shrink-0 ml-auto">
+              <div className="client-header-actions flex-shrink-0 ml-auto flex items-center gap-3">
+                {profile.mondayItemId && (
+                  <a
+                    href={`https://app.monday.com/boards/8025265377/pulses/${profile.mondayItemId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-colors"
+                    style={{
+                      color: "var(--color-ink-muted)",
+                      backgroundColor: "var(--color-surface-warm)",
+                      border: "1px solid var(--color-border-light)",
+                      textDecoration: "none",
+                      fontFamily: "var(--font-body)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                    Monday.com
+                  </a>
+                )}
                 <ActionButtons data={data} onViewRelations={onViewRelations} />
               </div>
             </div>

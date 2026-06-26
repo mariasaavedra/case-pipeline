@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { navigate, matchRoute } from "../router";
+import { useViewport } from "../hooks/useViewport";
 import type { AuthUser } from "../auth/AuthProvider";
 
 const COLLAPSED_KEY = "sidebar-collapsed";
@@ -99,6 +100,7 @@ interface Props {
 }
 
 export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
+  const { isTabletRail } = useViewport();
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSED_KEY) === "true";
@@ -128,7 +130,11 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
     onMobileClose();
   };
 
-  const width = collapsed ? 60 : 220;
+  // Effective rail mode: the open mobile drawer always shows full labels;
+  // the tablet range (641–1024px) forces the icon rail regardless of the
+  // user's manual collapse preference; otherwise honour the manual toggle.
+  const rail = mobileOpen ? false : collapsed || isTabletRail;
+  const width = rail ? 60 : 220;
 
   return (
     <>
@@ -142,7 +148,7 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
         style={{ width }}
       >
         {/* Logo area */}
-        <div className="sidebar-logo" style={{ padding: collapsed ? "16px 12px" : "16px 20px" }}>
+        <div className="sidebar-logo" style={{ padding: rail ? "16px 12px" : "16px 20px" }}>
           <div
             className="w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold flex-shrink-0"
             style={{
@@ -153,7 +159,7 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
           >
             CP
           </div>
-          {!collapsed && (
+          {!rail && (
             <span
               className="text-sm font-semibold tracking-tight whitespace-nowrap"
               style={{ color: "#fff", fontFamily: "var(--font-body)" }}
@@ -173,12 +179,12 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
                 onClick={() => handleNav(item)}
                 disabled={item.disabled}
                 className={`sidebar-item ${active ? "sidebar-item-active" : ""}`}
-                title={collapsed ? item.label : undefined}
-                style={{ justifyContent: collapsed ? "center" : "flex-start" }}
+                title={rail ? item.label : undefined}
+                style={{ justifyContent: rail ? "center" : "flex-start" }}
               >
                 <span className="sidebar-icon">{item.icon}</span>
-                {!collapsed && <span className="sidebar-label">{item.label}</span>}
-                {item.disabled && !collapsed && (
+                {!rail && <span className="sidebar-label">{item.label}</span>}
+                {item.disabled && !rail && (
                   <span className="sidebar-soon">Soon</span>
                 )}
               </button>
@@ -190,8 +196,8 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
         <button
           onClick={() => { navigate("/settings"); onMobileClose(); }}
           className={`sidebar-item ${pathname === "/settings" ? "sidebar-item-active" : ""}`}
-          title={collapsed ? "Settings" : undefined}
-          style={{ justifyContent: collapsed ? "center" : "flex-start" }}
+          title={rail ? "Settings" : undefined}
+          style={{ justifyContent: rail ? "center" : "flex-start" }}
         >
           <span className="sidebar-icon">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -199,14 +205,14 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
               <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4" />
             </svg>
           </span>
-          {!collapsed && <span className="sidebar-label">Settings</span>}
+          {!rail && <span className="sidebar-label">Settings</span>}
         </button>
 
         {/* User info + logout */}
         {user && (
           <div
             style={{
-              padding: collapsed ? "12px 8px" : "12px 16px",
+              padding: rail ? "12px 8px" : "12px 16px",
               borderTop: "1px solid rgba(255,255,255,0.07)",
               display: "flex",
               alignItems: "center",
@@ -231,7 +237,7 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
             >
               {user.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
             </div>
-            {!collapsed && (
+            {!rail && (
               <>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: "var(--font-body)", fontSize: "12px", fontWeight: 500, color: "rgba(255,255,255,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -254,27 +260,29 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
           </div>
         )}
 
-        {/* Collapse toggle */}
-        <button
-          onClick={toggleCollapse}
-          className="sidebar-toggle"
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            style={{
-              transform: collapsed ? "rotate(180deg)" : "none",
-              transition: "transform 0.2s ease",
-            }}
+        {/* Collapse toggle — hidden in the forced tablet rail (can't expand there) */}
+        {!isTabletRail && (
+          <button
+            onClick={toggleCollapse}
+            className="sidebar-toggle"
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            <path d="M10 3L5 8l5 5" />
-          </svg>
-        </button>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              style={{
+                transform: collapsed ? "rotate(180deg)" : "none",
+                transition: "transform 0.2s ease",
+              }}
+            >
+              <path d="M10 3L5 8l5 5" />
+            </svg>
+          </button>
+        )}
       </aside>
     </>
   );

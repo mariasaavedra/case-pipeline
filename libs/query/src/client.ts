@@ -91,6 +91,7 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
     .prepare(`
       SELECT
         local_id AS localId,
+        monday_item_id AS mondayItemId,
         name,
         email,
         phone,
@@ -128,6 +129,7 @@ export function getClientByName(db: Database, name: string): ProfileSummary | nu
     .prepare(`
       SELECT
         local_id AS localId,
+        monday_item_id AS mondayItemId,
         name,
         email,
         phone,

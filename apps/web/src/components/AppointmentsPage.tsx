@@ -20,7 +20,8 @@ import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { clientPath } from "../router";
 
 type DetailLevel = "minimal" | "snapshot" | "full";
-type DateRange = "day" | "week" | "upcoming" | "all";
+type DateRange = "day" | "week" | "upcoming" | "all" | "calendar";
+type ViewMode = "board" | "list";
 
 const DETAIL_LABELS: { id: DetailLevel; label: string }[] = [
   { id: "minimal", label: "Minimal" },
@@ -33,7 +34,23 @@ const RANGE_LABELS: { id: DateRange; label: string }[] = [
   { id: "week", label: "This Week" },
   { id: "upcoming", label: "Upcoming" },
   { id: "all", label: "All" },
+  { id: "calendar", label: "Pick Date" },
 ];
+
+// Color palette cycles for dynamically registered attorney boards.
+// Known boards get a stable slot; unknown ones cycle through the palette.
+const ATTORNEY_PALETTE = [
+  { color: "var(--color-amber)",        bg: "var(--color-amber-light)" },
+  { color: "var(--color-status-blue)",  bg: "var(--color-status-blue-bg)" },
+  { color: "var(--color-status-green)", bg: "var(--color-status-green-bg)" },
+  { color: "var(--color-status-red)",   bg: "var(--color-status-red-bg)" },
+];
+
+function getAttorneyMeta(boardKey: string, index: number) {
+  const slot = ATTORNEY_PALETTE[index % ATTORNEY_PALETTE.length]!;
+  const initial = boardKey.replace("appointments_", "").toUpperCase();
+  return { initial, ...slot };
+}
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -43,6 +60,16 @@ function formatDate(dateStr: string | null): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatTime(timeStr: string | null): string {
+  if (!timeStr) return "";
+  const [hStr, mStr] = timeStr.split(":");
+  const h = parseInt(hStr ?? "0", 10);
+  const m = mStr ?? "00";
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${m} ${ampm}`;
 }
 
 function getPriorityStyle(priority: string | null): { bg: string; text: string } {
@@ -111,7 +138,259 @@ function savePreference(key: string, value: string) {
 }
 
 // =============================================================================
-// Appointment Card
+// Compact Card (Board Mode)
+// =============================================================================
+
+function CompactStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex items-center gap-1">
+      <span
+        className="text-[10px]"
+        style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+      >
+        {label}
+      </span>
+      <span
+        className="text-[11px] font-semibold"
+        style={{ color: "var(--color-ink)", fontFamily: "var(--font-mono)" }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function AppointmentCardCompact({
+  entry,
+  onFocus,
+}: {
+  entry: AppointmentEntry;
+  onFocus: (entry: AppointmentEntry) => void;
+}) {
+  const { appointment, profile, snapshot } = entry;
+  const priorityStyle = profile ? getPriorityStyle(profile.priority) : null;
+  const statusStyle = getStatusStyle(appointment.status);
+
+  return (
+    <div
+      className="card"
+      style={{
+        padding: "12px 14px",
+        overflow: "hidden",
+        borderLeft: "3px solid transparent",
+        borderLeftColor: statusStyle.text,
+      }}
+    >
+      {/* Status + priority row */}
+      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+        {appointment.status && (
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+            style={{
+              backgroundColor: statusStyle.bg,
+              color: statusStyle.text,
+              fontFamily: "var(--font-body)",
+            }}
+          >
+            {appointment.status}
+          </span>
+        )}
+        {profile?.priority && priorityStyle && (
+          <span
+            className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+            style={{
+              backgroundColor: priorityStyle.bg,
+              color: priorityStyle.text,
+              fontFamily: "var(--font-body)",
+            }}
+          >
+            {profile.priority}
+          </span>
+        )}
+        {appointment.nextDate && (
+          <span
+            className="text-[10px] ml-auto"
+            style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)" }}
+          >
+            {formatDate(appointment.nextDate)}
+            {appointment.nextTime && (
+              <span
+                className="ml-1 font-semibold"
+                style={{ color: "var(--color-amber)" }}
+              >
+                · {formatTime(appointment.nextTime)}
+              </span>
+            )}
+          </span>
+        )}
+      </div>
+
+      {/* Client name */}
+      {profile ? (
+        <Link
+          href={clientPath(profile.localId)}
+          className="block text-sm font-semibold hover:underline leading-snug"
+          style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
+        >
+          {profile.name}
+        </Link>
+      ) : (
+        <span
+          className="block text-sm font-semibold leading-snug"
+          style={{ fontFamily: "var(--font-display)", color: "var(--color-ink-muted)" }}
+        >
+          Unknown Client
+        </span>
+      )}
+
+      {/* Appointment type */}
+      <p
+        className="text-xs mt-0.5 leading-snug"
+        style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}
+      >
+        {appointment.name}
+      </p>
+
+      {/* Snapshot stats */}
+      <div
+        className="flex items-center gap-3 mt-2 flex-wrap px-2 py-1.5 rounded-lg"
+        style={{ backgroundColor: "var(--color-surface-warm)" }}
+      >
+        <CompactStat label="Cases" value={snapshot.activeCaseCount} />
+        <CompactStat label="Contracts" value={snapshot.pendingContractCount} />
+        {snapshot.nextDeadline && (
+          <CompactStat label="Deadline" value={formatDate(snapshot.nextDeadline)} />
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 mt-2.5">
+        <button
+          onClick={() => onFocus(entry)}
+          className="text-[11px] font-medium px-2.5 py-1 rounded-lg transition-colors"
+          style={{
+            color: "var(--color-ink-muted)",
+            backgroundColor: "var(--color-surface-warm)",
+            border: "1px solid var(--color-border-light)",
+            cursor: "pointer",
+            fontFamily: "var(--font-body)",
+          }}
+        >
+          Focus
+        </button>
+        {profile && (
+          <Link
+            href={clientPath(profile.localId)}
+            className="text-[11px] font-medium px-2.5 py-1 rounded-lg"
+            style={{
+              color: "var(--color-amber)",
+              backgroundColor: "var(--color-amber-light)",
+              textDecoration: "none",
+              fontFamily: "var(--font-body)",
+            }}
+          >
+            View 360 →
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Attorney Column (Board Mode)
+// =============================================================================
+
+function AttorneyColumn({
+  boardKey,
+  index,
+  entries,
+  onFocus,
+}: {
+  boardKey: string;
+  index: number;
+  entries: AppointmentEntry[];
+  onFocus: (entry: AppointmentEntry) => void;
+}) {
+  const meta = getAttorneyMeta(boardKey, index);
+  const displayName = (BOARD_DISPLAY_NAMES[boardKey] ?? boardKey)
+    .replace("Appointments (", "")
+    .replace(")", "");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+      {/* Column header */}
+      <div
+        className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl mb-3"
+        style={{
+          backgroundColor: meta?.bg ?? "var(--color-surface-warm)",
+          border: "1px solid var(--color-border-light)",
+        }}
+      >
+        <div
+          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: meta?.color ?? "var(--color-ink-faint)" }}
+        >
+          <span
+            className="font-bold text-white"
+            style={{ fontSize: "10px", fontFamily: "var(--font-body)" }}
+          >
+            {meta?.initial ?? boardKey.toUpperCase()}
+          </span>
+        </div>
+        <span
+          className="text-sm font-semibold flex-1"
+          style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
+        >
+          {displayName}
+        </span>
+        <span
+          className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+          style={{
+            backgroundColor: "white",
+            color: meta?.color ?? "var(--color-ink-faint)",
+            fontFamily: "var(--font-mono)",
+            boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+          }}
+        >
+          {entries.length}
+        </span>
+      </div>
+
+      {/* Cards */}
+      <div className="space-y-2">
+        {entries.length > 0 ? (
+          entries.map((entry, i) => (
+            <div
+              key={entry.appointment.localId}
+              className={`animate-in animate-in-delay-${Math.min(i + 1, 5)}`}
+            >
+              <AppointmentCardCompact entry={entry} onFocus={onFocus} />
+            </div>
+          ))
+        ) : (
+          <div
+            className="px-4 py-8 text-center rounded-xl"
+            style={{
+              backgroundColor: "var(--color-surface-warm)",
+              border: "1px dashed var(--color-border-light)",
+            }}
+          >
+            <p
+              className="text-xs"
+              style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+            >
+              No appointments
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Full Appointment Card (List Mode)
 // =============================================================================
 
 function AppointmentCard({
@@ -142,7 +421,7 @@ function AppointmentCard({
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            {/* Date */}
+            {/* Date + Time */}
             {appointment.nextDate && (
               <span
                 className="text-xs font-medium"
@@ -153,6 +432,14 @@ function AppointmentCard({
                 }}
               >
                 {formatDate(appointment.nextDate)}
+                {appointment.nextTime && (
+                  <span
+                    className="ml-1.5 font-semibold"
+                    style={{ color: "var(--color-amber)" }}
+                  >
+                    · {formatTime(appointment.nextTime)}
+                  </span>
+                )}
               </span>
             )}
 
@@ -455,17 +742,44 @@ function SnapshotStat({ label, value }: { label: string; value: string | number 
 }
 
 // =============================================================================
+// View Mode Toggle Icons
+// =============================================================================
+
+function IconBoard() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="1" y="1" width="6" height="14" rx="1" />
+      <rect x="9" y="1" width="6" height="14" rx="1" />
+    </svg>
+  );
+}
+
+function IconList() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M3 4h10M3 8h10M3 12h10" />
+    </svg>
+  );
+}
+
+// =============================================================================
 // Main Page
 // =============================================================================
 
 export function AppointmentsPage() {
-  // State: attorney, range, detail level
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    () => (loadPreference("appointments-view", "board") as ViewMode),
+  );
   const [attorney, setAttorney] = useState<string>(() =>
     getUrlParam("attorney") ?? loadPreference("appointments-attorney", "all"),
   );
   const [range, setRange] = useState<DateRange>(() =>
     (getUrlParam("range") as DateRange) ?? "day",
   );
+  const [calendarDate, setCalendarDate] = useState<string>(() => {
+    const today = new Date();
+    return today.toISOString().slice(0, 10);
+  });
   const [detail, setDetail] = useState<DetailLevel>(() =>
     (loadPreference("appointments-detail", "snapshot") as DetailLevel),
   );
@@ -494,17 +808,19 @@ export function AppointmentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchAppointments(
-        attorney !== "all" ? attorney : undefined,
-        range,
-      );
+      // Board mode always fetches all attorneys so all columns can be populated
+      const attorneyFilter = viewMode === "list" && attorney !== "all" ? attorney : undefined;
+      // Calendar mode sends the picked date as "day" range
+      const apiRange = range === "calendar" ? "day" : range;
+      const apiDate = range === "calendar" ? calendarDate : undefined;
+      const result = await fetchAppointments(attorneyFilter, apiRange, apiDate);
       setData(result);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [attorney, range]);
+  }, [attorney, range, calendarDate, viewMode]);
 
   useEffect(() => {
     load();
@@ -515,23 +831,12 @@ export function AppointmentsPage() {
     syncUrlParams({ attorney, range });
     savePreference("appointments-attorney", attorney);
     savePreference("appointments-detail", detail);
-  }, [attorney, range, detail]);
+    savePreference("appointments-view", viewMode);
+  }, [attorney, range, detail, viewMode]);
 
   const attorneys = data?.attorneys ?? [];
 
-  const handleAttorneyChange = (value: string) => {
-    setAttorney(value);
-  };
-
-  const handleRangeChange = (value: DateRange) => {
-    setRange(value);
-  };
-
-  const handleDetailChange = (value: DetailLevel) => {
-    setDetail(value);
-  };
-
-  // Group entries by date for week view
+  // Group entries by date for list mode (week view)
   const entriesByDate: Record<string, AppointmentEntry[]> = {};
   if (data) {
     for (const entry of data.entries) {
@@ -540,6 +845,17 @@ export function AppointmentsPage() {
     }
   }
   const dateKeys = Object.keys(entriesByDate).sort();
+
+  // Group entries by boardKey for board mode
+  const entriesByBoard: Record<string, AppointmentEntry[]> = {};
+  if (data) {
+    for (const entry of data.entries) {
+      const key = entry.appointment.boardKey;
+      (entriesByBoard[key] ??= []).push(entry);
+    }
+  }
+
+  const totalCount = data?.entries.length ?? 0;
 
   return (
     <div className="animate-in">
@@ -552,8 +868,8 @@ export function AppointmentsPage() {
           Appointments
         </h1>
         <p className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-          {range === "day" ? "Today's" : range === "week" ? "This week's" : range === "upcoming" ? "Upcoming" : "All"} schedule
-          {attorney !== "all" ? ` for ${attorney}` : ""}.
+          {range === "day" ? "Today's" : range === "week" ? "This week's" : range === "upcoming" ? "Upcoming" : range === "calendar" ? formatDate(calendarDate) : "All"} schedule
+          {viewMode === "list" && attorney !== "all" ? ` for ${attorney}` : ""}.
         </p>
       </div>
 
@@ -565,74 +881,133 @@ export function AppointmentsPage() {
           border: "1px solid var(--color-border-light)",
         }}
       >
-        {/* Attorney selector */}
-        <div className="flex items-center gap-2">
-          <span
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+        {/* View mode toggle */}
+        <div className="flex items-center gap-1 mr-1">
+          <button
+            onClick={() => setViewMode("board")}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{
+              backgroundColor: viewMode === "board" ? "var(--color-amber)" : "transparent",
+              color: viewMode === "board" ? "white" : "var(--color-ink-muted)",
+              border: viewMode === "board" ? "none" : "1px solid var(--color-border-light)",
+              cursor: "pointer",
+              fontFamily: "var(--font-body)",
+            }}
+            title="Board view — all attorneys"
           >
-            Attorney
-          </span>
-          <div className="flex gap-1">
-            <button
-              className={`filter-chip ${attorney === "all" ? "filter-chip-active" : ""}`}
-              onClick={() => handleAttorneyChange("all")}
-            >
-              All
-            </button>
-            {attorneys.map((a) => (
-              <button
-                key={a}
-                className={`filter-chip ${attorney === a ? "filter-chip-active" : ""}`}
-                onClick={() => handleAttorneyChange(a)}
-              >
-                {a}
-              </button>
-            ))}
-          </div>
+            <IconBoard />
+            Board
+          </button>
+          <button
+            onClick={() => setViewMode("list")}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{
+              backgroundColor: viewMode === "list" ? "var(--color-amber)" : "transparent",
+              color: viewMode === "list" ? "white" : "var(--color-ink-muted)",
+              border: viewMode === "list" ? "none" : "1px solid var(--color-border-light)",
+              cursor: "pointer",
+              fontFamily: "var(--font-body)",
+            }}
+            title="List view — filter by attorney"
+          >
+            <IconList />
+            List
+          </button>
         </div>
 
+        {/* Divider */}
+        <div style={{ width: 1, height: 20, backgroundColor: "var(--color-border-light)" }} />
+
+        {/* Attorney selector — list mode only */}
+        {viewMode === "list" && (
+          <div className="flex items-center gap-2">
+            <span
+              className="text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+            >
+              Attorney
+            </span>
+            <div className="flex gap-1">
+              <button
+                className={`filter-chip ${attorney === "all" ? "filter-chip-active" : ""}`}
+                onClick={() => setAttorney("all")}
+              >
+                All
+              </button>
+              {attorneys.map((a) => (
+                <button
+                  key={a}
+                  className={`filter-chip ${attorney === a ? "filter-chip-active" : ""}`}
+                  onClick={() => setAttorney(a)}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Range toggle */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span
             className="text-[11px] font-semibold uppercase tracking-wider"
             style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
           >
             Range
           </span>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap">
             {RANGE_LABELS.map((r) => (
               <button
                 key={r.id}
                 className={`filter-chip ${range === r.id ? "filter-chip-active" : ""}`}
-                onClick={() => handleRangeChange(r.id)}
+                onClick={() => setRange(r.id)}
               >
                 {r.label}
               </button>
             ))}
           </div>
+          {range === "calendar" && (
+            <input
+              type="date"
+              value={calendarDate}
+              onChange={(e) => setCalendarDate(e.target.value)}
+              style={{
+                padding: "4px 10px",
+                borderRadius: "8px",
+                border: "1px solid var(--color-amber)",
+                backgroundColor: "var(--color-card)",
+                color: "var(--color-ink)",
+                fontFamily: "var(--font-mono)",
+                fontSize: "12px",
+                cursor: "pointer",
+                outline: "none",
+              }}
+            />
+          )}
         </div>
 
-        {/* Detail level */}
-        <div className="flex items-center gap-2">
-          <span
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-          >
-            Detail
-          </span>
-          <div className="flex gap-1">
-            {DETAIL_LABELS.map((d) => (
-              <button
-                key={d.id}
-                className={`filter-chip ${detail === d.id ? "filter-chip-active" : ""}`}
-                onClick={() => handleDetailChange(d.id)}
-              >
-                {d.label}
-              </button>
-            ))}
+        {/* Detail level — list mode only */}
+        {viewMode === "list" && (
+          <div className="flex items-center gap-2">
+            <span
+              className="text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+            >
+              Detail
+            </span>
+            <div className="flex gap-1">
+              {DETAIL_LABELS.map((d) => (
+                <button
+                  key={d.id}
+                  className={`filter-chip ${detail === d.id ? "filter-chip-active" : ""}`}
+                  onClick={() => setDetail(d.id)}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Error */}
@@ -674,7 +1049,7 @@ export function AppointmentsPage() {
       )}
 
       {/* Empty state */}
-      {!loading && data && data.entries.length === 0 && (
+      {!loading && data && totalCount === 0 && (
         <div className="py-20 flex flex-col items-center gap-4 animate-in">
           <div
             className="w-14 h-14 rounded-2xl flex items-center justify-center"
@@ -693,20 +1068,45 @@ export function AppointmentsPage() {
               No appointments found
             </p>
             <p className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-              {attorney !== "all"
-                ? `No appointments for ${attorney} ${range === "day" ? "today" : range === "week" ? "this week" : ""}.`
-                : `No appointments ${range === "day" ? "today" : range === "week" ? "this week" : "found"}.`}
+              {viewMode === "list" && attorney !== "all"
+                ? `No appointments for ${attorney} ${range === "day" ? "today" : range === "calendar" ? `on ${formatDate(calendarDate)}` : range === "week" ? "this week" : ""}.`
+                : `No appointments ${range === "day" ? "today" : range === "calendar" ? `on ${formatDate(calendarDate)}` : range === "week" ? "this week" : "found"}.`}
             </p>
           </div>
         </div>
       )}
 
-      {/* Appointment cards, grouped by date */}
-      {!loading && data && data.entries.length > 0 && (
+      {/* ── Board Mode ─────────────────────────────────────────────────────── */}
+      {!loading && data && viewMode === "board" && (
+        <div style={{ overflowX: "auto", paddingBottom: 8 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${data.boardKeys.length || 1}, minmax(280px, 1fr))`,
+              gap: "16px",
+              alignItems: "start",
+              minWidth: `${(data.boardKeys.length || 1) * 296}px`,
+            }}
+          >
+            {data.boardKeys.map((boardKey, index) => (
+              <AttorneyColumn
+                key={boardKey}
+                boardKey={boardKey}
+                index={index}
+                entries={entriesByBoard[boardKey] ?? []}
+                onFocus={setFocusedEntry}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── List Mode ──────────────────────────────────────────────────────── */}
+      {!loading && data && viewMode === "list" && totalCount > 0 && (
         <div className="space-y-6">
           {dateKeys.map((dateKey) => (
             <div key={dateKey}>
-              {/* Date group header (shown in week view or when multiple dates) */}
+              {/* Date group header (shown when multiple dates) */}
               {dateKeys.length > 1 && (
                 <div className="flex items-center gap-3 mb-3">
                   <span
@@ -749,14 +1149,14 @@ export function AppointmentsPage() {
       )}
 
       {/* Summary footer */}
-      {!loading && data && data.entries.length > 0 && (
+      {!loading && data && totalCount > 0 && (
         <div
           className="mt-6 text-center text-xs"
           style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
         >
-          {data.entries.length} appointment{data.entries.length !== 1 ? "s" : ""}
-          {attorney !== "all" ? ` for ${attorney}` : ""}
-          {range === "day" ? " today" : range === "week" ? " this week" : range === "upcoming" ? " upcoming" : ""}
+          {totalCount} appointment{totalCount !== 1 ? "s" : ""}
+          {viewMode === "list" && attorney !== "all" ? ` for ${attorney}` : ""}
+          {range === "day" ? " today" : range === "week" ? " this week" : range === "upcoming" ? " upcoming" : range === "calendar" ? ` on ${formatDate(calendarDate)}` : ""}
         </div>
       )}
 

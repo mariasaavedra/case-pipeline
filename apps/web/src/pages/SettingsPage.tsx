@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../auth/useAuth";
 import { usePreferences } from "../hooks/usePreferences";
 import type { Theme, DefaultPage, DateFormat } from "../hooks/usePreferences";
-import { apiFetch } from "../api";
+import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, getAzureToken } from "../api";
+import type { AttorneyBoard } from "../api";
 
 // =============================================================================
 // User management (admin section)
@@ -101,6 +102,391 @@ function UsersSection() {
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+// =============================================================================
+// Attorney Boards section
+// =============================================================================
+
+const BOARD_COLORS = [
+  { color: "var(--color-amber)",        bg: "var(--color-amber-light)" },
+  { color: "var(--color-status-blue)",  bg: "var(--color-status-blue-bg)" },
+  { color: "var(--color-status-green)", bg: "var(--color-status-green-bg)" },
+  { color: "var(--color-status-red)",   bg: "var(--color-status-red-bg)" },
+];
+
+function boardColor(index: number) {
+  return BOARD_COLORS[index % BOARD_COLORS.length]!;
+}
+
+function AttorneyBoardsSection() {
+  const [boards, setBoards] = useState<AttorneyBoard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  // Add form
+  const [showForm, setShowForm] = useState(false);
+  const [formName, setFormName] = useState("");
+  const [formBoardId, setFormBoardId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchAttorneyBoards()
+      .then(setBoards)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function derivedBoardKey(displayName: string): string {
+    return `appointments_${displayName.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  }
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!formName.trim() || !formBoardId.trim()) return;
+    setSaving(true);
+    setFormError(null);
+    try {
+      const updated = await addAttorneyBoard({
+        boardKey: derivedBoardKey(formName),
+        mondayBoardId: formBoardId.trim(),
+        displayName: formName.trim().toUpperCase(),
+      });
+      setBoards(updated);
+      setShowForm(false);
+      setFormName("");
+      setFormBoardId("");
+    } catch (e) {
+      setFormError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(boardKey: string) {
+    setDeleting(boardKey);
+    try {
+      const updated = await deleteAttorneyBoard(boardKey);
+      setBoards(updated);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  return (
+    <section style={{ marginBottom: "40px" }}>
+      <h2 style={styles.sectionTitle}>Attorney Appointment Boards</h2>
+      <p style={styles.sectionDesc}>
+        Each attorney has a dedicated Monday.com appointments board. Add or remove boards here —
+        the board will appear as a column in the Appointments view immediately, and the next sync
+        will pull their data.
+      </p>
+
+      {error && <div style={styles.errorBox}>{error}</div>}
+
+      {loading ? (
+        <div style={styles.faint}>Loading…</div>
+      ) : (
+        <div style={styles.card}>
+          {boards.length === 0 && (
+            <div style={{ ...styles.fieldRow, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", fontSize: "13px" }}>
+              No attorney boards configured.
+            </div>
+          )}
+
+          {boards.map((b, i) => {
+            const { color, bg } = boardColor(i);
+            return (
+              <div
+                key={b.boardKey}
+                style={{
+                  ...styles.userRow,
+                  borderTop: i === 0 ? "none" : `1px solid var(--color-border)`,
+                }}
+              >
+                {/* Color pill with initials */}
+                <div
+                  style={{
+                    width: "34px",
+                    height: "34px",
+                    borderRadius: "50%",
+                    backgroundColor: color,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontFamily: "var(--font-body)",
+                    fontWeight: 700,
+                    fontSize: "11px",
+                    color: "#fff",
+                    flexShrink: 0,
+                  }}
+                >
+                  {b.displayName}
+                </div>
+
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ ...styles.userName }}>{b.displayName}</div>
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--color-ink-faint)" }}>
+                    Board ID: {b.mondayBoardId || <em>not set</em>} · key: {b.boardKey}
+                  </div>
+                </div>
+
+                {/* Status badge */}
+                <span
+                  style={{
+                    padding: "3px 10px",
+                    borderRadius: "20px",
+                    border: `1px solid ${bg}`,
+                    fontSize: "11px",
+                    fontFamily: "var(--font-body)",
+                    fontWeight: 500,
+                    backgroundColor: bg,
+                    color,
+                    flexShrink: 0,
+                  }}
+                >
+                  Active
+                </span>
+
+                {/* Remove */}
+                <button
+                  onClick={() => handleDelete(b.boardKey)}
+                  disabled={deleting === b.boardKey}
+                  style={{
+                    background: "none",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "6px",
+                    padding: "4px 10px",
+                    cursor: "pointer",
+                    fontFamily: "var(--font-body)",
+                    fontSize: "12px",
+                    color: "var(--color-ink-faint)",
+                    flexShrink: 0,
+                    opacity: deleting === b.boardKey ? 0.5 : 1,
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            );
+          })}
+
+          {/* Add form */}
+          {showForm ? (
+            <form
+              onSubmit={handleAdd}
+              style={{
+                borderTop: `1px solid var(--color-border)`,
+                padding: "16px 20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+              }}
+            >
+              <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500, color: "var(--color-ink)" }}>
+                Add attorney board
+              </div>
+
+              {formError && <div style={{ ...styles.errorBox, marginBottom: 0 }}>{formError}</div>}
+
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: "0 0 80px" }}>
+                  <label style={{ fontFamily: "var(--font-body)", fontSize: "11px", color: "var(--color-ink-faint)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Initials
+                  </label>
+                  <input
+                    type="text"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="JS"
+                    maxLength={4}
+                    required
+                    style={{
+                      ...styles.select,
+                      padding: "7px 10px",
+                      width: "100%",
+                      textTransform: "uppercase",
+                    }}
+                  />
+                  {formName && (
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--color-ink-faint)" }}>
+                      key: {derivedBoardKey(formName)}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1, minWidth: "160px" }}>
+                  <label style={{ fontFamily: "var(--font-body)", fontSize: "11px", color: "var(--color-ink-faint)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Monday.com Board ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formBoardId}
+                    onChange={(e) => setFormBoardId(e.target.value)}
+                    placeholder="1234567890"
+                    required
+                    style={{ ...styles.select, padding: "7px 10px", width: "100%", fontFamily: "var(--font-mono)" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={{
+                    padding: "7px 18px",
+                    borderRadius: "8px",
+                    border: "none",
+                    backgroundColor: "var(--color-amber)",
+                    color: "#fff",
+                    fontFamily: "var(--font-body)",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: saving ? "default" : "pointer",
+                    opacity: saving ? 0.6 : 1,
+                  }}
+                >
+                  {saving ? "Adding…" : "Add board"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowForm(false); setFormName(""); setFormBoardId(""); setFormError(null); }}
+                  style={{
+                    padding: "7px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border)",
+                    backgroundColor: "transparent",
+                    color: "var(--color-ink-muted)",
+                    fontFamily: "var(--font-body)",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div style={{ borderTop: boards.length > 0 ? `1px solid var(--color-border)` : "none", padding: "12px 20px" }}>
+              <button
+                onClick={() => setShowForm(true)}
+                style={{
+                  background: "none",
+                  border: "1px dashed var(--color-border)",
+                  borderRadius: "8px",
+                  padding: "7px 16px",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-body)",
+                  fontSize: "13px",
+                  color: "var(--color-ink-muted)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M8 3v10M3 8h10" />
+                </svg>
+                Add attorney board
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// =============================================================================
+// Monday.com Connection
+// =============================================================================
+
+function MondayConnectionSection() {
+  const [status, setStatus] = useState<{ connected: boolean; mondayName?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchMondayStatus()
+      .then(setStatus)
+      .catch(() => setStatus({ connected: false }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Pick up ?monday=connected after OAuth redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("monday") === "connected") {
+      window.history.replaceState(null, "", window.location.pathname);
+      fetchMondayStatus().then(setStatus).catch(() => {});
+    }
+  }, []);
+
+  return (
+    <section style={{ marginBottom: "40px" }}>
+      <h2 style={styles.sectionTitle}>Monday.com Account</h2>
+      <p style={styles.sectionDesc}>
+        Connect your personal Monday.com account so notes you post are attributed to you.
+      </p>
+      <div style={styles.card}>
+        <div style={styles.fieldRow}>
+          <div>
+            <div style={styles.prefLabel}>Connection</div>
+            <div style={styles.prefHint}>
+              {loading
+                ? "Checking…"
+                : status?.connected
+                  ? `Connected${status.mondayName ? ` as ${status.mondayName}` : ""}`
+                  : "Not connected — notes will post under the shared API account"}
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setConnecting(true);
+              setConnectError(null);
+              getAzureToken()
+                .then((token) => {
+                  const qs = token ? `?az_token=${encodeURIComponent(token)}` : "";
+                  window.location.href = `/api/auth/monday${qs}`;
+                })
+                .catch((err: unknown) => {
+                  setConnecting(false);
+                  setConnectError(err instanceof Error ? err.message : String(err));
+                });
+            }}
+            disabled={connecting}
+            style={{
+              padding: "7px 16px",
+              borderRadius: "8px",
+              border: "none",
+              backgroundColor: status?.connected ? "var(--color-surface-warm)" : "var(--color-amber)",
+              color: status?.connected ? "var(--color-ink-muted)" : "#fff",
+              fontFamily: "var(--font-body)",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: connecting ? "wait" : "pointer",
+              opacity: connecting ? 0.7 : 1,
+              flexShrink: 0,
+            }}
+          >
+            {connecting ? "Redirecting…" : status?.connected ? "Reconnect" : "Connect Monday.com"}
+          </button>
+        </div>
+        {connectError && (
+          <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--color-status-red)", fontFamily: "var(--font-body)" }}>
+            {connectError}
+          </p>
+        )}
+      </div>
     </section>
   );
 }
@@ -237,6 +623,12 @@ export function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {/* Monday.com personal account */}
+      <MondayConnectionSection />
+
+      {/* Attorney Boards */}
+      <AttorneyBoardsSection />
 
       {/* Users — admin only */}
       {user?.role === "admin" && <UsersSection />}

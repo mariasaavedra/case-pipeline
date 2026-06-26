@@ -4,6 +4,7 @@
 
 export interface ProfileSummary {
   localId: string;
+  mondayItemId: string | null;
   name: string;
   email: string | null;
   phone: string | null;
@@ -17,10 +18,10 @@ export interface ProfileSummary {
 
 export interface ContractSummary {
   localId: string;
-  caseType: string;
+  caseType: string | null;
   status: string;
-  value: number;
-  contractId: string;
+  value: number | null;
+  contractId: string | null;
 }
 
 export interface BoardItemSummary {
@@ -29,6 +30,7 @@ export interface BoardItemSummary {
   name: string;
   status: string | null;
   nextDate: string | null;
+  nextTime: string | null;
   attorney: string | null;
   groupTitle: string | null;
   columnValues: Record<string, unknown>;

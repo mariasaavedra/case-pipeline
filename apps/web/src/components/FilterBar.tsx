@@ -108,7 +108,7 @@ export function FilterBar({ filters, onFilterChange, onClear, hasActiveFilters, 
       >
         <option value="">All Statuses</option>
         <option value="pending_contracts">Pending Contracts</option>
-        <option value="paid_fee_ks">Paid Fee Ks</option>
+        <option value="paid_fee_ks">Prescheduling</option>
         {options?.statuses.map((s) => (
           <option key={s} value={s}>{s}</option>
         ))}

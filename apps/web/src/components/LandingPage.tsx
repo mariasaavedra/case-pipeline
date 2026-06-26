@@ -57,7 +57,7 @@ const KPI_ICONS: Record<string, React.ReactNode> = {
 const KPI_EMPTY_MESSAGES: Record<string, string> = {
   open_forms: "No open forms at this time",
   pending_contracts: "All contracts are paid or closed",
-  paid_fee_ks: "No paid contracts awaiting action",
+  paid_fee_ks: "No clients in prescheduling",
   upcoming_deadlines: "Nothing due in the next 7 days",
   upcoming_hearings: "No hearings scheduled this period",
   alerts: "No active alerts — all clear",

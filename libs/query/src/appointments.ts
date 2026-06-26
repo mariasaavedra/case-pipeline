@@ -43,20 +43,19 @@ export interface AppointmentEntry {
 export interface AppointmentsResult {
   entries: AppointmentEntry[];
   attorneys: string[];
+  boardKeys: string[];
 }
 
 interface AppointmentOptions {
   attorney?: string;
   date?: string;
   range?: "day" | "week" | "upcoming" | "all";
+  boardKeys?: string[];
 }
 
 // =============================================================================
 // Main Query
 // =============================================================================
-
-const BOARD_KEY_LIST = [...APPOINTMENT_BOARD_KEYS];
-const BOARD_KEY_PLACEHOLDERS = BOARD_KEY_LIST.map(() => "?").join(",");
 
 /**
  * Get appointments filtered by attorney and date range.
@@ -66,6 +65,9 @@ export function getAppointments(
   db: Database,
   opts: AppointmentOptions = {},
 ): AppointmentsResult {
+  const boardKeyList = opts.boardKeys ?? [...APPOINTMENT_BOARD_KEYS];
+  const boardKeyPlaceholders = boardKeyList.map(() => "?").join(",");
+
   const today = new Date();
   const dateStr = opts.date ?? formatDate(today);
   const range = opts.range ?? "day";
@@ -80,11 +82,14 @@ export function getAppointments(
     // Today and forward
     dateClause = "AND bi.next_date >= ?";
     dateParams.push(dateStr);
-  } else {
-    // day or week — bounded range
-    const endDate = range === "week" ? addDays(dateStr, 7) : dateStr;
+  } else if (range === "week") {
+    const endDate = addDays(dateStr, 7);
     dateClause = "AND bi.next_date >= ? AND bi.next_date <= ?";
     dateParams.push(dateStr, endDate);
+  } else {
+    // day — exact date match only
+    dateClause = "AND bi.next_date = ?";
+    dateParams.push(dateStr);
   }
 
   // Build query with optional attorney filter
@@ -96,6 +101,7 @@ export function getAppointments(
       bi.name,
       bi.status,
       bi.next_date AS nextDate,
+      bi.next_time AS nextTime,
       bi.attorney,
       bi.group_title AS groupTitle,
       bi.column_values,
@@ -111,14 +117,14 @@ export function getAppointments(
       p.a_number AS profileANumber
     FROM board_items bi
     LEFT JOIN profiles p ON p.local_id = bi.profile_local_id
-    WHERE bi.board_key IN (${BOARD_KEY_PLACEHOLDERS})
+    WHERE bi.board_key IN (${boardKeyPlaceholders})
       ${dateClause}
       ${hasAttorneyFilter ? "AND bi.attorney = ?" : ""}
     ORDER BY bi.next_date ASC, bi.name ASC
   `;
 
   const params: (string | number)[] = [
-    ...BOARD_KEY_LIST,
+    ...boardKeyList,
     ...dateParams,
   ];
   if (hasAttorneyFilter) {
@@ -133,7 +139,7 @@ export function getAppointments(
   ];
 
   // Batch-prefetch all enrichment data — 9 queries total regardless of row count
-  const snapshotMap = batchGetSnapshots(db, profileIds);
+  const snapshotMap = batchGetSnapshots(db, profileIds, boardKeyList);
   // Fetch with limit 50 (larger budget); case summary reuses this map, appointment
   // entries get the first 20 via the mapping below.
   const updatesMap = batchGetClientUpdates(db, profileIds, 50);
@@ -161,6 +167,7 @@ export function getAppointments(
         name: row.name,
         status: row.status,
         nextDate: row.nextDate,
+        nextTime: row.nextTime,
         attorney: row.attorney,
         groupTitle: row.groupTitle,
         columnValues: safeParseJson(row.column_values),
@@ -176,9 +183,9 @@ export function getAppointments(
     };
   });
 
-  const attorneys = getAttorneyList(db);
+  const attorneys = getAttorneyList(db, boardKeyList);
 
-  return { entries, attorneys };
+  return { entries, attorneys, boardKeys: boardKeyList };
 }
 
 // =============================================================================
@@ -188,16 +195,18 @@ export function getAppointments(
 /**
  * Get distinct attorney identifiers from appointment boards.
  */
-export function getAttorneyList(db: Database): string[] {
+export function getAttorneyList(db: Database, boardKeyList?: string[]): string[] {
+  const keys = boardKeyList ?? [...APPOINTMENT_BOARD_KEYS];
+  const placeholders = keys.map(() => "?").join(",");
   const rows = db
     .prepare(
       `SELECT DISTINCT attorney
        FROM board_items
-       WHERE board_key IN (${BOARD_KEY_PLACEHOLDERS})
+       WHERE board_key IN (${placeholders})
          AND attorney IS NOT NULL
        ORDER BY attorney`,
     )
-    .all(...BOARD_KEY_LIST) as { attorney: string }[];
+    .all(...keys) as { attorney: string }[];
 
   return rows.map((r) => r.attorney);
 }
@@ -209,11 +218,13 @@ export function getAttorneyList(db: Database): string[] {
 function batchGetSnapshots(
   db: Database,
   profileLocalIds: string[],
+  boardKeyList: string[],
 ): Map<string, AppointmentSnapshot> {
   if (profileLocalIds.length === 0) return new Map();
 
   const todayStr = formatDate(new Date());
   const idPlaceholders = profileLocalIds.map(() => "?").join(",");
+  const boardPlaceholders = boardKeyList.map(() => "?").join(",");
   const closedStatuses = [...CLOSED_CONTRACT_STATUSES];
   const closedPlaceholders = closedStatuses.map(() => "?").join(",");
 
@@ -222,10 +233,10 @@ function batchGetSnapshots(
     .prepare(
       `SELECT profile_local_id, COUNT(*) AS cnt FROM board_items
        WHERE profile_local_id IN (${idPlaceholders})
-         AND board_key NOT IN (${BOARD_KEY_PLACEHOLDERS})
+         AND board_key NOT IN (${boardPlaceholders})
        GROUP BY profile_local_id`,
     )
-    .all(...profileLocalIds, ...BOARD_KEY_LIST) as { profile_local_id: string; cnt: number }[];
+    .all(...profileLocalIds, ...boardKeyList) as { profile_local_id: string; cnt: number }[];
 
   // Pending contract count per profile
   const contractRows = db
@@ -242,11 +253,11 @@ function batchGetSnapshots(
     .prepare(
       `SELECT profile_local_id, MIN(next_date) AS nextDeadline FROM board_items
        WHERE profile_local_id IN (${idPlaceholders})
-         AND board_key NOT IN (${BOARD_KEY_PLACEHOLDERS})
+         AND board_key NOT IN (${boardPlaceholders})
          AND next_date >= ?
        GROUP BY profile_local_id`,
     )
-    .all(...profileLocalIds, ...BOARD_KEY_LIST, todayStr) as {
+    .all(...profileLocalIds, ...boardKeyList, todayStr) as {
     profile_local_id: string;
     nextDeadline: string | null;
   }[];
@@ -274,6 +285,7 @@ function batchGetSnapshots(
 function buildProfileSummary(row: RawAppointmentRow): ProfileSummary {
   return {
     localId: row.profileLocalId ?? "",
+    mondayItemId: null,
     name: row.profileName!,
     email: row.profileEmail,
     phone: row.profilePhone,
@@ -296,6 +308,7 @@ interface RawAppointmentRow {
   name: string;
   status: string | null;
   nextDate: string | null;
+  nextTime: string | null;
   attorney: string | null;
   groupTitle: string | null;
   column_values: string;

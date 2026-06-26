@@ -153,6 +153,62 @@ export async function fetchAlerts(attorney?: string): Promise<AlertsResult> {
   return apiFetch<AlertsResult>(`/api/alerts${qs ? `?${qs}` : ""}`);
 }
 
+// =============================================================================
+// Attorney Boards Settings
+// =============================================================================
+
+export interface AttorneyBoard {
+  boardKey: string;
+  mondayBoardId: string;
+  displayName: string;
+  active: boolean;
+}
+
+export async function fetchAttorneyBoards(): Promise<AttorneyBoard[]> {
+  return apiFetch<AttorneyBoard[]>("/api/settings/attorney-boards");
+}
+
+export async function addAttorneyBoard(
+  board: Omit<AttorneyBoard, "active">,
+): Promise<AttorneyBoard[]> {
+  return apiFetch<AttorneyBoard[]>("/api/settings/attorney-boards", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(board),
+  });
+}
+
+export async function deleteAttorneyBoard(boardKey: string): Promise<AttorneyBoard[]> {
+  return apiFetch<AttorneyBoard[]>(`/api/settings/attorney-boards/${encodeURIComponent(boardKey)}`, {
+    method: "DELETE",
+  });
+}
+
+// =============================================================================
+// Monday.com OAuth
+// =============================================================================
+
+export async function fetchMondayStatus(): Promise<{ connected: boolean; mondayName?: string }> {
+  return apiFetch<{ connected: boolean; mondayName?: string }>("/api/auth/monday/status");
+}
+
+export async function getAzureToken(): Promise<string | null> {
+  if (!_tokenGetter) return null;
+  return _tokenGetter();
+}
+
+// =============================================================================
+// Profile Write-Back
+// =============================================================================
+
+export async function postProfileUpdate(profileLocalId: string, text: string): Promise<ClientUpdate> {
+  return apiFetch<ClientUpdate>(`/api/profiles/${encodeURIComponent(profileLocalId)}/updates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+}
+
 export async function fetchDashboard(hearingRange?: string): Promise<KpiCard[]> {
   const params = hearingRange ? `?hearingRange=${encodeURIComponent(hearingRange)}` : "";
   const res = await fetch(`/api/dashboard${params}`, { headers: await authHeaders() });

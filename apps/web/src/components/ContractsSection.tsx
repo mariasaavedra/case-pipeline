@@ -6,7 +6,8 @@ interface Props {
   contracts: { active: ContractSummary[]; closed: ContractSummary[] };
 }
 
-function formatCurrency(cents: number): string {
+function formatCurrency(cents: number | null | undefined): string {
+  if (cents == null) return "—";
   return `$${cents.toLocaleString()}`;
 }
 

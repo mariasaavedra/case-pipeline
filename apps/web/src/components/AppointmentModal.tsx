@@ -1,6 +1,7 @@
-import { useEffect, useCallback } from "react";
-import type { AppointmentEntry } from "../api";
+import { useEffect, useCallback, useState } from "react";
+import type { AppointmentEntry, ClientUpdate } from "../api";
 import { UpdatesTimeline } from "./UpdatesTimeline";
+import { NoteComposer } from "./NoteComposer";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { formatANumber } from "@case-pipeline/core";
 import { Link } from "./Link";
@@ -76,6 +77,7 @@ export function AppointmentModal({ entry, onClose }: Props) {
   const { appointment, profile, snapshot, updates, caseSummary } = entry;
   const statusStyle = getStatusStyle(appointment.status);
   const priorityStyle = profile ? getPriorityStyle(profile.priority) : null;
+  const [pendingUpdates, setPendingUpdates] = useState<ClientUpdate[]>([]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -353,23 +355,30 @@ export function AppointmentModal({ entry, onClose }: Props) {
           )}
 
           {/* Notes / updates */}
-          <div className="px-6 py-4">
-            {updates.length > 0 ? (
-              <>
-                <h3
-                  className="text-[11px] font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-                >
-                  Notes ({updates.length})
-                </h3>
-                <UpdatesTimeline updates={updates} />
-              </>
+          <div className="px-6 py-4 space-y-4">
+            <h3
+              className="text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+            >
+              Notes {pendingUpdates.length + updates.length > 0 ? `(${pendingUpdates.length + updates.length})` : ""}
+            </h3>
+
+            {profile && (
+              <NoteComposer
+                profileLocalId={profile.localId}
+                onPosted={(update) => setPendingUpdates((prev) => [update, ...prev])}
+                compact
+              />
+            )}
+
+            {pendingUpdates.length + updates.length > 0 ? (
+              <UpdatesTimeline updates={[...pendingUpdates, ...updates]} />
             ) : (
               <p
-                className="text-sm text-center py-6"
+                className="text-sm text-center py-4"
                 style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
               >
-                No notes for this appointment.
+                No notes yet. Add one above.
               </p>
             )}
           </div>

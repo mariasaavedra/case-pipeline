@@ -182,6 +182,33 @@ boards:
       link_to_activities:
         resolve: by_id
         id: link_to_activities_mkm0107k
+      link_to_court_cases:
+        resolve: by_type
+        type: board_relation
+      street:
+        resolve: by_title
+        pattern: street
+        types:
+          - text
+          - long_text
+      city:
+        resolve: by_title
+        pattern: city
+        types:
+          - text
+          - long_text
+      state:
+        resolve: by_title
+        pattern: state
+        types:
+          - text
+          - long_text
+      zip_code:
+        resolve: by_title
+        pattern: zip.*code
+        types:
+          - text
+          - long_text
   _fa_jail_intakes:
     id: "8094412694"
     name: "[FA] Jail Intakes"
@@ -465,6 +492,18 @@ boards:
       needs_to_pay_by:
         resolve: by_type
         type: date
+      first_name:
+        resolve: by_title
+        pattern: first.*name
+        types:
+          - text
+          - long_text
+      last_name:
+        resolve: by_title
+        pattern: last.*name
+        types:
+          - text
+          - long_text
   _na_originals_cards_notices:
     id: "8025618300"
     name: "[NA] Originals + Cards + Notices"
@@ -701,11 +740,15 @@ boards:
         resolve: by_id
         id: date_mkppxjpa
       results:
-        resolve: by_type
-        type: file
+        resolve: by_title
+        pattern: results
+        types:
+          - status
       follow_up_appt:
-        resolve: by_type
-        type: date
+        resolve: by_title
+        pattern: follow.*up.*appt
+        types:
+          - status
       follow_up_note:
         resolve: by_id
         id: long_text_mkxehpev
@@ -943,6 +986,27 @@ boards:
       link_to_na_originals_cards_notices:
         resolve: by_id
         id: board_relation_mm20s6tw
+      receipt_no_originals:
+        resolve: by_title
+        pattern: receipt.*no..*-.*originals
+        types:
+          - mirror
+          - lookup
+      received_date_priority_date_originals:
+        resolve: by_title
+        pattern: received.*date.*/.*priority.*date.*-.*originals
+        types:
+          - mirror
+          - lookup
+      uscis_receipt_notice_originals:
+        resolve: by_title
+        pattern: uscis.*receipt.*notice.*-.*originals
+        types:
+          - mirror
+          - lookup
+      link_to_address_changes:
+        resolve: by_type
+        type: board_relation
   motions:
     id: "8025556892"
     name: Motions
@@ -1064,6 +1128,21 @@ boards:
       attorney_notes:
         resolve: by_id
         id: lookup_mkvmbvhj
+      court_case_connected:
+        resolve: by_title
+        pattern: court.*case.*-.*connected
+        types:
+          - mirror
+          - lookup
+      mtns_history:
+        resolve: by_title
+        pattern: mtns.*history
+        types:
+          - mirror
+          - lookup
+      link_to_court_cases:
+        resolve: by_type
+        type: board_relation
   court_cases:
     id: "8025546360"
     name: Court Cases
@@ -1513,8 +1592,8 @@ boards:
         resolve: by_id
         id: color_mkqjj0zk
       ead:
-        resolve: by_id
-        id: status_15__1
+        resolve: by_type
+        type: file
       item_id:
         resolve: by_id
         id: pulse_id_mkrha67f
@@ -1658,6 +1737,140 @@ boards:
         types:
           - text
           - long_text
+      profile_profile_link_for_court_cases:
+        resolve: by_type
+        type: board_relation
+      create_fee_k_profiles:
+        resolve: by_title
+        pattern: create.*fee.*k.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      current_hearing_payment_note_connected_calendaring:
+        resolve: by_title
+        pattern: current.*hearing.*payment.*note.*-.*connected.*calendaring
+        types:
+          - mirror
+          - lookup
+      i200:
+        resolve: by_type
+        type: file
+      i200_issued:
+        resolve: by_title
+        pattern: i200.*issued?
+        types:
+          - status
+      a_number_profiles:
+        resolve: by_title
+        pattern: a.*number.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      country_profiles:
+        resolve: by_title
+        pattern: country.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      efile_profiles:
+        resolve: by_title
+        pattern: efile.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      hearings:
+        resolve: by_type
+        type: board_relation
+      language_profiles:
+        resolve: by_title
+        pattern: language.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      court_prep_appts:
+        resolve: by_type
+        type: board_relation
+      court_prep_note:
+        resolve: by_title
+        pattern: court.*prep.*note
+        types:
+          - mirror
+          - lookup
+      request_appointment:
+        resolve: by_title
+        pattern: request.*appointment
+      tp_4:
+        resolve: by_type
+        type: date
+      fee_k_sent:
+        resolve: by_type
+        type: date
+      link_to_litigation:
+        resolve: by_type
+        type: board_relation
+      profile_status_profiles:
+        resolve: by_title
+        pattern: profile.*status.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      court_receipt_open_forms_originals:
+        resolve: by_title
+        pattern: court.*receipt.*-.*open.*forms/.*originals
+        types:
+          - mirror
+          - lookup
+      forms_sent_to_uscis_on_open_forms:
+        resolve: by_title
+        pattern: forms.*sent.*to.*uscis.*on.*-.*open.*forms
+        types:
+          - mirror
+          - lookup
+      court_case_profiles:
+        resolve: by_title
+        pattern: court.*case?.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      phone_number_profiles:
+        resolve: by_title
+        pattern: phone.*number.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      mailing_address_profiles:
+        resolve: by_title
+        pattern: mailing.*address.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      email_profiles:
+        resolve: by_title
+        pattern: email.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      fee_ks_profiles:
+        resolve: by_title
+        pattern: fee.*ks.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      consults_profiles:
+        resolve: by_title
+        pattern: consults.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      link_to_address_changes:
+        resolve: by_type
+        type: board_relation
+      link_to_address_changes_1:
+        resolve: by_type
+        type: board_relation
+      link_to_court_tasks:
+        resolve: by_type
+        type: board_relation
   _lt_i918b_s:
     id: "8025538497"
     name: "[LT] I918B's"
@@ -1780,6 +1993,48 @@ boards:
       link_to_activities:
         resolve: by_id
         id: link_to_activities_mkm0zyef
+      court_case:
+        resolve: by_title
+        pattern: court.*case?
+        types:
+          - mirror
+          - lookup
+      case_type_profile:
+        resolve: by_title
+        pattern: case.*type.*-.*profile
+        types:
+          - mirror
+          - lookup
+      affirmative_filings_open_forms_link:
+        resolve: by_type
+        type: board_relation
+      last_filed_form:
+        resolve: by_title
+        pattern: last.*filed.*form
+        types:
+          - mirror
+          - lookup
+      court_cases:
+        resolve: by_type
+        type: board_relation
+      ecas_or_paper_court_cases:
+        resolve: by_title
+        pattern: ecas.*or.*paper?.*-.*court.*cases
+        types:
+          - mirror
+          - lookup
+      old_addy:
+        resolve: by_title
+        pattern: old.*addy
+        types:
+          - text
+          - long_text
+      new_addy:
+        resolve: by_title
+        pattern: new.*addy
+        types:
+          - text
+          - long_text
   rfes_all:
     id: "8025524218"
     name: RFEs - ALL
@@ -2037,6 +2292,90 @@ boards:
         types:
           - mirror
           - lookup
+      fee_k_status_court_board_connected:
+        resolve: by_title
+        pattern: fee.*k.*status.*-.*court.*board.*-.*connected
+        types:
+          - mirror
+          - lookup
+      fee_deadline_client_connected:
+        resolve: by_title
+        pattern: fee.*deadline.*-.*client.*-.*connected
+        types:
+          - mirror
+          - lookup
+      wd_warning_deadline_connected_calendaring:
+        resolve: by_title
+        pattern: wd.*warning.*deadline.*-.*connected.*calendaring
+        types:
+          - mirror
+          - lookup
+      sent_d_wd_warning_connected_calendaring:
+        resolve: by_title
+        pattern: sent/d.*-.*wd.*warning.*-.*connected.*calendaring
+        types:
+          - mirror
+          - lookup
+      profile_court_cases_connected:
+        resolve: by_title
+        pattern: profile.*-.*court.*cases.*connected
+        types:
+          - mirror
+          - lookup
+      court_case_profile:
+        resolve: by_title
+        pattern: court.*case?.*-.*profile
+        types:
+          - mirror
+          - lookup
+      first_name:
+        resolve: by_title
+        pattern: first.*name
+        types:
+          - mirror
+          - lookup
+      last_name:
+        resolve: by_title
+        pattern: last.*name
+        types:
+          - mirror
+          - lookup
+      street:
+        resolve: by_title
+        pattern: street
+        types:
+          - mirror
+          - lookup
+      state:
+        resolve: by_title
+        pattern: state
+        types:
+          - mirror
+          - lookup
+      city:
+        resolve: by_title
+        pattern: city
+        types:
+          - mirror
+          - lookup
+      zip_code:
+        resolve: by_title
+        pattern: zip.*code
+        types:
+          - mirror
+          - lookup
+      full_name:
+        resolve: by_title
+        pattern: full.*name
+        types:
+          - mirror
+          - lookup
+      profile_id:
+        resolve: by_title
+        pattern: profile.*id
+        types:
+          - mirror
+          - lookup
   appointments_lb:
     id: "8025389724"
     name: Appointments LB
@@ -2173,6 +2512,56 @@ boards:
         types:
           - mirror
           - lookup
+      appts_court_cases:
+        resolve: by_title
+        pattern: appts.*-.*court.*cases
+        types:
+          - mirror
+          - lookup
+      client_court_case_appts:
+        resolve: by_title
+        pattern: client.*-.*court.*case.*appts?
+        types:
+          - status
+      court_prep_appt_court_case:
+        resolve: by_type
+        type: board_relation
+      court_case_profile:
+        resolve: by_title
+        pattern: court.*case?.*-.*profile
+        types:
+          - mirror
+          - lookup
+      client:
+        resolve: by_title
+        pattern: client?
+        types:
+          - mirror
+          - lookup
+      street:
+        resolve: by_title
+        pattern: street
+        types:
+          - text
+          - long_text
+      city:
+        resolve: by_title
+        pattern: city
+        types:
+          - text
+          - long_text
+      state:
+        resolve: by_title
+        pattern: state
+        types:
+          - text
+          - long_text
+      zip_code:
+        resolve: by_title
+        pattern: zip.*code
+        types:
+          - text
+          - long_text
   appointments_m:
     id: "8025383981"
     name: Appointments M
@@ -2330,6 +2719,56 @@ boards:
         types:
           - text
           - long_text
+      court_prep_notes_court_cases:
+        resolve: by_type
+        type: board_relation
+      client_court_case_appt:
+        resolve: by_title
+        pattern: client.*-.*court.*case.*appt?
+        types:
+          - status
+      appts_profiles:
+        resolve: by_title
+        pattern: appts.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      first_name:
+        resolve: by_title
+        pattern: first.*name
+        types:
+          - text
+          - long_text
+      last_name:
+        resolve: by_title
+        pattern: last.*name
+        types:
+          - text
+          - long_text
+      street:
+        resolve: by_title
+        pattern: street
+        types:
+          - text
+          - long_text
+      city:
+        resolve: by_title
+        pattern: city
+        types:
+          - text
+          - long_text
+      state:
+        resolve: by_title
+        pattern: state
+        types:
+          - text
+          - long_text
+      zip_code:
+        resolve: by_title
+        pattern: zip.*code
+        types:
+          - text
+          - long_text
   profiles:
     id: "8025265377"
     name: Profiles
@@ -2386,8 +2825,11 @@ boards:
         resolve: by_id
         id: status__1
       last_consult_date:
-        resolve: by_id
-        id: consulted_date__1
+        resolve: by_title
+        pattern: last.*consult.*date
+        types:
+          - mirror
+          - lookup
       projects:
         resolve: by_id
         id: connect_boards8__1
@@ -2418,8 +2860,6 @@ boards:
       court_case:
         resolve: by_title
         pattern: court.*case?
-        types:
-          - status
       inactive_court_case:
         resolve: by_id
         id: button_mkta3mat
@@ -2540,6 +2980,81 @@ boards:
         types:
           - mirror
           - lookup
+      court_cases_mother:
+        resolve: by_type
+        type: board_relation
+      motions_connected_profile:
+        resolve: by_title
+        pattern: motions.*-.*connected.*profile
+        types:
+          - mirror
+          - lookup
+      court_case_profiles_from_court_case_link:
+        resolve: by_title
+        pattern: court.*case?.*-.*profiles.*from.*court.*case.*link
+        types:
+          - mirror
+          - lookup
+      first_name:
+        resolve: by_title
+        pattern: first.*name
+        types:
+          - text
+          - long_text
+      middle_name:
+        resolve: by_title
+        pattern: middle.*name
+        types:
+          - text
+          - long_text
+      last_name:
+        resolve: by_title
+        pattern: last.*name
+        types:
+          - text
+          - long_text
+      full_name:
+        resolve: by_title
+        pattern: full.*name
+        types:
+          - text
+          - long_text
+      street:
+        resolve: by_title
+        pattern: street
+        types:
+          - text
+          - long_text
+      city:
+        resolve: by_title
+        pattern: city
+        types:
+          - text
+          - long_text
+      state:
+        resolve: by_title
+        pattern: state
+        types:
+          - text
+          - long_text
+      zip_code:
+        resolve: by_title
+        pattern: zip.*code
+        types:
+          - text
+          - long_text
+      court_case_entry_creation_log:
+        resolve: by_title
+        pattern: court.*case.*entry.*creation.*log
+        types:
+          - mirror
+          - lookup
+      creation_log_profile:
+        resolve: by_type
+        type: creation_log
+      link_to_calendaring:
+        resolve: by_type
+        type: board_relation
   appeals:
     id: "3473957885"
     name: Appeals
@@ -2722,6 +3237,45 @@ boards:
       link_to_activities:
         resolve: by_id
         id: link_to_activities_mkm0kx85
+      link_to_court_cases:
+        resolve: by_type
+        type: board_relation
+      first_name:
+        resolve: by_title
+        pattern: first.*name
+        types:
+          - text
+          - long_text
+      last_name:
+        resolve: by_title
+        pattern: last.*name
+        types:
+          - text
+          - long_text
+      street:
+        resolve: by_title
+        pattern: street
+        types:
+          - text
+          - long_text
+      city:
+        resolve: by_title
+        pattern: city
+        types:
+          - text
+          - long_text
+      state:
+        resolve: by_title
+        pattern: state
+        types:
+          - text
+          - long_text
+      zip_code:
+        resolve: by_title
+        pattern: zip.*code
+        types:
+          - text
+          - long_text
   litigation:
     id: "4299007012"
     name: Litigation
@@ -2780,6 +3334,15 @@ boards:
         types:
           - mirror
           - lookup
+      court_cases:
+        resolve: by_type
+        type: board_relation
+      immigration_hearing_date_court_cases:
+        resolve: by_title
+        pattern: immigration.*hearing.*date.*-.*court.*cases
+        types:
+          - mirror
+          - lookup
   calendaring:
     id: "9287895872"
     name: Calendaring
@@ -2791,8 +3354,8 @@ boards:
         resolve: by_id
         id: color_mkrjc7n8
       court_cases:
-        resolve: by_id
-        id: board_relation_mkyrycjz
+        resolve: by_type
+        type: board_relation
       due_date:
         resolve: by_id
         id: date_mkrzrqxn
@@ -2932,14 +3495,173 @@ boards:
         resolve: by_id
         id: board_relation_mkynms9x
       link_to_court_cases:
-        resolve: by_id
-        id: board_relation_mkyxxzs1
+        resolve: by_type
+        type: board_relation
       link_to_subitems_of_calendaring:
-        resolve: by_id
-        id: board_relation_mm1jwpmz
+        resolve: by_type
+        type: board_relation
       mirror:
         resolve: by_title
         pattern: mirror
         types:
           - mirror
           - lookup
+      hearing_payment_note_per_hearing_entry:
+        resolve: by_title
+        pattern: hearing.*payment.*note.*-.*per.*hearing.*entry
+        types:
+          - text
+          - long_text
+      hearing_note:
+        resolve: by_title
+        pattern: hearing.*note
+        types:
+          - text
+          - long_text
+      connect_boards:
+        resolve: by_type
+        type: board_relation
+      court_task_connected:
+        resolve: by_title
+        pattern: court.*task.*-.*connected
+        types:
+          - mirror
+          - lookup
+      log_client_deadline:
+        resolve: by_title
+        pattern: log.*client.*deadline
+      hearing_status_connected_court_cases:
+        resolve: by_title
+        pattern: hearing.*status.*-.*connected.*court.*cases
+        types:
+          - mirror
+          - lookup
+      atty:
+        resolve: by_title
+        pattern: atty
+        types:
+          - mirror
+          - lookup
+      court_case_connected_boards_profiles:
+        resolve: by_title
+        pattern: court.*case?.*-.*connected.*boards.*profiles
+        types:
+          - mirror
+          - lookup
+      email_connected_boards:
+        resolve: by_title
+        pattern: email.*-.*connected.*boards
+        types:
+          - mirror
+          - lookup
+      profile_connected_boards:
+        resolve: by_title
+        pattern: profile.*-.*connected.*boards
+        types:
+          - mirror
+          - lookup
+      notices_connected_boards:
+        resolve: by_title
+        pattern: notices.*-.*connected.*boards
+        types:
+          - mirror
+          - lookup
+      hearing_year_calendaring_connected:
+        resolve: by_title
+        pattern: hearing.*year.*-.*calendaring.*connected
+        types:
+          - mirror
+          - lookup
+      hearing_month_calendaring_connected:
+        resolve: by_title
+        pattern: hearing.*month.*-.*calendaring.*connected
+        types:
+          - mirror
+          - lookup
+      hearing_history:
+        resolve: by_title
+        pattern: hearing.*history
+        types:
+          - mirror
+          - lookup
+      type_hearing_court_cases:
+        resolve: by_title
+        pattern: type.*hearing.*-.*court.*cases
+        types:
+          - mirror
+          - lookup
+      method:
+        resolve: by_title
+        pattern: method
+        types:
+          - mirror
+          - lookup
+      fees_hearings:
+        resolve: by_title
+        pattern: fees.*-.*hearings
+        types:
+          - mirror
+          - lookup
+      deadline_status:
+        resolve: by_title
+        pattern: deadline.*status
+        types:
+          - mirror
+          - lookup
+      deadline_type_connected:
+        resolve: by_title
+        pattern: deadline.*type.*-.*connected
+        types:
+          - mirror
+          - lookup
+      create_fee_k:
+        resolve: by_title
+        pattern: create.*fee.*k?
+        types:
+          - mirror
+          - lookup
+      hearing_fees_deadline_client:
+        resolve: by_title
+        pattern: hearing.*fees.*deadline.*-.*client
+        types:
+          - mirror
+          - lookup
+      wd_warning_sent:
+        resolve: by_type
+        type: date
+      wd_warning_deadline_file_mtwd_after:
+        resolve: by_type
+        type: date
+      mh_fees_paid_on_connected:
+        resolve: by_title
+        pattern: mh.*fees.*paid.*on:.*-.*connected
+        types:
+          - mirror
+          - lookup
+      tp_fees_paid_on_calendaring:
+        resolve: by_title
+        pattern: tp.*fees.*paid.*on:.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      trial_fees_paid_on_calendaring:
+        resolve: by_title
+        pattern: trial.*fees.*paid.*on:.*-.*calendaring
+        types:
+          - mirror
+          - lookup
+      payment_history_log_court_cases:
+        resolve: by_title
+        pattern: payment.*history.*log.*-.*court.*cases
+        types:
+          - mirror
+          - lookup
+      fee_k_status_connected_court_cases:
+        resolve: by_title
+        pattern: fee.*k.*status.*-.*connected.*court.*cases
+        types:
+          - mirror
+          - lookup
+      link_to_fee_ks:
+        resolve: by_type
+        type: board_relation

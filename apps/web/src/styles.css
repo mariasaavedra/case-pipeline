@@ -835,3 +835,63 @@ body {
     min-width: auto;
   }
 }
+/* =============================================================================
+   Responsive enhancements — approved responsive review (2026-06)
+
+   What this adds:
+   1. Tablet icon rail (641–1024px): the sidebar stays visible as a 60px
+      icon-only rail instead of disappearing behind the hamburger. The width
+      and label-hiding are driven by useViewport() in Sidebar.tsx / app.tsx;
+      these rules just neutralise the phone off-canvas behaviour in that range.
+   2. Phone client header (<=640px): the name keeps the top line on its own and
+      the priority pill + action buttons wrap onto the next line, so a long name
+      is never squeezed.
+   3. Mobile tab bar (<=768px): a right-edge fade signals the tab strip scrolls.
+
+   HOW TO APPLY: paste this whole block at the END of apps/web/src/styles.css.
+   (Appending plain @media rules is valid CSS — no @import needed.)
+   ============================================================================= */
+
+/* 1. Tablet icon rail — undo the phone off-canvas rules between 641 and 1024px.
+   The base off-canvas / hamburger rules live in the @media (max-width: 640px)
+   block, so for 641–1024px we restore the on-canvas rail. */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .sidebar {
+    transform: none !important;
+  }
+  .app-content {
+    /* app.tsx already sets marginLeft: 60 inline; this beats the phone
+       `margin-left: 0 !important` rule if your styles.css still scopes it to 768px. */
+    margin-left: 60px !important;
+  }
+  .mobile-menu-btn {
+    display: none !important;
+  }
+  .sidebar-backdrop {
+    display: none !important;
+  }
+}
+
+/* 2. Phone client header — let the name row wrap. */
+@media (max-width: 640px) {
+  .client-header-namerow {
+    flex-wrap: wrap;
+  }
+  .client-header-name {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    flex-basis: 100%;
+  }
+  .client-header-actions {
+    margin-left: 0 !important;
+  }
+}
+
+/* 3. Mobile tab bar — fade the right edge to hint the strip is scrollable. */
+@media (max-width: 768px) {
+  .tab-bar {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  }
+}

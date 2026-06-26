@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import type { ClientCaseSummary } from "../api";
+import type { ClientCaseSummary, ClientUpdate } from "../api";
 import { BOARD_CONFIG, DOCUMENT_BOARD_KEYS } from "../config";
+import { NoteComposer } from "./NoteComposer";
 import { navigate, clientPath } from "../router";
 import { ClientHeaderSticky } from "./ClientHeaderSticky";
 import { ClientSnapshot } from "./ClientSnapshot";
@@ -23,6 +24,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
   const [last30Days, setLast30Days] = useState(false);
+  const [pendingUpdates, setPendingUpdates] = useState<ClientUpdate[]>([]);
 
   // Sync activeTab when the route changes (back/forward, direct URL load)
   useEffect(() => {
@@ -102,6 +104,11 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
                 </span>
               </div>
 
+              <NoteComposer
+                profileLocalId={data.profile.localId}
+                onPosted={(update) => setPendingUpdates((prev) => [update, ...prev])}
+              />
+
               <TimelineFilters
                 activeFilter={timelineFilter}
                 onFilterChange={setTimelineFilter}
@@ -110,7 +117,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
               />
 
               <UpdatesTimeline
-                updates={data.updates}
+                updates={[...pendingUpdates, ...data.updates]}
                 filter={timelineFilter}
                 last30Days={last30Days}
               />

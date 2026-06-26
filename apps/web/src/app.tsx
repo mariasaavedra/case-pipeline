@@ -17,10 +17,12 @@ import type { ClientCaseSummary } from "./api";
 import { AuthProvider } from "./auth/AuthProvider";
 import { useAuth } from "./auth/useAuth";
 import { usePreferences } from "./hooks/usePreferences";
+import { useViewport } from "./hooks/useViewport";
 
 function App() {
   const { user, isLoading: authLoading, logout } = useAuth();
   const { prefs } = usePreferences();
+  const { isMobile, isTabletRail } = useViewport();
   const [client, setClient] = useState<ClientCaseSummary | null>(null);
   const [initialTab, setInitialTab] = useState<TabId>("overview");
   const [loading, setLoading] = useState(false);
@@ -103,7 +105,10 @@ function App() {
 
   const route = matchRoute(pathname);
   const isClientDetail = route.page === "client-detail";
-  const sidebarWidth = sidebarCollapsed ? 60 : 220;
+  // Phones: drawer is off-canvas, content takes the full width.
+  // Tablets (641–1024px): sidebar is a forced 60px icon rail.
+  // Desktop: honour the manual collapse toggle (60 vs 220).
+  const sidebarWidth = isMobile ? 0 : sidebarCollapsed || isTabletRail ? 60 : 220;
 
   // Auth loading — wait before showing anything to avoid flash.
   if (authLoading) {

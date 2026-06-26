@@ -17,6 +17,7 @@ interface RawBoardItemRow {
   name: string;
   status: string | null;
   nextDate: string | null;
+  nextTime: string | null;
   attorney: string | null;
   groupTitle: string | null;
   column_values: string;
@@ -43,6 +44,7 @@ export function batchGetClientBoardItems(
         name,
         status,
         next_date AS nextDate,
+        next_time AS nextTime,
         attorney,
         group_title AS groupTitle,
         column_values
@@ -65,6 +67,7 @@ export function batchGetClientBoardItems(
       name: row.name,
       status: row.status,
       nextDate: row.nextDate,
+      nextTime: row.nextTime,
       attorney: row.attorney,
       groupTitle: row.groupTitle,
       columnValues: safeParseJson(row.column_values),
@@ -94,6 +97,7 @@ export function getClientBoardItems(
         name,
         status,
         next_date AS nextDate,
+        next_time AS nextTime,
         attorney,
         group_title AS groupTitle,
         column_values
@@ -113,6 +117,7 @@ export function getClientBoardItems(
       name: row.name,
       status: row.status,
       nextDate: row.nextDate,
+      nextTime: row.nextTime,
       attorney: row.attorney,
       groupTitle: row.groupTitle,
       columnValues: safeParseJson(row.column_values),
@@ -144,6 +149,7 @@ export function getBoardItemDetail(
         name,
         status,
         next_date AS nextDate,
+        next_time AS nextTime,
         attorney,
         group_title AS groupTitle,
         column_values
@@ -160,6 +166,7 @@ export function getBoardItemDetail(
     name: row.name,
     status: row.status,
     nextDate: row.nextDate,
+    nextTime: row.nextTime,
     attorney: row.attorney,
     groupTitle: row.groupTitle,
     columnValues: safeParseJson(row.column_values),

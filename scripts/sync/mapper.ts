@@ -62,10 +62,13 @@ export function shapeColumnValue(type: string, value: MondayColumnValue): unknow
       if (!text) return null;
       return { labels: text.split(",").map((s) => s.trim()).filter(Boolean) };
 
-    // Dates → { date } using the date part only ("YYYY-MM-DD HH:MM" → "YYYY-MM-DD")
+    // Dates → { date } and optional { time } if Monday has a time set ("YYYY-MM-DD HH:MM")
     case "date":
-    case "datetime":
-      return text ? { date: text.split(" ")[0] } : null;
+    case "datetime": {
+      if (!text) return null;
+      const [date, time] = text.split(" ");
+      return time ? { date, time } : { date };
+    }
 
     // Relations → keep linked ids; profile resolution happens in a later pass
     case "board_relation":
@@ -118,6 +121,7 @@ export function buildColumnValues(
 export interface BoardItemFields {
   status: string | null;
   nextDate: string | null;
+  nextTime: string | null;
   attorney: string | null;
   paralegals: string | null;
 }
@@ -137,18 +141,22 @@ export function extractBoardItemFields(
 
   const status = label(columnValues.status);
 
-  const dateKey = NEXT_DATE_KEY[boardKey];
+  // All appointment boards share the same consult_date key; new boards inherit it.
+  const dateKey = NEXT_DATE_KEY[boardKey] ?? (boardKey.startsWith("appointments_") ? "consult_date" : null);
   let nextDate: string | null = null;
+  let nextTime: string | null = null;
   if (dateKey) {
     const dv = columnValues[dateKey];
     if (dv && typeof dv === "object" && "date" in dv) {
-      nextDate = (dv as { date?: string }).date ?? null;
+      nextDate = (dv as { date?: string; time?: string }).date ?? null;
+      nextTime = (dv as { date?: string; time?: string }).time ?? null;
     }
   }
 
   return {
     status,
     nextDate,
+    nextTime,
     attorney: label(columnValues.attorney),
     paralegals: label(columnValues.paralegals),
   };
