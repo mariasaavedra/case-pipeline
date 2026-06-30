@@ -56,12 +56,9 @@ function verifyState(state: string): string | null {
 
 function buildOAuthUrl(azureOid: string): string {
   const state = signState(azureOid);
-  const url = new URL("https://auth.monday.com/oauth2/authorize");
-  url.searchParams.set("client_id", CLIENT_ID);
-  url.searchParams.set("redirect_uri", REDIRECT_URI);
-  url.searchParams.set("scope", "me:read");
-  url.searchParams.set("state", state);
-  return url.toString();
+  // Build manually to avoid encoding colons in scope (me:read not me%3Aread)
+  const params = new URLSearchParams({ client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, state });
+  return `https://auth.monday.com/oauth2/authorize?${params.toString()}&scope=me:read%20updates:write`;
 }
 
 async function handleRedirect(req: Request, res: Response): Promise<void> {
