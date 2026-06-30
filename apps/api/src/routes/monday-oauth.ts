@@ -59,7 +59,7 @@ function buildOAuthUrl(azureOid: string): string {
   const url = new URL("https://auth.monday.com/oauth2/authorize");
   url.searchParams.set("client_id", CLIENT_ID);
   url.searchParams.set("redirect_uri", REDIRECT_URI);
-  url.searchParams.set("scope", "me:read updates:write");
+  url.searchParams.set("scope", "me:read");
   url.searchParams.set("state", state);
   return url.toString();
 }
