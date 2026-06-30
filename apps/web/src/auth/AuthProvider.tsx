@@ -88,7 +88,10 @@ function AuthConsumer({ children }: { children: ReactNode }) {
   }, [isAuthenticated, inProgress, instance, accounts]);
 
   const login = () => {
-    instance.loginRedirect(loginRequest).catch(console.error);
+    instance.loginRedirect(loginRequest).catch((err) => {
+      console.error("[auth] loginRedirect failed:", err);
+      alert(`Login error: ${err?.message ?? err}`);
+    });
   };
 
   const logout = () => {

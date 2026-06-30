@@ -5,14 +5,17 @@ const root = resolve(import.meta.dirname, "../..");
 
 export default defineConfig({
   resolve: {
-    alias: {
-      "@case-pipeline/seed/db/schema": resolve(root, "libs/seed/src/db/schema.ts"),
-      "@case-pipeline/seed": resolve(root, "libs/seed/src/index.ts"),
-      "@case-pipeline/query": resolve(root, "libs/query/src/index.ts"),
-      "@case-pipeline/config": resolve(root, "libs/config/src/index.ts"),
-      "@case-pipeline/monday": resolve(root, "libs/monday/src/index.ts"),
-      "@case-pipeline/core": resolve(root, "libs/core/src/index.ts"),
-    },
+    // Array form so the seed-subpath regex is matched before the bare package
+    // alias. Without the wildcard, any `@case-pipeline/seed/<subpath>` (e.g.
+    // db/sync-lock, db/connection) would fall through to index.ts and fail.
+    alias: [
+      { find: /^@case-pipeline\/seed\/(.*)$/, replacement: resolve(root, "libs/seed/src/$1.ts") },
+      { find: "@case-pipeline/seed", replacement: resolve(root, "libs/seed/src/index.ts") },
+      { find: "@case-pipeline/query", replacement: resolve(root, "libs/query/src/index.ts") },
+      { find: "@case-pipeline/config", replacement: resolve(root, "libs/config/src/index.ts") },
+      { find: "@case-pipeline/monday", replacement: resolve(root, "libs/monday/src/index.ts") },
+      { find: "@case-pipeline/core", replacement: resolve(root, "libs/core/src/index.ts") },
+    ],
   },
   test: {
     environment: "node",

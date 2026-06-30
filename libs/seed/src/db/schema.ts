@@ -5,14 +5,20 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 const SCHEMA_SQL = `
 -- =============================================================================
 -- Seed Data Factory Schema
 -- =============================================================================
 
--- Track generation runs for reproducibility
+-- Track generation/sync runs. Every profile, contract and board_item belongs to
+-- a batch via batch_id … ON DELETE CASCADE. With foreign_keys=ON (set on every
+-- connection — see openDatabase), deleting a batch row deletes ALL of its client
+-- data. In live.db each sync writes one batch and a full re-sync replaces it, so
+-- the cascade is intentional — never DELETE FROM seed_batches by hand to clean
+-- up unless you mean to drop the data it owns. Operational tables (write_queue,
+-- sync_state) deliberately carry no batch_id so they survive a re-sync.
 CREATE TABLE IF NOT EXISTS seed_batches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_name TEXT NOT NULL,
@@ -127,6 +133,39 @@ CREATE TABLE IF NOT EXISTS item_relationships (
     synced INTEGER NOT NULL DEFAULT 0,
     UNIQUE(source_local_id, target_local_id, relationship_type)
 );
+
+-- Durable write-back outbox (Monday.com). The API writes locally + enqueues
+-- here; an in-process processor drains it to Monday.com with retry/backoff.
+-- Intentionally has NO batch_id FK: it is operational state, not seed data, and
+-- must survive a full re-sync. Mutations key off monday_item_id (stable across
+-- syncs), so a queued item stays valid even after profile local_ids are remapped.
+CREATE TABLE IF NOT EXISTS write_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    op_type TEXT NOT NULL,                    -- create_update | change_column | reschedule | ...
+    target_table TEXT,                        -- profiles | board_items | contracts
+    target_local_id TEXT,                     -- local row for optimistic-update correlation
+    monday_item_id TEXT,                      -- stable Monday.com id the mutation targets
+    payload TEXT NOT NULL,                     -- JSON args for the Monday.com mutation
+    status TEXT NOT NULL DEFAULT 'pending',    -- pending | syncing | synced | failed
+    attempts INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 5,
+    last_error TEXT,
+    next_attempt_at TEXT,                      -- ISO; backoff schedule for retries
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_write_queue_status ON write_queue(status, next_attempt_at);
+
+-- Single-row advisory lock so a sync run and the write-queue processor (or two
+-- sync runs) never write concurrently. Holders stamp their identity + time.
+CREATE TABLE IF NOT EXISTS sync_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    locked_by TEXT,
+    locked_at TEXT,
+    last_sync_at TEXT,
+    last_sync_status TEXT
+);
+INSERT OR IGNORE INTO sync_state (id) VALUES (1);
 
 -- Schema version tracking
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -417,9 +456,54 @@ export function initializeSchema(db: Database): void {
       `);
     }
 
+    // Migration v10 → v11: durable write-back outbox + sync advisory lock
+    if (fromVersion < 11) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS write_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            op_type TEXT NOT NULL,
+            target_table TEXT,
+            target_local_id TEXT,
+            monday_item_id TEXT,
+            payload TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 5,
+            last_error TEXT,
+            next_attempt_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_write_queue_status ON write_queue(status, next_attempt_at);
+
+        CREATE TABLE IF NOT EXISTS sync_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            locked_by TEXT,
+            locked_at TEXT,
+            last_sync_at TEXT,
+            last_sync_status TEXT
+        );
+        INSERT OR IGNORE INTO sync_state (id) VALUES (1);
+      `);
+    }
+
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);
     console.log(`  Database schema migrated to v${SCHEMA_VERSION}`);
   }
+}
+
+/**
+ * Read the current schema version, or 0 if the database has no schema yet.
+ * Used by the API to decide whether a startup migration (and pre-migration
+ * backup) is needed before serving traffic.
+ */
+export function getSchemaVersion(db: Database): number {
+  const versionRow = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
+    .get();
+  if (!versionRow) return 0;
+  const row = db.prepare("SELECT version FROM schema_version").get() as { version: number } | undefined;
+  return row?.version ?? 0;
 }
 
 /**
@@ -433,7 +517,7 @@ export function validateSchema(db: Database): void {
 
   if (!versionRow) {
     throw new Error(
-      `Database has no schema. Run the seeder first: bun scripts/seed/index.ts`
+      `Database has no schema. Run the seeder first: npm run seed`
     );
   }
 
@@ -442,12 +526,16 @@ export function validateSchema(db: Database): void {
 
   if (current < SCHEMA_VERSION) {
     throw new Error(
-      `Database schema is v${current}, expected v${SCHEMA_VERSION}. Re-seed to upgrade: bun scripts/seed/index.ts`
+      `Database schema is v${current}, expected v${SCHEMA_VERSION}. Re-seed to upgrade: npm run seed`
     );
   }
 }
 
 export function resetDatabase(db: Database): void {
+  // write_queue and sync_state are deliberately NOT dropped: they are
+  // operational state (pending write-backs, the sync lock), not seed/synced
+  // data. A full re-sync replaces client data but must not discard queued
+  // Monday.com writes — those key off the stable monday_item_id and stay valid.
   db.exec(`
     DROP TABLE IF EXISTS profiles_fts;
     DROP TRIGGER IF EXISTS profiles_ai;

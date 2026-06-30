@@ -1,13 +1,12 @@
-import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { openDatabase } from "@case-pipeline/seed/db/connection";
 
 const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const usersDb = new Database(path.join(DATA_DIR, "users.db"));
-usersDb.pragma("journal_mode = WAL");
+const usersDb = openDatabase(path.join(DATA_DIR, "users.db"));
 usersDb.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id                  INTEGER PRIMARY KEY,

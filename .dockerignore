@@ -1,0 +1,36 @@
+# Keep the build context small and never copy local-only / sensitive files into
+# the image. Dependencies are installed fresh via `npm ci`; data/ and secrets
+# come from the mounted volume and host .env at runtime.
+
+# Dependencies & build output (reinstalled / rebuilt in the image)
+node_modules
+**/node_modules
+dist
+**/dist
+*.tsbuildinfo
+
+# Local data & secrets (mounted volume + env_file provide these at runtime)
+data
+.env
+.env.*
+
+# VCS / tooling / editor noise
+.git
+.github
+.vscode
+.idea
+.claude
+.dmux
+coverage
+*.lcov
+
+# Docs and local artifacts not needed to run the app
+*.md
+Codebase review request.zip
+design_handoff_responsive_rail
+nightly
+docs
+
+# OS cruft
+.DS_Store
+**/.DS_Store

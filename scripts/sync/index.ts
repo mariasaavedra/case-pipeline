@@ -17,7 +17,6 @@
 // Column reshaping is handled by ./mapper (unit-tested in mapper.test.ts).
 // =============================================================================
 
-import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -32,6 +31,8 @@ import {
 import type { MondayItem } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { initializeSchema, resetDatabase } from "@case-pipeline/seed/db/schema";
+import { openDatabase } from "@case-pipeline/seed/db/connection";
+import { acquireSyncLock, releaseSyncLock, recordSyncResult } from "@case-pipeline/seed/db/sync-lock";
 import { normalizeANumber } from "@case-pipeline/core";
 import {
   buildColumnValues,
@@ -56,12 +57,14 @@ const PROFILE_RELATION_KEYS = ["profile", "profiles", "person"];
 function parseArgs() {
   const args = process.argv.slice(2);
   let maxItems = 5000;
+  let pageSize = 50;
   let onlyBoards: string[] | null = null;
   for (const arg of args) {
     if (arg.startsWith("--max-items=")) maxItems = parseInt(arg.split("=")[1] ?? "") || maxItems;
+    else if (arg.startsWith("--page-size=")) pageSize = parseInt(arg.split("=")[1] ?? "") || pageSize;
     else if (arg.startsWith("--boards=")) onlyBoards = (arg.split("=")[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   }
-  return { maxItems, onlyBoards };
+  return { maxItems, pageSize, onlyBoards };
 }
 
 // =============================================================================
@@ -101,20 +104,27 @@ async function main() {
   }
   setApiToken(token);
 
-  const { maxItems, onlyBoards } = parseArgs();
+  const { maxItems, pageSize, onlyBoards } = parseArgs();
 
   const dataDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../data");
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, "live.db");
 
-  const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
+  const db = openDatabase(dbPath);
   if (onlyBoards) {
     // Partial (--boards) run: keep the database, replace only targeted boards.
     initializeSchema(db);
   } else {
     // Full run: full replace from a clean, current-schema database.
     resetDatabase(db);
+  }
+
+  // Coordinate with the API's write-queue processor: take the sync advisory lock
+  // so the two writers don't overlap. busy_timeout guarantees integrity even if
+  // this is best-effort, so a contended lock is a warning, not a hard stop.
+  const SYNC_HOLDER = `sync-${process.pid}`;
+  if (!acquireSyncLock(db, SYNC_HOLDER)) {
+    console.warn("[sync] Sync lock is held by another writer; proceeding (busy_timeout guards integrity).");
   }
 
   const batchInfo = db
@@ -187,6 +197,7 @@ async function main() {
     const resolved = resolveAllColumns(structure.columns, config) as Record<string, ResolvedColumnMeta | undefined>;
     const items = await fetchAllBoardItems(config.id, {
       maxItems,
+      pageSize,
       onProgress: (n) => process.stdout.write(`\r  ${key}: ${n} items`),
     });
     process.stdout.write(`\r  ${key}: ${items.length} items ✓\n`);
@@ -425,6 +436,8 @@ async function main() {
   console.log(`  → ${dbPath}`);
   console.log(`\nRun the API against it with: DB_SOURCE=live npm run dev:api`);
 
+  recordSyncResult(db, errors.length ? "partial" : "synced");
+  releaseSyncLock(db, SYNC_HOLDER);
   db.close();
 }
 

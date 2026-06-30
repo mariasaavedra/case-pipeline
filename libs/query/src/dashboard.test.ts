@@ -46,12 +46,13 @@ function insertContract(
     profileLocalId: string;
     caseType: string;
     status: string;
+    groupTitle?: string;
   },
 ) {
-  run(db, 
-    `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id)
-     VALUES (1, ?, ?, ?, ?, ?, 1000, ?)`,
-    [opts.localId, opts.profileLocalId, opts.caseType, opts.caseType, opts.status, `CT-${opts.localId}`],
+  run(db,
+    `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id, group_title)
+     VALUES (1, ?, ?, ?, ?, ?, 1000, ?, ?)`,
+    [opts.localId, opts.profileLocalId, opts.caseType, opts.caseType, opts.status, `CT-${opts.localId}`, opts.groupTitle ?? null],
   );
 }
 
@@ -147,36 +148,40 @@ describe("getDashboardKpis", () => {
     db.close();
   });
 
-  test("Pending Contracts — excludes closed and paid statuses", () => {
+  test("Pending Contracts — counts contracts in 'Pending Fee Ks' group", () => {
     const db = freshDb();
     insertProfile(db, { localId: "p1", name: "Maria Garcia" });
 
-    // Pending (should be counted)
+    // Pending group (should be counted)
     insertContract(db, {
       localId: "c1",
       profileLocalId: "p1",
       caseType: "I-485",
       status: "Atty Reviewing",
+      groupTitle: "Pending Fee Ks",
     });
     insertContract(db, {
       localId: "c2",
       profileLocalId: "p1",
       caseType: "I-130",
       status: "HOLD",
+      groupTitle: "Pending Fee Ks",
     });
-    // Closed (should NOT count)
+    // Different group (should NOT count)
     insertContract(db, {
       localId: "c3",
       profileLocalId: "p1",
       caseType: "FOIA",
       status: "Completed",
+      groupTitle: "Closed",
     });
-    // Paid (should NOT count in pending)
+    // Paid group (should NOT count in pending)
     insertContract(db, {
       localId: "c4",
       profileLocalId: "p1",
       caseType: "N-400",
       status: "Paid Needs Action",
+      groupTitle: "Paid Fee Ks",
     });
 
     const cards = getDashboardKpis(db);
@@ -186,7 +191,7 @@ describe("getDashboardKpis", () => {
     db.close();
   });
 
-  test("Paid Fee Ks — counts only paid statuses", () => {
+  test("Paid Fee Ks — counts contracts in 'Paid Fee Ks' group", () => {
     const db = freshDb();
     insertProfile(db, { localId: "p1", name: "Maria Garcia" });
 
@@ -195,25 +200,29 @@ describe("getDashboardKpis", () => {
       profileLocalId: "p1",
       caseType: "I-485",
       status: "Paid Needs Action",
+      groupTitle: "Paid Fee Ks",
     });
     insertContract(db, {
       localId: "c2",
       profileLocalId: "p1",
       caseType: "I-130",
       status: "E-File opened",
+      groupTitle: "Paid Fee Ks",
     });
     insertContract(db, {
       localId: "c3",
       profileLocalId: "p1",
       caseType: "N-400",
       status: "Create Project",
+      groupTitle: "Paid Fee Ks",
     });
-    // Not paid
+    // Different group — should NOT count
     insertContract(db, {
       localId: "c4",
       profileLocalId: "p1",
       caseType: "FOIA",
       status: "Active",
+      groupTitle: "Pending Fee Ks",
     });
 
     const cards = getDashboardKpis(db);
@@ -348,6 +357,7 @@ describe("getDashboardKpis", () => {
       profileLocalId: "p1",
       caseType: "I-485",
       status: "Paid Needs Action",
+      groupTitle: "Paid Fee Ks",
     });
 
     const cards = getDashboardKpis(db);

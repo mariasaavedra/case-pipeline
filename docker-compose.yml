@@ -1,0 +1,55 @@
+# =============================================================================
+# Deployment topology — single firm, single host.
+#
+#   web (nginx)  ──/api──▶  api (Express + tsx)  ──▶  SQLite on a named volume
+#       :8080                  (internal :3000)         case-data:/app/data
+#
+# First-time setup (the volume starts empty; the API exits if live.db is
+# missing). Populate it once before/after first boot:
+#   docker compose run --rm api npx tsx scripts/sync/index.ts
+# Secrets (MONDAY_API_TOKEN, MONDAY_CLIENT_ID/SECRET, …) come from the host .env
+# via env_file and are never baked into the image.
+# =============================================================================
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file:
+      - .env
+    environment:
+      - DB_SOURCE=live
+      - HOST=0.0.0.0
+      - PORT=3000
+      - NODE_ENV=production
+    volumes:
+      # The ONLY copy of real client data — must be a persistent named volume,
+      # not an image layer, or it is lost on every redeploy.
+      - case-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 15s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  case-data:

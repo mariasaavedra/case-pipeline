@@ -740,15 +740,11 @@ boards:
         resolve: by_id
         id: date_mkppxjpa
       results:
-        resolve: by_title
-        pattern: results
-        types:
-          - status
+        resolve: by_type
+        type: file
       follow_up_appt:
-        resolve: by_title
-        pattern: follow.*up.*appt
-        types:
-          - status
+        resolve: by_type
+        type: date
       follow_up_note:
         resolve: by_id
         id: long_text_mkxehpev
@@ -1592,8 +1588,10 @@ boards:
         resolve: by_id
         id: color_mkqjj0zk
       ead:
-        resolve: by_type
-        type: file
+        resolve: by_title
+        pattern: ead?
+        types:
+          - status
       item_id:
         resolve: by_id
         id: pulse_id_mkrha67f
@@ -2825,11 +2823,8 @@ boards:
         resolve: by_id
         id: status__1
       last_consult_date:
-        resolve: by_title
-        pattern: last.*consult.*date
-        types:
-          - mirror
-          - lookup
+        resolve: by_type
+        type: date
       projects:
         resolve: by_id
         id: connect_boards8__1

@@ -447,14 +447,15 @@ export async function fetchBoardItems(
  */
 export async function fetchAllBoardItems(
   boardId: string,
-  options: { maxItems?: number; onProgress?: (count: number) => void } = {}
+  options: { maxItems?: number; pageSize?: number; onProgress?: (count: number) => void } = {}
 ): Promise<MondayItem[]> {
   const maxItems = options.maxItems ?? 500;
+  const pageSize = options.pageSize ?? 50;
   const allItems: MondayItem[] = [];
   let cursor: string | null = null;
 
   do {
-    const page = await fetchBoardItems(boardId, { limit: 50, cursor: cursor ?? undefined });
+    const page = await fetchBoardItems(boardId, { limit: pageSize, cursor: cursor ?? undefined });
     allItems.push(...page.items);
     cursor = page.cursor;
 

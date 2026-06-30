@@ -2,7 +2,7 @@
 // Case Pipeline — Web Server
 // =============================================================================
 
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 import express from "express";
 import fs from "node:fs";
@@ -11,7 +11,9 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import cron from "node-cron";
-import { validateSchema } from "@case-pipeline/seed/db/schema";
+import { initializeSchema, getSchemaVersion, SCHEMA_VERSION } from "@case-pipeline/seed/db/schema";
+import { openDatabase } from "@case-pipeline/seed/db/connection";
+import { startWriteQueueProcessor, enqueueWrite } from "./write-queue/processor.js";
 import {
   handleListClients,
   handleSearch,
@@ -62,8 +64,32 @@ if (!fs.existsSync(DB_PATH)) {
   process.exit(1);
 }
 
-const db = new Database(DB_PATH);
-validateSchema(db);
+const db = openDatabase(DB_PATH);
+
+// Auto-migrate on startup. A schema mismatch on real client data must never mean
+// "re-seed" (that would wipe it) — apply the incremental migrations instead. For
+// live data, snapshot first with VACUUM INTO (synchronous, consistent copy) so a
+// migration can never be a one-way door.
+function backupBeforeMigrate(fromVersion: number): void {
+  const backupDir = path.join(DATA_DIR, "backups");
+  fs.mkdirSync(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const dest = path.join(backupDir, `${DB_SOURCE}-premigrate-v${fromVersion}-${stamp}.db`);
+  db.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`);
+  console.log(`[migrate] Backed up ${DB_SOURCE}.db (v${fromVersion}) → ${dest}`);
+}
+
+const currentVersion = getSchemaVersion(db);
+if (currentVersion === 0) {
+  console.error(`Database at ${DB_PATH} has no schema.`);
+  console.error(DB_SOURCE === "live" ? `Run the live sync first: npm run sync:live` : `Generate seed data first: npm run seed`);
+  process.exit(1);
+}
+if (currentVersion < SCHEMA_VERSION) {
+  if (DB_SOURCE === "live") backupBeforeMigrate(currentVersion);
+  console.log(`Migrating schema v${currentVersion} → v${SCHEMA_VERSION}…`);
+  initializeSchema(db); // applies pending migrations in order (idempotent)
+}
 
 // Wire up Monday.com write-back (only needed when MONDAY_API_TOKEN is present)
 const MONDAY_API_TOKEN = process.env.MONDAY_API_TOKEN;
@@ -186,7 +212,7 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
     return;
   }
 
-  const localId = req.params.localId;
+  const localId = String(req.params.localId);
   const text = ((req.body as { text?: unknown }).text ?? "").toString().trim();
   if (!text) {
     res.status(400).json({ error: "text is required" });
@@ -206,42 +232,54 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
     return;
   }
 
-  try {
-    // Prefer the posting user's personal Monday.com token; fall back to shared token
-    const userToken = getUserMondayToken(req.user?.oid ?? "");
-    const mondayUpdateId = await createUpdate(profile.monday_item_id, text, userToken ?? undefined);
+  const newLocalId = randomUUID();
+  const now = new Date().toISOString();
+  const authorName = req.user?.name ?? req.user?.preferred_username ?? "Staff";
+  const authorEmail = req.user?.email ?? req.user?.preferred_username ?? null;
 
-    const newLocalId = randomUUID();
-    const now = new Date().toISOString();
-    const authorName = req.user?.name ?? req.user?.preferred_username ?? "Staff";
-    const authorEmail = req.user?.email ?? req.user?.preferred_username ?? null;
-
+  const insertUpdate = (mondayUpdateId: string | null, syncStatus: "synced" | "pending") =>
     db.prepare(`
       INSERT INTO client_updates
         (batch_id, local_id, monday_update_id, profile_local_id, board_item_local_id,
          board_key, author_name, author_email, text_body, body_html, source_type,
          reply_to_update_id, created_at_source, sync_status)
-      VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL, 'update', NULL, ?, 'synced')
-    `).run(profile.batch_id, newLocalId, mondayUpdateId, localId, authorName, authorEmail, text, now);
+      VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL, 'update', NULL, ?, ?)
+    `).run(profile.batch_id, newLocalId, mondayUpdateId, localId, authorName, authorEmail, text, now, syncStatus);
 
-    res.json({
-      data: {
-        localId: newLocalId,
-        profileLocalId: localId,
-        boardItemLocalId: null,
-        boardKey: null,
-        authorName,
-        authorEmail,
-        textBody: text,
-        bodyHtml: null,
-        sourceType: "update" as const,
-        replyToUpdateId: null,
-        createdAtSource: now,
-      }
-    });
+  const responseData = (pending: boolean) => ({
+    localId: newLocalId,
+    profileLocalId: localId,
+    boardItemLocalId: null,
+    boardKey: null,
+    authorName,
+    authorEmail,
+    textBody: text,
+    bodyHtml: null,
+    sourceType: "update" as const,
+    replyToUpdateId: null,
+    createdAtSource: now,
+    pending,
+  });
+
+  try {
+    // Prefer the posting user's personal Monday.com token; fall back to shared token
+    const userToken = getUserMondayToken(req.user?.oid ?? "");
+    const mondayUpdateId = await createUpdate(profile.monday_item_id, text, userToken ?? undefined);
+    insertUpdate(mondayUpdateId, "synced");
+    res.json({ data: responseData(false) });
   } catch (err) {
-    console.error("[write-back] createUpdate failed:", err);
-    res.status(502).json({ error: "Failed to post update to Monday.com" });
+    // Resilient fallback: don't lose the note on a transient Monday.com outage.
+    // Persist it locally as pending and enqueue the write for background retry.
+    console.error("[write-back] createUpdate failed; queueing for retry:", err);
+    insertUpdate(null, "pending");
+    enqueueWrite(db, {
+      opType: "create_update",
+      targetTable: "profiles",
+      targetLocalId: localId,
+      mondayItemId: profile.monday_item_id,
+      payload: { body: text },
+    });
+    res.status(202).json({ data: responseData(true) });
   }
 });
 
@@ -319,13 +357,49 @@ const PORT = Number(process.env.PORT ?? 3000);
 // (behind nginx, with no published port) set HOST=0.0.0.0 so the proxy can reach
 // it on the compose network.
 const HOST = process.env.HOST ?? "127.0.0.1";
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   console.log(`Server running at http://${HOST}:${PORT}`);
 
   if (DB_SOURCE === "live") {
     scheduleNightlySync();
+    scheduleWalCheckpoint();
+    scheduleBackups();
+    if (MONDAY_API_TOKEN) {
+      // Drain queued Monday.com write-backs in the background, with retries.
+      startWriteQueueProcessor(db, { token: MONDAY_API_TOKEN });
+    }
   }
 });
+
+// =============================================================================
+// Graceful shutdown — Docker `stop` sends SIGTERM. Stop accepting connections,
+// checkpoint the WAL into the main DB file, then close cleanly so the .db is
+// self-contained (no orphaned -wal) for the next start or a backup.
+// =============================================================================
+
+let shuttingDown = false;
+function shutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[shutdown] ${signal} received — draining…`);
+  server.close(() => {
+    try {
+      db.pragma("wal_checkpoint(TRUNCATE)");
+      db.close();
+      console.log("[shutdown] database checkpointed and closed.");
+    } catch (err) {
+      console.error("[shutdown] error closing database:", err);
+    }
+    process.exit(0);
+  });
+  // Failsafe: force-exit if connections don't drain in time.
+  setTimeout(() => {
+    console.error("[shutdown] forced exit after 10s timeout.");
+    process.exit(1);
+  }, 10_000).unref();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 // =============================================================================
 // Nightly sync — Monday.com → live.db (runs at midnight, live mode only)
@@ -361,4 +435,47 @@ function scheduleNightlySync() {
     runSync().catch((err) => console.error("[sync] Error:", err));
   });
   console.log("[sync] Nightly sync scheduled — runs every day at midnight.");
+}
+
+function scheduleWalCheckpoint() {
+  // Fold the WAL back into the main DB file hourly so it can't grow unbounded
+  // under continuous write-back. TRUNCATE also shrinks the -wal file afterward.
+  cron.schedule("0 * * * *", () => {
+    try {
+      db.pragma("wal_checkpoint(TRUNCATE)");
+    } catch (err) {
+      console.error("[wal] checkpoint error:", err);
+    }
+  });
+  console.log("[wal] Hourly WAL checkpoint scheduled.");
+}
+
+async function runBackup(): Promise<void> {
+  const backupDir = path.join(DATA_DIR, "backups");
+  fs.mkdirSync(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const dest = path.join(backupDir, `${DB_SOURCE}-${stamp}.db`);
+  // better-sqlite3's online backup is safe to run against the live connection.
+  await db.backup(dest);
+  console.log(`[backup] wrote ${dest}`);
+
+  // Prune daily backups to the 14 most recent. Pre-migration snapshots
+  // (…-premigrate-…) are kept separately and never pruned here.
+  const KEEP = 14;
+  const files = fs
+    .readdirSync(backupDir)
+    .filter((f) => f.startsWith(`${DB_SOURCE}-`) && f.endsWith(".db") && !f.includes("premigrate"))
+    .sort();
+  for (const f of files.slice(0, Math.max(0, files.length - KEEP))) {
+    fs.unlinkSync(path.join(backupDir, f));
+    console.log(`[backup] pruned old backup: ${f}`);
+  }
+}
+
+function scheduleBackups() {
+  // Daily online backup at 02:30 (after the midnight sync settles).
+  cron.schedule("30 2 * * *", () => {
+    runBackup().catch((err) => console.error("[backup] error:", err));
+  });
+  console.log("[backup] Daily backup scheduled — runs at 02:30.");
 }

@@ -35,10 +35,11 @@ describe("shapeColumnValue", () => {
     expect(shapeColumnValue("tags", cv("c", "A2, B1 , C"))).toEqual({ labels: ["A2", "B1", "C"] });
   });
 
-  it("shapes dates as { date } using the date part only", () => {
+  it("shapes dates as { date } and datetimes as { date, time }", () => {
     expect(shapeColumnValue("date", cv("c", "2026-07-01"))).toEqual({ date: "2026-07-01" });
     expect(shapeColumnValue("datetime", cv("c", "2026-07-01 09:30:00"))).toEqual({
       date: "2026-07-01",
+      time: "09:30:00",
     });
   });
 
@@ -109,6 +110,7 @@ describe("extractBoardItemFields", () => {
     expect(extractBoardItemFields("_cd_open_forms", columnValues)).toEqual({
       status: "Open",
       nextDate: "2026-07-04",
+      nextTime: null,
       attorney: "WH",
       paralegals: "Mayra Ruiz",
     });
@@ -123,6 +125,7 @@ describe("extractBoardItemFields", () => {
     expect(extractBoardItemFields("foias", {})).toEqual({
       status: null,
       nextDate: null,
+      nextTime: null,
       attorney: null,
       paralegals: null,
     });
