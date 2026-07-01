@@ -343,13 +343,24 @@ app.get("/health", (_req, res) => {
     db.prepare("SELECT 1").get();
     res.status(200).json({ status: "ok", db: DB_SOURCE });
   } catch (err) {
-    res.status(503).json({ status: "error", error: err instanceof Error ? err.message : String(err) });
+    // Log the detail server-side; don't leak internals (paths, driver errors)
+    // in the response — /health is outside auth and reachable by the proxy.
+    console.error("[health] db check failed:", err);
+    res.status(503).json({ status: "error" });
   }
 });
 
 // Unknown /api/ routes → 404
 app.use("/api/", (_req, res) => {
   res.status(404).json({ error: "Not found" });
+});
+
+// Global error handler — any thrown/rejected handler lands here. Log the detail
+// server-side and return a generic JSON 500 so stack traces never leak.
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("[error]", err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: "Internal server error" });
 });
 
 

@@ -68,13 +68,13 @@ function printSummary(summary: ClientCaseSummary): void {
 
   if (contracts.active.length > 0) {
     for (const c of contracts.active) {
-      console.log(`  * ${c.caseType.padEnd(35)} ${c.status.padEnd(20)} $${c.value}`);
+      console.log(`  * ${(c.caseType ?? "—").padEnd(35)} ${c.status.padEnd(20)} $${c.value}`);
     }
   }
   if (contracts.closed.length > 0) {
     console.log(`  Closed:`);
     for (const c of contracts.closed) {
-      console.log(`    ${c.caseType.padEnd(35)} ${c.status}`);
+      console.log(`    ${(c.caseType ?? "—").padEnd(35)} ${c.status}`);
     }
   }
 
