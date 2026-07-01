@@ -99,9 +99,9 @@ export function SearchBar({ onResults, onTypedResults }: Props) {
         onChange={handleTypeChange}
         className="text-sm rounded-lg px-3 py-2"
         style={{
-          backgroundColor: "rgba(255,255,255,0.08)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          color: "rgba(255,255,255,0.8)",
+          backgroundColor: "var(--color-surface-warm)",
+          border: "1px solid var(--color-border)",
+          color: "var(--color-ink)",
           fontFamily: "var(--font-body)",
           fontWeight: 400,
           outline: "none",
@@ -110,7 +110,7 @@ export function SearchBar({ onResults, onTypedResults }: Props) {
         }}
       >
         {SEARCH_TYPE_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value} style={{ backgroundColor: "#1a1a2e", color: "#fff" }}>
+          <option key={opt.value} value={opt.value}>
             {opt.label}
           </option>
         ))}
@@ -123,7 +123,7 @@ export function SearchBar({ onResults, onTypedResults }: Props) {
             height="16"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="rgba(255,255,255,0.35)"
+            stroke="var(--color-ink-faint)"
             strokeWidth="2"
           >
             <circle cx="11" cy="11" r="8" />
@@ -137,22 +137,20 @@ export function SearchBar({ onResults, onTypedResults }: Props) {
           placeholder={placeholderText}
           className="w-full pl-10 pr-4 py-2 text-sm rounded-lg"
           style={{
-            backgroundColor: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color: "#fff",
+            backgroundColor: "var(--color-surface-warm)",
+            border: "1px solid var(--color-border)",
+            color: "var(--color-ink)",
             fontFamily: "var(--font-body)",
             fontWeight: 300,
             outline: "none",
             transition: "all 0.2s ease",
           }}
           onFocus={(e) => {
-            e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.12)";
             e.currentTarget.style.borderColor = "rgba(180,83,9,0.5)";
             e.currentTarget.style.boxShadow = "0 0 0 3px rgba(180,83,9,0.1)";
           }}
           onBlur={(e) => {
-            e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.08)";
-            e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
+            e.currentTarget.style.borderColor = "var(--color-border)";
             e.currentTarget.style.boxShadow = "none";
           }}
         />

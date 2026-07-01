@@ -34,6 +34,7 @@ import { setApiToken, createUpdate } from "@case-pipeline/monday";
 import { requireAuth } from "./auth/middleware.js";
 import { handleAuthMe } from "./routes/auth.js";
 import { handleAdminListUsers, handleAdminUpdateRole } from "./routes/admin.js";
+import { usersDb } from "./db/users-db.js";
 import { registerMondayOAuth, getUserMondayToken } from "./routes/monday-oauth.js";
 
 // =============================================================================
@@ -386,7 +387,9 @@ function shutdown(signal: string): void {
     try {
       db.pragma("wal_checkpoint(TRUNCATE)");
       db.close();
-      console.log("[shutdown] database checkpointed and closed.");
+      usersDb.pragma("wal_checkpoint(TRUNCATE)");
+      usersDb.close();
+      console.log("[shutdown] databases checkpointed and closed.");
     } catch (err) {
       console.error("[shutdown] error closing database:", err);
     }
@@ -438,11 +441,10 @@ function scheduleNightlySync() {
 }
 
 function scheduleWalCheckpoint() {
-  // Fold the WAL back into the main DB file hourly so it can't grow unbounded
-  // under continuous write-back. TRUNCATE also shrinks the -wal file afterward.
   cron.schedule("0 * * * *", () => {
     try {
       db.pragma("wal_checkpoint(TRUNCATE)");
+      usersDb.pragma("wal_checkpoint(TRUNCATE)");
     } catch (err) {
       console.error("[wal] checkpoint error:", err);
     }
@@ -454,21 +456,29 @@ async function runBackup(): Promise<void> {
   const backupDir = path.join(DATA_DIR, "backups");
   fs.mkdirSync(backupDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+  // Back up the main client database.
   const dest = path.join(backupDir, `${DB_SOURCE}-${stamp}.db`);
-  // better-sqlite3's online backup is safe to run against the live connection.
   await db.backup(dest);
   console.log(`[backup] wrote ${dest}`);
 
-  // Prune daily backups to the 14 most recent. Pre-migration snapshots
-  // (…-premigrate-…) are kept separately and never pruned here.
+  // Back up users.db alongside — it holds roles, prefs, and Monday tokens.
+  const usersDest = path.join(backupDir, `users-${stamp}.db`);
+  await usersDb.backup(usersDest);
+  console.log(`[backup] wrote ${usersDest}`);
+
+  // Prune daily backups to the 14 most recent per prefix. Pre-migration
+  // snapshots (…-premigrate-…) are kept separately and never pruned here.
   const KEEP = 14;
-  const files = fs
-    .readdirSync(backupDir)
-    .filter((f) => f.startsWith(`${DB_SOURCE}-`) && f.endsWith(".db") && !f.includes("premigrate"))
-    .sort();
-  for (const f of files.slice(0, Math.max(0, files.length - KEEP))) {
-    fs.unlinkSync(path.join(backupDir, f));
-    console.log(`[backup] pruned old backup: ${f}`);
+  for (const prefix of [DB_SOURCE, "users"]) {
+    const files = fs
+      .readdirSync(backupDir)
+      .filter((f) => f.startsWith(`${prefix}-`) && f.endsWith(".db") && !f.includes("premigrate"))
+      .sort();
+    for (const f of files.slice(0, Math.max(0, files.length - KEEP))) {
+      fs.unlinkSync(path.join(backupDir, f));
+      console.log(`[backup] pruned old backup: ${f}`);
+    }
   }
 }
 

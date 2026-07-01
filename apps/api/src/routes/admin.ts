@@ -33,6 +33,18 @@ export function handleAdminUpdateRole(req: Request, res: Response): void {
     return;
   }
 
+  // Prevent demoting the last admin — at least one admin must always exist.
+  if (role === "user") {
+    const target = usersDb.prepare("SELECT role FROM users WHERE id = ?").get(id) as { role: string } | undefined;
+    if (target?.role === "admin") {
+      const adminCount = (usersDb.prepare("SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin'").get() as { cnt: number }).cnt;
+      if (adminCount <= 1) {
+        res.status(400).json({ error: "Cannot demote the last admin. Promote another user first." });
+        return;
+      }
+    }
+  }
+
   const result = usersDb.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
   if (result.changes === 0) {
     res.status(404).json({ error: "User not found" });

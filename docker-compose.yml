@@ -1,11 +1,19 @@
 # =============================================================================
 # Deployment topology — single firm, single host.
 #
-#   web (nginx)  ──/api──▶  api (Express + tsx)  ──▶  SQLite on a named volume
-#       :8080                  (internal :3000)         case-data:/app/data
+#   web (nginx)  ──/api──▶  api (Express + tsx)  ──▶  SQLite on a host bind mount
+#       :8080                  (internal :3000)         ./data:/app/data
 #
-# First-time setup (the volume starts empty; the API exits if live.db is
-# missing). Populate it once before/after first boot:
+# Data lives in ./data next to this file — a deterministic bind mount, NOT a
+# named Docker volume. Rationale: a named volume is invisible to the repo and
+# detaches silently on a clean redeploy (`git checkout`, fresh clone) → the API
+# points at an empty volume and the real live.db / users.db "disappear". A
+# relative bind mount is versioned here, identical on every host, and the DB
+# files stay visible on disk for backup/inspection. Keep ./data OUT of git
+# (it is gitignored) — only this mapping is tracked.
+#
+# First-time setup (./data starts empty; the API exits if live.db is missing).
+# Populate it once before/after first boot:
 #   docker compose run --rm api npx tsx scripts/sync/index.ts
 # Secrets (MONDAY_API_TOKEN, MONDAY_CLIENT_ID/SECRET, …) come from the host .env
 # via env_file and are never baked into the image.
@@ -24,9 +32,9 @@ services:
       - PORT=3000
       - NODE_ENV=production
     volumes:
-      # The ONLY copy of real client data — must be a persistent named volume,
-      # not an image layer, or it is lost on every redeploy.
-      - case-data:/app/data
+      # The ONLY copy of real client data (live.db + users.db). Relative bind
+      # mount so git and every host agree and the files never detach on redeploy.
+      - ./data:/app/data
     healthcheck:
       test:
         - CMD
@@ -50,6 +58,3 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  case-data:
