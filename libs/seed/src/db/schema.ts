@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -145,6 +145,7 @@ CREATE TABLE IF NOT EXISTS write_queue (
     target_table TEXT,                        -- profiles | board_items | contracts
     target_local_id TEXT,                     -- local row for optimistic-update correlation
     monday_item_id TEXT,                      -- stable Monday.com id the mutation targets
+    author_oid TEXT,                          -- Azure OID of the staff member who made the edit (for token attribution)
     payload TEXT NOT NULL,                     -- JSON args for the Monday.com mutation
     status TEXT NOT NULL DEFAULT 'pending',    -- pending | syncing | synced | failed
     attempts INTEGER NOT NULL DEFAULT 0,
@@ -485,6 +486,18 @@ export function initializeSchema(db: Database): void {
         );
         INSERT OR IGNORE INTO sync_state (id) VALUES (1);
       `);
+    }
+
+    // Migration v11 → v12: attribute queued write-backs to their author so a
+    // retried note posts under the staff member's Monday.com token, not the
+    // shared service token.
+    if (fromVersion < 12) {
+      const has = db
+        .prepare("SELECT COUNT(*) as cnt FROM pragma_table_info('write_queue') WHERE name='author_oid'")
+        .get() as { cnt: number };
+      if (!has || has.cnt === 0) {
+        db.exec("ALTER TABLE write_queue ADD COLUMN author_oid TEXT");
+      }
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

@@ -31,7 +31,7 @@ import {
 } from "./handlers/handlers";
 import { getAppointments } from "@case-pipeline/query";
 import { setApiToken, createUpdate } from "@case-pipeline/monday";
-import { requireAuth } from "./auth/middleware.js";
+import { requireAuth, requireAdmin } from "./auth/middleware.js";
 import { handleAuthMe } from "./routes/auth.js";
 import { handleAdminListUsers, handleAdminUpdateRole } from "./routes/admin.js";
 import { usersDb } from "./db/users-db.js";
@@ -278,6 +278,7 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
       targetTable: "profiles",
       targetLocalId: localId,
       mondayItemId: profile.monday_item_id,
+      authorOid: req.user?.oid ?? null,
       payload: { body: text },
     });
     res.status(202).json({ data: responseData(true) });
@@ -292,7 +293,7 @@ app.get("/api/settings/attorney-boards", (_req, res) => {
   res.json({ data: loadAttorneyBoards() });
 });
 
-app.post("/api/settings/attorney-boards", (req, res) => {
+app.post("/api/settings/attorney-boards", requireAdmin, (req, res) => {
   const { boardKey, mondayBoardId, displayName } = req.body as Partial<AttorneyBoard>;
 
   if (!boardKey || !displayName) {
@@ -321,7 +322,7 @@ app.post("/api/settings/attorney-boards", (req, res) => {
   res.json({ data: boards });
 });
 
-app.delete("/api/settings/attorney-boards/:boardKey", (req, res) => {
+app.delete("/api/settings/attorney-boards/:boardKey", requireAdmin, (req, res) => {
   const { boardKey } = req.params;
   const boards = loadAttorneyBoards();
   const idx = boards.findIndex((b) => b.boardKey === boardKey);
@@ -367,7 +368,7 @@ const server = app.listen(PORT, HOST, () => {
     scheduleBackups();
     if (MONDAY_API_TOKEN) {
       // Drain queued Monday.com write-backs in the background, with retries.
-      startWriteQueueProcessor(db, { token: MONDAY_API_TOKEN });
+      startWriteQueueProcessor(db, { token: MONDAY_API_TOKEN, resolveUserToken: getUserMondayToken });
     }
   }
 });

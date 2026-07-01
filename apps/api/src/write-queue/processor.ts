@@ -27,9 +27,14 @@ export interface EnqueueInput {
   targetTable?: string | null;
   targetLocalId?: string | null;
   mondayItemId?: string | null;
+  /** Azure OID of the staff member who made the edit, so a retry posts under their token. */
+  authorOid?: string | null;
   payload: Record<string, unknown>;
   maxAttempts?: number;
 }
+
+/** Resolves a staff member's personal Monday.com token from their Azure OID. */
+export type TokenResolver = (authorOid: string) => string | null;
 
 /** Append a write-back op to the durable queue. Returns the new row id. */
 export function enqueueWrite(db: Database, input: EnqueueInput): number {
@@ -37,15 +42,16 @@ export function enqueueWrite(db: Database, input: EnqueueInput): number {
   const res = db
     .prepare(
       `INSERT INTO write_queue
-         (op_type, target_table, target_local_id, monday_item_id, payload,
+         (op_type, target_table, target_local_id, monday_item_id, author_oid, payload,
           status, attempts, max_attempts, next_attempt_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?)`,
     )
     .run(
       input.opType,
       input.targetTable ?? null,
       input.targetLocalId ?? null,
       input.mondayItemId ?? null,
+      input.authorOid ?? null,
       JSON.stringify(input.payload),
       input.maxAttempts ?? 5,
       now,
@@ -59,9 +65,25 @@ interface QueueRow {
   id: number;
   op_type: string;
   monday_item_id: string | null;
+  author_oid: string | null;
   payload: string;
   attempts: number;
   max_attempts: number;
+}
+
+/**
+ * Reset rows orphaned in 'syncing' back to 'pending'. A crash between marking a
+ * row 'syncing' and resolving its dispatch would otherwise strand it forever
+ * (the drainer only selects 'pending'). Run once at startup before scheduling.
+ */
+export function reconcileInFlightWrites(db: Database): number {
+  const res = db
+    .prepare(`UPDATE write_queue SET status = 'pending', updated_at = ? WHERE status = 'syncing'`)
+    .run(new Date().toISOString());
+  if (res.changes > 0) {
+    console.warn(`[write-queue] reset ${res.changes} orphaned 'syncing' row(s) to 'pending' on startup.`);
+  }
+  return res.changes;
 }
 
 /**
@@ -97,13 +119,16 @@ function backoffMs(attempts: number): number {
  * Held under the sync advisory lock; if a sync owns the lock this is a no-op
  * until the next tick.
  */
-export async function drainWriteQueue(db: Database, opts: { token?: string } = {}): Promise<number> {
+export async function drainWriteQueue(
+  db: Database,
+  opts: { token?: string; resolveUserToken?: TokenResolver } = {},
+): Promise<number> {
   if (!acquireSyncLock(db, LOCK_HOLDER)) return 0;
   try {
     const due = new Date().toISOString();
     const rows = db
       .prepare(
-        `SELECT id, op_type, monday_item_id, payload, attempts, max_attempts
+        `SELECT id, op_type, monday_item_id, author_oid, payload, attempts, max_attempts
            FROM write_queue
           WHERE status = 'pending'
             AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
@@ -119,7 +144,10 @@ export async function drainWriteQueue(db: Database, opts: { token?: string } = {
         row.id,
       );
       try {
-        await dispatch(row, opts.token);
+        // Prefer the author's personal token so the retry is attributed to them;
+        // fall back to the shared service token if they have none.
+        const authorToken = row.author_oid ? opts.resolveUserToken?.(row.author_oid) : null;
+        await dispatch(row, authorToken ?? opts.token);
         db.prepare(`UPDATE write_queue SET status = 'synced', updated_at = ? WHERE id = ?`).run(
           new Date().toISOString(),
           row.id,
@@ -153,11 +181,14 @@ export async function drainWriteQueue(db: Database, opts: { token?: string } = {
 /** Schedule the drainer on a cron cadence (every minute by default). */
 export function startWriteQueueProcessor(
   db: Database,
-  opts: { token?: string; schedule?: string } = {},
+  opts: { token?: string; schedule?: string; resolveUserToken?: TokenResolver } = {},
 ): void {
+  // Recover any rows stranded 'syncing' by a prior crash before draining.
+  reconcileInFlightWrites(db);
+
   const schedule = opts.schedule ?? "* * * * *";
   cron.schedule(schedule, () => {
-    drainWriteQueue(db, { token: opts.token }).catch((err) =>
+    drainWriteQueue(db, { token: opts.token, resolveUserToken: opts.resolveUserToken }).catch((err) =>
       console.error("[write-queue] drain error:", err),
     );
   });
