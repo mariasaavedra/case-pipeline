@@ -1,0 +1,32 @@
+# =============================================================================
+# Build overlay — LOCAL image building only.
+# =============================================================================
+# The main docker-compose.yml is pull-only (references prebuilt GHCR images) so
+# the production server can never build. This overlay adds the `build:` context
+# back for the rare case you want to build the images on your own machine.
+#
+# Normally you never need this — GitHub Actions builds and pushes on every push
+# to main. Use it only for local testing of image changes:
+#
+#   # Build for your local arch and run:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose up -d
+#
+#   # Build for the server's arch (x86_64) from an Apple Silicon Mac, then push:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build \
+#     --build-arg BUILDPLATFORM=linux/amd64
+#
+# The `image:` names are inherited from docker-compose.yml, so a local build
+# tags the same ref the server pulls.
+# =============================================================================
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
