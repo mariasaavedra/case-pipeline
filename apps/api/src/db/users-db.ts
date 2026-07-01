@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDatabase } from "@case-pipeline/seed/db/connection";
+import { backupEncryptionKey, encryptFileSync } from "../backup/crypto.js";
 
 const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -79,7 +80,11 @@ function backupBeforeMigrate(fromVersion: number): void {
   const dest = path.join(backupDir, `users-premigrate-v${fromVersion}-${stamp}.db`);
   // VACUUM INTO is a synchronous, consistent snapshot — safe on the live handle.
   usersDb.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`);
-  console.log(`[users-db] Backed up users.db (v${fromVersion}) → ${dest}`);
+  // users.db is tiny (KBs); encrypt in-memory synchronously if a key is set so
+  // the snapshot never sits on disk with plaintext Monday tokens.
+  const key = backupEncryptionKey();
+  const final = key ? encryptFileSync(dest, key) : dest;
+  console.log(`[users-db] Backed up users.db (v${fromVersion}) → ${final}`);
 }
 
 function migrate(): void {

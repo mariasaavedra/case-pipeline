@@ -35,6 +35,7 @@ import { requireAuth, requireAdmin } from "./auth/middleware.js";
 import { handleAuthMe } from "./routes/auth.js";
 import { handleAdminListUsers, handleAdminUpdateRole } from "./routes/admin.js";
 import { usersDb } from "./db/users-db.js";
+import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
 import { registerMondayOAuth, getUserMondayToken } from "./routes/monday-oauth.js";
 
 // =============================================================================
@@ -71,13 +72,15 @@ const db = openDatabase(DB_PATH);
 // "re-seed" (that would wipe it) — apply the incremental migrations instead. For
 // live data, snapshot first with VACUUM INTO (synchronous, consistent copy) so a
 // migration can never be a one-way door.
-function backupBeforeMigrate(fromVersion: number): void {
+async function backupBeforeMigrate(fromVersion: number): Promise<void> {
   const backupDir = path.join(DATA_DIR, "backups");
   fs.mkdirSync(backupDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const dest = path.join(backupDir, `${DB_SOURCE}-premigrate-v${fromVersion}-${stamp}.db`);
   db.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`);
-  console.log(`[migrate] Backed up ${DB_SOURCE}.db (v${fromVersion}) → ${dest}`);
+  const key = backupEncryptionKey();
+  const final = key ? await encryptFile(dest, key) : dest;
+  console.log(`[migrate] Backed up ${DB_SOURCE}.db (v${fromVersion}) → ${final}`);
 }
 
 const currentVersion = getSchemaVersion(db);
@@ -87,7 +90,7 @@ if (currentVersion === 0) {
   process.exit(1);
 }
 if (currentVersion < SCHEMA_VERSION) {
-  if (DB_SOURCE === "live") backupBeforeMigrate(currentVersion);
+  if (DB_SOURCE === "live") await backupBeforeMigrate(currentVersion);
   console.log(`Migrating schema v${currentVersion} → v${SCHEMA_VERSION}…`);
   initializeSchema(db); // applies pending migrations in order (idempotent)
 }
@@ -468,24 +471,37 @@ async function runBackup(): Promise<void> {
   const backupDir = path.join(DATA_DIR, "backups");
   fs.mkdirSync(backupDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const key = backupEncryptionKey();
 
-  // Back up the main client database.
+  // Back up the main client database, then encrypt at rest if a key is set.
   const dest = path.join(backupDir, `${DB_SOURCE}-${stamp}.db`);
   await db.backup(dest);
-  console.log(`[backup] wrote ${dest}`);
+  const destFinal = key ? await encryptFile(dest, key) : dest;
+  console.log(`[backup] wrote ${destFinal}`);
 
   // Back up users.db alongside — it holds roles, prefs, and Monday tokens.
   const usersDest = path.join(backupDir, `users-${stamp}.db`);
   await usersDb.backup(usersDest);
-  console.log(`[backup] wrote ${usersDest}`);
+  const usersFinal = key ? await encryptFile(usersDest, key) : usersDest;
+  console.log(`[backup] wrote ${usersFinal}`);
 
-  // Prune daily backups to the 14 most recent per prefix. Pre-migration
-  // snapshots (…-premigrate-…) are kept separately and never pruned here.
+  if (!key) {
+    console.warn("[backup] BACKUP_ENCRYPTION_KEY not set — backups written UNENCRYPTED.");
+  }
+
+  // Prune daily backups to the 14 most recent per prefix. Matches both plain
+  // (.db) and encrypted (.db.enc) outputs. Pre-migration snapshots
+  // (…-premigrate-…) are kept separately and never pruned here.
   const KEEP = 14;
   for (const prefix of [DB_SOURCE, "users"]) {
     const files = fs
       .readdirSync(backupDir)
-      .filter((f) => f.startsWith(`${prefix}-`) && f.endsWith(".db") && !f.includes("premigrate"))
+      .filter(
+        (f) =>
+          f.startsWith(`${prefix}-`) &&
+          (f.endsWith(".db") || f.endsWith(".db.enc")) &&
+          !f.includes("premigrate"),
+      )
       .sort();
     for (const f of files.slice(0, Math.max(0, files.length - KEEP))) {
       fs.unlinkSync(path.join(backupDir, f));
