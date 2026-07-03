@@ -36,6 +36,13 @@ export interface BoardItemSummary {
   columnValues: Record<string, unknown>;
 }
 
+/**
+ * A single entry in a profile's unified timeline. Covers both Monday.com
+ * updates/replies and Emails & Activities (E&A) items (emails, notes, calls,
+ * custom activities). `sourceType` is the discriminator used for filtering.
+ */
+export type TimelineSourceType = "update" | "reply" | "email" | "note" | "activity" | "custom";
+
 export interface ClientUpdate {
   localId: string;
   profileLocalId: string;
@@ -43,9 +50,13 @@ export interface ClientUpdate {
   boardKey: string | null;
   authorName: string;
   authorEmail: string | null;
+  /** E&A email subject / activity title; null for updates and replies. */
+  title: string | null;
   textBody: string;
   bodyHtml: string | null;
-  sourceType: "update" | "reply";
+  sourceType: TimelineSourceType;
+  /** E&A custom activity label (e.g. "Consult note"); null otherwise. */
+  activityTypeName: string | null;
   replyToUpdateId: string | null;
   createdAtSource: string;
 }

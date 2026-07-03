@@ -20,7 +20,7 @@ import {
   getAlerts,
   getActiveCases,
 } from "@case-pipeline/query";
-import type { SearchType } from "@case-pipeline/query";
+import type { SearchType, TimelineSourceType } from "@case-pipeline/query";
 
 // =============================================================================
 // Helpers
@@ -130,7 +130,18 @@ export function handleClientUpdates(req: Request, db: Database): Response {
     ? Math.max(0, parseInt(offsetParam, 10) || 0)
     : 0;
 
-  const updates = getClientUpdates(db, localId, limit, offset);
+  // Optional ?types=email,note filter over the unified timeline. Unknown values
+  // are dropped; an all-invalid list falls through to the unified view.
+  const VALID_TYPES = new Set(["update", "reply", "email", "note", "activity", "custom"]);
+  const typesParam = url.searchParams.get("types");
+  const types = typesParam
+    ? (typesParam
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t) => VALID_TYPES.has(t)) as TimelineSourceType[])
+    : undefined;
+
+  const updates = getClientUpdates(db, localId, limit, offset, types && types.length ? types : undefined);
   return json(updates);
 }
 

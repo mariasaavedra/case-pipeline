@@ -26,9 +26,11 @@ import {
   fetchBoardStructure,
   fetchAllBoardItems,
   fetchItemUpdatesBatch,
+  fetchTimelineBatch,
+  fetchCustomActivities,
   resolveAllColumns,
 } from "@case-pipeline/monday";
-import type { MondayItem } from "@case-pipeline/monday";
+import type { MondayItem, MondayTimelineItem } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { initializeSchema, resetDatabase } from "@case-pipeline/seed/db/schema";
 import { openDatabase } from "@case-pipeline/seed/db/connection";
@@ -176,6 +178,7 @@ async function main() {
   }
   const counts: Record<string, number> = {};
   const errors: Array<{ board: string; error: string }> = [];
+  const truncations: Array<{ board: string; detail: string }> = [];
   let orphanContracts = 0;
 
   // Run one board's sync in isolation: a failure logs and is skipped so one bad
@@ -199,6 +202,15 @@ async function main() {
       maxItems,
       pageSize,
       onProgress: (n) => process.stdout.write(`\r  ${key}: ${n} items`),
+      onTruncated: (t) => {
+        const detail =
+          t.reason === "max_items_cap"
+            ? `hit max-items cap (${maxItems}); board has more items — raise --max-items to sync the full board`
+            : `pagination ended early — fetched ${t.fetched} of ${t.expected} items Monday reports (likely a transient API truncation; re-run the sync)`;
+        // Newline first so we don't clobber the in-progress progress line.
+        console.warn(`\n  ⚠ ${key}: ${detail}`);
+        truncations.push({ board: key, detail });
+      },
     });
     process.stdout.write(`\r  ${key}: ${items.length} items ✓\n`);
     return { config, resolved, items };
@@ -342,8 +354,15 @@ async function main() {
 
       const allIds = [...itemMeta.keys()];
       const BATCH = 25;
+      // E&A timeline queries are heavier than updates, so they get a smaller
+      // per-request fan-out to stay under the API complexity budget.
+      const TIMELINE_BATCH = 12;
       const DELAY_MS = 300;
       let totalUpdates = 0;
+      let totalTimeline = 0;
+
+      // custom_activity id → name, so E&A rows of type=custom get a readable label.
+      const customActivityNames = await fetchCustomActivities();
 
       const insertUpdate = db.prepare(`
         INSERT INTO client_updates (
@@ -353,6 +372,26 @@ async function main() {
           created_at_source, raw_json, sync_status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
       `);
+
+      // E&A rows. INSERT OR IGNORE honors the content-signature unique index:
+      // the same event surfaces on the profile AND its connected board items
+      // (each with a different monday_timeline_id), so content_sig is what keeps
+      // one row per logical event per profile.
+      const insertTimelineItem = db.prepare(`
+        INSERT OR IGNORE INTO client_updates (
+          batch_id, local_id, monday_timeline_id, profile_local_id,
+          board_item_local_id, board_key, author_name, author_email,
+          title, text_body, body_html, source_type, activity_type_name, content_sig,
+          created_at_source, raw_json, sync_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+      `);
+
+      // Content signature (must match the SQL backfill in schema migration v14):
+      // created_at + author + first 300 chars of the stripped body, \x1f-joined.
+      const US = "\x1f";
+      function contentSig(createdAt: string, author: string, strippedBody: string): string {
+        return `${createdAt}${US}${author}${US}${strippedBody.slice(0, 300)}`;
+      }
 
       function stripHtml(html: string): string {
         return html
@@ -409,26 +448,117 @@ async function main() {
 
       process.stdout.write(`\r  updates: ${allIds.length}/${allIds.length} items (${totalUpdates} notes) ✓\n`);
       counts["updates"] = totalUpdates;
+
+      // ---- Emails & Activities (E&A) timeline → same client_updates table ----
+      // Merged into the unified per-profile timeline alongside updates/replies.
+      // Deduped by INSERT OR IGNORE on the content-signature index.
+      let totalTimelineSkipped = 0;
+
+      // Insert one item's timeline entries; returns rows actually written
+      // (INSERT OR IGNORE returns 0 for a duplicate collapsed by content_sig).
+      const insertTimelineFor = (timelineMap: Map<string, MondayTimelineItem[]>) => {
+        const tx = db.transaction(() => {
+          for (const [mondayItemId, items] of timelineMap) {
+            const meta = itemMeta.get(mondayItemId);
+            if (!meta) continue;
+            for (const item of items) {
+              const html = item.content ?? "";
+              const author = item.user?.name ?? "Unknown";
+              const stripped = stripHtml(html);
+              const activityName =
+                item.custom_activity_id ? customActivityNames.get(item.custom_activity_id) ?? null : null;
+              const res = insertTimelineItem.run(
+                batchId, randomUUID(), item.id,
+                meta.profile_local_id, meta.board_item_local_id, meta.board_key,
+                author, null,
+                item.title ?? null, stripped, html || null,
+                item.type, activityName, contentSig(item.created_at, author, stripped),
+                item.created_at, JSON.stringify(item),
+              );
+              if (res.changes > 0) totalTimeline++;
+            }
+          }
+        });
+        tx();
+      };
+
+      for (let i = 0; i < allIds.length; i += TIMELINE_BATCH) {
+        const batch = allIds.slice(i, i + TIMELINE_BATCH);
+        try {
+          insertTimelineFor(await fetchTimelineBatch(batch, 50));
+        } catch (batchErr) {
+          // A transient Monday CRM subgraph error must not abort the whole pass.
+          // Retry the batch one item at a time; skip (and count) only the item(s)
+          // that genuinely fail, so one bad item never loses its 11 neighbors.
+          const msg = batchErr instanceof Error ? batchErr.message : String(batchErr);
+          console.warn(`\n  [E&A] batch failed (${msg.slice(0, 120)}); falling back to per-item…`);
+          for (const id of batch) {
+            try {
+              insertTimelineFor(await fetchTimelineBatch([id], 50));
+            } catch (itemErr) {
+              totalTimelineSkipped++;
+              const im = itemErr instanceof Error ? itemErr.message : String(itemErr);
+              console.warn(`  [E&A] skipped item ${id}: ${im.slice(0, 100)}`);
+            }
+          }
+        }
+
+        process.stdout.write(`\r  emails & activities: ${Math.min(i + TIMELINE_BATCH, allIds.length)}/${allIds.length} items (${totalTimeline} entries${totalTimelineSkipped ? `, ${totalTimelineSkipped} skipped` : ""})`);
+        if (i + TIMELINE_BATCH < allIds.length) await new Promise((r) => setTimeout(r, DELAY_MS));
+      }
+
+      process.stdout.write(`\r  emails & activities: ${allIds.length}/${allIds.length} items (${totalTimeline} entries${totalTimelineSkipped ? `, ${totalTimelineSkipped} skipped` : ""}) ✓\n`);
+      counts["emails_activities"] = totalTimeline;
+      if (totalTimelineSkipped > 0) {
+        counts["emails_activities_skipped"] = totalTimelineSkipped;
+      }
     });
   }
 
+  // A truncated board (silent short-read or a hit max-items cap) means the DB
+  // is not a complete mirror of Monday, so the run is "partial" even when no
+  // pass threw outright.
+  const partial = errors.length > 0 || truncations.length > 0;
+
   db.prepare("UPDATE seed_batches SET status = ? WHERE id = ?")
-    .run(errors.length ? "partial" : "synced", batchId);
+    .run(partial ? "partial" : "synced", batchId);
 
   // ---- Summary ----
   console.log("\n" + "=".repeat(60));
-  console.log(errors.length ? "Sync finished with errors" : "Sync complete");
+  console.log(
+    errors.length
+      ? "Sync finished with errors"
+      : truncations.length
+        ? "Sync complete (with truncated boards)"
+        : "Sync complete",
+  );
   console.log("=".repeat(60));
   console.log(`  Profiles: ${counts[PROFILE_BOARD] ?? 0}`);
   console.log(
     `  Contracts: ${counts[CONTRACT_BOARD] ?? 0}` +
       (orphanContracts ? ` (${orphanContracts} without a resolved profile)` : ""),
   );
+  const NON_BOARD_COUNT_KEYS = new Set([
+    PROFILE_BOARD,
+    CONTRACT_BOARD,
+    "updates",
+    "emails_activities",
+    "emails_activities_skipped",
+  ]);
   const boardItemTotal = Object.entries(counts)
-    .filter(([k]) => k !== PROFILE_BOARD && k !== CONTRACT_BOARD && k !== "updates")
+    .filter(([k]) => !NON_BOARD_COUNT_KEYS.has(k))
     .reduce((sum, [, n]) => sum + n, 0);
   console.log(`  Board items: ${boardItemTotal}`);
   console.log(`  Notes (updates + replies): ${counts["updates"] ?? 0}`);
+  const skippedEA = counts["emails_activities_skipped"] ?? 0;
+  console.log(
+    `  Emails & activities: ${counts["emails_activities"] ?? 0}` +
+      (skippedEA ? ` (${skippedEA} item${skippedEA === 1 ? "" : "s"} skipped after fetch failures)` : ""),
+  );
+  if (truncations.length) {
+    console.log(`\n  Truncated boards (${truncations.length}):`);
+    for (const t of truncations) console.log(`    - ${t.board}: ${t.detail}`);
+  }
   if (errors.length) {
     console.log(`\n  Failed boards (${errors.length}):`);
     for (const e of errors) console.log(`    - ${e.board}: ${e.error}`);
@@ -436,7 +566,7 @@ async function main() {
   console.log(`  → ${dbPath}`);
   console.log(`\nRun the API against it with: DB_SOURCE=live npm run dev:api`);
 
-  recordSyncResult(db, errors.length ? "partial" : "synced");
+  recordSyncResult(db, partial ? "partial" : "synced");
   releaseSyncLock(db, SYNC_HOLDER);
   db.close();
 }

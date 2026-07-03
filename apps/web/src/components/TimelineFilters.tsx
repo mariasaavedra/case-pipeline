@@ -1,4 +1,11 @@
-export type TimelineFilter = "all" | "notes" | "documents" | "notices" | "appointments";
+export type TimelineFilter =
+  | "all"
+  | "notes"
+  | "emails"
+  | "activities"
+  | "documents"
+  | "notices"
+  | "appointments";
 
 interface Props {
   activeFilter: TimelineFilter;
@@ -10,6 +17,8 @@ interface Props {
 const FILTERS: { id: TimelineFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "notes", label: "Notes" },
+  { id: "emails", label: "Emails" },
+  { id: "activities", label: "Activities" },
   { id: "documents", label: "Documents" },
   { id: "notices", label: "Notices / RFEs" },
   { id: "appointments", label: "Appointments" },

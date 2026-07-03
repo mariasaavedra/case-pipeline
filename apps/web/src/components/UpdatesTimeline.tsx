@@ -52,12 +52,24 @@ function getAvatarColor(name: string) {
 
 const NOTICE_KEYS = new Set(["rfes_all", "nvc_notices", "_na_originals_cards_notices"]);
 
+// E&A source types that come from the Emails & Activities timeline.
+const EA_ACTIVITY_TYPES = new Set(["activity", "custom"]);
+
 function matchesFilter(u: ClientUpdate, filter: TimelineFilter): boolean {
   switch (filter) {
     case "all":
       return true;
+    case "emails":
+      return u.sourceType === "email";
+    case "activities":
+      return EA_ACTIVITY_TYPES.has(u.sourceType);
     case "notes":
-      return !u.boardKey || (!DOCUMENT_BOARD_KEYS.has(u.boardKey) && !APPOINTMENT_BOARD_KEYS.has(u.boardKey));
+      // Genuine notes/comments: Monday updates+replies and E&A notes, excluding
+      // emails, activities, and document/appointment board content.
+      return (
+        (u.sourceType === "update" || u.sourceType === "reply" || u.sourceType === "note") &&
+        (!u.boardKey || (!DOCUMENT_BOARD_KEYS.has(u.boardKey) && !APPOINTMENT_BOARD_KEYS.has(u.boardKey)))
+      );
     case "documents":
       return !!u.boardKey && DOCUMENT_BOARD_KEYS.has(u.boardKey);
     case "notices":
@@ -68,6 +80,11 @@ function matchesFilter(u: ClientUpdate, filter: TimelineFilter): boolean {
 }
 
 function getEventBadge(u: ClientUpdate): { label: string; bg: string; text: string } {
+  // Source-type badges first, so E&A entries read as what they are while still
+  // sharing one chronological stream.
+  if (u.sourceType === "email") return { label: "Email", bg: "var(--color-status-blue-bg)", text: "var(--color-status-blue)" };
+  if (EA_ACTIVITY_TYPES.has(u.sourceType)) return { label: u.activityTypeName ?? "Activity", bg: "var(--color-amber-light)", text: "var(--color-amber)" };
+  if (u.sourceType === "note") return { label: "Note", bg: "var(--color-surface-warm)", text: "var(--color-ink-muted)" };
   if (u.sourceType === "reply") return { label: "Reply", bg: "var(--color-status-purple-bg)", text: "var(--color-status-purple)" };
   if (u.boardKey && DOCUMENT_BOARD_KEYS.has(u.boardKey)) return { label: "Document", bg: "var(--color-status-blue-bg)", text: "var(--color-status-blue)" };
   if (u.boardKey && APPOINTMENT_BOARD_KEYS.has(u.boardKey)) return { label: "Appt", bg: "var(--color-status-green-bg)", text: "var(--color-status-green)" };
@@ -189,6 +206,14 @@ export function UpdatesTimeline({ updates, filter = "all", last30Days = false }:
                         </span>
                       )}
                     </div>
+                    {u.title && (
+                      <p
+                        className="text-sm font-medium mb-0.5"
+                        style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
+                      >
+                        {u.title}
+                      </p>
+                    )}
                     <p
                       className="text-sm whitespace-pre-wrap leading-relaxed"
                       style={{
