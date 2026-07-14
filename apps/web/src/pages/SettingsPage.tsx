@@ -2,34 +2,29 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../auth/useAuth";
 import { usePreferences } from "../hooks/usePreferences";
 import type { Theme, DefaultPage, DateFormat } from "../hooks/usePreferences";
-import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, getAzureToken } from "../api";
-import type { AttorneyBoard } from "../api";
+import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, getAzureToken, updateMyProfile, getBoardPeople, fetchAdminUsers, updateAdminUser, fetchAuditLog } from "../api";
+import type { AttorneyBoard, PublicUser, AuditEntry } from "../api";
 
 // =============================================================================
 // User management (admin section)
 // =============================================================================
 
-interface UserRow {
-  id: number;
-  name: string;
-  email: string;
-  role: "admin" | "user";
-  created_at: string;
-  last_login: string | null;
-}
+type UserRow = PublicUser;
 
 function UsersSection() {
   const { user } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [boardPeople, setBoardPeople] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<number | null>(null);
 
   useEffect(() => {
-    apiFetch<UserRow[]>("/api/admin/users")
+    fetchAdminUsers()
       .then(setUsers)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
+    getBoardPeople().then(setBoardPeople).catch(() => {});
   }, []);
 
   async function toggleRole(target: UserRow) {
@@ -50,13 +45,24 @@ function UsersSection() {
     }
   }
 
+  async function patchUser(target: UserRow, patch: { paralegal_link?: string | null; active?: boolean }) {
+    setUpdating(target.id);
+    try {
+      const updated = await updateAdminUser(target.id, patch);
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setUpdating(null);
+    }
+  }
+
   return (
     <section>
       <h2 style={styles.sectionTitle}>Users</h2>
       <p style={styles.sectionDesc}>
-        Users sign in automatically with their firm Microsoft account. Share the app URL with
-        someone to give them access — their account is created on first login as a regular user.
-        Promote them to admin here if needed.
+        Users sign in with their firm Microsoft account (created as a regular user on first login).
+        Promote to admin, link them to their board name for “My Cases”, or disable access here.
       </p>
 
       {error && <div style={styles.errorBox}>{error}</div>}
@@ -68,21 +74,42 @@ function UsersSection() {
           {users.map((u, i) => (
             <div
               key={u.id}
-              style={{ ...styles.userRow, borderTop: i === 0 ? "none" : `1px solid var(--color-border)` }}
+              style={{
+                ...styles.userRow,
+                flexWrap: "wrap",
+                borderTop: i === 0 ? "none" : `1px solid var(--color-border)`,
+                opacity: u.active === 0 ? 0.55 : 1,
+              }}
             >
               <div style={styles.avatar}>
                 {u.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 140 }}>
                 <div style={styles.userName}>
                   {u.name}
                   {u.id === user?.id && <span style={styles.youTag}> (you)</span>}
+                  {u.active === 0 && <span style={styles.youTag}> · disabled</span>}
                 </div>
                 <div style={styles.userEmail}>{u.email}</div>
               </div>
-              <div style={styles.lastLogin}>
-                {u.last_login ? new Date(u.last_login + "Z").toLocaleDateString() : "Never signed in"}
-              </div>
+
+              {/* Admin-assigned board identity (for My Cases) */}
+              <select
+                value={u.paralegal_link ?? ""}
+                onChange={(e) => patchUser(u, { paralegal_link: e.target.value || null })}
+                disabled={updating === u.id}
+                style={{ ...styles.select, maxWidth: 150 }}
+                title="Link this user to their name on the boards (for My Cases)"
+              >
+                <option value="">— board name —</option>
+                {boardPeople.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+                {u.paralegal_link && !boardPeople.includes(u.paralegal_link) && (
+                  <option value={u.paralegal_link}>{u.paralegal_link}</option>
+                )}
+              </select>
+
               <button
                 onClick={() => toggleRole(u)}
                 disabled={updating === u.id || u.id === user?.id}
@@ -98,6 +125,164 @@ function UsersSection() {
               >
                 {u.role}
               </button>
+
+              <button
+                onClick={() => patchUser(u, { active: u.active === 0 })}
+                disabled={updating === u.id || u.id === user?.id}
+                style={{
+                  ...styles.roleBadge,
+                  cursor: u.id === user?.id ? "default" : "pointer",
+                  backgroundColor: "var(--color-surface)",
+                  borderColor: "var(--color-border)",
+                  color: u.active === 0 ? "var(--color-status-green)" : "var(--color-ink-faint)",
+                }}
+                title={u.id === user?.id ? "Cannot change your own status" : u.active === 0 ? "Reactivate access" : "Disable access"}
+              >
+                {u.active === 0 ? "Activate" : "Disable"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// =============================================================================
+// My board identity (self-service) + Audit log (admin)
+// =============================================================================
+
+function BoardIdentitySection() {
+  const { user } = useAuth();
+  const [people, setPeople] = useState<string[]>([]);
+  const [link, setLink] = useState<string>(user?.paralegal_link ?? "");
+  const [locale, setLocale] = useState<string>(user?.locale ?? "es");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getBoardPeople().then(setPeople).catch(() => {});
+  }, []);
+
+  async function save(patch: { paralegal_link?: string | null; locale?: string }) {
+    setStatus("saving");
+    setError(null);
+    try {
+      await updateMyProfile(patch);
+      setStatus("saved");
+    } catch (e) {
+      setError((e as Error).message);
+      setStatus("idle");
+    }
+  }
+
+  return (
+    <section style={{ marginBottom: "40px" }}>
+      <h2 style={styles.sectionTitle}>My board identity</h2>
+      <p style={styles.sectionDesc}>
+        Link your account to your name on the Monday.com boards so “My Cases” shows your workload.
+      </p>
+      {error && <div style={styles.errorBox}>{error}</div>}
+      <div style={styles.card}>
+        <div style={styles.prefRow}>
+          <div>
+            <div style={styles.prefLabel}>I am (board name)</div>
+            <div style={styles.prefHint}>Used to filter “My Cases” to your assignments</div>
+          </div>
+          <select
+            value={link}
+            onChange={(e) => {
+              const v = e.target.value;
+              setLink(v);
+              save({ paralegal_link: v || null });
+            }}
+            style={styles.select}
+          >
+            <option value="">— not set —</option>
+            {people.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+            {link && !people.includes(link) && <option value={link}>{link}</option>}
+          </select>
+        </div>
+        <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
+          <div>
+            <div style={styles.prefLabel}>Language</div>
+            <div style={styles.prefHint}>Preferred language for your account</div>
+          </div>
+          <select
+            value={locale}
+            onChange={(e) => {
+              const v = e.target.value;
+              setLocale(v);
+              save({ locale: v });
+            }}
+            style={styles.select}
+          >
+            <option value="es">Español</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        {status !== "idle" && (
+          <div style={{ padding: "8px 20px", fontSize: 12, fontFamily: "var(--font-body)", color: "var(--color-ink-faint)" }}>
+            {status === "saving" ? "Saving…" : "Saved ✓"}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function AuditLogSection() {
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchAuditLog(50, 0)
+      .then(setEntries)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <section style={{ marginBottom: "40px" }}>
+      <h2 style={styles.sectionTitle}>Audit log</h2>
+      <p style={styles.sectionDesc}>
+        Recent sensitive actions — role changes, Monday.com writes, and board/profile edits.
+      </p>
+      {error && <div style={styles.errorBox}>{error}</div>}
+      {loading ? (
+        <div style={styles.faint}>Loading…</div>
+      ) : entries.length === 0 ? (
+        <div style={styles.card}>
+          <div style={styles.fieldRow}>
+            <span style={styles.faint}>No audit entries yet.</span>
+          </div>
+        </div>
+      ) : (
+        <div style={styles.card}>
+          {entries.map((e, i) => (
+            <div
+              key={e.id}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                padding: "12px 20px",
+                borderTop: i === 0 ? "none" : `1px solid var(--color-border)`,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-ink)" }}>{e.action}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-ink-faint)", flexShrink: 0 }}>
+                  {new Date(e.createdAt + "Z").toLocaleString()}
+                </span>
+              </div>
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--color-ink-faint)" }}>
+                {e.actorEmail ?? "system"}
+                {e.targetType ? ` → ${e.targetType} ${e.targetId ?? ""}` : ""}
+              </span>
             </div>
           ))}
         </div>
@@ -535,7 +720,7 @@ export function SettingsPage() {
       {/* Preferences */}
       <section style={{ marginBottom: "40px" }}>
         <h2 style={styles.sectionTitle}>Preferences</h2>
-        <p style={styles.sectionDesc}>Stored locally in this browser.</p>
+        <p style={styles.sectionDesc}>Synced to your account, so they follow you across devices.</p>
 
         <div style={styles.card}>
           {/* Theme */}
@@ -545,7 +730,7 @@ export function SettingsPage() {
               <div style={styles.prefHint}>Switch between light and dark appearance</div>
             </div>
             <div style={styles.segmented}>
-              {(["light", "dark"] as Theme[]).map((t) => (
+              {(["light", "dark", "system"] as Theme[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => update("theme", t)}
@@ -556,7 +741,7 @@ export function SettingsPage() {
                     fontWeight: prefs.theme === t ? 600 : 400,
                   }}
                 >
-                  {t === "light" ? "Light" : "Dark"}
+                  {t === "light" ? "Light" : t === "dark" ? "Dark" : "System"}
                 </button>
               ))}
             </div>
@@ -624,6 +809,9 @@ export function SettingsPage() {
         </div>
       </section>
 
+      {/* My board identity (self-service link for My Cases) */}
+      <BoardIdentitySection />
+
       {/* Monday.com personal account */}
       <MondayConnectionSection />
 
@@ -632,6 +820,9 @@ export function SettingsPage() {
 
       {/* Users — admin only */}
       {user?.role === "admin" && <UsersSection />}
+
+      {/* Audit log — admin only */}
+      {user?.role === "admin" && <AuditLogSection />}
     </div>
   );
 }

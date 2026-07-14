@@ -1,5 +1,6 @@
 import type { ProfileSummary, ClientCaseSummary } from "../api";
 import { ActionButtons } from "./ActionButtons";
+import { WatchlistPin } from "./WatchlistPin";
 import { formatANumber } from "@case-pipeline/core";
 
 const PRIORITY_STYLES: Record<string, { dot: string; label: string; bg: string; text: string }> = {
@@ -68,6 +69,7 @@ export function ClientHeaderSticky({ profile, data, onViewRelations }: Props) {
                 </span>
               )}
               <div className="client-header-actions flex-shrink-0 ml-auto flex items-center gap-3">
+                <WatchlistPin profileLocalId={profile.localId} />
                 {profile.mondayItemId && (
                   <a
                     href={`https://app.monday.com/boards/8025265377/pulses/${profile.mondayItemId}`}

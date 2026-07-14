@@ -9,6 +9,13 @@ export interface AuthUser {
   name: string;
   email: string;
   role: "admin" | "user";
+  // Profile fields returned by /api/auth/me (present after login).
+  paralegal_link?: string | null;
+  locale?: string | null;
+  timezone?: string | null;
+  phone_ext?: string | null;
+  job_title?: string | null;
+  mondayConnected?: boolean;
 }
 
 export interface AuthContextValue {

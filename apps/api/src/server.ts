@@ -33,7 +33,28 @@ import { getAppointments } from "@case-pipeline/query";
 import { setApiToken, createUpdate } from "@case-pipeline/monday";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
 import { handleAuthMe } from "./routes/auth.js";
-import { handleAdminListUsers, handleAdminUpdateRole } from "./routes/admin.js";
+import {
+  handleAdminListUsers,
+  handleAdminUpdateRole,
+  handleAdminUpdateUser,
+  handleAdminAudit,
+} from "./routes/admin.js";
+import { handleGetPreferences, handleUpdatePreferences } from "./routes/preferences.js";
+import {
+  handleUpdateMyProfile,
+  handleGetRecentlyViewed,
+  handleGetWatchlist,
+  handleAddWatchlist,
+  handleRemoveWatchlist,
+  handleGetSavedViews,
+  handleAddSavedView,
+  handleDeleteSavedView,
+  recordRecentlyViewed,
+} from "./routes/me.js";
+import { handleMyCases } from "./routes/my-cases.js";
+import { handleBoardPeople } from "./routes/board-people.js";
+import { currentUserId } from "./db/user-context.js";
+import { auditFromReq } from "./audit/log.js";
 import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
 import { registerMondayOAuth, getUserMondayToken } from "./routes/monday-oauth.js";
@@ -171,9 +192,25 @@ registerMondayOAuth(app);
 // Admin
 app.get("/api/admin/users", requireAuth, handleAdminListUsers);
 app.patch("/api/admin/users/:id/role", requireAuth, handleAdminUpdateRole);
+app.patch("/api/admin/users/:id", requireAuth, handleAdminUpdateUser);
+app.get("/api/admin/audit", requireAuth, handleAdminAudit);
 
 // Protect all remaining /api/* routes
 app.use("/api/", requireAuth);
+
+// User preferences & personalization (all require an authenticated caller)
+app.get("/api/preferences", handleGetPreferences);
+app.put("/api/preferences", handleUpdatePreferences);
+app.patch("/api/me/profile", handleUpdateMyProfile);
+app.get("/api/me/recently-viewed", (req, res) => handleGetRecentlyViewed(req, res, db));
+app.get("/api/watchlist", (req, res) => handleGetWatchlist(req, res, db));
+app.post("/api/watchlist", handleAddWatchlist);
+app.delete("/api/watchlist/:profileLocalId", handleRemoveWatchlist);
+app.get("/api/saved-views", handleGetSavedViews);
+app.post("/api/saved-views", handleAddSavedView);
+app.delete("/api/saved-views/:id", handleDeleteSavedView);
+app.get("/api/my-cases", (req, res) => handleMyCases(req, res, db));
+app.get("/api/board-people", (req, res) => handleBoardPeople(req, res, db));
 
 // API routes
 app.get("/api/dashboard", adapt(handleDashboard));
@@ -199,7 +236,16 @@ app.get("/api/search", adapt(handleTypedSearch));
 app.get("/api/filter-options", adapt(handleFilterOptions));
 app.get("/api/clients", adapt(handleListClients));
 app.get("/api/clients/search", adapt(handleSearch));
-app.get("/api/clients/:localId", adapt(handleClientDetail));
+app.get(
+  "/api/clients/:localId",
+  (req, _res, next) => {
+    // Record the view for "recently viewed" (best-effort, never blocks the read).
+    const uid = currentUserId(req);
+    if (uid) recordRecentlyViewed(uid, String(req.params.localId));
+    next();
+  },
+  adapt(handleClientDetail),
+);
 app.get("/api/clients/:localId/contracts", adapt(handleClientContracts));
 app.get("/api/clients/:localId/board-items", adapt(handleClientBoardItems));
 app.get("/api/clients/:localId/updates", adapt(handleClientUpdates));
@@ -270,6 +316,11 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
     const userToken = getUserMondayToken(req.user?.oid ?? "");
     const mondayUpdateId = await createUpdate(profile.monday_item_id, text, userToken ?? undefined);
     insertUpdate(mondayUpdateId, "synced");
+    auditFromReq(req, "monday.update_posted", {
+      targetType: "profile",
+      targetId: localId,
+      metadata: { mondayItemId: profile.monday_item_id, mondayUpdateId, usedPersonalToken: !!userToken },
+    });
     res.json({ data: responseData(false) });
   } catch (err) {
     // Resilient fallback: don't lose the note on a transient Monday.com outage.
@@ -322,6 +373,11 @@ app.post("/api/settings/attorney-boards", requireAdmin, (req, res) => {
   };
   boards.push(newBoard);
   saveAttorneyBoards(boards);
+  auditFromReq(req, "attorney_board.added", {
+    targetType: "attorney_board",
+    targetId: boardKey,
+    metadata: { mondayBoardId: newBoard.mondayBoardId, displayName },
+  });
   res.json({ data: boards });
 });
 
@@ -335,6 +391,10 @@ app.delete("/api/settings/attorney-boards/:boardKey", requireAdmin, (req, res) =
   }
   boards.splice(idx, 1);
   saveAttorneyBoards(boards);
+  auditFromReq(req, "attorney_board.removed", {
+    targetType: "attorney_board",
+    targetId: String(boardKey),
+  });
   res.json({ data: boards });
 });
 

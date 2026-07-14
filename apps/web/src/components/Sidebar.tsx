@@ -61,6 +61,18 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    id: "my-cases",
+    label: "My Cases",
+    path: "/my-cases",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="8" cy="7" r="3" />
+        <path d="M2.5 17c0-3 2.5-5.5 5.5-5.5 1 0 1.9.3 2.7.7" />
+        <path d="M12.5 14.5l1.8 1.8 3.2-3.6" />
+      </svg>
+    ),
+  },
+  {
     id: "calendar",
     label: "Calendar",
     path: "/calendar",

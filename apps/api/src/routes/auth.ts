@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { usersDb, type UserRow } from "../db/users-db.js";
+import { toPublicUser } from "../db/users-types.js";
 
 export function handleAuthMe(req: Request, res: Response): void {
   const claims = req.user!;
@@ -24,9 +25,17 @@ export function handleAuthMe(req: Request, res: Response): void {
   });
   upsert(claims.oid, email, claims.name);
 
+  // Track engagement: bump login count + presence timestamp on each session start.
+  usersDb
+    .prepare(
+      "UPDATE users SET login_count = login_count + 1, last_active_at = datetime('now') WHERE azure_oid = ?",
+    )
+    .run(claims.oid);
+
   const user = usersDb
     .prepare("SELECT * FROM users WHERE azure_oid = ?")
     .get(claims.oid) as UserRow;
 
-  res.json({ data: user });
+  // Strip the stored Monday token before returning the profile to the client.
+  res.json({ data: toPublicUser(user) });
 }
