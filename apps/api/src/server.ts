@@ -52,7 +52,7 @@ import {
   recordRecentlyViewed,
 } from "./routes/me.js";
 import { handleMyCases } from "./routes/my-cases.js";
-import { handleBoardPeople } from "./routes/board-people.js";
+import { handleParalegals } from "./routes/paralegals.js";
 import { currentUserId } from "./db/user-context.js";
 import { auditFromReq } from "./audit/log.js";
 import { usersDb } from "./db/users-db.js";
@@ -210,7 +210,7 @@ app.get("/api/saved-views", handleGetSavedViews);
 app.post("/api/saved-views", handleAddSavedView);
 app.delete("/api/saved-views/:id", handleDeleteSavedView);
 app.get("/api/my-cases", (req, res) => handleMyCases(req, res, db));
-app.get("/api/board-people", (req, res) => handleBoardPeople(req, res, db));
+app.get("/api/paralegals", (req, res) => handleParalegals(req, res, db));
 
 // API routes
 app.get("/api/dashboard", adapt(handleDashboard));

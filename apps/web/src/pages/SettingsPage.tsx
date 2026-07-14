@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../auth/useAuth";
 import { usePreferences } from "../hooks/usePreferences";
 import type { Theme, DefaultPage, DateFormat } from "../hooks/usePreferences";
-import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, getAzureToken, updateMyProfile, getBoardPeople, fetchAdminUsers, updateAdminUser, fetchAuditLog } from "../api";
+import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, getAzureToken, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser, fetchAuditLog } from "../api";
 import type { AttorneyBoard, PublicUser, AuditEntry } from "../api";
 
 // =============================================================================
@@ -24,7 +24,7 @@ function UsersSection() {
       .then(setUsers)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-    getBoardPeople().then(setBoardPeople).catch(() => {});
+    getParalegals().then(setBoardPeople).catch(() => {});
   }, []);
 
   async function toggleRole(target: UserRow) {
@@ -99,9 +99,9 @@ function UsersSection() {
                 onChange={(e) => patchUser(u, { paralegal_link: e.target.value || null })}
                 disabled={updating === u.id}
                 style={{ ...styles.select, maxWidth: 150 }}
-                title="Link this user to their name on the boards (for My Cases)"
+                title="Link this user to their paralegal name on the boards (for My Cases)"
               >
-                <option value="">— board name —</option>
+                <option value="">— paralegal —</option>
                 {boardPeople.map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
@@ -161,7 +161,7 @@ function BoardIdentitySection() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getBoardPeople().then(setPeople).catch(() => {});
+    getParalegals().then(setPeople).catch(() => {});
   }, []);
 
   async function save(patch: { paralegal_link?: string | null; locale?: string }) {
@@ -186,8 +186,8 @@ function BoardIdentitySection() {
       <div style={styles.card}>
         <div style={styles.prefRow}>
           <div>
-            <div style={styles.prefLabel}>I am (board name)</div>
-            <div style={styles.prefHint}>Used to filter “My Cases” to your assignments</div>
+            <div style={styles.prefLabel}>I am (paralegal)</div>
+            <div style={styles.prefHint}>Pick your paralegal name to filter “My Cases” to your assignments</div>
           </div>
           <select
             value={link}
