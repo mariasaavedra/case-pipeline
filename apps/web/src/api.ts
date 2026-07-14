@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, BoardItemSummary, ClientUpdate, KpiCard, KpiItem, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -225,4 +225,168 @@ export async function fetchDashboard(hearingRange?: string): Promise<KpiCard[]> 
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return body?.data as KpiCard[];
+}
+
+// =============================================================================
+// User customization — preferences, profile, my-cases, watchlist, saved views
+// =============================================================================
+
+export type ThemePref = "light" | "dark" | "system";
+export type DateFormatPref = "MM/DD/YYYY" | "DD/MM/YYYY" | "YYYY-MM-DD" | "relative";
+
+export interface ServerPreferences {
+  theme: ThemePref;
+  defaultPage: string;
+  sidebarCollapsedDefault: boolean;
+  dateFormat: DateFormatPref;
+  density: "comfortable" | "compact";
+  dashboardLayout: string[];
+  columns: Record<string, string[]>;
+}
+
+export interface PublicUser {
+  id: number;
+  azure_oid: string;
+  email: string;
+  name: string;
+  role: "admin" | "user";
+  created_at: string;
+  last_login: string | null;
+  monday_name: string | null;
+  job_title: string | null;
+  locale: string | null;
+  timezone: string | null;
+  active: number;
+  paralegal_link: string | null;
+  phone_ext: string | null;
+  login_count: number;
+  last_active_at: string | null;
+  mondayConnected: boolean;
+}
+
+export interface MyCasesResult {
+  needsLink: boolean;
+  paralegalLink: string | null;
+  cases: ActiveCase[];
+}
+
+export interface WatchlistItem {
+  profileLocalId: string;
+  name: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface RecentlyViewedItem {
+  profileLocalId: string;
+  name: string | null;
+  viewedAt: string;
+}
+
+export interface SavedViewItem {
+  id: number;
+  name: string;
+  kind: string;
+  filters: unknown;
+  createdAt: string;
+}
+
+export interface AuditEntry {
+  id: number;
+  actorUserId: number | null;
+  actorEmail: string | null;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  metadata: unknown;
+  createdAt: string;
+}
+
+// ---- Preferences ----
+export function getPreferences(): Promise<ServerPreferences> {
+  return apiFetch<ServerPreferences>("/api/preferences");
+}
+export function updatePreferences(patch: Partial<ServerPreferences>): Promise<ServerPreferences> {
+  return apiFetch<ServerPreferences>("/api/preferences", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
+// ---- Self-service profile ----
+export interface ProfilePatch {
+  locale?: string;
+  timezone?: string | null;
+  phone_ext?: string | null;
+  paralegal_link?: string | null;
+}
+export function updateMyProfile(patch: ProfilePatch): Promise<PublicUser> {
+  return apiFetch<PublicUser>("/api/me/profile", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+export function getBoardPeople(): Promise<string[]> {
+  return apiFetch<string[]>("/api/board-people");
+}
+
+// ---- My cases ----
+export function getMyCases(): Promise<MyCasesResult> {
+  return apiFetch<MyCasesResult>("/api/my-cases");
+}
+
+// ---- Watchlist ----
+export function getWatchlist(): Promise<WatchlistItem[]> {
+  return apiFetch<WatchlistItem[]>("/api/watchlist");
+}
+export function addWatchlist(profileLocalId: string, note?: string): Promise<{ profileLocalId: string; note: string | null }> {
+  return apiFetch("/api/watchlist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ profileLocalId, note }),
+  });
+}
+export function removeWatchlist(profileLocalId: string): Promise<{ removed: boolean }> {
+  return apiFetch(`/api/watchlist/${encodeURIComponent(profileLocalId)}`, { method: "DELETE" });
+}
+
+// ---- Recently viewed ----
+export function getRecentlyViewed(): Promise<RecentlyViewedItem[]> {
+  return apiFetch<RecentlyViewedItem[]>("/api/me/recently-viewed");
+}
+
+// ---- Saved views ----
+export function getSavedViews(kind?: string): Promise<SavedViewItem[]> {
+  const q = kind ? `?kind=${encodeURIComponent(kind)}` : "";
+  return apiFetch<SavedViewItem[]>(`/api/saved-views${q}`);
+}
+export function addSavedView(name: string, kind: string, filters: unknown): Promise<SavedViewItem> {
+  return apiFetch<SavedViewItem>("/api/saved-views", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, kind, filters }),
+  });
+}
+export function deleteSavedView(id: number): Promise<{ removed: boolean }> {
+  return apiFetch(`/api/saved-views/${id}`, { method: "DELETE" });
+}
+
+// ---- Admin ----
+export function fetchAdminUsers(): Promise<PublicUser[]> {
+  return apiFetch<PublicUser[]>("/api/admin/users");
+}
+export function updateAdminUser(
+  id: number,
+  patch: { job_title?: string | null; paralegal_link?: string | null; active?: boolean },
+): Promise<PublicUser> {
+  return apiFetch<PublicUser>(`/api/admin/users/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+export function fetchAuditLog(limit = 100, offset = 0): Promise<AuditEntry[]> {
+  return apiFetch<AuditEntry[]>(`/api/admin/audit?limit=${limit}&offset=${offset}`);
 }
