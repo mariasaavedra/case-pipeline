@@ -8,6 +8,7 @@ import type { SearchResult, TypedSearchResult, SearchType } from "../api";
 import { SearchBar } from "./SearchBar";
 import { SearchResults, TypedSearchResults } from "./SearchResults";
 import { FilterBar } from "./FilterBar";
+import { SavedViewsBar } from "./SavedViewsBar";
 import { useUrlFilters } from "../hooks/useUrlFilters";
 import { navigate } from "../router";
 
@@ -23,7 +24,7 @@ const FILTER_DEFAULTS = {
 type FilterKeys = keyof typeof FILTER_DEFAULTS;
 
 export function ClientsPage() {
-  const { filters, setFilter, resetFilters, hasActiveFilters } = useUrlFilters({
+  const { filters, setFilter, setFilters, resetFilters, hasActiveFilters } = useUrlFilters({
     defaults: FILTER_DEFAULTS,
     storagePrefix: "clients",
     persistKeys: ["priority", "attorney"],
@@ -110,6 +111,12 @@ export function ClientsPage() {
             onClear={resetFilters}
             hasActiveFilters={hasActiveFilters}
             total={total}
+          />
+
+          <SavedViewsBar
+            filters={filters}
+            applyFilters={(u) => setFilters(u as Partial<typeof FILTER_DEFAULTS>)}
+            hasActiveFilters={hasActiveFilters}
           />
 
           {loading && (

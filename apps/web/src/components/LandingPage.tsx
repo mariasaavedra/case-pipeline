@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { fetchDashboard } from "../api";
 import type { KpiCard, KpiItem } from "../api";
 import { Link } from "./Link";
+import { QuickAccess } from "./QuickAccess";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 
 function getGreeting(): string {
@@ -277,6 +278,9 @@ export function LandingPage() {
           {error}
         </div>
       )}
+
+      {/* Quick access — watchlist + recently viewed (hidden when both empty) */}
+      <QuickAccess />
 
       {/* KPI Grid */}
       <div className="kpi-grid">
