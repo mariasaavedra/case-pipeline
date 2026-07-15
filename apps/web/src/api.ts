@@ -328,8 +328,8 @@ export function updateMyProfile(patch: ProfilePatch): Promise<PublicUser> {
     body: JSON.stringify(patch),
   });
 }
-export function getBoardPeople(): Promise<string[]> {
-  return apiFetch<string[]>("/api/board-people");
+export function getParalegals(): Promise<string[]> {
+  return apiFetch<string[]>("/api/paralegals");
 }
 
 // ---- My cases ----
