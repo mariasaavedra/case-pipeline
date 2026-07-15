@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 14;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -96,20 +96,34 @@ CREATE TABLE IF NOT EXISTS board_items (
     synced_at TEXT
 );
 
--- Client updates (case notes, replies) from Monday.com updates
+-- Unified per-profile timeline. Holds Monday.com "updates" (comments + replies)
+-- AND Emails & Activities (E&A) timeline items (emails, notes, calls, custom
+-- activities) from every entry connected to a profile. source_type is the
+-- discriminator; a single chronological read of this table per profile IS the
+-- unified timeline.
+--
+-- E&A dedup: the SAME logical event surfaces on both the profile and its
+-- connected board items, and Monday assigns each surface a DIFFERENT
+-- monday_timeline_id — so the timeline-id index alone cannot collapse them. The
+-- real key is content_sig (created_at + author + body), unique per profile, so
+-- one event is stored once no matter how many connected entries surface it.
 CREATE TABLE IF NOT EXISTS client_updates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_id INTEGER NOT NULL REFERENCES seed_batches(id) ON DELETE CASCADE,
     local_id TEXT NOT NULL UNIQUE,
     monday_update_id TEXT,
+    monday_timeline_id TEXT,
     profile_local_id TEXT NOT NULL,
     board_item_local_id TEXT,
     board_key TEXT,
     author_name TEXT NOT NULL,
     author_email TEXT,
+    title TEXT,
     text_body TEXT NOT NULL,
     body_html TEXT,
-    source_type TEXT NOT NULL DEFAULT 'update',
+    source_type TEXT NOT NULL DEFAULT 'update',   -- update | reply | email | note | activity | custom
+    activity_type_name TEXT,                       -- E&A custom activity name (e.g. "Consult note")
+    content_sig TEXT,                              -- E&A content signature for dedup (NULL for update/reply)
     reply_to_update_id TEXT,
     created_at_source TEXT NOT NULL,
     raw_json TEXT,
@@ -119,6 +133,15 @@ CREATE TABLE IF NOT EXISTS client_updates (
 CREATE INDEX IF NOT EXISTS idx_updates_profile ON client_updates(profile_local_id);
 CREATE INDEX IF NOT EXISTS idx_updates_board_item ON client_updates(board_item_local_id);
 CREATE INDEX IF NOT EXISTS idx_updates_created ON client_updates(created_at_source);
+CREATE INDEX IF NOT EXISTS idx_updates_source_type ON client_updates(source_type);
+-- Primary E&A dedup: one row per profile per logical event (content signature).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_content_dedup
+    ON client_updates(profile_local_id, content_sig)
+    WHERE content_sig IS NOT NULL;
+-- Secondary guard: skip an exact re-fetch of the same timeline id.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_timeline_dedup
+    ON client_updates(profile_local_id, monday_timeline_id)
+    WHERE monday_timeline_id IS NOT NULL;
 
 -- Relationships between items
 CREATE TABLE IF NOT EXISTS item_relationships (
@@ -498,6 +521,70 @@ export function initializeSchema(db: Database): void {
       if (!has || has.cnt === 0) {
         db.exec("ALTER TABLE write_queue ADD COLUMN author_oid TEXT");
       }
+    }
+
+    // Migration v12 → v13: unify Emails & Activities (E&A) into client_updates.
+    // Adds the E&A columns and a partial unique index that dedups E&A rows by
+    // stable timeline id per profile (existing update/reply rows have a NULL
+    // monday_timeline_id and are unaffected).
+    if (fromVersion < 13) {
+      const addColumn = (name: string, ddl: string) => {
+        const has = db
+          .prepare(`SELECT COUNT(*) as cnt FROM pragma_table_info('client_updates') WHERE name='${name}'`)
+          .get() as { cnt: number };
+        if (!has || has.cnt === 0) {
+          db.exec(`ALTER TABLE client_updates ADD COLUMN ${ddl}`);
+        }
+      };
+      addColumn("monday_timeline_id", "monday_timeline_id TEXT");
+      addColumn("title", "title TEXT");
+      addColumn("activity_type_name", "activity_type_name TEXT");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_updates_source_type ON client_updates(source_type)");
+      db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_timeline_dedup
+          ON client_updates(profile_local_id, monday_timeline_id)
+          WHERE monday_timeline_id IS NOT NULL
+      `);
+    }
+
+    // Migration v13 → v14: content-signature dedup for E&A rows. The same event
+    // surfaces on the profile AND its connected board items, each with a
+    // different monday_timeline_id, so the timeline-id index couldn't collapse
+    // them. content_sig (created_at + author + body) is stable across surfaces.
+    if (fromVersion < 14) {
+      const has = db
+        .prepare("SELECT COUNT(*) as cnt FROM pragma_table_info('client_updates') WHERE name='content_sig'")
+        .get() as { cnt: number };
+      if (!has || has.cnt === 0) {
+        db.exec("ALTER TABLE client_updates ADD COLUMN content_sig TEXT");
+      }
+      // Backfill signatures for existing E&A rows (char(31) = unit separator).
+      db.exec(`
+        UPDATE client_updates
+           SET content_sig = created_at_source || char(31) || author_name || char(31) || substr(text_body, 1, 300)
+         WHERE monday_timeline_id IS NOT NULL AND content_sig IS NULL
+      `);
+      // Collapse logical duplicates already in the table: keep the earliest row
+      // per (profile, content_sig). Must run BEFORE the unique index is created.
+      const del = db
+        .prepare(
+          `DELETE FROM client_updates
+             WHERE content_sig IS NOT NULL
+               AND id NOT IN (
+                 SELECT MIN(id) FROM client_updates
+                  WHERE content_sig IS NOT NULL
+                  GROUP BY profile_local_id, content_sig
+               )`,
+        )
+        .run();
+      if (del.changes > 0) {
+        console.log(`  [migrate v14] collapsed ${del.changes} duplicate E&A timeline row(s)`);
+      }
+      db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_content_dedup
+          ON client_updates(profile_local_id, content_sig)
+          WHERE content_sig IS NOT NULL
+      `);
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

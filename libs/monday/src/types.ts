@@ -61,3 +61,33 @@ export interface MondayUpdate {
   creator: MondayUpdateCreator | null;
   replies: MondayReply[];
 }
+
+// -----------------------------------------------------------------------------
+// Emails & Activities (E&A) timeline — CRM entity boards, API version 2024-10+.
+// -----------------------------------------------------------------------------
+
+export interface MondayTimelineUser {
+  id: string;
+  name: string;
+}
+
+/** One entry in a Monday.com item's E&A timeline (email, note, call, activity). */
+export interface MondayTimelineItem {
+  id: string;
+  /** email | note | activity | custom (raw Monday value). */
+  type: string;
+  title: string | null;
+  content: string | null;
+  created_at: string;
+  /** Set when type=custom; resolve to a name via the custom_activity map. */
+  custom_activity_id: string | null;
+  user: MondayTimelineUser | null;
+}
+
+/** A custom activity type defined in the account (Consult note, Deadline, …). */
+export interface MondayCustomActivity {
+  id: string;
+  name: string;
+  color: string | null;
+  icon_id: string | null;
+}

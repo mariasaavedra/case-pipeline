@@ -2,7 +2,15 @@
 // Monday.com API utilities
 // =============================================================================
 
-import type { MondayBoard, MondayColumn, MondayItem, ColumnLabels, MondayUpdate } from "./types";
+import type {
+  MondayBoard,
+  MondayColumn,
+  MondayItem,
+  ColumnLabels,
+  MondayUpdate,
+  MondayTimelineItem,
+  MondayCustomActivity,
+} from "./types";
 
 // =============================================================================
 // Custom Error Types
@@ -383,6 +391,8 @@ export async function fetchAllBoards(): Promise<MondayBoard[]> {
 export interface BoardItemsPage {
   items: MondayItem[];
   cursor: string | null;
+  /** Total number of items Monday reports for the board (null if unavailable). */
+  itemsCount: number | null;
 }
 
 /**
@@ -397,6 +407,7 @@ export async function fetchBoardItems(
   const query = `
     query ($boardId: ID!, $limit: Int!, $cursor: String) {
       boards(ids: [$boardId]) {
+        items_count
         items_page(limit: $limit, cursor: $cursor) {
           cursor
           items {
@@ -424,7 +435,9 @@ export async function fetchBoardItems(
   `;
 
   const result = await mondayRequest<{
-    data: { boards: [{ items_page: { cursor: string | null; items: MondayItem[] } }] };
+    data: {
+      boards: [{ items_count: number | null; items_page: { cursor: string | null; items: MondayItem[] } }];
+    };
   }>(query, {
     boardId,
     limit,
@@ -439,34 +452,74 @@ export async function fetchBoardItems(
   return {
     items: board.items_page.items,
     cursor: board.items_page.cursor,
+    itemsCount: board.items_count ?? null,
   };
 }
 
+/** Describes a board whose full item set was not fully retrieved. */
+export interface BoardTruncation {
+  boardId: string;
+  /** Items actually returned by this call. */
+  fetched: number;
+  /** Total items Monday reports for the board (null if unavailable). */
+  expected: number | null;
+  reason: "max_items_cap" | "count_mismatch";
+}
+
 /**
- * Fetches all items from a board (handles pagination automatically)
+ * Fetches all items from a board (handles pagination automatically).
+ *
+ * Two ways a board can come back short, both of which are surfaced via
+ * `onTruncated` (the items fetched so far are still returned, never discarded):
+ *  - `max_items_cap`: we hit the `maxItems` ceiling while a cursor remained.
+ *  - `count_mismatch`: pagination ended (cursor exhausted) but we returned
+ *    fewer items than Monday's `items_count` — e.g. a transient subgraph error
+ *    made Monday hand back a null cursor mid-board. Without this check that
+ *    truncation is silent and the board looks fully synced.
  */
 export async function fetchAllBoardItems(
   boardId: string,
-  options: { maxItems?: number; pageSize?: number; onProgress?: (count: number) => void } = {}
+  options: {
+    maxItems?: number;
+    pageSize?: number;
+    onProgress?: (count: number) => void;
+    onTruncated?: (truncation: BoardTruncation) => void;
+  } = {}
 ): Promise<MondayItem[]> {
   const maxItems = options.maxItems ?? 500;
   const pageSize = options.pageSize ?? 50;
   const allItems: MondayItem[] = [];
   let cursor: string | null = null;
+  let expected: number | null = null;
+  let cappedWithMore = false;
 
   do {
     const page = await fetchBoardItems(boardId, { limit: pageSize, cursor: cursor ?? undefined });
+    if (expected === null) expected = page.itemsCount;
     allItems.push(...page.items);
     cursor = page.cursor;
 
     options.onProgress?.(allItems.length);
 
     if (allItems.length >= maxItems) {
+      // Stopped at the safety ceiling. If a cursor remains, the board has more
+      // items than we returned — a truncation the caller should know about.
+      cappedWithMore = cursor !== null;
       break;
     }
   } while (cursor);
 
-  return allItems.slice(0, maxItems);
+  const items = allItems.slice(0, maxItems);
+
+  if (cappedWithMore) {
+    options.onTruncated?.({ boardId, fetched: items.length, expected, reason: "max_items_cap" });
+  } else if (expected !== null && items.length < expected) {
+    // Pagination ran to completion (cursor exhausted) yet we came up short of the
+    // board's reported item count — pagination was truncated mid-board.
+    options.onTruncated?.({ boardId, fetched: items.length, expected, reason: "count_mismatch" });
+  }
+
+  return items;
 }
 
 export async function fetchItem(itemId: string): Promise<MondayItem> {
@@ -642,5 +695,135 @@ export async function createUpdate(itemId: string, body: string, tokenOverride?:
     tokenOverride
   );
   return result.data.create_update.id;
+}
+
+// =============================================================================
+// Emails & Activities (E&A) timeline fetching (read)
+// =============================================================================
+
+const TIMELINE_ITEM_FIELDS = `
+  id
+  type
+  title
+  content
+  created_at
+  custom_activity_id
+  user { id name }
+`;
+
+/**
+ * GraphQL alias for an item's timeline in a batched request. Aliases must be
+ * valid names (can't start with a digit), so we prefix the numeric id with "t".
+ */
+export function timelineAlias(itemId: string): string {
+  return `t${itemId}`;
+}
+
+/**
+ * Fetch the account's custom activity types as an id → name map. Used to label
+ * E&A rows whose type is `custom` (e.g. "Consult note", "HEARING NOTES").
+ */
+export async function fetchCustomActivities(tokenOverride?: string): Promise<Map<string, string>> {
+  const result = await mondayRequest<{ data: { custom_activity: MondayCustomActivity[] } }>(
+    `query { custom_activity { id name } }`,
+    undefined,
+    tokenOverride
+  );
+  const map = new Map<string, string>();
+  for (const a of result.data.custom_activity ?? []) {
+    map.set(a.id, a.name);
+  }
+  return map;
+}
+
+/** Follow a single item's timeline pagination tail until the cursor runs out. */
+async function fetchTimelineTail(
+  itemId: string,
+  firstCursor: string,
+  pageLimit: number,
+  tokenOverride?: string
+): Promise<MondayTimelineItem[]> {
+  const items: MondayTimelineItem[] = [];
+  let cursor: string | null = firstCursor;
+
+  while (cursor) {
+    const result: {
+      data: {
+        timeline: { timeline_items_page: { cursor: string | null; timeline_items: MondayTimelineItem[] } } | null;
+      };
+    } = await mondayRequest(
+      `query ($id: ID!, $cursor: String, $limit: Int!) {
+         timeline(id: $id) {
+           timeline_items_page(limit: $limit, cursor: $cursor) {
+             cursor
+             timeline_items { ${TIMELINE_ITEM_FIELDS} }
+           }
+         }
+       }`,
+      { id: itemId, cursor, limit: pageLimit },
+      tokenOverride
+    );
+    const page = result.data.timeline?.timeline_items_page;
+    if (!page) break;
+    items.push(...(page.timeline_items ?? []));
+    cursor = page.cursor;
+  }
+  return items;
+}
+
+type TimelineNode = {
+  timeline_items_page: { cursor: string | null; timeline_items: MondayTimelineItem[] };
+} | null;
+
+/**
+ * Fetch the E&A timeline for a batch of item IDs in one request.
+ *
+ * `timeline` is a top-level query (not an Item field), so we batch by emitting
+ * one aliased `timeline(id: …)` selection per item. Any item whose first page
+ * reports a cursor is then paginated individually. Returns a map of
+ * monday_item_id → timeline items (newest-first, as Monday returns them).
+ *
+ * Keep batches modest (≤ ~15) — E&A queries are heavier than plain updates.
+ */
+export async function fetchTimelineBatch(
+  itemIds: string[],
+  pageLimit = 50,
+  tokenOverride?: string
+): Promise<Map<string, MondayTimelineItem[]>> {
+  const map = new Map<string, MondayTimelineItem[]>();
+  if (itemIds.length === 0) return map;
+
+  const aliases = itemIds
+    .map(
+      (id) =>
+        `${timelineAlias(id)}: timeline(id: ${JSON.stringify(id)}) {
+          timeline_items_page(limit: ${pageLimit}) {
+            cursor
+            timeline_items { ${TIMELINE_ITEM_FIELDS} }
+          }
+        }`
+    )
+    .join("\n");
+
+  const result = await mondayRequest<{ data: Record<string, TimelineNode> }>(
+    `query { ${aliases} }`,
+    undefined,
+    tokenOverride
+  );
+
+  for (const id of itemIds) {
+    const node = result.data?.[timelineAlias(id)];
+    if (!node) {
+      map.set(id, []);
+      continue;
+    }
+    const page = node.timeline_items_page;
+    const items = [...(page.timeline_items ?? [])];
+    if (page.cursor) {
+      items.push(...(await fetchTimelineTail(id, page.cursor, pageLimit, tokenOverride)));
+    }
+    map.set(id, items);
+  }
+  return map;
 }
 
