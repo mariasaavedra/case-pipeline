@@ -10,6 +10,7 @@
 import type { Request, Response } from "express";
 import { createHmac } from "node:crypto";
 import { usersDb } from "../db/users-db.js";
+import { protect, reveal } from "../crypto/secrets.js";
 import { requireAuth } from "../auth/middleware.js";
 import { validateToken } from "../auth/validate-token.js";
 import type { Router } from "express";
@@ -137,10 +138,11 @@ async function handleCallback(req: Request, res: Response): Promise<void> {
       // Non-fatal — we still save the token
     }
 
-    // Persist to users.db
+    // Persist to users.db — the token is encrypted at rest (AES-256-GCM) so a
+    // leaked DB or backup can't be used to impersonate the user on Monday.com.
     usersDb
       .prepare(`UPDATE users SET monday_access_token = ?, monday_name = ? WHERE azure_oid = ?`)
-      .run(access_token, mondayName, azureOid);
+      .run(protect(access_token), mondayName, azureOid);
 
     res.redirect(`${FRONTEND_URL}/settings?monday=connected`);
   } catch (err) {
@@ -181,5 +183,6 @@ export function getUserMondayToken(azureOid: string): string | null {
   const row = usersDb
     .prepare(`SELECT monday_access_token FROM users WHERE azure_oid = ?`)
     .get(azureOid) as { monday_access_token: string | null } | null;
-  return row?.monday_access_token ?? null;
+  // Stored encrypted (or legacy plaintext); reveal() handles both.
+  return row?.monday_access_token ? reveal(row.monday_access_token) : null;
 }

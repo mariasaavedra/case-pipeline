@@ -20,10 +20,21 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   try {
     req.user = await validateToken(auth.slice(7));
-    next();
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });
+    return;
   }
+
+  // Block deactivated accounts even with a valid Azure token (defense in depth).
+  // A brand-new user has no row yet — they're created active in handleAuthMe.
+  const row = usersDb
+    .prepare("SELECT active FROM users WHERE azure_oid = ?")
+    .get(req.user.oid) as { active: number } | undefined;
+  if (row && row.active === 0) {
+    res.status(403).json({ error: "Account disabled" });
+    return;
+  }
+  next();
 }
 
 /**

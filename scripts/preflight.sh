@@ -29,10 +29,10 @@ fi
 
 echo "npm version: $(npm --version)"
 
-if [[ ! -d "data" ]]; then
-  echo "ERROR: missing data/ directory"
-  exit 1
-fi
+# data/ is gitignored and created on demand by the sync/seed scripts
+# (fs.mkdirSync(..., { recursive: true })). Create it here too so a fresh
+# checkout — including CI — passes, then verify it is writable.
+mkdir -p data
 
 if [[ ! -w "data" ]]; then
   echo "ERROR: data/ is not writable"

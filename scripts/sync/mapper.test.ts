@@ -100,12 +100,13 @@ describe("buildColumnValues", () => {
 });
 
 describe("extractBoardItemFields", () => {
-  it("pulls status, next_date (per board), attorney, paralegals", () => {
+  it("pulls status, next_date (per board), attorney, paralegals (config key: paralegal)", () => {
     const columnValues = {
       status: { label: "Open" },
       target_date: { date: "2026-07-04" },
       attorney: { label: "WH" },
-      paralegals: { label: "Mayra Ruiz" },
+      // Real boards key this column `paralegal` (singular).
+      paralegal: { label: "Mayra Ruiz" },
     };
     expect(extractBoardItemFields("_cd_open_forms", columnValues)).toEqual({
       status: "Open",
@@ -114,6 +115,13 @@ describe("extractBoardItemFields", () => {
       attorney: "WH",
       paralegals: "Mayra Ruiz",
     });
+  });
+
+  it("joins multiple assignees from a multiple-person paralegal column", () => {
+    const columnValues = { paralegal: { labels: ["Laura Torres", "Walter Taborda"] } };
+    expect(extractBoardItemFields("_cd_open_forms", columnValues).paralegals).toBe(
+      "Laura Torres, Walter Taborda",
+    );
   });
 
   it("uses the board-specific next_date key (court_cases → x_next_hearing_date)", () => {

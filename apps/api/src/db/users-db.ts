@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDatabase } from "@case-pipeline/seed/db/connection";
 import { backupEncryptionKey, encryptFileSync } from "../backup/crypto.js";
+import { protect, isEncrypted } from "../crypto/secrets.js";
 
 const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -69,6 +70,122 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    // Profile & identity fields, plus a one-time re-encryption of any legacy
+    // plaintext Monday tokens now that column encryption exists.
+    version: 3,
+    up: () => {
+      const addCol = (col: string, decl: string) => {
+        if (!columnExists("users", col)) {
+          usersDb.exec(`ALTER TABLE users ADD COLUMN ${col} ${decl}`);
+        }
+      };
+      addCol("job_title", "TEXT");
+      addCol("locale", "TEXT DEFAULT 'es'");
+      addCol("timezone", "TEXT");
+      addCol("active", "INTEGER NOT NULL DEFAULT 1"); // soft-delete flag
+      addCol("paralegal_link", "TEXT"); // name as it appears on the boards
+      addCol("phone_ext", "TEXT");
+      addCol("login_count", "INTEGER NOT NULL DEFAULT 0");
+      addCol("last_active_at", "TEXT");
+
+      // Encrypt existing tokens in place. protect() is a no-op passthrough when
+      // APP_ENCRYPTION_KEY is unset (tokens then self-heal on next OAuth
+      // connect); isEncrypted() guards against double-encrypting on re-runs.
+      const rows = usersDb
+        .prepare("SELECT id, monday_access_token FROM users WHERE monday_access_token IS NOT NULL")
+        .all() as { id: number; monday_access_token: string }[];
+      const upd = usersDb.prepare("UPDATE users SET monday_access_token = ? WHERE id = ?");
+      for (const r of rows) {
+        if (!isEncrypted(r.monday_access_token)) upd.run(protect(r.monday_access_token), r.id);
+      }
+    },
+  },
+  {
+    // Per-user UI preferences: a single JSON blob (theme, density, default page,
+    // dashboard layout, column choices). JSON avoids a migration per new knob.
+    version: 4,
+    up: () => {
+      usersDb.exec(`
+        CREATE TABLE IF NOT EXISTS user_preferences (
+          user_id     INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          prefs_json  TEXT NOT NULL DEFAULT '{}',
+          updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `);
+    },
+  },
+  {
+    // Named, reusable filter sets per user (e.g. a saved clients query).
+    version: 5,
+    up: () => {
+      usersDb.exec(`
+        CREATE TABLE IF NOT EXISTS user_saved_views (
+          id           INTEGER PRIMARY KEY,
+          user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name         TEXT NOT NULL,
+          kind         TEXT NOT NULL,
+          filters_json TEXT NOT NULL DEFAULT '{}',
+          created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `);
+      usersDb.exec(`CREATE INDEX IF NOT EXISTS idx_saved_views_user ON user_saved_views(user_id)`);
+    },
+  },
+  {
+    // Pinned clients (watchlist), one row per pinned profile per user.
+    version: 6,
+    up: () => {
+      usersDb.exec(`
+        CREATE TABLE IF NOT EXISTS user_watchlist (
+          id               INTEGER PRIMARY KEY,
+          user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          profile_local_id TEXT NOT NULL,
+          note             TEXT,
+          created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(user_id, profile_local_id)
+        )
+      `);
+    },
+  },
+  {
+    // Recently viewed clients — upsert viewed_at; caller rotates to keep N latest.
+    version: 7,
+    up: () => {
+      usersDb.exec(`
+        CREATE TABLE IF NOT EXISTS recently_viewed (
+          id               INTEGER PRIMARY KEY,
+          user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          profile_local_id TEXT NOT NULL,
+          viewed_at        TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(user_id, profile_local_id)
+        )
+      `);
+      usersDb.exec(
+        `CREATE INDEX IF NOT EXISTS idx_recently_user_time ON recently_viewed(user_id, viewed_at DESC)`,
+      );
+    },
+  },
+  {
+    // Append-only audit trail for sensitive actions (role changes, Monday
+    // writes, admin profile edits, board config changes).
+    version: 8,
+    up: () => {
+      usersDb.exec(`
+        CREATE TABLE IF NOT EXISTS audit_log (
+          id            INTEGER PRIMARY KEY,
+          actor_user_id INTEGER,
+          actor_email   TEXT,
+          action        TEXT NOT NULL,
+          target_type   TEXT,
+          target_id     TEXT,
+          metadata_json TEXT,
+          created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `);
+      usersDb.exec(`CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC)`);
+    },
+  },
 ];
 
 const TARGET_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
@@ -119,4 +236,13 @@ export interface UserRow {
   last_login: string | null;
   monday_access_token: string | null;
   monday_name: string | null;
+  // v3 — profile & identity
+  job_title: string | null;
+  locale: string | null;
+  timezone: string | null;
+  active: number; // 1 = active, 0 = disabled (soft-delete)
+  paralegal_link: string | null;
+  phone_ext: string | null;
+  login_count: number;
+  last_active_at: string | null;
 }

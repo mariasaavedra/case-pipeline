@@ -8,6 +8,7 @@ import { AppointmentsPage } from "./components/AppointmentsPage";
 import { ClientsPage } from "./components/ClientsPage";
 import { AlertsPage } from "./components/AlertsPage";
 import { ActiveCasesPage } from "./components/ActiveCasesPage";
+import { MyCasesPage } from "./components/MyCasesPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import type { TabId } from "./components/ClientTabs";
@@ -239,6 +240,7 @@ function App() {
           {/* Appointments page */}
           {route.page === "appointments" && !loading && <AppointmentsPage />}
           {route.page === "active-cases" && !loading && <ActiveCasesPage />}
+          {route.page === "my-cases" && !loading && <MyCasesPage />}
 
           {/* Alerts page */}
           {route.page === "alerts" && !loading && <AlertsPage />}

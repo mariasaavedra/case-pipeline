@@ -139,6 +139,22 @@ export function extractBoardItemFields(
       ? ((v as { label?: string }).label ?? null)
       : null;
 
+  // People columns come as { label } (single person) or { labels: [...] }
+  // (multiple person). Join multiples with ", " so downstream code that splits
+  // on commas (getActiveCases) sees every assignee.
+  const people = (v: unknown): string | null => {
+    if (v && typeof v === "object") {
+      if ("labels" in v) {
+        const arr = (v as { labels?: unknown[] }).labels;
+        if (Array.isArray(arr) && arr.length) {
+          return arr.filter((x) => typeof x === "string" && x.trim()).join(", ") || null;
+        }
+      }
+      if ("label" in v) return (v as { label?: string }).label ?? null;
+    }
+    return null;
+  };
+
   const status = label(columnValues.status);
 
   // All appointment boards share the same consult_date key; new boards inherit it.
@@ -157,8 +173,11 @@ export function extractBoardItemFields(
     status,
     nextDate,
     nextTime,
-    attorney: label(columnValues.attorney),
-    paralegals: label(columnValues.paralegals),
+    // Config keys these people columns as `attorney` and `paralegal` (singular);
+    // `columnValues.paralegals` was always undefined, so this column silently
+    // stayed empty and broke the paralegal grouping in Active/My Cases.
+    attorney: people(columnValues.attorney),
+    paralegals: people(columnValues.paralegal ?? columnValues.paralegals),
   };
 }
 
