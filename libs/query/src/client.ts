@@ -87,7 +87,7 @@ export function searchClients(db: Database, query: string): SearchResult[] {
  * Get a single profile by local_id
  */
 export function getClientProfile(db: Database, localId: string): ProfileSummary | null {
-  return db
+  const row = db
     .prepare(`
       SELECT
         local_id AS localId,
@@ -100,11 +100,37 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
         address,
         date_of_birth AS dateOfBirth,
         place_of_birth AS placeOfBirth,
-        a_number AS aNumber
+        a_number AS aNumber,
+        raw_column_values AS rawColumnValues
       FROM profiles
       WHERE local_id = ?
     `)
-    .get(localId) as ProfileSummary ?? null;
+    .get(localId) as (ProfileSummary & { rawColumnValues: string | null }) | undefined;
+
+  if (!row) return null;
+
+  // The SharePoint folder links live inside the raw Monday column values.
+  const { rawColumnValues, ...profile } = row;
+  const cvs = safeParseJson(rawColumnValues);
+  return {
+    ...profile,
+    eFile: asNonEmptyString(cvs.e_file),
+    consultFile: asNonEmptyString(cvs.consult),
+  };
+}
+
+function safeParseJson(value: string | null | undefined): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 /**

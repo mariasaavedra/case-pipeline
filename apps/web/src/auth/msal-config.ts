@@ -18,3 +18,16 @@ export const msalConfig: Configuration = {
 export const loginRequest = {
   scopes: ["openid", "profile", "email", "User.Read"],
 };
+
+/**
+ * Microsoft Graph scopes for the SharePoint file browser — deliberately NOT part
+ * of loginRequest, so signing in doesn't prompt everyone for file access. It's
+ * requested the first time someone opens a client's Documents tab.
+ *
+ * ReadWrite (not Read) because the tab supports uploading into client folders.
+ * Delegated: each user only ever sees/writes what SharePoint already allows them.
+ * Requires tenant admin consent on the app registration.
+ */
+export const graphRequest = {
+  scopes: ["Files.ReadWrite.All"],
+};
