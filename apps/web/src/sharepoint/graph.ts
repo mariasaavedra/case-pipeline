@@ -67,17 +67,37 @@ export async function getGraphToken(interactive = false): Promise<string> {
   const account = msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0];
   if (!account) throw new Error("Not signed in");
 
+  // Interactive path: open the popup FIRST, with no await before it. Awaiting
+  // acquireTokenSilent here would spend the click's user-activation and the
+  // browser would block the popup (MSAL popup_window_error). The silent attempt
+  // is redundant anyway — we only get here because it already failed.
+  if (interactive) {
+    try {
+      const result = await msalInstance.acquireTokenPopup({ ...graphRequest, account });
+      return result.accessToken;
+    } catch (err) {
+      // Some browsers block popups outright; fall back to a full-page redirect.
+      if (isPopupBlocked(err)) {
+        await msalInstance.acquireTokenRedirect({ ...graphRequest, account });
+        // acquireTokenRedirect navigates away; this never resolves.
+        return new Promise<string>(() => {});
+      }
+      throw err;
+    }
+  }
+
   try {
     const result = await msalInstance.acquireTokenSilent({ ...graphRequest, account });
     return result.accessToken;
   } catch (err) {
-    if (!interactive) {
-      if (err instanceof InteractionRequiredAuthError) throw new GraphConsentRequiredError();
-      throw err;
-    }
-    const result = await msalInstance.acquireTokenPopup({ ...graphRequest, account });
-    return result.accessToken;
+    if (err instanceof InteractionRequiredAuthError) throw new GraphConsentRequiredError();
+    throw err;
   }
+}
+
+function isPopupBlocked(err: unknown): boolean {
+  const code = (err as { errorCode?: string } | null)?.errorCode;
+  return code === "popup_window_error" || code === "empty_window_error";
 }
 
 async function graphFetch<T>(pathOrUrl: string, init?: RequestInit): Promise<T> {
