@@ -91,3 +91,20 @@ export const DOCUMENT_BOARD_KEYS = new Set([
   "nvc_notices",
   "address_changes",
 ]);
+
+// =============================================================================
+// Monday.com deep links
+// =============================================================================
+// The account has its own subdomain — app.monday.com does NOT resolve to this
+// account's context, which is why item links used to land nowhere useful.
+// Confirmed from URLs Monday itself returns in the synced data
+// (e.g. https://scaltheclinic.monday.com/users/32109226-michael-sharma-crawford).
+export const MONDAY_ACCOUNT_URL = "https://scaltheclinic.monday.com";
+
+/** Mirrors `profiles.id` in config/boards.yaml — keep the two in sync. */
+export const MONDAY_PROFILES_BOARD_ID = "8025265377";
+
+/** Canonical deep link to a Monday item ("pulse") on a board. */
+export function mondayItemUrl(boardId: string, itemId: string): string {
+  return `${MONDAY_ACCOUNT_URL}/boards/${boardId}/pulses/${itemId}`;
+}

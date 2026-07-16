@@ -5,7 +5,7 @@ import { getWatchlist, addWatchlist, removeWatchlist } from "../api";
  * Star toggle that pins/unpins a client to the current user's watchlist.
  * Self-contained: checks membership on mount, then optimistically toggles.
  */
-export function WatchlistPin({ profileLocalId }: { profileLocalId: string }) {
+export function WatchlistPin({ mondayItemId }: { mondayItemId: string }) {
   const [watched, setWatched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -14,7 +14,7 @@ export function WatchlistPin({ profileLocalId }: { profileLocalId: string }) {
     let cancelled = false;
     getWatchlist()
       .then((items) => {
-        if (!cancelled) setWatched(items.some((i) => i.profileLocalId === profileLocalId));
+        if (!cancelled) setWatched(items.some((i) => i.mondayItemId === mondayItemId));
       })
       .catch(() => {})
       .finally(() => {
@@ -23,15 +23,15 @@ export function WatchlistPin({ profileLocalId }: { profileLocalId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [profileLocalId]);
+  }, [mondayItemId]);
 
   async function toggle() {
     const next = !watched;
     setWatched(next); // optimistic
     setBusy(true);
     try {
-      if (next) await addWatchlist(profileLocalId);
-      else await removeWatchlist(profileLocalId);
+      if (next) await addWatchlist(mondayItemId);
+      else await removeWatchlist(mondayItemId);
     } catch {
       setWatched(!next); // revert on failure
     } finally {

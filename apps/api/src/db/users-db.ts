@@ -167,8 +167,17 @@ const MIGRATIONS: Migration[] = [
     },
   },
   {
-    // Append-only audit trail for sensitive actions (role changes, Monday
-    // writes, admin profile edits, board config changes).
+    // Re-key the watchlist and recently-viewed on monday_item_id.
+    //
+    // profiles.local_id is a PER-SYNC surrogate: the nightly sync does a full
+    // replace (resetDatabase → DROP TABLE profiles) and re-inserts every profile
+    // with a fresh randomUUID(). users.db survives that, so every stored
+    // local_id dangled the next morning — names stopped resolving and the links
+    // 404'd. monday_item_id is the stable identity (resetDatabase's own comment
+    // says as much about the write queue).
+    //
+    // The existing rows point at local_ids that no longer map to anything, so
+    // they can't be back-filled — drop them and let users re-pin.
     version: 8,
     up: () => {
       usersDb.exec(`
@@ -184,6 +193,46 @@ const MIGRATIONS: Migration[] = [
         )
       `);
       usersDb.exec(`CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC)`);
+    },
+  },
+  {
+    // Re-key the watchlist and recently-viewed on monday_item_id.
+    //
+    // profiles.local_id is a PER-SYNC surrogate: the nightly sync does a full
+    // replace (resetDatabase → DROP TABLE profiles) and re-inserts every profile
+    // with a fresh randomUUID(). users.db survives that, so every stored
+    // local_id dangled the next morning — names stopped resolving and the links
+    // 404'd. monday_item_id is the stable identity (resetDatabase's own comment
+    // says as much about the write queue).
+    //
+    // The existing rows point at local_ids that no longer map to anything, so
+    // they can't be back-filled — drop them and let users re-pin.
+    version: 9,
+    up: () => {
+      usersDb.exec(`DROP TABLE IF EXISTS user_watchlist`);
+      usersDb.exec(`DROP TABLE IF EXISTS recently_viewed`);
+      usersDb.exec(`
+        CREATE TABLE user_watchlist (
+          id             INTEGER PRIMARY KEY,
+          user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          monday_item_id TEXT NOT NULL,
+          note           TEXT,
+          created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(user_id, monday_item_id)
+        )
+      `);
+      usersDb.exec(`
+        CREATE TABLE recently_viewed (
+          id             INTEGER PRIMARY KEY,
+          user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          monday_item_id TEXT NOT NULL,
+          viewed_at      TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(user_id, monday_item_id)
+        )
+      `);
+      usersDb.exec(
+        `CREATE INDEX IF NOT EXISTS idx_recently_user_time ON recently_viewed(user_id, viewed_at DESC)`,
+      );
     },
   },
 ];
