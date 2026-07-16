@@ -271,15 +271,21 @@ export interface MyCasesResult {
 }
 
 export interface WatchlistItem {
+  /** The profile's CURRENT local_id, resolved server-side for linking. */
   profileLocalId: string;
-  name: string | null;
+  /** Stable identity — what the watchlist is actually keyed on. */
+  mondayItemId: string;
+  name: string;
   note: string | null;
   createdAt: string;
 }
 
 export interface RecentlyViewedItem {
+  /** The profile's CURRENT local_id, resolved server-side for linking. */
   profileLocalId: string;
-  name: string | null;
+  /** Stable identity — what the history is actually keyed on. */
+  mondayItemId: string;
+  name: string;
   viewedAt: string;
 }
 
@@ -341,15 +347,15 @@ export function getMyCases(): Promise<MyCasesResult> {
 export function getWatchlist(): Promise<WatchlistItem[]> {
   return apiFetch<WatchlistItem[]>("/api/watchlist");
 }
-export function addWatchlist(profileLocalId: string, note?: string): Promise<{ profileLocalId: string; note: string | null }> {
+export function addWatchlist(mondayItemId: string, note?: string): Promise<{ mondayItemId: string; note: string | null }> {
   return apiFetch("/api/watchlist", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ profileLocalId, note }),
+    body: JSON.stringify({ mondayItemId, note }),
   });
 }
-export function removeWatchlist(profileLocalId: string): Promise<{ removed: boolean }> {
-  return apiFetch(`/api/watchlist/${encodeURIComponent(profileLocalId)}`, { method: "DELETE" });
+export function removeWatchlist(mondayItemId: string): Promise<{ removed: boolean }> {
+  return apiFetch(`/api/watchlist/${encodeURIComponent(mondayItemId)}`, { method: "DELETE" });
 }
 
 // ---- Recently viewed ----
