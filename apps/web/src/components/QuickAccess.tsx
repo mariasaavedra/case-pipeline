@@ -24,7 +24,7 @@ function MiniList({
 }: {
   title: string;
   icon: ReactNode;
-  items: { id: string; name: string | null }[];
+  items: { id: string; name: string }[];
   empty: string;
 }) {
   return (
@@ -57,7 +57,7 @@ function MiniList({
               className="kpi-item-client"
               style={{ padding: "5px 0", fontSize: 14 }}
             >
-              {it.name ?? it.id}
+              {it.name}
             </Link>
           ))}
         </div>

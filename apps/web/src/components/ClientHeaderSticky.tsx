@@ -1,6 +1,7 @@
 import type { ProfileSummary, ClientCaseSummary } from "../api";
 import { ActionButtons } from "./ActionButtons";
 import { WatchlistPin } from "./WatchlistPin";
+import { mondayItemUrl, MONDAY_PROFILES_BOARD_ID } from "../config";
 import { formatANumber } from "@case-pipeline/core";
 
 const PRIORITY_STYLES: Record<string, { dot: string; label: string; bg: string; text: string }> = {
@@ -69,10 +70,11 @@ export function ClientHeaderSticky({ profile, data, onViewRelations }: Props) {
                 </span>
               )}
               <div className="client-header-actions flex-shrink-0 ml-auto flex items-center gap-3">
-                <WatchlistPin profileLocalId={profile.localId} />
+                {/* Pinning keys off the Monday id, so a profile without one can't be pinned. */}
+                {profile.mondayItemId && <WatchlistPin mondayItemId={profile.mondayItemId} />}
                 {profile.mondayItemId && (
                   <a
-                    href={`https://app.monday.com/boards/8025265377/pulses/${profile.mondayItemId}`}
+                    href={mondayItemUrl(MONDAY_PROFILES_BOARD_ID, profile.mondayItemId)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-colors"
