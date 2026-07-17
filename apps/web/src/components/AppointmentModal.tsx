@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState } from "react";
 import type { AppointmentEntry, ClientUpdate } from "../api";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { NoteComposer } from "./NoteComposer";
+import { DocumentsTab } from "./DocumentsTab";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { formatANumber } from "@case-pipeline/core";
 import { Link } from "./Link";
@@ -104,7 +105,7 @@ export function AppointmentModal({ entry, onClose }: Props) {
       }}
     >
       <div
-        className="relative w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col animate-in"
+        className="relative w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col animate-in"
         style={{
           backgroundColor: "var(--color-surface)",
           maxHeight: "90vh",
@@ -354,33 +355,56 @@ export function AppointmentModal({ entry, onClose }: Props) {
             })()
           )}
 
-          {/* Notes / updates */}
-          <div className="px-6 py-4 space-y-4">
-            <h3
-              className="text-[11px] font-semibold uppercase tracking-wider"
-              style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-            >
-              Notes {pendingUpdates.length + updates.length > 0 ? `(${pendingUpdates.length + updates.length})` : ""}
-            </h3>
-
-            {profile && (
-              <NoteComposer
-                profileLocalId={profile.localId}
-                onPosted={(update) => setPendingUpdates((prev) => [update, ...prev])}
-                compact
-              />
-            )}
-
-            {pendingUpdates.length + updates.length > 0 ? (
-              <UpdatesTimeline updates={[...pendingUpdates, ...updates]} />
-            ) : (
-              <p
-                className="text-sm text-center py-4"
+          {/* Notes + Documents — two columns on desktop, stacked on mobile */}
+          <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x" style={{ borderColor: "var(--color-border-light)" }}>
+            {/* Notes / updates */}
+            <div className="px-6 py-4 space-y-4 min-w-0">
+              <h3
+                className="text-[11px] font-semibold uppercase tracking-wider"
                 style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
               >
-                No notes yet. Add one above.
-              </p>
-            )}
+                Notes {pendingUpdates.length + updates.length > 0 ? `(${pendingUpdates.length + updates.length})` : ""}
+              </h3>
+
+              {profile && (
+                <NoteComposer
+                  profileLocalId={profile.localId}
+                  onPosted={(update) => setPendingUpdates((prev) => [update, ...prev])}
+                  compact
+                />
+              )}
+
+              {pendingUpdates.length + updates.length > 0 ? (
+                <UpdatesTimeline updates={[...pendingUpdates, ...updates]} />
+              ) : (
+                <p
+                  className="text-sm text-center py-4"
+                  style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+                >
+                  No notes yet. Add one above.
+                </p>
+              )}
+            </div>
+
+            {/* SharePoint documents — reuses the client Documents browser */}
+            <div className="px-6 py-4 space-y-4 min-w-0">
+              <h3
+                className="text-[11px] font-semibold uppercase tracking-wider"
+                style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+              >
+                Documents
+              </h3>
+              {caseSummary ? (
+                <DocumentsTab data={caseSummary} />
+              ) : (
+                <p
+                  className="text-sm text-center py-4"
+                  style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+                >
+                  No client linked to this appointment.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>

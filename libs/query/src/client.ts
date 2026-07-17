@@ -109,14 +109,21 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
 
   if (!row) return null;
 
-  // The SharePoint folder links live inside the raw Monday column values.
   const { rawColumnValues, ...profile } = row;
+  return { ...profile, ...readSharePointLinks(rawColumnValues) };
+}
+
+/**
+ * Pull the SharePoint e_file / consult folder links out of a profile's raw
+ * Monday column values. Shared so getClientProfile and the appointments query
+ * populate them the same way.
+ */
+export function readSharePointLinks(rawColumnValues: string | null | undefined): {
+  eFile: string | null;
+  consultFile: string | null;
+} {
   const cvs = safeParseJson(rawColumnValues);
-  return {
-    ...profile,
-    eFile: asNonEmptyString(cvs.e_file),
-    consultFile: asNonEmptyString(cvs.consult),
-  };
+  return { eFile: asNonEmptyString(cvs.e_file), consultFile: asNonEmptyString(cvs.consult) };
 }
 
 function safeParseJson(value: string | null | undefined): Record<string, unknown> {
