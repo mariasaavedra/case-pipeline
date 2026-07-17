@@ -190,6 +190,25 @@ export async function listChildren(driveId: string, itemId: string): Promise<Dri
   });
 }
 
+// ---- Preview ----------------------------------------------------------------
+
+/**
+ * Get a short-lived, embeddable preview URL for a file (Office viewer / PDF /
+ * image renderer). Meant for an <iframe src>. Uses the same delegated token, so
+ * it only ever previews what the user is already allowed to open.
+ *
+ * Not every type is previewable; Graph returns 400 for those, which the caller
+ * surfaces as "can't preview — download instead".
+ */
+export async function getPreviewUrl(driveId: string, itemId: string): Promise<string> {
+  const res = await graphFetch<{ getUrl?: string; postUrl?: string }>(
+    `/drives/${driveId}/items/${itemId}/preview`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+  );
+  if (!res.getUrl) throw new GraphError(415, "This file type can't be previewed.");
+  return res.getUrl;
+}
+
 // ---- Upload -----------------------------------------------------------------
 
 /** Graph's cutoff for a simple content PUT. Above this, an upload session is required. */

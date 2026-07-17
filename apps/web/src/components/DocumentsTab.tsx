@@ -21,6 +21,7 @@ import {
   type ResolvedItem,
 } from "../sharepoint/graph";
 import { SharePointPlaceholder } from "./SharePointPlaceholder";
+import { FilePreviewModal } from "./FilePreviewModal";
 
 interface Props {
   data: ClientCaseSummary;
@@ -81,6 +82,7 @@ export function DocumentsTab({ data }: Props) {
   const [connecting, setConnecting] = useState(false);
   const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [preview, setPreview] = useState<{ driveId: string; item: DriveItem } | null>(null);
 
   /** Load a folder's children and set it as the deepest crumb. */
   const open = useCallback(async (item: ResolvedItem, trail: Crumb[]) => {
@@ -145,7 +147,8 @@ export function DocumentsTab({ data }: Props) {
         };
         void open(item, [...crumbs, { item, label: child.name }]);
       } else {
-        window.open(child.webUrl, "_blank", "noopener");
+        // Preview in place; the modal itself offers Open-in-SharePoint / Download.
+        setPreview({ driveId: parent.item.driveId, item: child });
       }
     },
     [crumbs, open],
@@ -392,6 +395,10 @@ export function DocumentsTab({ data }: Props) {
             </div>
           ))}
         </div>
+      )}
+
+      {preview && (
+        <FilePreviewModal driveId={preview.driveId} item={preview.item} onClose={() => setPreview(null)} />
       )}
     </div>
   );
