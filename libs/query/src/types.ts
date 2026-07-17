@@ -14,6 +14,16 @@ export interface ProfileSummary {
   dateOfBirth: string | null;
   placeOfBirth: string | null;
   aNumber: string | null;
+  /**
+   * SharePoint folder links from the e_file / consult columns.
+   *
+   * Optional on purpose: only the full client detail (getClientProfile) reads
+   * raw_column_values to populate them. The appointments query builds a
+   * lightweight ProfileSummary without that JSON blob, so there they are
+   * `undefined` ("not loaded") rather than a misleading `null` ("no e-file").
+   */
+  eFile?: string | null;
+  consultFile?: string | null;
 }
 
 export interface ContractSummary {

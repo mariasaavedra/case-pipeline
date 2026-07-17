@@ -18,7 +18,7 @@ const TABS: { id: TabId; label: string; countKey?: keyof NonNullable<Props["coun
   { id: "contracts", label: "Contracts", countKey: "contracts" },
   { id: "active_cases", label: "Active Cases", countKey: "activeCases" },
   { id: "court_cases", label: "Court Cases", countKey: "courtCases" },
-  { id: "documents", label: "Documents & Notices" },
+  { id: "documents", label: "Documents" },
   { id: "relations", label: "Relations", countKey: "relations" },
 ];
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import type { ClientCaseSummary, ClientUpdate } from "../api";
-import { BOARD_CONFIG, DOCUMENT_BOARD_KEYS } from "../config";
+import { BOARD_CONFIG } from "../config";
 import { NoteComposer } from "./NoteComposer";
 import { navigate, clientPath } from "../router";
 import { ClientHeaderSticky } from "./ClientHeaderSticky";
@@ -147,7 +147,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
           )}
 
           {activeTab === "documents" && (
-            <DocumentsTab boardItems={data.boardItems} />
+            <DocumentsTab data={data} />
           )}
 
           {activeTab === "relations" && (

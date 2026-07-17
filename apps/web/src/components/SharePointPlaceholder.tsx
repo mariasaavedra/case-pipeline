@@ -1,4 +1,15 @@
-export function SharePointPlaceholder() {
+interface Props {
+  title: string;
+  message: string;
+  /** Optional call-to-action, e.g. the "Connect SharePoint" consent prompt. */
+  action?: { label: string; onClick: () => void; busy?: boolean };
+}
+
+/**
+ * Empty / consent / error state for the SharePoint file browser.
+ * (Was a "Coming Soon" placeholder; now it carries the real states.)
+ */
+export function SharePointPlaceholder({ title, message, action }: Props) {
   return (
     <div className="py-16 text-center animate-in">
       <div className="max-w-md mx-auto space-y-4">
@@ -19,27 +30,35 @@ export function SharePointPlaceholder() {
             className="text-base font-semibold mb-1"
             style={{ color: "var(--color-ink)", fontFamily: "var(--font-display)" }}
           >
-            SharePoint Integration
+            {title}
           </h3>
           <p
             className="text-sm leading-relaxed"
             style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
           >
-            Client e-files and consult files from SharePoint will be available here.
-            Browse folders, preview documents, and access files without leaving the dashboard.
+            {message}
           </p>
         </div>
-        <span
-          className="inline-block text-[11px] font-medium px-3 py-1.5 rounded-full"
-          style={{
-            backgroundColor: "var(--color-surface-warm)",
-            color: "var(--color-ink-faint)",
-            border: "1px solid var(--color-border-light)",
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          Coming Soon
-        </span>
+        {action && (
+          <button
+            onClick={action.onClick}
+            disabled={action.busy}
+            style={{
+              padding: "8px 18px",
+              borderRadius: "8px",
+              border: "none",
+              backgroundColor: "var(--color-amber)",
+              color: "#fff",
+              fontFamily: "var(--font-body)",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: action.busy ? "wait" : "pointer",
+              opacity: action.busy ? 0.7 : 1,
+            }}
+          >
+            {action.busy ? "…" : action.label}
+          </button>
+        )}
       </div>
     </div>
   );
