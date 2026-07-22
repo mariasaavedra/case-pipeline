@@ -26,6 +26,10 @@ export interface ActiveCase {
   /** All paralegals assigned to this case. Empty when unassigned. */
   assignees: string[];
   priority: null;
+  /** North Pole return date, when the case is parked. Null otherwise. */
+  northPoleUntil: string | null;
+  /** True when hidden by default: parked in North Pole with a future return date. */
+  snoozed: boolean;
 }
 
 export interface ActiveCasesAssignee {
@@ -35,7 +39,21 @@ export interface ActiveCasesAssignee {
 
 export interface ActiveCasesResult {
   assignees: ActiveCasesAssignee[];
+  /** Cases hidden because they are parked in North Pole with a future return date. */
+  snoozedCount: number;
 }
+
+export interface ActiveCasesOptions {
+  /** Include cases currently snoozed in North Pole (default false). */
+  includeSnoozed?: boolean;
+}
+
+// The status the team uses to temporarily park a case. A parked case is hidden
+// from the board ONLY while its return date (north_pole_until) is in the
+// future — no return date means it stays visible, so "temporarily hidden" can
+// never become "permanently forgotten". Deadline alerts are computed elsewhere
+// and are never silenced by parking. See docs/features/monday-write-back.md.
+const NORTH_POLE_STATUS = "Send to North Pole";
 
 // =============================================================================
 // Urgency helpers
@@ -98,11 +116,12 @@ interface RawActiveCaseRow {
   targetDate: string | null;
   paralegals: string | null;
   groupTitle: string | null;
+  northPoleUntil: string | null;
   clientLocalId: string | null;
   clientName: string | null;
 }
 
-export function getActiveCases(db: Database): ActiveCasesResult {
+export function getActiveCases(db: Database, options: ActiveCasesOptions = {}): ActiveCasesResult {
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const rows = db.prepare(`
@@ -113,6 +132,7 @@ export function getActiveCases(db: Database): ActiveCasesResult {
       bi.next_date   AS targetDate,
       bi.paralegals,
       bi.group_title AS groupTitle,
+      json_extract(bi.column_values, '$.north_pole_until.date') AS northPoleUntil,
       p.local_id     AS clientLocalId,
       p.name         AS clientName
     FROM board_items bi
@@ -124,8 +144,19 @@ export function getActiveCases(db: Database): ActiveCasesResult {
 
   // Group by assignee
   const assigneeMap = new Map<string, ActiveCase[]>();
+  let snoozedCount = 0;
 
   for (const row of rows) {
+    // North Pole snooze: hidden only while the return date is still ahead.
+    // Past-date or missing-date parks stay visible (fail-safe by design).
+    const snoozed =
+      row.status === NORTH_POLE_STATUS &&
+      row.northPoleUntil !== null &&
+      row.northPoleUntil > todayIso;
+    if (snoozed) {
+      snoozedCount++;
+      if (!options.includeSnoozed) continue;
+    }
     const assignees = parseAssignees(row.paralegals);
     const { urgency, daysUntilTarget } = computeUrgency(row.targetDate, todayIso);
 
@@ -141,6 +172,8 @@ export function getActiveCases(db: Database): ActiveCasesResult {
       isCourtCase: row.groupTitle === "Court Forms",
       assignees,
       priority: null,
+      northPoleUntil: row.status === NORTH_POLE_STATUS ? row.northPoleUntil : null,
+      snoozed,
     };
 
     // Fan the case out into every assigned paralegal's row so each person
@@ -167,5 +200,5 @@ export function getActiveCases(db: Database): ActiveCasesResult {
     })
     .map(([name, cases]) => ({ name, cases }));
 
-  return { assignees };
+  return { assignees, snoozedCount };
 }

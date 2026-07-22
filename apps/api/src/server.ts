@@ -30,7 +30,9 @@ import {
   handleAlerts,
 } from "./handlers/handlers";
 import { getAppointments } from "@case-pipeline/query";
-import { setApiToken, createUpdate } from "@case-pipeline/monday";
+import { setApiToken, createUpdate, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
+import { loadConfig } from "@case-pipeline/config";
+import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
 import { handleAuthMe } from "./routes/auth.js";
 import {
@@ -190,11 +192,12 @@ app.get("/api/auth/me", requireAuth, handleAuthMe);
 // Monday.com OAuth (callback is intentionally unauthenticated — browser redirect)
 registerMondayOAuth(app);
 
-// Admin
-app.get("/api/admin/users", requireAuth, handleAdminListUsers);
-app.patch("/api/admin/users/:id/role", requireAuth, handleAdminUpdateRole);
-app.patch("/api/admin/users/:id", requireAuth, handleAdminUpdateUser);
-app.get("/api/admin/audit", requireAuth, handleAdminAudit);
+// Admin — requireAdmin gates the role once here, so a future admin route can't
+// forget the check.
+app.get("/api/admin/users", requireAuth, requireAdmin, handleAdminListUsers);
+app.patch("/api/admin/users/:id/role", requireAuth, requireAdmin, handleAdminUpdateRole);
+app.patch("/api/admin/users/:id", requireAuth, requireAdmin, handleAdminUpdateUser);
+app.get("/api/admin/audit", requireAuth, requireAdmin, handleAdminAudit);
 
 // Protect all remaining /api/* routes
 app.use("/api/", requireAuth);
@@ -345,6 +348,90 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
 });
 
 // =============================================================================
+// Document generation — render a DOCX for a profile from live Monday.com data
+// =============================================================================
+// Same pipeline as the CLI `render` command: fetch the item from Monday.com,
+// resolve columns per config/boards.yaml, map to template variables, fill the
+// .docx template. Streams the file back as a download; nothing is written to
+// disk on the server.
+
+app.post("/api/profiles/:localId/render", requireAuth, async (req, res) => {
+  if (!MONDAY_API_TOKEN) {
+    res.status(503).json({ error: "Document generation not configured (MONDAY_API_TOKEN missing)" });
+    return;
+  }
+
+  const localId = String(req.params.localId);
+  const templateName = (((req.body ?? {}) as { template?: unknown }).template ?? "client_letter_docx").toString();
+
+  const profile = db
+    .prepare("SELECT name, monday_item_id FROM profiles WHERE local_id = ?")
+    .get(localId) as { name: string; monday_item_id: string | null } | null;
+
+  if (!profile) {
+    res.status(404).json({ error: "Profile not found" });
+    return;
+  }
+  if (!profile.monday_item_id) {
+    res.status(400).json({ error: "Profile has no Monday.com item ID — cannot generate a document" });
+    return;
+  }
+
+  try {
+    const config = await loadConfig({
+      boardsPath: path.join(REPO_ROOT, "config/boards.yaml"),
+      templatesPath: path.join(REPO_ROOT, "config/templates.yaml"),
+    });
+
+    const templateConfig = config.templates[templateName];
+    if (!templateConfig) {
+      const available = Object.keys(config.templates).join(", ");
+      res.status(400).json({ error: `Unknown template "${templateName}". Available: ${available}` });
+      return;
+    }
+    if (!templateConfig.path.endsWith(".docx")) {
+      res.status(400).json({ error: `Template "${templateName}" is not a .docx — only Word templates can be generated from the dashboard` });
+      return;
+    }
+    const boardConfig = config.boards[templateConfig.source_board];
+    if (!boardConfig) {
+      res.status(500).json({ error: `Template source board "${templateConfig.source_board}" missing from boards.yaml` });
+      return;
+    }
+
+    const board = await fetchBoardStructure(boardConfig.id);
+    const resolvedColumns = resolveAllColumns(board.columns, boardConfig, {});
+    const item = await fetchItem(profile.monday_item_id);
+    const vars = mapItemToTemplateVars(item, templateConfig, resolvedColumns);
+
+    const validation = validateTemplateVars(vars, templateConfig);
+    if (!validation.valid) {
+      res.status(422).json({ error: `Missing required data: ${validation.errors.join("; ")}` });
+      return;
+    }
+
+    const templateBuffer = fs.readFileSync(path.join(REPO_ROOT, templateConfig.path));
+    const docx = renderDocxTemplate(templateBuffer, vars);
+
+    auditFromReq(req, "doc.generated", {
+      targetType: "profile",
+      targetId: localId,
+      metadata: { template: templateName, mondayItemId: profile.monday_item_id },
+    });
+
+    const safeName = profile.name.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 40) || "document";
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.status(200);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}-${stamp}.docx"`);
+    res.send(docx);
+  } catch (err) {
+    console.error("[render] doc generation failed:", err);
+    res.status(502).json({ error: "Could not generate the document — Monday.com fetch or template render failed" });
+  }
+});
+
+// =============================================================================
 // Settings — Attorney Boards
 // =============================================================================
 
@@ -433,8 +520,8 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 
 const PORT = Number(process.env.PORT ?? 3000);
-// Bind to loopback by default. The API is unauthenticated and serves client
-// PII, so locally it must not be reachable from other hosts. Inside a container
+// Bind to loopback by default. The API serves client PII, so locally it must
+// not be reachable from other hosts. Inside a container
 // (behind nginx, with no published port) set HOST=0.0.0.0 so the proxy can reach
 // it on the compose network.
 const HOST = process.env.HOST ?? "127.0.0.1";

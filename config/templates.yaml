@@ -16,6 +16,41 @@
 # =============================================================================
 
 templates:
+  # DOCX variant of client_letter — used by the dashboard's "Generate Doc"
+  # button (POST /api/profiles/:id/render). Tags in the .docx use the same
+  # {{variable}} names.
+  client_letter_docx:
+    path: "templates/client-template.docx"
+    description: "Client information confirmation letter (Word document)"
+    source_board: profiles
+
+    variables:
+      contact_name:
+        source: item.name
+      email:
+        source: column
+        column: email
+      phone:
+        source: column
+        column: phone
+      priority:
+        source: column
+        column: priority
+      next_interaction:
+        source: column
+        column: next_interaction
+      notes:
+        source: column
+        column: notes
+
+    validation:
+      required:
+        - contact_name
+        - email
+      warn_if_empty:
+        - phone
+        - notes
+
   client_letter:
     path: "templates/client.txt"
     description: "Client information confirmation letter"

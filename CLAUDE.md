@@ -20,7 +20,7 @@ npm run test           # Run all workspace tests
 npx vitest run apps/api/src/some.test.ts
 
 # Linting
-npm run lint           # Lint all workspaces
+npm run lint           # NO-OP today: no workspace defines a lint script and there is no ESLint config yet
 
 # Other
 npm run preflight      # Pre-flight environment checks
@@ -124,12 +124,15 @@ Run with `npm run dev:cli -- <command> [options]`:
 
 ## API Routes (`apps/api`)
 
-All routes are read-only GET endpoints served from `http://localhost:3000`:
+Served from `http://localhost:3000`. Every `/api/*` route requires an Azure AD bearer token (`requireAuth`); admin routes additionally pass `requireAdmin`. `/health` is the only unauthenticated route.
+
+Data reads:
 
 | Route | Description |
 |---|---|
 | `GET /api/dashboard` | 6 KPI cards (open forms, pending contracts, paid fee Ks, deadlines, hearings, alerts) |
 | `GET /api/appointments` | Daily appointments with enriched profiles, snapshots, updates, case summaries |
+| `GET /api/active-cases` | Swim-lane board data (paralegal rows × urgency). `?includeSnoozed=1` reveals North-Pole-parked cases |
 | `GET /api/alerts` | Grouped alerts by severity (critical / warning / info) |
 | `GET /api/search` | Cross-type search: profiles, contracts, court cases, etc. |
 | `GET /api/filter-options` | Distinct values for filter dropdowns (priorities, statuses, attorneys, board types) |
@@ -141,6 +144,20 @@ All routes are read-only GET endpoints served from `http://localhost:3000`:
 | `GET /api/clients/:id/updates` | Timeline updates for one client |
 | `GET /api/clients/:id/relationships` | Item relationships for one client |
 | `GET /api/board-items/:id` | Single board item detail |
+
+Writes and user/account routes:
+
+| Route | Description |
+|---|---|
+| `POST /api/profiles/:id/updates` | Post a note to Monday.com (falls back to the write queue on outage) |
+| `POST /api/profiles/:id/render` | Generate a DOCX for a profile from live Monday.com data (default template `client_letter_docx`) |
+| `GET /api/auth/me` | Validate token, upsert user (first user becomes admin) |
+| `GET/PUT /api/preferences`, `PATCH /api/me/profile` | Per-user preferences and profile |
+| `GET/POST/DELETE /api/watchlist`, `/api/saved-views`, `GET /api/me/recently-viewed` | Personalization (keyed by stable Monday item ids) |
+| `GET /api/my-cases`, `GET /api/paralegals` | Paralegal-linked case list and identity options |
+| `GET/POST/DELETE /api/settings/attorney-boards` | Attorney appointment board config (mutations admin-only) |
+| `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only) |
+| `/api/auth/monday`, `/callback`, `/status` | Personal Monday.com OAuth connection (`routes/monday-oauth.ts`) |
 
 ## Key Directories
 

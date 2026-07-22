@@ -142,8 +142,40 @@ export async function fetchAppointments(
   return apiFetch<AppointmentsResult>(`/api/appointments${qs ? `?${qs}` : ""}`);
 }
 
-export async function fetchActiveCases(): Promise<ActiveCasesResult> {
-  return apiFetch<ActiveCasesResult>("/api/active-cases");
+/**
+ * Generate a DOCX for a profile (server renders it from live Monday.com data).
+ * Resolves to the file blob + suggested filename; the caller triggers the
+ * download. Throws with the server's error message on failure (e.g. 503 when
+ * MONDAY_API_TOKEN isn't configured).
+ */
+export async function renderProfileDoc(
+  localId: string,
+  template?: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const headers = { ...(await authHeaders()), "Content-Type": "application/json" };
+  const res = await fetch(`/api/profiles/${localId}/render`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(template ? { template } : {}),
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      // non-JSON error body — keep the HTTP status message
+    }
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("content-disposition") ?? "";
+  const match = /filename="([^"]+)"/.exec(disposition);
+  return { blob, filename: match?.[1] ?? "document.docx" };
+}
+
+export async function fetchActiveCases(includeSnoozed = false): Promise<ActiveCasesResult> {
+  return apiFetch<ActiveCasesResult>(`/api/active-cases${includeSnoozed ? "?includeSnoozed=1" : ""}`);
 }
 
 export async function fetchAlerts(attorney?: string): Promise<AlertsResult> {

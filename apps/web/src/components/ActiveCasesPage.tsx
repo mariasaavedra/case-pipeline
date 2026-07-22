@@ -90,6 +90,15 @@ function CaseCard({ c }: { c: ActiveCase }) {
               COURT
             </span>
           )}
+          {c.snoozed && (
+            <span
+              className="text-xs font-semibold px-1.5 py-0.5 rounded"
+              style={{ background: "#e0f2fe", color: "#0369a1" }}
+              title={`Parked in North Pole — returns ${c.northPoleUntil}`}
+            >
+              ❄ {c.northPoleUntil}
+            </span>
+          )}
         </div>
       </div>
 
@@ -164,15 +173,16 @@ export function ActiveCasesPage() {
   const [data, setData] = useState<ActiveCasesResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showSnoozed, setShowSnoozed] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetchActiveCases()
+    fetchActiveCases(showSnoozed)
       .then(setData)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [showSnoozed]);
 
   // Count each case once — a shared case is fanned out across multiple rows.
   const totalCases = data
@@ -193,6 +203,20 @@ export function ActiveCasesPage() {
           >
             {totalCases} case{totalCases !== 1 ? "s" : ""}
           </span>
+        )}
+        {data && (data.snoozedCount > 0 || showSnoozed) && (
+          <button
+            onClick={() => setShowSnoozed((v) => !v)}
+            className="text-sm font-medium px-2.5 py-0.5 rounded-full border transition-colors"
+            style={
+              showSnoozed
+                ? { background: "#e0f2fe", color: "#0369a1", borderColor: "#7dd3fc" }
+                : { background: "transparent", color: "#0369a1", borderColor: "#bae6fd" }
+            }
+            title="Cases parked in North Pole with a future return date are hidden from the board. They come back on their own when the date passes."
+          >
+            ❄ {showSnoozed ? "Hide" : "Show"} {data.snoozedCount} in North Pole
+          </button>
         )}
       </div>
 

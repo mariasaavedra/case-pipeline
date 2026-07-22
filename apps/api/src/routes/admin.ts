@@ -3,18 +3,10 @@ import { usersDb, type UserRow } from "../db/users-db.js";
 import { toPublicUser, type AuditLogRow } from "../db/users-types.js";
 import { auditFromReq } from "../audit/log.js";
 
-function callerRole(oid: string): string {
-  const row = usersDb
-    .prepare("SELECT role FROM users WHERE azure_oid = ?")
-    .get(oid) as { role: string } | undefined;
-  return row?.role ?? "user";
-}
+// Role gating happens in the requireAdmin middleware (server.ts) — handlers
+// here can assume an admin caller.
 
-export function handleAdminListUsers(req: Request, res: Response): void {
-  if (callerRole(req.user!.oid) !== "admin") {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
+export function handleAdminListUsers(_req: Request, res: Response): void {
   const users = usersDb
     .prepare("SELECT * FROM users ORDER BY created_at ASC")
     .all() as UserRow[];
@@ -23,11 +15,6 @@ export function handleAdminListUsers(req: Request, res: Response): void {
 }
 
 export function handleAdminUpdateRole(req: Request, res: Response): void {
-  if (callerRole(req.user!.oid) !== "admin") {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-
   const { id } = req.params;
   const { role } = req.body as { role?: string };
 
@@ -67,11 +54,6 @@ export function handleAdminUpdateRole(req: Request, res: Response): void {
 // PATCH /api/admin/users/:id — profile fields an admin may set
 // =============================================================================
 export function handleAdminUpdateUser(req: Request, res: Response): void {
-  if (callerRole(req.user!.oid) !== "admin") {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-
   const { id } = req.params;
   const body = (req.body ?? {}) as Record<string, unknown>;
   const target = usersDb.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
@@ -139,10 +121,6 @@ export function handleAdminUpdateUser(req: Request, res: Response): void {
 // GET /api/admin/audit — paginated audit trail
 // =============================================================================
 export function handleAdminAudit(req: Request, res: Response): void {
-  if (callerRole(req.user!.oid) !== "admin") {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
   const limit = Math.min(Math.max(Number(req.query.limit ?? 100) || 100, 1), 500);
   const offset = Math.max(Number(req.query.offset ?? 0) || 0, 0);
   const rows = usersDb
