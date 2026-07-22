@@ -78,11 +78,14 @@ That covers every path (Monday web, mobile, our app, automations) with no code. 
 
 The "temporarily hidden → permanently forgotten" failure mode is not hypothetical here; it is already happening. Any design that hides by status alone makes it worse.
 
-**Read-side rule (independent of write-back — implement first):**
-- Hide from working lists **only while `north_pole_until` is in the future**. Past the date, the case resurfaces on its own — self-healing, nobody has to remember to un-snooze.
+**Read-side rule — ✅ IMPLEMENTED 2026-07-22** (`libs/query/src/active-cases.ts`, toggle in `ActiveCasesPage.tsx`, `GET /api/active-cases?includeSnoozed=1`):
+- Hide from the Active Cases board **only while `north_pole_until` is in the future**. Past the date, the case resurfaces on its own — self-healing, nobody has to remember to un-snooze.
 - **No return date → do not hide.** Fail-safe; makes "hidden forever" structurally impossible. *(Once the Monday automation exists, this case stops occurring.)*
-- **An overdue deadline still alerts**, North Pole or not. Snoozing a working list must never silence a real legal deadline.
-- A toggle/filter reveals the hidden North Pole cases on demand.
+- **An overdue deadline still alerts**, North Pole or not — the alerts query is untouched by the snooze.
+- A "❄ Show N in North Pole" toggle on the board reveals the hidden cases; revealed cards carry a ❄ badge with the return date.
+- The seeder now generates `north_pole_until` for parked cases (mix of future / expired / missing) so the rule is visible in seed data.
+
+*Still pending from this section: the Monday.com automation setting a default return date (no code — configure in Monday), and the dashboard snooze dialog (needs status write-back).*
 
 ### 2. (add future write-back-dependent requests here)
 

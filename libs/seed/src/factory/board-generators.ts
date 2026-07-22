@@ -198,6 +198,18 @@ export function generateOpenFormData(
     targetDateScenario === "later"    ? generateDate(8, 90)   :
     null;
 
+  // North Pole return date — mirrors production: most parked cases have a
+  // future return date, some are expired, some missing (the fail-safe path
+  // where the case must stay visible).
+  const northPoleUntil: string | null =
+    status === "Send to North Pole"
+      ? faker.helpers.weightedArrayElement([
+          { value: generateDate(1, 21),   weight: 60 },
+          { value: generateDate(-30, -1), weight: 25 },
+          { value: null,                  weight: 15 },
+        ])
+      : null;
+
   // ~35% of items land in terminal groups (Filed, Interview, etc.) for realism
   const activeGroup = group ?? "Open Forms";
   const resolvedGroup = faker.number.float({ min: 0, max: 1 }) < 0.35
@@ -210,6 +222,7 @@ export function generateOpenFormData(
     overrides: {
       status: { label: status },
       ...(targetDate ? { target_date: { date: targetDate } } : {}),
+      ...(northPoleUntil ? { north_pole_until: { date: northPoleUntil } } : {}),
       assignment_date: { date: generateDate(-30, -1) },
       hire_date: { date: generateDate(-90, -1) },
       ...(paralegal ? { paralegals: { label: paralegal } } : {}),

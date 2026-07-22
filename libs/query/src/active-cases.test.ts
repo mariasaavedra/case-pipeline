@@ -38,9 +38,13 @@ interface BoardItemOpts {
   nextDate?: string;
   paralegals?: string;
   profileLocalId?: string;
+  northPoleUntil?: string;
 }
 
 function insertBoardItem(db: DatabaseInstance, batchId: number, opts: BoardItemOpts) {
+  const columnValues = opts.northPoleUntil
+    ? JSON.stringify({ north_pole_until: { date: opts.northPoleUntil } })
+    : "{}";
   db.prepare(`
     INSERT INTO board_items
       (batch_id, local_id, board_key, name, group_title, status, next_date, paralegals, profile_local_id, column_values)
@@ -55,7 +59,7 @@ function insertBoardItem(db: DatabaseInstance, batchId: number, opts: BoardItemO
     opts.nextDate ?? null,
     opts.paralegals ?? null,
     opts.profileLocalId ?? null,
-    "{}",
+    columnValues,
   );
 }
 
@@ -363,6 +367,102 @@ describe("getActiveCases", () => {
     const urgencies = result.assignees[0]!.cases.map(c => c.urgency);
     expect(urgencies[0]).toBe("overdue");
     expect(urgencies[urgencies.length - 1]).toBe("none");
+    db.close();
+  });
+});
+
+describe("North Pole snooze rule", () => {
+  const p = "Laura Torres";
+
+  test("parked case with a future return date is hidden by default and counted", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+
+    insertBoardItem(db, batchId, {
+      localId: "parked", boardKey: "_cd_open_forms", name: "Parked Case",
+      groupTitle: "Open Forms", paralegals: p,
+      status: "Send to North Pole", northPoleUntil: daysFromToday(7),
+    });
+    insertBoardItem(db, batchId, {
+      localId: "active", boardKey: "_cd_open_forms", name: "Active Case",
+      groupTitle: "Open Forms", paralegals: p,
+    });
+
+    const result = getActiveCases(db);
+    expect(result.snoozedCount).toBe(1);
+    expect(result.assignees[0]!.cases.map(c => c.localId)).toEqual(["active"]);
+    db.close();
+  });
+
+  test("includeSnoozed reveals the parked case, flagged with its return date", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+    const until = daysFromToday(7);
+
+    insertBoardItem(db, batchId, {
+      localId: "parked", boardKey: "_cd_open_forms", name: "Parked Case",
+      groupTitle: "Open Forms", paralegals: p,
+      status: "Send to North Pole", northPoleUntil: until,
+    });
+
+    const result = getActiveCases(db, { includeSnoozed: true });
+    expect(result.snoozedCount).toBe(1);
+    const c = result.assignees[0]!.cases[0]!;
+    expect(c.localId).toBe("parked");
+    expect(c.snoozed).toBe(true);
+    expect(c.northPoleUntil).toBe(until);
+    db.close();
+  });
+
+  test("expired return date resurfaces the case on its own", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+
+    insertBoardItem(db, batchId, {
+      localId: "expired", boardKey: "_cd_open_forms", name: "Overdue Return",
+      groupTitle: "Open Forms", paralegals: p,
+      status: "Send to North Pole", northPoleUntil: daysFromToday(-3),
+    });
+
+    const result = getActiveCases(db);
+    expect(result.snoozedCount).toBe(0);
+    const c = result.assignees[0]!.cases[0]!;
+    expect(c.localId).toBe("expired");
+    expect(c.snoozed).toBe(false);
+    db.close();
+  });
+
+  test("parked case with NO return date is never hidden (fail-safe)", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+
+    insertBoardItem(db, batchId, {
+      localId: "nodate", boardKey: "_cd_open_forms", name: "No Return Date",
+      groupTitle: "Open Forms", paralegals: p,
+      status: "Send to North Pole",
+    });
+
+    const result = getActiveCases(db);
+    expect(result.snoozedCount).toBe(0);
+    expect(result.assignees[0]!.cases[0]!.localId).toBe("nodate");
+    db.close();
+  });
+
+  test("a future north_pole_until without the North Pole status does not hide", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+
+    insertBoardItem(db, batchId, {
+      localId: "stale-date", boardKey: "_cd_open_forms", name: "Left North Pole",
+      groupTitle: "Open Forms", paralegals: p,
+      status: "In Progress", northPoleUntil: daysFromToday(7),
+    });
+
+    const result = getActiveCases(db);
+    expect(result.snoozedCount).toBe(0);
+    const c = result.assignees[0]!.cases[0]!;
+    expect(c.snoozed).toBe(false);
+    expect(c.northPoleUntil).toBeNull();
     db.close();
   });
 });

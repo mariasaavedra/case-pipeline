@@ -16,7 +16,7 @@ export type { AppointmentEntry, AppointmentsResult, AppointmentSnapshot } from "
 export { searchByType } from "./search";
 export { getAlerts, getAlertsTotalCount } from "./alerts";
 export { getActiveCases } from "./active-cases";
-export type { ActiveCase, ActiveCasesAssignee, ActiveCasesResult, Urgency } from "./active-cases";
+export type { ActiveCase, ActiveCasesAssignee, ActiveCasesResult, ActiveCasesOptions, Urgency } from "./active-cases";
 export type {
   ProfileSummary,
   ContractSummary,

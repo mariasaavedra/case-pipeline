@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ClientCaseSummary } from "../api";
+import { renderProfileDoc } from "../api";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 
 interface Props {
@@ -38,6 +39,29 @@ function generateSummaryText(data: ClientCaseSummary): string {
 
 export function ActionButtons({ data, onViewRelations }: Props) {
   const [copied, setCopied] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
+
+  const handleGenerateDoc = async () => {
+    if (generating) return;
+    setGenerating(true);
+    setDocError(null);
+    try {
+      const { blob, filename } = await renderProfileDoc(data.profile.localId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setDocError(e instanceof Error ? e.message : "Document generation failed");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const handleCopy = async () => {
     const text = generateSummaryText(data);
@@ -73,13 +97,27 @@ export function ActionButtons({ data, onViewRelations }: Props) {
         <span>{copied ? "Copied" : "Copy"}</span>
       </button>
 
-      <button className="action-btn" disabled title="Coming soon">
+      <button
+        onClick={handleGenerateDoc}
+        className="action-btn"
+        disabled={generating || !data.profile.mondayItemId}
+        title={
+          !data.profile.mondayItemId
+            ? "This profile has no Monday.com item — cannot generate a document"
+            : docError ?? "Generate the client letter as a Word document"
+        }
+      >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
           <polyline points="14 2 14 8 20 8" />
         </svg>
-        <span>Generate Doc</span>
+        <span>{generating ? "Generating…" : "Generate Doc"}</span>
       </button>
+      {docError && (
+        <span className="text-xs" style={{ color: "#dc2626" }} role="alert">
+          {docError}
+        </span>
+      )}
 
       <button className="action-btn" disabled title="Coming soon">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

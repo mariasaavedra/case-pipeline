@@ -202,8 +202,10 @@ export function handleAlerts(req: Request, db: Database): Response {
   return json(result);
 }
 
-export function handleActiveCases(_req: Request, db: Database): Response {
-  const result = getActiveCases(db);
+export function handleActiveCases(req: Request, db: Database): Response {
+  const url = new URL(req.url);
+  const includeSnoozed = url.searchParams.get("includeSnoozed") === "1";
+  const result = getActiveCases(db, { includeSnoozed });
   return json(result);
 }
 
