@@ -21,6 +21,7 @@ import type {
 import { APPOINTMENT_BOARD_KEYS, CLOSED_CONTRACT_STATUSES } from "./types";
 import { batchGetClientCaseSummaries } from "./case-summary";
 import { batchGetClientUpdates } from "./updates";
+import { readSharePointLinks } from "./client";
 
 // =============================================================================
 // Types
@@ -114,7 +115,8 @@ export function getAppointments(
       p.address AS profileAddress,
       p.date_of_birth AS profileDateOfBirth,
       p.place_of_birth AS profilePlaceOfBirth,
-      p.a_number AS profileANumber
+      p.a_number AS profileANumber,
+      p.raw_column_values AS profileRawColumnValues
     FROM board_items bi
     LEFT JOIN profiles p ON p.local_id = bi.profile_local_id
     WHERE bi.board_key IN (${boardKeyPlaceholders})
@@ -295,6 +297,9 @@ function buildProfileSummary(row: RawAppointmentRow): ProfileSummary {
     dateOfBirth: row.profileDateOfBirth,
     placeOfBirth: row.profilePlaceOfBirth,
     aNumber: row.profileANumber,
+    // Populate the SharePoint links so the appointment's Documents panel can
+    // offer the profile's own e-file, not just the ones mirrored on board items.
+    ...readSharePointLinks(row.profileRawColumnValues),
   };
 }
 
@@ -322,6 +327,7 @@ interface RawAppointmentRow {
   profileDateOfBirth: string | null;
   profilePlaceOfBirth: string | null;
   profileANumber: string | null;
+  profileRawColumnValues: string | null;
 }
 
 function safeParseJson(value: string | null | undefined): Record<string, unknown> {

@@ -109,7 +109,7 @@ function getUrlParam(key: string): string | null {
 
 function syncUrlParams(params: Record<string, string>) {
   const url = new URL(window.location.href);
-  const defaults: Record<string, string> = { attorney: "all", range: "day" };
+  const defaults: Record<string, string> = { attorney: "all", range: "day", focus: "all" };
   for (const [k, v] of Object.entries(params)) {
     if (v && v !== defaults[k]) {
       url.searchParams.set(k, v);
@@ -783,6 +783,11 @@ export function AppointmentsPage() {
   const [detail, setDetail] = useState<DetailLevel>(() =>
     (loadPreference("appointments-detail", "snapshot") as DetailLevel),
   );
+  // Which attorney board is in focus. "all" = overview (big picture, current
+  // multi-column layout); a boardKey = dedicated full-width view of that board.
+  const [focusBoard, setFocusBoard] = useState<string>(() =>
+    getUrlParam("focus") ?? loadPreference("appointments-focus", "all"),
+  );
 
   const [data, setData] = useState<AppointmentsResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -828,11 +833,12 @@ export function AppointmentsPage() {
 
   // Sync state → URL + localStorage
   useEffect(() => {
-    syncUrlParams({ attorney, range });
+    syncUrlParams({ attorney, range, focus: focusBoard });
     savePreference("appointments-attorney", attorney);
     savePreference("appointments-detail", detail);
     savePreference("appointments-view", viewMode);
-  }, [attorney, range, detail, viewMode]);
+    savePreference("appointments-focus", focusBoard);
+  }, [attorney, range, detail, viewMode, focusBoard]);
 
   const attorneys = data?.attorneys ?? [];
 
@@ -914,6 +920,50 @@ export function AppointmentsPage() {
             List
           </button>
         </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 20, backgroundColor: "var(--color-border-light)" }} />
+
+        {/* Attorney focus — Overview (all) or one attorney's board full-width */}
+        {data && data.boardKeys.length > 0 && (
+          <div className="flex items-center gap-1 flex-wrap">
+            <button
+              onClick={() => setFocusBoard("all")}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              style={{
+                backgroundColor: focusBoard === "all" ? "var(--color-amber)" : "transparent",
+                color: focusBoard === "all" ? "white" : "var(--color-ink-muted)",
+                border: focusBoard === "all" ? "none" : "1px solid var(--color-border-light)",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+              }}
+              title="Overview — all attorneys"
+            >
+              Overview
+            </button>
+            {data.boardKeys.map((bk, i) => {
+              const meta = getAttorneyMeta(bk, i);
+              const selected = focusBoard === bk;
+              return (
+                <button
+                  key={bk}
+                  onClick={() => setFocusBoard(bk)}
+                  className="w-8 h-8 rounded-lg text-xs font-bold transition-colors flex items-center justify-center"
+                  style={{
+                    backgroundColor: selected ? meta.color : "transparent",
+                    color: selected ? "white" : "var(--color-ink-muted)",
+                    border: selected ? "none" : "1px solid var(--color-border-light)",
+                    cursor: "pointer",
+                    fontFamily: "var(--font-body)",
+                  }}
+                  title={(BOARD_DISPLAY_NAMES[bk] ?? bk).replace("Appointments (", "").replace(")", "")}
+                >
+                  {meta.initial}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Divider */}
         <div style={{ width: 1, height: 20, backgroundColor: "var(--color-border-light)" }} />
@@ -1076,8 +1126,20 @@ export function AppointmentsPage() {
         </div>
       )}
 
+      {/* ── Dedicated Mode — one attorney's board, full width ──────────────── */}
+      {!loading && data && focusBoard !== "all" && (
+        <div style={{ maxWidth: 720, margin: "0 auto" }}>
+          <AttorneyColumn
+            boardKey={focusBoard}
+            index={Math.max(0, data.boardKeys.indexOf(focusBoard))}
+            entries={entriesByBoard[focusBoard] ?? []}
+            onFocus={setFocusedEntry}
+          />
+        </div>
+      )}
+
       {/* ── Board Mode ─────────────────────────────────────────────────────── */}
-      {!loading && data && viewMode === "board" && (
+      {!loading && data && focusBoard === "all" && viewMode === "board" && (
         <div style={{ overflowX: "auto", paddingBottom: 8 }}>
           <div
             style={{
@@ -1102,7 +1164,7 @@ export function AppointmentsPage() {
       )}
 
       {/* ── List Mode ──────────────────────────────────────────────────────── */}
-      {!loading && data && viewMode === "list" && totalCount > 0 && (
+      {!loading && data && focusBoard === "all" && viewMode === "list" && totalCount > 0 && (
         <div className="space-y-6">
           {dateKeys.map((dateKey) => (
             <div key={dateKey}>
