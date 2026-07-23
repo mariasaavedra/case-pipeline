@@ -641,55 +641,91 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
-function runSync(): Promise<void> {
+/**
+ * Guards against overlapping runs. The full pass takes hours, so without this a
+ * frequent incremental would pile several syncs onto the same database. The
+ * advisory lock inside the sync only warns; this is what actually prevents it.
+ */
+let syncInFlight: string | null = null;
+
+function runSync(label: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    console.log("[sync] Starting nightly sync from Monday.com…");
-    const child = spawn("npm", ["run", "sync:live"], {
+    if (syncInFlight) {
+      console.log(`[sync] ${label} skipped — a ${syncInFlight} sync is still running.`);
+      resolve();
+      return;
+    }
+    syncInFlight = label;
+    console.log(`[sync] Starting ${label} sync from Monday.com…`);
+    // `npm run sync:live -- <args>` — the `--` passes flags through to the script.
+    const child = spawn("npm", ["run", "sync:live", "--", ...args], {
       cwd: REPO_ROOT,
       stdio: "inherit",
       env: process.env,
       shell: true,
     });
     child.on("close", (code) => {
+      syncInFlight = null;
       if (code === 0) {
-        console.log("[sync] Nightly sync complete.");
+        console.log(`[sync] ${label} sync complete.`);
         resolve();
       } else {
-        console.error(`[sync] Nightly sync failed (exit code ${code}).`);
+        console.error(`[sync] ${label} sync failed (exit code ${code}).`);
         reject(new Error(`sync exited with code ${code}`));
       }
     });
-    child.on("error", reject);
+    child.on("error", (err) => {
+      syncInFlight = null;
+      reject(err);
+    });
   });
 }
 
 /**
- * DISABLED BY DEFAULT — opt in with NIGHTLY_SYNC=on.
+ * Two schedules, because the sync has two very different costs.
  *
- * `npm run sync:live` opens with resetDatabase() (a full DROP) BEFORE it fetches
- * anything, so a run that dies partway leaves an empty database rather than the
- * previous night's data. That is not a theoretical risk: the 2026-07-16 run died
- * mid-pass and left client_updates empty for a week, and the 2026-07-23 run lost
- * the whole _cd_open_forms board to a network timeout — the board behind the
- * Open Forms card, Active Cases and My Cases.
+ *   INCREMENTAL (default 07:00–19:00, every 2h) — `--skip-timeline`.
+ *     Fetches only board items whose Monday updated_at moved since the last run.
+ *     Minutes, not hours (measured: 568s → 30s on a 753-item board). Keeps
+ *     statuses, dates and assignments fresh through the working day.
  *
- * Leaving a destructive-first, 3-hour job on an unattended midnight timer means
- * betting the entire dataset on a clean network run every night. Off until the
- * sync is incremental (upsert by monday_item_id) instead of drop-and-rebuild.
+ *   FULL (default 01:00 daily) — `--full`.
+ *     Walks every board and every timeline. This is the only pass that can
+ *     detect deletions (an incremental pass never sees unchanged rows, so
+ *     "missing" means nothing) and the only one that pulls Emails & Activities,
+ *     because Monday does not move an item's updated_at when only its E&A
+ *     timeline changes.
+ *
+ * Safe to leave unattended as of schema v15/v16: the sync upserts instead of
+ * dropping, so an interrupted run leaves the previous data intact, a board that
+ * fails keeps its rows, and a pre-sync snapshot is taken (and required) first.
+ * That was NOT true before 2026-07-23 — see docs/nightly/2026-07-23.md.
+ *
+ * Off unless NIGHTLY_SYNC=on. Both cron expressions can be overridden.
  */
 function scheduleNightlySync() {
   if (process.env.NIGHTLY_SYNC !== "on") {
     console.log(
-      "[sync] Nightly sync DISABLED (set NIGHTLY_SYNC=on to enable). " +
-        "Full sync is destructive-first — run it manually: npm run sync:live",
+      "[sync] Scheduled syncs DISABLED (set NIGHTLY_SYNC=on to enable). " +
+        "Run manually: npm run sync:live [--full]",
     );
     return;
   }
-  // Runs every day at midnight (server local time).
-  cron.schedule("0 0 * * *", () => {
-    runSync().catch((err) => console.error("[sync] Error:", err));
+
+  const fullCron = process.env.SYNC_FULL_CRON ?? "0 1 * * *";
+  const incrementalCron = process.env.SYNC_INCREMENTAL_CRON ?? "0 7-19/2 * * *";
+
+  cron.schedule(fullCron, () => {
+    runSync("full", ["--full"]).catch((err) => console.error("[sync] Error:", err));
   });
-  console.log("[sync] Nightly sync scheduled — runs every day at midnight.");
+  cron.schedule(incrementalCron, () => {
+    runSync("incremental", ["--skip-timeline"]).catch((err) => console.error("[sync] Error:", err));
+  });
+
+  console.log(
+    `[sync] Scheduled: full "${fullCron}" (deletions + emails/activities), ` +
+      `incremental "${incrementalCron}" (columns only). Overlapping runs are skipped.`,
+  );
 }
 
 function scheduleWalCheckpoint() {
@@ -748,9 +784,13 @@ async function runBackup(): Promise<void> {
 }
 
 function scheduleBackups() {
-  // Daily online backup at 02:30 (after the midnight sync settles).
-  cron.schedule("30 2 * * *", () => {
+  // Daily online backup at 05:30 — after the 01:00 full sync has settled. It
+  // used to be 02:30, which now lands mid-sync: the online backup API would
+  // still produce a consistent file, but of a half-synced database, which is a
+  // poor thing to keep as the day's restore point.
+  const backupCron = process.env.BACKUP_CRON ?? "30 5 * * *";
+  cron.schedule(backupCron, () => {
     runBackup().catch((err) => console.error("[backup] error:", err));
   });
-  console.log("[backup] Daily backup scheduled — runs at 02:30.");
+  console.log(`[backup] Daily backup scheduled — cron "${backupCron}".`);
 }
