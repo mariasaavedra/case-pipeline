@@ -27,6 +27,13 @@ export interface MondayColumnValue {
 export interface MondayItem {
   id: string;
   name: string;
+  /**
+   * Monday's own last-modified stamp (ISO). Tracks column edits, NOT Emails &
+   * Activities: a new email logged against an item leaves this untouched, which
+   * is why E&A needs its own sweep rather than an updated_at watermark. See
+   * scripts/phase0-updated-at.ts for the evidence.
+   */
+  updated_at?: string;
   board?: {
     id: string;
     name: string;

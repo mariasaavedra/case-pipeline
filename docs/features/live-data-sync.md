@@ -20,8 +20,8 @@ all resolve). Two bugs found and fixed during this run:
 
 Sync hardening also added: per-board error isolation (one bad board no longer
 aborts the run), orphan-contract handling (`profile_local_id` NOT NULL → `""`),
-and non-destructive partial runs (`--boards` preserves other boards; only a full
-run does a full replace).
+and non-destructive runs: every run UPSERTs on `monday_item_id` (schema v15+),
+so nothing is dropped up front and `local_id` survives across syncs.
 
 **Domain notes:** `_fa_jail_intakes` (0% profile link) and `calendaring` (82%)
 link to cases/are standalone rather than to profiles directly — expected, not a bug.
@@ -102,6 +102,14 @@ All of these are already in the codebase and working:
 
 ## Open Questions
 
-- Should sync be incremental (only changed items since last run) or full replace? Incremental is faster but more complex. Start with full replace, optimize later.
+- ~~Should sync be incremental or full replace?~~ **Resolved (2026-07-23).** The
+  sync is now non-destructive: it UPSERTs on the stable `monday_item_id` and
+  removes rows Monday stopped returning in a reconciliation pass at the end —
+  and only for boards that fetched cleanly, so a flaky board keeps its data
+  instead of being wiped. Still walks every board each run; fetching only what
+  changed (`updated_at` watermark, verified supported) is the next step. That
+  watermark can never cover Emails & Activities: Monday does not bump an item's
+  `updated_at` when only its E&A timeline changes (see
+  `scripts/phase0-updated-at.ts`), so E&A needs its own rolling sweep.
 - How often should sync run? Manual trigger via CLI for now; scheduled sync (cron) is a later phase.
 - What happens to `live.db` schema when `seed.db` schema gets a new migration? Sync script should run migrations on `live.db` before syncing data.

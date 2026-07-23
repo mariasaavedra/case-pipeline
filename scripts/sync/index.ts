@@ -5,9 +5,18 @@
 // local SQLite database (data/live.db) using the same schema as the seeder, so
 // the API can serve real data when run with DB_SOURCE=live.
 //
-// Strategy: full replace. Each run rebuilds live.db from scratch (resetDatabase
-// + one fresh batch). Incremental sync is a later optimization
-// (see docs/features/live-data-sync.md "Open Questions").
+// Strategy: non-destructive UPSERT (schema v15+). Rows are matched on the stable
+// monday_item_id and updated in place, so local_id survives every run — which is
+// what keeps watchlists, saved views and /clients/:id links resolving. Nothing is
+// dropped up front, so an interrupted run leaves the previous data intact instead
+// of an empty database. Rows Monday stopped returning are removed by the
+// reconciliation pass at the end, and ONLY for boards that fetched cleanly.
+//
+// Still a full walk of every board each run; fetching only what changed (via the
+// updated_at watermark) is the next optimization. Note that watermark can never
+// cover Emails & Activities: Monday does not bump an item's updated_at when only
+// its E&A timeline changes (see scripts/phase0-updated-at.ts), so E&A needs its
+// own sweep.
 //
 // Usage:
 //   MONDAY_API_TOKEN=... npm run sync:live
@@ -32,7 +41,7 @@ import {
 } from "@case-pipeline/monday";
 import type { MondayItem, MondayTimelineItem } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
-import { initializeSchema, resetDatabase } from "@case-pipeline/seed/db/schema";
+import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { openDatabase } from "@case-pipeline/seed/db/connection";
 import { backupDatabase } from "../backup-db.js";
 import { acquireSyncLock, releaseSyncLock, recordSyncResult } from "@case-pipeline/seed/db/sync-lock";
@@ -133,38 +142,42 @@ async function main() {
   const dbPath = path.join(dataDir, "live.db");
 
   const db = openDatabase(dbPath);
-  if (onlyBoards) {
-    // Partial (--boards) run: keep the database, replace only targeted boards.
-    initializeSchema(db);
-  } else {
-    // Full run: full replace from a clean, current-schema database.
-    //
-    // SAFETY NET: resetDatabase() DROPs every client table before a single row
-    // is fetched, so a run that dies partway would otherwise leave an empty
-    // database with no way back. Snapshot the current live.db first. If it holds
-    // real data and the snapshot fails, ABORT before the reset — a wipe with no
-    // fallback is exactly the failure this guards against. Nothing to lose (a
-    // fresh/empty DB) skips the backup and proceeds.
-    if (liveDbHasData(db)) {
-      try {
-        const dest = await backupDatabase({
-          existing: db,
-          label: "live-presync",
-          keep: PRESYNC_BACKUPS_KEPT,
-          dataDir,
-        });
-        console.log(`[sync] Pre-sync safety backup written: ${dest}`);
-      } catch (err) {
-        // The sync lock is acquired below, after this block, so nothing to
-        // release here — just close the handle and bail before the DROP.
-        console.error("[sync] Pre-sync backup FAILED — aborting before reset to avoid data loss.");
-        console.error(err);
-        db.close();
-        process.exit(1);
-      }
+
+  // The sync is UPSERT-based and non-destructive (schema v15+): rows are matched
+  // on the stable monday_item_id and updated in place, so local_id survives every
+  // run and an interrupted sync leaves the previous data intact rather than an
+  // empty database. Rows Monday no longer returns are removed by the
+  // reconciliation pass at the end — and only for boards that fetched cleanly.
+  //
+  // The pre-sync snapshot stays regardless: it is cheap next to a 3-hour run, and
+  // it is the fallback if a bad run corrupts data rather than merely failing. If
+  // there is real data and the snapshot fails, abort rather than write blind.
+  if (liveDbHasData(db)) {
+    try {
+      const dest = await backupDatabase({
+        existing: db,
+        label: "live-presync",
+        keep: PRESYNC_BACKUPS_KEPT,
+        dataDir,
+      });
+      console.log(`[sync] Pre-sync safety backup written: ${dest}`);
+    } catch (err) {
+      // The sync lock is acquired below, after this block, so nothing to
+      // release here — just close the handle and bail before writing anything.
+      console.error("[sync] Pre-sync backup FAILED — aborting to avoid writing without a fallback.");
+      console.error(err);
+      db.close();
+      process.exit(1);
     }
-    resetDatabase(db);
   }
+
+  // Schema comes up to date only AFTER the snapshot, so the fallback captures
+  // the database as it was before any migration touched it.
+  initializeSchema(db);
+
+  // Everything upserted by this run is stamped last_seen_at >= runStartedAt;
+  // anything older is what Monday stopped returning (see reconcile()).
+  const runStartedAt = new Date().toISOString();
 
   // Coordinate with the API's write-queue processor: take the sync advisory lock
   // so the two writers don't overlap. busy_timeout guarantees integrity even if
@@ -224,6 +237,10 @@ async function main() {
   const counts: Record<string, number> = {};
   const errors: Array<{ board: string; error: string }> = [];
   const truncations: Array<{ board: string; detail: string }> = [];
+  // Boards whose fetch completed and whose rows were written. Only these are
+  // eligible for reconciliation — a board that failed or came up short must
+  // never have its "missing" rows deleted, because they were never fetched.
+  const syncedBoards = new Set<string>();
   let orphanContracts = 0;
 
   // Run one board's sync in isolation: a failure logs and is skipped so one bad
@@ -273,21 +290,42 @@ async function main() {
   if (boardKeys.includes(PROFILE_BOARD)) {
     await runPass(PROFILE_BOARD, async () => {
       const { resolved, items } = await resolveBoard(PROFILE_BOARD);
-      if (onlyBoards) db.prepare("DELETE FROM profiles").run();
-      const insert = db.prepare(`
+      // UPSERT on the stable monday_item_id. local_id is deliberately absent from
+      // the DO UPDATE list: it is generated once, on first insert, and preserved
+      // forever after — which is what lets watchlists, saved views and every
+      // /clients/:id link keep resolving across syncs. RETURNING hands back the
+      // effective local_id (existing row's or the freshly generated one).
+      const upsert = db.prepare(`
         INSERT INTO profiles (
           batch_id, local_id, monday_item_id, name, email, phone, address,
           date_of_birth, place_of_birth, a_number, priority, group_title,
-          raw_column_values, sync_status, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
+          raw_column_values, updated_at_source, sync_status, synced_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'), ?)
+        ON CONFLICT(monday_item_id) DO UPDATE SET
+          batch_id = excluded.batch_id,
+          name = excluded.name,
+          email = excluded.email,
+          phone = excluded.phone,
+          address = excluded.address,
+          date_of_birth = excluded.date_of_birth,
+          place_of_birth = excluded.place_of_birth,
+          a_number = excluded.a_number,
+          priority = excluded.priority,
+          group_title = excluded.group_title,
+          raw_column_values = excluded.raw_column_values,
+          updated_at_source = excluded.updated_at_source,
+          sync_status = 'synced',
+          sync_error = NULL,
+          synced_at = datetime('now'),
+          last_seen_at = excluded.last_seen_at,
+          deleted_at = NULL
+        RETURNING local_id
       `);
       const tx = db.transaction((rows: MondayItem[]) => {
         for (const item of rows) {
           const cvs = buildColumnValues(item, resolved);
-          const localId = randomUUID();
-          profilesByMondayId.set(item.id, localId);
-          insert.run(
-            batchId, localId, item.id, item.name,
+          const row = upsert.get(
+            batchId, randomUUID(), item.id, item.name,
             rawOf(cvs.email), rawOf(cvs.phone), rawOf(cvs.physical_address),
             rawOf(cvs.date_of_birth) ?? dateOf(cvs.date_of_birth),
             labelOf(cvs.country_of_birth) ?? rawOf(cvs.country_of_birth),
@@ -295,11 +333,15 @@ async function main() {
             labelOf(cvs.status),
             item.group?.title ?? null,
             JSON.stringify(cvs),
-          );
+            item.updated_at ?? null,
+            runStartedAt,
+          ) as { local_id: string };
+          profilesByMondayId.set(item.id, row.local_id);
         }
       });
       tx(items);
       counts[PROFILE_BOARD] = items.length;
+      syncedBoards.add(PROFILE_BOARD);
     });
   }
 
@@ -307,12 +349,29 @@ async function main() {
   if (boardKeys.includes(CONTRACT_BOARD)) {
     await runPass(CONTRACT_BOARD, async () => {
       const { resolved, items } = await resolveBoard(CONTRACT_BOARD);
-      if (onlyBoards) db.prepare("DELETE FROM contracts").run();
-      const insert = db.prepare(`
+      // UPSERT keyed on monday_item_id; local_id preserved (see the profiles pass).
+      const upsert = db.prepare(`
         INSERT INTO contracts (
           batch_id, local_id, monday_item_id, profile_local_id, profile_monday_id,
-          name, case_type, contract_id, status, group_title, raw_column_values, sync_status, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
+          name, case_type, contract_id, status, group_title, raw_column_values,
+          updated_at_source, sync_status, synced_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'), ?)
+        ON CONFLICT(monday_item_id) DO UPDATE SET
+          batch_id = excluded.batch_id,
+          profile_local_id = excluded.profile_local_id,
+          profile_monday_id = excluded.profile_monday_id,
+          name = excluded.name,
+          case_type = excluded.case_type,
+          contract_id = excluded.contract_id,
+          status = excluded.status,
+          group_title = excluded.group_title,
+          raw_column_values = excluded.raw_column_values,
+          updated_at_source = excluded.updated_at_source,
+          sync_status = 'synced',
+          sync_error = NULL,
+          synced_at = datetime('now'),
+          last_seen_at = excluded.last_seen_at,
+          deleted_at = NULL
       `);
       const tx = db.transaction((rows: MondayItem[]) => {
         for (const item of rows) {
@@ -320,7 +379,7 @@ async function main() {
           const profileMondayId = firstLinkedId(cvs.profile);
           const profileLocalId = findProfileLocalId(cvs);
           if (!profileLocalId) orphanContracts++;
-          insert.run(
+          upsert.run(
             batchId, randomUUID(), item.id,
             // contracts.profile_local_id is NOT NULL; orphans (no resolvable
             // profile link) get "" so they still sync without breaking joins.
@@ -332,11 +391,14 @@ async function main() {
             labelOf(cvs.contract_stage) ?? labelOf(cvs.ps_stage),
             item.group?.title ?? null,
             JSON.stringify(cvs),
+            item.updated_at ?? null,
+            runStartedAt,
           );
         }
       });
       tx(items);
       counts[CONTRACT_BOARD] = items.length;
+      syncedBoards.add(CONTRACT_BOARD);
     });
   }
 
@@ -345,28 +407,49 @@ async function main() {
     if (key === PROFILE_BOARD || key === CONTRACT_BOARD) continue;
     await runPass(key, async () => {
       const { resolved, items } = await resolveBoard(key);
-      if (onlyBoards) db.prepare("DELETE FROM board_items WHERE board_key = ?").run(key);
-      const insert = db.prepare(`
+      // UPSERT keyed on monday_item_id; local_id preserved (see the profiles pass).
+      const upsert = db.prepare(`
         INSERT INTO board_items (
           batch_id, local_id, monday_item_id, board_key, group_title, name,
           status, next_date, next_time, attorney, paralegals, profile_local_id,
-          column_values, sync_status, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'))
+          column_values, updated_at_source, sync_status, synced_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', datetime('now'), ?)
+        ON CONFLICT(monday_item_id) DO UPDATE SET
+          batch_id = excluded.batch_id,
+          board_key = excluded.board_key,
+          group_title = excluded.group_title,
+          name = excluded.name,
+          status = excluded.status,
+          next_date = excluded.next_date,
+          next_time = excluded.next_time,
+          attorney = excluded.attorney,
+          paralegals = excluded.paralegals,
+          profile_local_id = excluded.profile_local_id,
+          column_values = excluded.column_values,
+          updated_at_source = excluded.updated_at_source,
+          sync_status = 'synced',
+          sync_error = NULL,
+          synced_at = datetime('now'),
+          last_seen_at = excluded.last_seen_at,
+          deleted_at = NULL
       `);
       const tx = db.transaction((rows: MondayItem[]) => {
         for (const item of rows) {
           const cvs = buildColumnValues(item, resolved);
           const fields = extractBoardItemFields(key, cvs);
-          insert.run(
+          upsert.run(
             batchId, randomUUID(), item.id, key, item.group?.title ?? null, item.name,
             fields.status, fields.nextDate, fields.nextTime, fields.attorney, fields.paralegals,
             findProfileLocalId(cvs),
             JSON.stringify(cvs),
+            item.updated_at ?? null,
+            runStartedAt,
           );
         }
       });
       tx(items);
       counts[key] = items.length;
+      syncedBoards.add(key);
     });
   }
 
@@ -560,6 +643,49 @@ async function main() {
     });
   }
 
+  // ---- Reconciliation: drop rows Monday no longer returns ----
+  //
+  // The sync upserts rather than resetting, so items deleted or archived in
+  // Monday would otherwise linger forever. Anything belonging to a board that
+  // synced cleanly, yet carries a last_seen_at older than this run, is gone
+  // upstream and is removed here.
+  //
+  // The gating is the whole point: a board is reconciled ONLY if its fetch both
+  // succeeded AND was not truncated. That is what makes an interrupted or flaky
+  // run safe — the old code DROPped everything up front, so a network timeout
+  // wiped a board (as _cd_open_forms was on 2026-07-23); now a board that fails
+  // simply keeps yesterday's rows untouched.
+  const truncatedBoards = new Set(truncations.map((t) => t.board));
+  const reconcilable = [...syncedBoards].filter((b) => !truncatedBoards.has(b));
+  const removed: Record<string, number> = {};
+
+  if (reconcilable.length > 0) {
+    const reconcile = db.transaction(() => {
+      for (const board of reconcilable) {
+        if (board === PROFILE_BOARD) {
+          const r = db
+            .prepare("DELETE FROM profiles WHERE last_seen_at IS NULL OR last_seen_at < ?")
+            .run(runStartedAt);
+          if (r.changes > 0) removed[PROFILE_BOARD] = r.changes;
+        } else if (board === CONTRACT_BOARD) {
+          const r = db
+            .prepare("DELETE FROM contracts WHERE last_seen_at IS NULL OR last_seen_at < ?")
+            .run(runStartedAt);
+          if (r.changes > 0) removed[CONTRACT_BOARD] = r.changes;
+        } else {
+          const r = db
+            .prepare("DELETE FROM board_items WHERE board_key = ? AND (last_seen_at IS NULL OR last_seen_at < ?)")
+            .run(board, runStartedAt);
+          if (r.changes > 0) removed[board] = r.changes;
+        }
+      }
+    });
+    reconcile();
+  }
+
+  const totalRemoved = Object.values(removed).reduce((a, b) => a + b, 0);
+  const skippedReconcile = [...truncatedBoards].filter((b) => syncedBoards.has(b));
+
   // A truncated board (silent short-read or a hit max-items cap) means the DB
   // is not a complete mirror of Monday, so the run is "partial" even when no
   // pass threw outright.
@@ -600,6 +726,18 @@ async function main() {
     `  Emails & activities: ${counts["emails_activities"] ?? 0}` +
       (skippedEA ? ` (${skippedEA} item${skippedEA === 1 ? "" : "s"} skipped after fetch failures)` : ""),
   );
+  if (totalRemoved > 0) {
+    console.log(
+      `  Removed (gone from Monday): ${totalRemoved} — ` +
+        Object.entries(removed).map(([b, n]) => `${b}:${n}`).join(", "),
+    );
+  }
+  if (skippedReconcile.length) {
+    console.log(
+      `\n  Reconciliation SKIPPED for ${skippedReconcile.length} truncated board(s): ${skippedReconcile.join(", ")}` +
+        `\n    (their rows were kept — a short fetch must never be read as "deleted upstream")`,
+    );
+  }
   if (truncations.length) {
     console.log(`\n  Truncated boards (${truncations.length}):`);
     for (const t of truncations) console.log(`    - ${t.board}: ${t.detail}`);

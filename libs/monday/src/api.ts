@@ -413,6 +413,7 @@ export async function fetchBoardItems(
           items {
             id
             name
+            updated_at
             group {
               id
               title
