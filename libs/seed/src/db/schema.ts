@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -206,6 +206,24 @@ CREATE TABLE IF NOT EXISTS sync_state (
     last_sync_status TEXT
 );
 INSERT OR IGNORE INTO sync_state (id) VALUES (1);
+
+-- Per-board incremental-sync watermarks (v16+).
+--
+-- last_updated_at is the newest Monday updated_at seen in the last CLEAN pass of
+-- that board. An incremental run fetches items ordered by __last_updated__ desc
+-- and stops paginating once it crosses this mark, so it pulls only what changed.
+-- It advances only on a clean pass — a failed or truncated board keeps its old
+-- mark and simply re-fetches that ground next time.
+--
+-- last_full_sweep_at records when a complete walk last happened. It matters
+-- because reconciliation (deleting rows Monday no longer returns) is only valid
+-- after a full sweep: on an incremental pass "not seen" just means "unchanged".
+CREATE TABLE IF NOT EXISTS sync_watermarks (
+    board_key          TEXT PRIMARY KEY,
+    last_updated_at    TEXT,
+    last_full_sweep_at TEXT,
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 -- Schema version tracking
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -785,6 +803,20 @@ export function initializeSchema(db: Database): void {
         rebuild();
         db.pragma("foreign_keys = ON");
       }
+    }
+
+    // Migration v15 → v16: per-board incremental-sync watermarks. Purely
+    // additive — an empty table means every board takes a full walk on the next
+    // run, which is exactly the safe starting state.
+    if (fromVersion < 16) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sync_watermarks (
+            board_key          TEXT PRIMARY KEY,
+            last_updated_at    TEXT,
+            last_full_sweep_at TEXT,
+            updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

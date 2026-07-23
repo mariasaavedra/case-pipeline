@@ -9,17 +9,26 @@
 // monday_item_id and updated in place, so local_id survives every run — which is
 // what keeps watchlists, saved views and /clients/:id links resolving. Nothing is
 // dropped up front, so an interrupted run leaves the previous data intact instead
-// of an empty database. Rows Monday stopped returning are removed by the
-// reconciliation pass at the end, and ONLY for boards that fetched cleanly.
+// of an empty database.
 //
-// Still a full walk of every board each run; fetching only what changed (via the
-// updated_at watermark) is the next optimization. Note that watermark can never
-// cover Emails & Activities: Monday does not bump an item's updated_at when only
-// its E&A timeline changes (see scripts/phase0-updated-at.ts), so E&A needs its
-// own sweep.
+// Incremental by default (schema v16+): each board remembers the newest Monday
+// updated_at it has seen, and a run fetches items newest-first, stopping once it
+// crosses that mark. A board with no watermark yet takes a full walk.
+//
+// Deletions can only be detected by a FULL walk (--full): an incremental pass
+// never sees unchanged rows, so "missing" tells you nothing. Reconciliation is
+// gated accordingly — see the reconciliation block.
+//
+// The watermark can never cover Emails & Activities: Monday does not bump an
+// item's updated_at when only its E&A timeline changes (see
+// scripts/phase0-updated-at.ts), so E&A still needs its own rolling sweep. Until
+// that exists, pass 4 remains a full walk — use --skip-timeline for a fast
+// column-only refresh, and --full periodically to catch deletions and E&A.
 //
 // Usage:
-//   MONDAY_API_TOKEN=... npm run sync:live
+//   MONDAY_API_TOKEN=... npm run sync:live                  # incremental
+//   npm run sync:live -- --full                             # full walk + deletions
+//   npm run sync:live -- --skip-timeline                    # columns only (fast)
 //   npm run sync:live -- --max-items=200   # cap items per board (debugging)
 //   npm run sync:live -- --boards=profiles,fee_ks,court_cases
 //
@@ -90,12 +99,16 @@ function parseArgs() {
   let maxItems = 5000;
   let pageSize = 50;
   let onlyBoards: string[] | null = null;
+  let full = false;
+  let skipTimeline = false;
   for (const arg of args) {
     if (arg.startsWith("--max-items=")) maxItems = parseInt(arg.split("=")[1] ?? "") || maxItems;
     else if (arg.startsWith("--page-size=")) pageSize = parseInt(arg.split("=")[1] ?? "") || pageSize;
     else if (arg.startsWith("--boards=")) onlyBoards = (arg.split("=")[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    else if (arg === "--full") full = true;
+    else if (arg === "--skip-timeline") skipTimeline = true;
   }
-  return { maxItems, pageSize, onlyBoards };
+  return { maxItems, pageSize, onlyBoards, full, skipTimeline };
 }
 
 // =============================================================================
@@ -135,7 +148,7 @@ async function main() {
   }
   setApiToken(token);
 
-  const { maxItems, pageSize, onlyBoards } = parseArgs();
+  const { maxItems, pageSize, onlyBoards, full, skipTimeline } = parseArgs();
 
   const dataDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../data");
   fs.mkdirSync(dataDir, { recursive: true });
@@ -223,7 +236,11 @@ async function main() {
 
   console.log(`\nLive Data Sync → ${dbPath}`);
   console.log("=".repeat(60));
-  console.log(`Batch ${batchId} · boards: ${boardKeys.length} · max items/board: ${maxItems}\n`);
+  console.log(
+    `Batch ${batchId} · boards: ${boardKeys.length} · max items/board: ${maxItems}` +
+      ` · mode: ${full ? "FULL walk (deletions reconciled)" : "incremental"}` +
+      `${skipTimeline ? " · timeline skipped" : ""}\n`,
+  );
 
   // monday_item_id → local profile id, used to resolve profile relations.
   const profilesByMondayId = new Map<string, string>();
@@ -243,6 +260,29 @@ async function main() {
   const syncedBoards = new Set<string>();
   let orphanContracts = 0;
 
+  // ---- Incremental watermarks ----
+  // A board runs incrementally when it has a watermark from a previous clean
+  // pass AND this is not a --full run. Anything else (first ever run, --full)
+  // walks the whole board.
+  const readWatermark = db.prepare("SELECT last_updated_at FROM sync_watermarks WHERE board_key = ?");
+  const writeWatermark = db.prepare(`
+    INSERT INTO sync_watermarks (board_key, last_updated_at, last_full_sweep_at, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(board_key) DO UPDATE SET
+      last_updated_at = excluded.last_updated_at,
+      last_full_sweep_at = COALESCE(excluded.last_full_sweep_at, sync_watermarks.last_full_sweep_at),
+      updated_at = datetime('now')
+  `);
+  /** The watermark to fetch from, or null to walk the whole board. */
+  function watermarkFor(board: string): string | null {
+    if (full) return null;
+    const row = readWatermark.get(board) as { last_updated_at: string | null } | undefined;
+    return row?.last_updated_at ?? null;
+  }
+  /** Boards that actually ran incrementally this run — never reconcilable. */
+  const incrementalBoards = new Set<string>();
+  const fetchedCounts: Record<string, number> = {};
+
   // Run one board's sync in isolation: a failure logs and is skipped so one bad
   // board never aborts the rest of the sync.
   async function runPass(key: string, fn: () => Promise<void>): Promise<void> {
@@ -260,10 +300,13 @@ async function main() {
     const config = boardsConfig[key]!;
     const structure = await fetchBoardStructure(config.id);
     const resolved = resolveAllColumns(structure.columns, config) as Record<string, ResolvedColumnMeta | undefined>;
+    const since = watermarkFor(key);
+    if (since) incrementalBoards.add(key);
     const items = await fetchAllBoardItems(config.id, {
       maxItems,
       pageSize,
-      onProgress: (n) => process.stdout.write(`\r  ${key}: ${n} items`),
+      ...(since ? { since } : {}),
+      onProgress: (n) => process.stdout.write(`\r  ${key}: ${n} items${since ? " (changed)" : ""}`),
       onTruncated: (t) => {
         const detail =
           t.reason === "max_items_cap"
@@ -274,8 +317,32 @@ async function main() {
         truncations.push({ board: key, detail });
       },
     });
-    process.stdout.write(`\r  ${key}: ${items.length} items ✓\n`);
+    process.stdout.write(`\r  ${key}: ${items.length} ${since ? "changed" : "items"} ✓\n`);
+    fetchedCounts[key] = items.length;
     return { config, resolved, items };
+  }
+
+  /**
+   * Advance a board's watermark to the newest updated_at it just returned.
+   * Called only after a board's rows are committed, so a failed pass leaves the
+   * old mark in place and simply re-covers that ground next run.
+   *
+   * An empty incremental result means nothing changed — the mark stays put.
+   */
+  function advanceWatermark(board: string, items: MondayItem[]): void {
+    let newest: string | null = null;
+    for (const item of items) {
+      if (item.updated_at && (newest === null || item.updated_at > newest)) newest = item.updated_at;
+    }
+    const wasFullWalk = !incrementalBoards.has(board);
+    if (newest === null && !wasFullWalk) return;
+    const existing = readWatermark.get(board) as { last_updated_at: string | null } | undefined;
+    // Never move a watermark backwards.
+    const next =
+      newest && (!existing?.last_updated_at || newest > existing.last_updated_at)
+        ? newest
+        : (existing?.last_updated_at ?? newest);
+    writeWatermark.run(board, next, wasFullWalk ? new Date().toISOString() : null);
   }
 
   function findProfileLocalId(columnValues: Record<string, unknown>): string | null {
@@ -342,6 +409,7 @@ async function main() {
       tx(items);
       counts[PROFILE_BOARD] = items.length;
       syncedBoards.add(PROFILE_BOARD);
+      advanceWatermark(PROFILE_BOARD, items);
     });
   }
 
@@ -399,6 +467,7 @@ async function main() {
       tx(items);
       counts[CONTRACT_BOARD] = items.length;
       syncedBoards.add(CONTRACT_BOARD);
+      advanceWatermark(CONTRACT_BOARD, items);
     });
   }
 
@@ -450,11 +519,15 @@ async function main() {
       tx(items);
       counts[key] = items.length;
       syncedBoards.add(key);
+      advanceWatermark(key, items);
     });
   }
 
   // ---- Pass 4: updates (comments + replies on every profile and board item) ----
-  if (!onlyBoards) {
+  // Still a full walk of every item: E&A activity does not move an item's
+  // updated_at, so the watermark cannot narrow this pass (see the header note).
+  // --skip-timeline exists so an incremental column refresh stays fast.
+  if (!onlyBoards && !skipTimeline) {
     await runPass("updates", async () => {
       // Build a lookup: monday_item_id → { profile_local_id, board_item_local_id, board_key }
       type ItemMeta = { profile_local_id: string; board_item_local_id: string | null; board_key: string | null };
@@ -655,8 +728,16 @@ async function main() {
   // run safe — the old code DROPped everything up front, so a network timeout
   // wiped a board (as _cd_open_forms was on 2026-07-23); now a board that fails
   // simply keeps yesterday's rows untouched.
+  // THREE gates, all of them load-bearing. A board is reconciled only if it
+  // (a) synced cleanly, (b) was not truncated, and (c) took a FULL walk. (c) is
+  // the one the watermark adds: an incremental pass fetches only what changed,
+  // so every unchanged row looks "not seen" — reconciling that would delete
+  // almost the entire board. Deletions are therefore only ever detected by a
+  // --full run.
   const truncatedBoards = new Set(truncations.map((t) => t.board));
-  const reconcilable = [...syncedBoards].filter((b) => !truncatedBoards.has(b));
+  const reconcilable = [...syncedBoards].filter(
+    (b) => !truncatedBoards.has(b) && !incrementalBoards.has(b),
+  );
   const removed: Record<string, number> = {};
 
   if (reconcilable.length > 0) {
@@ -736,6 +817,12 @@ async function main() {
     console.log(
       `\n  Reconciliation SKIPPED for ${skippedReconcile.length} truncated board(s): ${skippedReconcile.join(", ")}` +
         `\n    (their rows were kept — a short fetch must never be read as "deleted upstream")`,
+    );
+  }
+  if (incrementalBoards.size > 0) {
+    console.log(
+      `\n  Incremental: ${incrementalBoards.size} board(s) fetched only what changed.` +
+        `\n    Deletions are NOT detected on an incremental run — use --full for that.`,
     );
   }
   if (truncations.length) {

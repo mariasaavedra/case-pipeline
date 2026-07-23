@@ -400,15 +400,24 @@ export interface BoardItemsPage {
  */
 export async function fetchBoardItems(
   boardId: string,
-  options: { limit?: number; cursor?: string } = {}
+  options: { limit?: number; cursor?: string; orderByLastUpdated?: boolean } = {}
 ): Promise<BoardItemsPage> {
   const limit = options.limit ?? 50;
+
+  // Sort newest-first so an incremental caller can stop paginating once it
+  // crosses its watermark. query_params only goes on the FIRST page — the sort
+  // is baked into the cursor, and Monday rejects both together. Verified that
+  // the ordering does hold across cursor pages.
+  const orderBy =
+    options.orderByLastUpdated && !options.cursor
+      ? `, query_params: { order_by: [{ column_id: "__last_updated__", direction: desc }] }`
+      : "";
 
   const query = `
     query ($boardId: ID!, $limit: Int!, $cursor: String) {
       boards(ids: [$boardId]) {
         items_count
-        items_page(limit: $limit, cursor: $cursor) {
+        items_page(limit: $limit, cursor: $cursor${orderBy}) {
           cursor
           items {
             id
@@ -485,22 +494,53 @@ export async function fetchAllBoardItems(
     pageSize?: number;
     onProgress?: (count: number) => void;
     onTruncated?: (truncation: BoardTruncation) => void;
+    /**
+     * Incremental mode: an ISO watermark. Items are fetched newest-first and
+     * pagination stops at the first one not newer than this, so only what
+     * changed since comes back.
+     *
+     * A short read here is NOT a truncation — it is the whole point — so the
+     * count-mismatch check is skipped. The caller must therefore never treat an
+     * incremental result as a complete picture of the board (in particular:
+     * never reconcile deletions from it).
+     */
+    since?: string;
   } = {}
 ): Promise<MondayItem[]> {
   const maxItems = options.maxItems ?? 500;
   const pageSize = options.pageSize ?? 50;
+  const incremental = !!options.since;
   const allItems: MondayItem[] = [];
   let cursor: string | null = null;
   let expected: number | null = null;
   let cappedWithMore = false;
+  let reachedWatermark = false;
 
   do {
-    const page = await fetchBoardItems(boardId, { limit: pageSize, cursor: cursor ?? undefined });
+    const page = await fetchBoardItems(boardId, {
+      limit: pageSize,
+      cursor: cursor ?? undefined,
+      orderByLastUpdated: incremental,
+    });
     if (expected === null) expected = page.itemsCount;
-    allItems.push(...page.items);
-    cursor = page.cursor;
 
+    if (incremental) {
+      for (const item of page.items) {
+        // No updated_at → keep it rather than risk dropping a real change.
+        if (item.updated_at && item.updated_at <= options.since!) {
+          reachedWatermark = true;
+          break;
+        }
+        allItems.push(item);
+      }
+    } else {
+      allItems.push(...page.items);
+    }
+
+    cursor = page.cursor;
     options.onProgress?.(allItems.length);
+
+    if (reachedWatermark) break;
 
     if (allItems.length >= maxItems) {
       // Stopped at the safety ceiling. If a cursor remains, the board has more
@@ -514,9 +554,9 @@ export async function fetchAllBoardItems(
 
   if (cappedWithMore) {
     options.onTruncated?.({ boardId, fetched: items.length, expected, reason: "max_items_cap" });
-  } else if (expected !== null && items.length < expected) {
-    // Pagination ran to completion (cursor exhausted) yet we came up short of the
-    // board's reported item count — pagination was truncated mid-board.
+  } else if (!incremental && expected !== null && items.length < expected) {
+    // Full walk only: pagination ran to completion (cursor exhausted) yet we came
+    // up short of the board's reported item count — truncated mid-board.
     options.onTruncated?.({ boardId, fetched: items.length, expected, reason: "count_mismatch" });
   }
 
