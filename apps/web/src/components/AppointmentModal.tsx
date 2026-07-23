@@ -7,6 +7,7 @@ import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { formatANumber } from "@case-pipeline/core";
 import { Link } from "./Link";
 import { clientPath } from "../router";
+import { ModalPortal } from "./ModalPortal";
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -97,6 +98,7 @@ export function AppointmentModal({ entry, onClose }: Props) {
   }, [handleKeyDown]);
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: "rgba(12, 18, 34, 0.55)" }}
@@ -409,5 +411,6 @@ export function AppointmentModal({ entry, onClose }: Props) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

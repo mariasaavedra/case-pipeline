@@ -649,25 +649,36 @@ body {
    KPI Dashboard Grid
    ============================================================================= */
 
+/*
+ * Three columns on desktop, dropping to two then one as the window narrows.
+ *
+ * `minmax(0, 1fr)` rather than plain `1fr` is the part that makes it safe on any
+ * monitor: `1fr` is really `minmax(auto, 1fr)`, so a track refuses to shrink
+ * below its content — one long unbroken client name and the grid pushes past the
+ * container instead of ellipsising. minmax(0, …) lets the track shrink, which is
+ * what lets the row's own `text-overflow: ellipsis` do its job.
+ *
+ * `align-items: start` matters as much as the columns: the default `stretch`
+ * made every card in a row as tall as the tallest one, so a card with a short
+ * list grew a block of dead space to match its neighbours.
+ */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
   gap: 16px;
 }
 
-.kpi-grid > :nth-child(n+4) {
-  /* 4th and 5th cards span the bottom row evenly */
-}
-
-@media (max-width: 1024px) {
+/* Two columns before the cards get too narrow to read at three. */
+@media (max-width: 1080px) {
   .kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .kpi-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -767,6 +778,20 @@ body {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+/*
+ * The status/column chip carries whatever Monday holds, which can be a long
+ * label. Wrapping already handles the row, but a single long token would still
+ * push past the card — cap and ellipsise it instead.
+ */
+.kpi-item-meta .board-tag {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
 }
 
 .kpi-item-date {

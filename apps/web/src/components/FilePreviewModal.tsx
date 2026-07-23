@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { getPreviewUrl, GraphConsentRequiredError, GraphError, type DriveItem } from "../sharepoint/graph";
+import { ModalPortal } from "./ModalPortal";
 
 interface Props {
   driveId: string;
@@ -60,6 +61,7 @@ export function FilePreviewModal({ driveId, item, onClose }: Props) {
   }, [driveId, item, downloadUrl, onClose]);
 
   return (
+    <ModalPortal>
     <div
       onClick={onClose}
       style={{
@@ -145,5 +147,6 @@ export function FilePreviewModal({ driveId, item, onClose }: Props) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

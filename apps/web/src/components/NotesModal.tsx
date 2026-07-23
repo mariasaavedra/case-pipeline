@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from "react";
 import type { ClientUpdate } from "../api";
 import { UpdatesTimeline } from "./UpdatesTimeline";
+import { ModalPortal } from "./ModalPortal";
 
 interface Props {
   updates: ClientUpdate[];
@@ -26,6 +27,7 @@ export function NotesModal({ updates, title, onClose }: Props) {
   }, [handleKeyDown]);
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       style={{ backgroundColor: "rgba(12, 18, 34, 0.5)" }}
@@ -83,5 +85,6 @@ export function NotesModal({ updates, title, onClose }: Props) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
