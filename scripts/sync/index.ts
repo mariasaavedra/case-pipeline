@@ -34,6 +34,7 @@ import type { MondayItem, MondayTimelineItem } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { initializeSchema, resetDatabase } from "@case-pipeline/seed/db/schema";
 import { openDatabase } from "@case-pipeline/seed/db/connection";
+import { backupDatabase } from "../backup-db.js";
 import { acquireSyncLock, releaseSyncLock, recordSyncResult } from "@case-pipeline/seed/db/sync-lock";
 import { normalizeANumber } from "@case-pipeline/core";
 import {
@@ -51,6 +52,25 @@ const PROFILE_BOARD = "profiles";
 const CONTRACT_BOARD = "fee_ks";
 // Config keys that, when present as a board_relation, link an item to a profile.
 const PROFILE_RELATION_KEYS = ["profile", "profiles", "person"];
+
+// How many pre-sync safety snapshots to retain (each is a full live.db copy,
+// ~0.8 GB). Kept separate from the daily backup series; 3 covers the last few
+// full syncs while capping the disk they hold.
+const PRESYNC_BACKUPS_KEPT = 3;
+
+/**
+ * True when live.db already holds real client data worth snapshotting before a
+ * destructive reset. A first-ever sync (no schema, or an empty profiles table)
+ * has nothing to lose and skips the pre-sync backup.
+ */
+function liveDbHasData(db: ReturnType<typeof openDatabase>): boolean {
+  const hasTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='profiles'")
+    .get();
+  if (!hasTable) return false;
+  const row = db.prepare("SELECT COUNT(*) AS n FROM profiles").get() as { n: number };
+  return row.n > 0;
+}
 
 // =============================================================================
 // CLI args
@@ -118,6 +138,31 @@ async function main() {
     initializeSchema(db);
   } else {
     // Full run: full replace from a clean, current-schema database.
+    //
+    // SAFETY NET: resetDatabase() DROPs every client table before a single row
+    // is fetched, so a run that dies partway would otherwise leave an empty
+    // database with no way back. Snapshot the current live.db first. If it holds
+    // real data and the snapshot fails, ABORT before the reset — a wipe with no
+    // fallback is exactly the failure this guards against. Nothing to lose (a
+    // fresh/empty DB) skips the backup and proceeds.
+    if (liveDbHasData(db)) {
+      try {
+        const dest = await backupDatabase({
+          existing: db,
+          label: "live-presync",
+          keep: PRESYNC_BACKUPS_KEPT,
+          dataDir,
+        });
+        console.log(`[sync] Pre-sync safety backup written: ${dest}`);
+      } catch (err) {
+        // The sync lock is acquired below, after this block, so nothing to
+        // release here — just close the handle and bail before the DROP.
+        console.error("[sync] Pre-sync backup FAILED — aborting before reset to avoid data loss.");
+        console.error(err);
+        db.close();
+        process.exit(1);
+      }
+    }
     resetDatabase(db);
   }
 
