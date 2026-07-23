@@ -153,13 +153,50 @@ export interface KpiItem {
   clientLocalId: string | null;
   boardKey: string | null;
   status: string | null;
+  /**
+   * Raw Monday value of the card's configured display column (see KpiCard.columnId).
+   * Still in Monday's shaped form — `{ label }`, `{ labels: [] }`, `{ date, time }`
+   * or a plain string — because formatting belongs to the client. Null when the
+   * card has no column configured or this row has no value for it.
+   */
+  columnValue: unknown;
 }
 
 export interface KpiCard {
   key: string;
   label: string;
   count: number;
+  /**
+   * The board column surfaced on this card's rows, resolved per request from the
+   * viewer's preference falling back to the firm-wide default. Null = none set.
+   */
+  columnId: string | null;
+  columnLabel: string | null;
   items: KpiItem[];
+}
+
+/** A column a KPI card can be configured to display. */
+export interface KpiColumnOption {
+  id: string;
+  label: string;
+  /** How many rows on this card actually carry a value — helps pick a useful column. */
+  populatedCount: number;
+}
+
+export interface KpiDetailItem extends KpiItem {
+  /** Every shaped Monday column on the row, so the client can re-pick instantly. */
+  columnValues: Record<string, unknown>;
+}
+
+/** The full row set behind one KPI card, for the dashboard's click-through modal. */
+export interface KpiCardDetail {
+  key: string;
+  label: string;
+  count: number;
+  columnId: string | null;
+  columnLabel: string | null;
+  columns: KpiColumnOption[];
+  items: KpiDetailItem[];
 }
 
 // Board item statuses considered closed (not alertable)

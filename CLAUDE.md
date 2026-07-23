@@ -130,7 +130,8 @@ Data reads:
 
 | Route | Description |
 |---|---|
-| `GET /api/dashboard` | 6 KPI cards (open forms, pending contracts, paid fee Ks, deadlines, hearings, alerts) |
+| `GET /api/dashboard` | 6 KPI cards (open forms, pending contracts, paid fee Ks, deadlines, hearings, alerts). Open Forms excludes `Send to North Pole` cases |
+| `GET /api/dashboard/:key/items` | Every row behind one KPI card + the display-column options (`?column=` previews one) |
 | `GET /api/appointments` | Daily appointments with enriched profiles, snapshots, updates, case summaries |
 | `GET /api/active-cases` | Swim-lane board data (paralegal rows × urgency). `?includeSnoozed=1` reveals North-Pole-parked cases |
 | `GET /api/alerts` | Grouped alerts by severity (critical / warning / info) |
@@ -156,6 +157,7 @@ Writes and user/account routes:
 | `GET/POST/DELETE /api/watchlist`, `/api/saved-views`, `GET /api/me/recently-viewed` | Personalization (keyed by stable Monday item ids) |
 | `GET /api/my-cases`, `GET /api/paralegals` | Paralegal-linked case list and identity options |
 | `GET/POST/DELETE /api/settings/attorney-boards` | Attorney appointment board config (mutations admin-only) |
+| `GET/PUT /api/settings/kpi-columns` | Firm-wide default display column per KPI card (PUT admin-only); users override via `preferences.kpiColumns` |
 | `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only) |
 | `/api/auth/monday`, `/callback`, `/status` | Personal Monday.com OAuth connection (`routes/monday-oauth.ts`) |
 

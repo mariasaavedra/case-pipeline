@@ -25,11 +25,10 @@ import {
   handleBoardItemDetail,
   handleClientUpdates,
   handleClientRelationships,
-  handleDashboard,
   handleActiveCases,
   handleAlerts,
 } from "./handlers/handlers";
-import { getAppointments } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail } from "@case-pipeline/query";
 import { setApiToken, createUpdate, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
 import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
@@ -56,7 +55,14 @@ import {
 } from "./routes/me.js";
 import { handleMyCases } from "./routes/my-cases.js";
 import { handleParalegals } from "./routes/paralegals.js";
+import {
+  initKpiColumns,
+  loadGlobalKpiColumns,
+  saveGlobalKpiColumns,
+  resolveKpiColumns,
+} from "./routes/kpi-columns.js";
 import { currentUserId } from "./db/user-context.js";
+import { sanitizeKpiColumns } from "./db/users-types.js";
 import { auditFromReq } from "./audit/log.js";
 import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
@@ -140,6 +146,8 @@ export interface AttorneyBoard {
 
 const ATTORNEY_BOARDS_PATH = path.join(DATA_DIR, "attorney-boards.json");
 
+initKpiColumns(DATA_DIR);
+
 function loadAttorneyBoards(): AttorneyBoard[] {
   try {
     return JSON.parse(fs.readFileSync(ATTORNEY_BOARDS_PATH, "utf-8")) as AttorneyBoard[];
@@ -217,7 +225,36 @@ app.get("/api/my-cases", (req, res) => handleMyCases(req, res, db));
 app.get("/api/paralegals", (req, res) => handleParalegals(req, res, db));
 
 // API routes
-app.get("/api/dashboard", adapt(handleDashboard));
+//
+// Dashboard — inline rather than adapt()ed because the per-card display column
+// depends on WHO is asking (their preference over the firm-wide default), and
+// the Fetch-style handlers don't carry the authenticated user.
+app.get("/api/dashboard", (req, res) => {
+  const url = new URL(`http://localhost${req.originalUrl}`);
+  const range = url.searchParams.get("hearingRange") === "month" ? "month" : "7d";
+  const columnSelections = resolveKpiColumns(req);
+  res.json({ data: getDashboardKpis(db, { range, columnSelections }) });
+});
+
+// Every row behind one card, for the dashboard's click-through modal.
+app.get("/api/dashboard/:key/items", (req, res) => {
+  const url = new URL(`http://localhost${req.originalUrl}`);
+  const range = url.searchParams.get("hearingRange") === "month" ? "month" : "7d";
+  // An explicit ?column= previews a different column without saving it, so the
+  // picker in the modal can react before the user commits to the choice.
+  const columnOverride = url.searchParams.get("column");
+  const columnSelections = {
+    ...resolveKpiColumns(req),
+    ...sanitizeKpiColumns(columnOverride ? { [String(req.params.key)]: columnOverride } : {}),
+  };
+
+  const detail = getKpiCardDetail(db, String(req.params.key), { range, columnSelections });
+  if (!detail) {
+    res.status(404).json({ error: `Unknown dashboard card "${req.params.key}"` });
+    return;
+  }
+  res.json({ data: detail });
+});
 
 // Appointments — inline to inject dynamic board keys from attorney-boards.json
 app.get("/api/appointments", (req, res) => {
@@ -488,6 +525,33 @@ app.delete("/api/settings/attorney-boards/:boardKey", requireAdmin, (req, res) =
     targetId: String(boardKey),
   });
   res.json({ data: boards });
+});
+
+// =============================================================================
+// Settings — Dashboard KPI display columns (firm-wide defaults)
+// =============================================================================
+// Readable by anyone (the dashboard needs it to explain what "default" means);
+// writable only by admins, since it changes the view for every user who hasn't
+// picked their own column.
+
+app.get("/api/settings/kpi-columns", (_req, res) => {
+  res.json({ data: loadGlobalKpiColumns() });
+});
+
+app.put("/api/settings/kpi-columns", requireAdmin, (req, res) => {
+  const body = req.body as { columns?: unknown };
+  if (typeof body?.columns !== "object" || body.columns === null || Array.isArray(body.columns)) {
+    res.status(400).json({ error: "columns must be an object of { cardKey: columnId }" });
+    return;
+  }
+  // The whole map is replaced, so the client must send every card it wants kept.
+  const saved = saveGlobalKpiColumns(body.columns as Record<string, string>);
+  auditFromReq(req, "kpi_columns.updated", {
+    targetType: "settings",
+    targetId: "kpi-columns",
+    metadata: saved,
+  });
+  res.json({ data: saved });
 });
 
 // Health check — cheap liveness/readiness probe for container orchestration.

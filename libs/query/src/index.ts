@@ -10,7 +10,7 @@ export { getClientCaseSummary } from "./case-summary";
 export { getClientUpdates } from "./updates";
 export { getClientRelationships } from "./relationships";
 export type { RelationshipWithDetails } from "./relationships";
-export { getDashboardKpis } from "./dashboard";
+export { getDashboardKpis, getKpiCardDetail } from "./dashboard";
 export { getAppointments, getAttorneyList } from "./appointments";
 export type { AppointmentEntry, AppointmentsResult, AppointmentSnapshot } from "./appointments";
 export { searchByType } from "./search";
@@ -27,6 +27,9 @@ export type {
   SearchResult,
   KpiCard,
   KpiItem,
+  KpiCardDetail,
+  KpiDetailItem,
+  KpiColumnOption,
   SearchType,
   TypedSearchResult,
 } from "./types";

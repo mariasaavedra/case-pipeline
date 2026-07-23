@@ -36,6 +36,12 @@ export interface Preferences {
   dashboardLayout: string[];
   /** Per-table visible column ids, keyed by table id. */
   columns: Record<string, string[]>;
+  /**
+   * Which board column each dashboard KPI card displays on its rows, keyed by
+   * card key (e.g. { open_forms: "status" }). Overrides the firm-wide default in
+   * data/kpi-columns.json; an absent key falls back to it.
+   */
+  kpiColumns: Record<string, string>;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -46,6 +52,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   density: "comfortable",
   dashboardLayout: [],
   columns: {},
+  kpiColumns: {},
 };
 
 const THEMES: ThemePref[] = ["light", "dark", "system"];
@@ -54,6 +61,29 @@ const DATE_FORMATS: DateFormatPref[] = ["MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"
 
 function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+
+/**
+ * Monday logical column keys and KPI card keys are both generated from
+ * config/boards.yaml / the card registry, so they are always snake_case ASCII.
+ * Anything else is a client that made something up.
+ */
+const KEY_PATTERN = /^[a-z0-9_]{1,64}$/;
+
+/**
+ * Validate a { cardKey: columnId } map from an untrusted source, dropping any
+ * entry that isn't a plain snake_case pair. Shared by the per-user preference
+ * and the firm-wide default in data/kpi-columns.json so both enforce one rule.
+ */
+export function sanitizeKpiColumns(input: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return out;
+  for (const [cardKey, columnId] of Object.entries(input as Record<string, unknown>)) {
+    if (!KEY_PATTERN.test(cardKey)) continue;
+    if (typeof columnId !== "string" || !KEY_PATTERN.test(columnId)) continue;
+    out[cardKey] = columnId;
+  }
+  return out;
 }
 
 /**
@@ -92,6 +122,11 @@ export function sanitizePreferencesPatch(input: unknown): Partial<Preferences> {
       if (isStringArray(v)) cols[k] = v;
     }
     out.columns = cols;
+  }
+  // Sent as a whole map, not per-key: mergePreferences replaces it outright, so
+  // dropping a card key from the map is how a user clears their override.
+  if (typeof o.kpiColumns === "object" && o.kpiColumns !== null && !Array.isArray(o.kpiColumns)) {
+    out.kpiColumns = sanitizeKpiColumns(o.kpiColumns);
   }
   return out;
 }

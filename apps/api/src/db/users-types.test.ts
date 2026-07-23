@@ -1,10 +1,38 @@
 import { describe, it, expect } from "vitest";
 import {
   sanitizePreferencesPatch,
+  sanitizeKpiColumns,
   parsePreferences,
   mergePreferences,
   DEFAULT_PREFERENCES,
 } from "./users-types.js";
+
+describe("sanitizeKpiColumns", () => {
+  it("keeps snake_case card→column pairs", () => {
+    expect(sanitizeKpiColumns({ open_forms: "status", upcoming_hearings: "next_date" })).toEqual({
+      open_forms: "status",
+      upcoming_hearings: "next_date",
+    });
+  });
+
+  it("drops non-string values, odd keys, and prototype-pollution attempts", () => {
+    expect(
+      sanitizeKpiColumns({
+        open_forms: 5,
+        "bad key": "status",
+        alerts: "Not Snake Case",
+        __proto__: "status",
+        paid_fee_ks: "case_type",
+      }),
+    ).toEqual({ paid_fee_ks: "case_type" });
+  });
+
+  it("returns an empty map for non-objects", () => {
+    expect(sanitizeKpiColumns(null)).toEqual({});
+    expect(sanitizeKpiColumns(["status"])).toEqual({});
+    expect(sanitizeKpiColumns("status")).toEqual({});
+  });
+});
 
 describe("preferences validation", () => {
   it("keeps valid fields and drops invalid ones", () => {

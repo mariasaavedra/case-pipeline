@@ -676,6 +676,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+/* The whole card opens the full case list, so it needs to read as clickable. */
+.kpi-card:hover {
+  border-color: var(--color-amber);
+  transform: translateY(-1px);
+}
+
+.kpi-card:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
 }
 
 .kpi-card-header {
@@ -788,6 +800,33 @@ body {
 .kpi-hearing-toggle {
   display: flex;
   gap: 6px;
+}
+
+.kpi-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--color-border-light);
+  padding-top: 8px;
+  margin-top: -4px;
+}
+
+.kpi-card-more {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-amber);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.kpi-card-more:hover {
+  color: var(--color-amber-dark);
+  text-decoration: underline;
 }
 
 /* =============================================================================

@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
-import { fetchDashboard } from "../api";
+import { fetchDashboard, getPreferences, updatePreferences } from "../api";
 import type { KpiCard, KpiItem } from "../api";
 import { Link } from "./Link";
 import { QuickAccess } from "./QuickAccess";
+import { KpiDetailModal } from "./KpiDetailModal";
+import { formatColumnValue } from "../utils/columnValue";
+import { useAuth } from "../auth/useAuth";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 
 function getGreeting(): string {
@@ -70,7 +73,11 @@ function formatItemDate(dateStr: string | null): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function KpiItemRow({ item }: { item: KpiItem }) {
+function KpiItemRow({ item, columnLabel }: { item: KpiItem; columnLabel: string | null }) {
+  // The configured column is the useful signal. Fall back to the board tag only
+  // when no column is set — on a single-board card it just repeats the heading.
+  const columnText = formatColumnValue(item.columnValue);
+
   return (
     <div className="kpi-item-row">
       <div className="kpi-item-name" title={item.name}>
@@ -80,13 +87,20 @@ function KpiItemRow({ item }: { item: KpiItem }) {
         {item.date && (
           <span className="kpi-item-date">{formatItemDate(item.date)}</span>
         )}
-        {item.boardKey && (
-          <span className="board-tag">{BOARD_DISPLAY_NAMES[item.boardKey] ?? item.boardKey}</span>
+        {columnText ? (
+          <span className="board-tag" title={columnLabel ?? undefined}>
+            {columnText}
+          </span>
+        ) : (
+          item.boardKey && (
+            <span className="board-tag">{BOARD_DISPLAY_NAMES[item.boardKey] ?? item.boardKey}</span>
+          )
         )}
         {item.clientName && item.clientLocalId && (
           <Link
             href={`/clients/${encodeURIComponent(item.clientLocalId)}`}
             className="kpi-item-client"
+            onClick={(e) => e.stopPropagation()}
           >
             {item.clientName}
           </Link>
@@ -133,45 +147,43 @@ function KpiCardComponent({
   index,
   onHearingToggle,
   hearingRange,
+  onOpen,
 }: {
   card: KpiCard;
   index: number;
   onHearingToggle?: () => void;
   hearingRange?: string;
+  onOpen: () => void;
 }) {
   const filterUrl = getKpiFilterUrl(card.key, hearingRange);
 
   return (
-    <div className={`kpi-card card card-elevated animate-in animate-in-delay-${index + 1}`}>
+    <div
+      className={`kpi-card card card-elevated animate-in animate-in-delay-${index + 1}`}
+      role="button"
+      tabIndex={0}
+      style={{ cursor: "pointer" }}
+      title={`See all ${card.label.toLowerCase()}`}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+    >
       <div className="kpi-card-header">
         <div className="kpi-card-icon">
           {KPI_ICONS[card.key]}
         </div>
         <div className="kpi-card-title">
           <span className="kpi-card-label">{card.label}</span>
-          {filterUrl && card.count > 0 ? (
-            <Link
-              href={filterUrl}
-              className="kpi-card-count"
-              style={{
-                cursor: "pointer",
-                textDecoration: "none",
-                transition: "opacity 0.15s",
-              }}
-              title="View all matching clients"
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.7")}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-            >
-              {card.count}
-            </Link>
-          ) : (
-            <span className="kpi-card-count">{card.count}</span>
-          )}
+          <span className="kpi-card-count">{card.count}</span>
         </div>
       </div>
 
       {card.key === "upcoming_hearings" && onHearingToggle && (
-        <div className="kpi-hearing-toggle">
+        <div className="kpi-hearing-toggle" onClick={(e) => e.stopPropagation()}>
           <button
             className={`filter-chip ${hearingRange === "7d" ? "filter-chip-active" : ""}`}
             onClick={onHearingToggle}
@@ -192,19 +204,46 @@ function KpiCardComponent({
           <div className="kpi-empty">{KPI_EMPTY_MESSAGES[card.key] ?? "No items"}</div>
         ) : (
           card.items.map((item) => (
-            <KpiItemRow key={item.localId} item={item} />
+            <KpiItemRow key={item.localId} item={item} columnLabel={card.columnLabel} />
           ))
         )}
       </div>
+
+      {card.count > card.items.length && (
+        <div className="kpi-card-footer">
+          <button
+            className="kpi-card-more"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen();
+            }}
+          >
+            See all {card.count}
+          </button>
+          {filterUrl && (
+            <Link href={filterUrl} className="kpi-card-more" onClick={(e) => e.stopPropagation()}>
+              Open in Clients →
+            </Link>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 export function LandingPage() {
+  const { user } = useAuth();
   const [cards, setCards] = useState<KpiCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hearingRange, setHearingRange] = useState<"7d" | "month">("7d");
+  const [openCardKey, setOpenCardKey] = useState<string | null>(null);
+  /**
+   * This user's own per-card column choices. The server already folded the
+   * firm-wide default into the cards it returned; this map exists so the modal
+   * can tell "I picked this" from "this is the house default" and offer a reset.
+   */
+  const [myColumns, setMyColumns] = useState<Record<string, string>>({});
 
   const loadDashboard = async (range: "7d" | "month") => {
     try {
@@ -222,9 +261,35 @@ export function LandingPage() {
     loadDashboard(hearingRange);
   }, [hearingRange]);
 
+  useEffect(() => {
+    getPreferences()
+      .then((prefs) => setMyColumns(prefs.kpiColumns ?? {}))
+      .catch(() => {
+        /* offline or not signed in — the firm-wide default still applies */
+      });
+  }, []);
+
   const toggleHearingRange = () => {
     setHearingRange((prev) => (prev === "7d" ? "month" : "7d"));
   };
+
+  /** Save (or clear, with null) this user's column choice for one card. */
+  const selectColumn = (cardKey: string, columnId: string | null) => {
+    const next = { ...myColumns };
+    if (columnId) next[cardKey] = columnId;
+    else delete next[cardKey];
+
+    setMyColumns(next);
+    // Optimistic on the cards too, so the previews behind the modal update now.
+    setCards((prev) =>
+      prev.map((c) => (c.key === cardKey ? { ...c, columnId, columnLabel: null } : c)),
+    );
+    updatePreferences({ kpiColumns: next })
+      .then(() => loadDashboard(hearingRange))
+      .catch((e: Error) => setError(e.message));
+  };
+
+  const openCard = openCardKey ? cards.find((c) => c.key === openCardKey) : undefined;
 
   if (loading) {
     return (
@@ -291,9 +356,23 @@ export function LandingPage() {
             index={i}
             onHearingToggle={card.key === "upcoming_hearings" ? toggleHearingRange : undefined}
             hearingRange={card.key === "upcoming_hearings" ? hearingRange : undefined}
+            onOpen={() => setOpenCardKey(card.key)}
           />
         ))}
       </div>
+
+      {openCard && (
+        <KpiDetailModal
+          cardKey={openCard.key}
+          cardLabel={openCard.label}
+          hearingRange={openCard.key === "upcoming_hearings" ? hearingRange : undefined}
+          columnId={openCard.columnId}
+          isPersonalChoice={openCard.key in myColumns}
+          isAdmin={user?.role === "admin"}
+          onSelectColumn={(columnId) => selectColumn(openCard.key, columnId)}
+          onClose={() => setOpenCardKey(null)}
+        />
+      )}
     </div>
   );
 }

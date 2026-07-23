@@ -2,14 +2,14 @@
 // API Client — Typed fetch wrappers
 // =============================================================================
 
-import type { SearchResult, ClientCaseSummary, ClientUpdate, KpiCard, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
+import type { SearchResult, ClientCaseSummary, ClientUpdate, KpiCard, KpiCardDetail, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 import type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
 import type { ActiveCasesResult, ActiveCase } from "@case-pipeline/query";
 
-export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, BoardItemSummary, ClientUpdate, KpiCard, KpiItem, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
+export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, BoardItemSummary, ClientUpdate, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
 export type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
 export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "@case-pipeline/query/appointments";
@@ -259,6 +259,39 @@ export async function fetchDashboard(hearingRange?: string): Promise<KpiCard[]> 
   return body?.data as KpiCard[];
 }
 
+/**
+ * Every row behind one KPI card. `column` previews a display column without
+ * saving it, so the picker in the modal can react before the user commits.
+ */
+export function fetchKpiCardItems(
+  key: string,
+  opts: { hearingRange?: string; column?: string } = {},
+): Promise<KpiCardDetail> {
+  const params = new URLSearchParams();
+  if (opts.hearingRange) params.set("hearingRange", opts.hearingRange);
+  if (opts.column) params.set("column", opts.column);
+  const qs = params.toString();
+  return apiFetch<KpiCardDetail>(
+    `/api/dashboard/${encodeURIComponent(key)}/items${qs ? `?${qs}` : ""}`,
+  );
+}
+
+// ---- KPI display columns: firm-wide default (admins write, everyone reads) ----
+
+export function fetchGlobalKpiColumns(): Promise<Record<string, string>> {
+  return apiFetch<Record<string, string>>("/api/settings/kpi-columns");
+}
+
+export function updateGlobalKpiColumns(
+  columns: Record<string, string>,
+): Promise<Record<string, string>> {
+  return apiFetch<Record<string, string>>("/api/settings/kpi-columns", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ columns }),
+  });
+}
+
 // =============================================================================
 // User customization — preferences, profile, my-cases, watchlist, saved views
 // =============================================================================
@@ -274,6 +307,8 @@ export interface ServerPreferences {
   density: "comfortable" | "compact";
   dashboardLayout: string[];
   columns: Record<string, string[]>;
+  /** Per-card display column on the dashboard, overriding the firm-wide default. */
+  kpiColumns: Record<string, string>;
 }
 
 export interface PublicUser {

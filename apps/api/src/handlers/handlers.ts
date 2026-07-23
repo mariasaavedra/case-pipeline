@@ -14,7 +14,6 @@ import {
   getBoardItemDetail,
   getClientUpdates,
   getClientRelationships,
-  getDashboardKpis,
   getAppointments,
   searchByType,
   getAlerts,
@@ -165,14 +164,9 @@ export function handleAppointments(req: Request, db: Database): Response {
   return json(result);
 }
 
-export function handleDashboard(req: Request, db: Database): Response {
-  const url = new URL(req.url);
-  const rangeParam = url.searchParams.get("hearingRange");
-  const range = rangeParam === "month" ? "month" : "7d";
-
-  const cards = getDashboardKpis(db, { range });
-  return json(cards);
-}
+// NOTE: the dashboard has no handler here. Its per-card display column depends
+// on the authenticated user, which these Fetch-style handlers don't carry, so
+// /api/dashboard is defined inline in server.ts.
 
 export function handleTypedSearch(req: Request, db: Database): Response {
   const url = new URL(req.url);
