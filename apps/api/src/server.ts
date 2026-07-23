@@ -663,7 +663,28 @@ function runSync(): Promise<void> {
   });
 }
 
+/**
+ * DISABLED BY DEFAULT — opt in with NIGHTLY_SYNC=on.
+ *
+ * `npm run sync:live` opens with resetDatabase() (a full DROP) BEFORE it fetches
+ * anything, so a run that dies partway leaves an empty database rather than the
+ * previous night's data. That is not a theoretical risk: the 2026-07-16 run died
+ * mid-pass and left client_updates empty for a week, and the 2026-07-23 run lost
+ * the whole _cd_open_forms board to a network timeout — the board behind the
+ * Open Forms card, Active Cases and My Cases.
+ *
+ * Leaving a destructive-first, 3-hour job on an unattended midnight timer means
+ * betting the entire dataset on a clean network run every night. Off until the
+ * sync is incremental (upsert by monday_item_id) instead of drop-and-rebuild.
+ */
 function scheduleNightlySync() {
+  if (process.env.NIGHTLY_SYNC !== "on") {
+    console.log(
+      "[sync] Nightly sync DISABLED (set NIGHTLY_SYNC=on to enable). " +
+        "Full sync is destructive-first — run it manually: npm run sync:live",
+    );
+    return;
+  }
   // Runs every day at midnight (server local time).
   cron.schedule("0 0 * * *", () => {
     runSync().catch((err) => console.error("[sync] Error:", err));
