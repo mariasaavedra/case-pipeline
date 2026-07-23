@@ -5,20 +5,20 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 const SCHEMA_SQL = `
 -- =============================================================================
 -- Seed Data Factory Schema
 -- =============================================================================
 
--- Track generation/sync runs. Every profile, contract and board_item belongs to
--- a batch via batch_id … ON DELETE CASCADE. With foreign_keys=ON (set on every
--- connection — see openDatabase), deleting a batch row deletes ALL of its client
--- data. In live.db each sync writes one batch and a full re-sync replaces it, so
--- the cascade is intentional — never DELETE FROM seed_batches by hand to clean
--- up unless you mean to drop the data it owns. Operational tables (write_queue,
--- sync_state) deliberately carry no batch_id so they survive a re-sync.
+-- Track generation/sync runs. Every profile, contract and board_item records the
+-- batch that last touched it via batch_id … ON DELETE SET NULL (schema v15+).
+-- Deleting a batch row now only nulls that provenance pointer — it NO LONGER
+-- deletes the client rows (pre-v15 this was ON DELETE CASCADE, which turned a
+-- stray "DELETE FROM seed_batches" into silent data loss). Operational tables
+-- (write_queue, sync_state) deliberately carry no batch_id so they survive a
+-- re-sync.
 CREATE TABLE IF NOT EXISTS seed_batches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_name TEXT NOT NULL,
@@ -29,12 +29,18 @@ CREATE TABLE IF NOT EXISTS seed_batches (
     metadata TEXT
 );
 
--- Profiles with local + Monday.com IDs
+-- Profiles with local + Monday.com IDs.
+--
+-- monday_item_id is UNIQUE (v15+): it is the stable natural key, the thing an
+-- incremental sync upserts on. local_id stays the surrogate the app links by.
+-- updated_at_source / last_seen_at / deleted_at are the incremental-sync
+-- scaffolding (Monday's own updated_at; when a sync last confirmed the row;
+-- soft-delete marker) — added in v15, populated once the sync goes incremental.
 CREATE TABLE IF NOT EXISTS profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    batch_id INTEGER NOT NULL REFERENCES seed_batches(id) ON DELETE CASCADE,
+    batch_id INTEGER REFERENCES seed_batches(id) ON DELETE SET NULL,
     local_id TEXT NOT NULL UNIQUE,
-    monday_item_id TEXT,
+    monday_item_id TEXT UNIQUE,
     name TEXT NOT NULL,
     email TEXT,
     phone TEXT,
@@ -50,15 +56,18 @@ CREATE TABLE IF NOT EXISTS profiles (
     sync_status TEXT NOT NULL DEFAULT 'pending',
     sync_error TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    synced_at TEXT
+    synced_at TEXT,
+    updated_at_source TEXT,
+    last_seen_at TEXT,
+    deleted_at TEXT
 );
 
--- Contracts linked to profiles
+-- Contracts linked to profiles. See profiles for the v15 identity/scaffolding cols.
 CREATE TABLE IF NOT EXISTS contracts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    batch_id INTEGER NOT NULL REFERENCES seed_batches(id) ON DELETE CASCADE,
+    batch_id INTEGER REFERENCES seed_batches(id) ON DELETE SET NULL,
     local_id TEXT NOT NULL UNIQUE,
-    monday_item_id TEXT,
+    monday_item_id TEXT UNIQUE,
     profile_local_id TEXT NOT NULL,
     profile_monday_id TEXT,
     name TEXT NOT NULL,
@@ -71,15 +80,19 @@ CREATE TABLE IF NOT EXISTS contracts (
     sync_status TEXT NOT NULL DEFAULT 'pending',
     sync_error TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    synced_at TEXT
+    synced_at TEXT,
+    updated_at_source TEXT,
+    last_seen_at TEXT,
+    deleted_at TEXT
 );
 
--- Generic items for other boards (RFEs, Court Cases, etc.)
+-- Generic items for other boards (RFEs, Court Cases, etc.).
+-- See profiles for the v15 identity/scaffolding cols.
 CREATE TABLE IF NOT EXISTS board_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    batch_id INTEGER NOT NULL REFERENCES seed_batches(id) ON DELETE CASCADE,
+    batch_id INTEGER REFERENCES seed_batches(id) ON DELETE SET NULL,
     local_id TEXT NOT NULL UNIQUE,
-    monday_item_id TEXT,
+    monday_item_id TEXT UNIQUE,
     board_key TEXT NOT NULL,
     group_title TEXT,
     name TEXT NOT NULL,
@@ -93,7 +106,10 @@ CREATE TABLE IF NOT EXISTS board_items (
     sync_status TEXT NOT NULL DEFAULT 'pending',
     sync_error TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    synced_at TEXT
+    synced_at TEXT,
+    updated_at_source TEXT,
+    last_seen_at TEXT,
+    deleted_at TEXT
 );
 
 -- Unified per-profile timeline. Holds Monday.com "updates" (comments + replies)
@@ -585,6 +601,190 @@ export function initializeSchema(db: Database): void {
           ON client_updates(profile_local_id, content_sig)
           WHERE content_sig IS NOT NULL
       `);
+    }
+
+    // Migration v14 → v15: stable-identity foundation for the incremental sync.
+    // Rebuilds profiles, contracts and board_items to:
+    //   1. drop the seed_batches CASCADE — batch_id is now nullable ON DELETE SET
+    //      NULL, so deleting a batch nulls provenance instead of wiping client
+    //      rows (the old CASCADE turned a stray DELETE into silent data loss);
+    //   2. add UNIQUE(monday_item_id) — the stable natural key an incremental
+    //      sync will upsert on (multiple NULLs still allowed, so seed data with
+    //      no Monday ids is fine);
+    //   3. add updated_at_source / last_seen_at / deleted_at scaffolding columns.
+    //
+    // SQLite can't ALTER a constraint, so each table is rebuilt via the standard
+    // create-copy-drop-rename dance. foreign_keys must be OFF for a rebuild and
+    // can't toggle inside a transaction, so it brackets the whole thing;
+    // foreign_key_check inside the transaction rolls back on any dangling ref.
+    // id is copied verbatim so profiles' external-content FTS (content_rowid=id)
+    // stays valid; its triggers are recreated after the rename.
+    if (fromVersion < 15) {
+      // Only rebuild tables that exist. A real live/seed DB has all three; some
+      // migration unit-test fixtures build only a subset (e.g. client_updates
+      // alone), so guard each rebuild rather than assume the full schema.
+      const tableExists = (name: string): boolean =>
+        !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
+      const doProfiles = tableExists("profiles");
+      const doContracts = tableExists("contracts");
+      const doBoardItems = tableExists("board_items");
+
+      if (doProfiles || doContracts || doBoardItems) {
+        console.log("  [migrate v15] rebuilding client tables (drop CASCADE, UNIQUE(monday_item_id), +3 cols)…");
+        db.pragma("foreign_keys = OFF");
+        const rebuild = db.transaction(() => {
+          if (doProfiles) db.exec(`
+          -- ---- profiles ----
+          CREATE TABLE profiles_v15 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER REFERENCES seed_batches(id) ON DELETE SET NULL,
+            local_id TEXT NOT NULL UNIQUE,
+            monday_item_id TEXT UNIQUE,
+            name TEXT NOT NULL,
+            email TEXT,
+            phone TEXT,
+            notes TEXT,
+            next_interaction TEXT,
+            priority TEXT,
+            group_title TEXT,
+            address TEXT,
+            date_of_birth TEXT,
+            place_of_birth TEXT,
+            a_number TEXT,
+            raw_column_values TEXT,
+            sync_status TEXT NOT NULL DEFAULT 'pending',
+            sync_error TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            synced_at TEXT,
+            updated_at_source TEXT,
+            last_seen_at TEXT,
+            deleted_at TEXT
+          );
+          INSERT INTO profiles_v15 (id, batch_id, local_id, monday_item_id, name, email, phone,
+            notes, next_interaction, priority, group_title, address, date_of_birth, place_of_birth,
+            a_number, raw_column_values, sync_status, sync_error, created_at, synced_at, last_seen_at)
+            SELECT id, batch_id, local_id, monday_item_id, name, email, phone,
+              notes, next_interaction, priority, group_title, address, date_of_birth, place_of_birth,
+              a_number, raw_column_values, sync_status, sync_error, created_at, synced_at, synced_at
+            FROM profiles;
+          DROP TABLE profiles;
+          ALTER TABLE profiles_v15 RENAME TO profiles;
+          CREATE INDEX IF NOT EXISTS idx_profiles_batch ON profiles(batch_id);
+          CREATE INDEX IF NOT EXISTS idx_profiles_sync ON profiles(sync_status);
+          CREATE INDEX IF NOT EXISTS idx_profiles_monday_id ON profiles(monday_item_id);
+          CREATE INDEX IF NOT EXISTS idx_profiles_group ON profiles(group_title);
+          `);
+
+          // The FTS sync triggers reference profiles_fts, so only recreate them
+          // where that external-content table exists (every real DB from v3+; not
+          // the minimal fixtures some migration tests build). A trigger whose body
+          // names a missing table errors as soon as the next DDL revalidates it.
+          if (doProfiles && tableExists("profiles_fts")) db.exec(`
+          CREATE TRIGGER profiles_ai AFTER INSERT ON profiles BEGIN
+            INSERT INTO profiles_fts(rowid, name, email, phone, address)
+            VALUES (new.id, new.name, new.email, new.phone, new.address);
+          END;
+          CREATE TRIGGER profiles_ad AFTER DELETE ON profiles BEGIN
+            INSERT INTO profiles_fts(profiles_fts, rowid, name, email, phone, address)
+            VALUES ('delete', old.id, old.name, old.email, old.phone, old.address);
+          END;
+          CREATE TRIGGER profiles_au AFTER UPDATE ON profiles BEGIN
+            INSERT INTO profiles_fts(profiles_fts, rowid, name, email, phone, address)
+            VALUES ('delete', old.id, old.name, old.email, old.phone, old.address);
+            INSERT INTO profiles_fts(rowid, name, email, phone, address)
+            VALUES (new.id, new.name, new.email, new.phone, new.address);
+          END;
+          `);
+
+          if (doContracts) db.exec(`
+          -- ---- contracts ----
+          CREATE TABLE contracts_v15 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER REFERENCES seed_batches(id) ON DELETE SET NULL,
+            local_id TEXT NOT NULL UNIQUE,
+            monday_item_id TEXT UNIQUE,
+            profile_local_id TEXT NOT NULL,
+            profile_monday_id TEXT,
+            name TEXT NOT NULL,
+            case_type TEXT,
+            value INTEGER,
+            contract_id TEXT,
+            status TEXT,
+            group_title TEXT,
+            raw_column_values TEXT,
+            sync_status TEXT NOT NULL DEFAULT 'pending',
+            sync_error TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            synced_at TEXT,
+            updated_at_source TEXT,
+            last_seen_at TEXT,
+            deleted_at TEXT
+          );
+          INSERT INTO contracts_v15 (id, batch_id, local_id, monday_item_id, profile_local_id,
+            profile_monday_id, name, case_type, value, contract_id, status, group_title,
+            raw_column_values, sync_status, sync_error, created_at, synced_at, last_seen_at)
+            SELECT id, batch_id, local_id, monday_item_id, profile_local_id,
+              profile_monday_id, name, case_type, value, contract_id, status, group_title,
+              raw_column_values, sync_status, sync_error, created_at, synced_at, synced_at
+            FROM contracts;
+          DROP TABLE contracts;
+          ALTER TABLE contracts_v15 RENAME TO contracts;
+          CREATE INDEX IF NOT EXISTS idx_contracts_batch ON contracts(batch_id);
+          CREATE INDEX IF NOT EXISTS idx_contracts_profile ON contracts(profile_local_id);
+          CREATE INDEX IF NOT EXISTS idx_contracts_sync ON contracts(sync_status);
+          `);
+
+          if (doBoardItems) db.exec(`
+          -- ---- board_items ----
+          CREATE TABLE board_items_v15 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER REFERENCES seed_batches(id) ON DELETE SET NULL,
+            local_id TEXT NOT NULL UNIQUE,
+            monday_item_id TEXT UNIQUE,
+            board_key TEXT NOT NULL,
+            group_title TEXT,
+            name TEXT NOT NULL,
+            status TEXT,
+            next_date TEXT,
+            next_time TEXT,
+            attorney TEXT,
+            paralegals TEXT,
+            profile_local_id TEXT,
+            column_values TEXT NOT NULL,
+            sync_status TEXT NOT NULL DEFAULT 'pending',
+            sync_error TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            synced_at TEXT,
+            updated_at_source TEXT,
+            last_seen_at TEXT,
+            deleted_at TEXT
+          );
+          INSERT INTO board_items_v15 (id, batch_id, local_id, monday_item_id, board_key,
+            group_title, name, status, next_date, next_time, attorney, paralegals, profile_local_id,
+            column_values, sync_status, sync_error, created_at, synced_at, last_seen_at)
+            SELECT id, batch_id, local_id, monday_item_id, board_key,
+              group_title, name, status, next_date, next_time, attorney, paralegals, profile_local_id,
+              column_values, sync_status, sync_error, created_at, synced_at, synced_at
+            FROM board_items;
+          DROP TABLE board_items;
+          ALTER TABLE board_items_v15 RENAME TO board_items;
+          CREATE INDEX IF NOT EXISTS idx_board_items_batch ON board_items(batch_id);
+          CREATE INDEX IF NOT EXISTS idx_board_items_board ON board_items(board_key);
+          CREATE INDEX IF NOT EXISTS idx_board_items_status ON board_items(status);
+          CREATE INDEX IF NOT EXISTS idx_board_items_profile ON board_items(profile_local_id);
+          CREATE INDEX IF NOT EXISTS idx_board_items_next_date ON board_items(next_date);
+          CREATE INDEX IF NOT EXISTS idx_board_items_group ON board_items(board_key, group_title);
+          CREATE INDEX IF NOT EXISTS idx_board_items_paralegals ON board_items(board_key, paralegals);
+          `);
+
+          const violations = db.pragma("foreign_key_check") as unknown[];
+          if (Array.isArray(violations) && violations.length > 0) {
+            throw new Error(`v15 migration: foreign_key_check failed: ${JSON.stringify(violations)}`);
+          }
+        });
+        rebuild();
+        db.pragma("foreign_keys = ON");
+      }
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);
