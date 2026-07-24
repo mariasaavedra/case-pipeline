@@ -20,6 +20,11 @@ export type { ActiveCase, ActiveCasesAssignee, ActiveCasesResult, ActiveCasesOpt
 export type {
   ProfileSummary,
   ContractSummary,
+  ContractStatusKey,
+  ContractLinkedCase,
+  ContractTotals,
+  ClientContracts,
+  StatusTone,
   BoardItemSummary,
   ClientCaseSummary,
   ClientUpdate,
@@ -34,4 +39,10 @@ export type {
   TypedSearchResult,
 } from "./types";
 export { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS, PAID_CONTRACT_STATUSES } from "./types";
+export {
+  normalizeContractStatus,
+  contractStatusKey,
+  isContractPaid,
+  CONTRACT_STATUS_LABELS,
+} from "./types";
 export type { AlertItem, AlertGroup, AlertsResult, AlertSeverity } from "./types";

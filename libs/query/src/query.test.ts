@@ -68,12 +68,13 @@ function insertContract(
     status: string;
     value: number;
     contractId: string;
+    groupTitle?: string;
   }
 ) {
-  run(db, 
-    `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [batchId, opts.localId, opts.profileLocalId, opts.name, opts.caseType, opts.status, opts.value, opts.contractId]
+  run(db,
+    `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id, group_title)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [batchId, opts.localId, opts.profileLocalId, opts.name, opts.caseType, opts.status, opts.value, opts.contractId, opts.groupTitle ?? null]
   );
 }
 
@@ -276,34 +277,38 @@ describe("getClientContracts", () => {
       profileLocalId: "p1",
       name: "I-485 Application",
       caseType: "I-485",
-      status: "Active",
+      status: "Payment link sent",
       value: 5000,
       contractId: "CT-001",
+      groupTitle: "Pending Fee Ks",
     });
     insertContract(db, batchId, {
       localId: "c2",
       profileLocalId: "p1",
       name: "N-400 Application",
       caseType: "N-400",
-      status: "Completed",
+      status: "Create Project",
       value: 3000,
       contractId: "CT-002",
+      groupTitle: "Closed Fee Ks",
     });
     insertContract(db, batchId, {
       localId: "c3",
       profileLocalId: "p1",
       name: "FOIA Request",
       caseType: "FOIA",
-      status: "Cancelled",
+      status: "Not going forward",
       value: 500,
       contractId: "CT-003",
+      groupTitle: "Not Going Forward",
     });
 
+    // Classification is group-driven: Pending → active; Closed/Not-going-forward → closed.
     const { active, closed } = getClientContracts(db, "p1");
     expect(active.length).toBe(1);
     expect(active[0]!.caseType).toBe("I-485");
     expect(closed.length).toBe(2);
-    expect(closed.map((c) => c.status).sort()).toEqual(["Cancelled", "Completed"]);
+    expect(closed.map((c) => c.caseType).sort()).toEqual(["FOIA", "N-400"]);
     db.close();
   });
 
@@ -517,17 +522,19 @@ describe("getClientCaseSummary", () => {
       profileLocalId: "p1",
       name: "I-485",
       caseType: "I-485",
-      status: "Active",
+      status: "Payment link sent",
       value: 5000,
       contractId: "CT-001",
+      groupTitle: "Pending Fee Ks",
     });
     insertContract(db, batchId, {
       localId: "c2",
       profileLocalId: "p1",
       name: "FOIA",
       caseType: "FOIA",
-      status: "Completed",
+      status: "Create Project",
       value: 500,
+      groupTitle: "Closed Fee Ks",
       contractId: "CT-002",
     });
 
@@ -570,7 +577,7 @@ describe("getClientCaseSummary", () => {
     expect(summary!.contracts.active.length).toBe(1);
     expect(summary!.contracts.active[0]!.caseType).toBe("I-485");
     expect(summary!.contracts.closed.length).toBe(1);
-    expect(summary!.contracts.closed[0]!.status).toBe("Completed");
+    expect(summary!.contracts.closed[0]!.statusLabel).toBe("Completed");
 
     // Board items
     expect(Object.keys(summary!.boardItems).sort()).toEqual(["_cd_open_forms", "court_cases"]);

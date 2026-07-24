@@ -52,15 +52,17 @@ beforeAll(() => {
     [batchId, "p2", "Carlos Garcia", "carlos@test.com", "555-5678", null, null]
   );
 
-  run(db, 
-    `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [batchId, "c1", "p1", "I-485", "I-485", "Active", 5000, "CT-001"]
+  // Classification is group-driven (see normalizeContractStatus): a Pending
+  // group is active, a Closed group is closed.
+  run(db,
+    `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id, group_title)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [batchId, "c1", "p1", "I-485", "I-485", "Payment link sent", 5000, "CT-001", "Pending Fee Ks"]
   );
-  run(db, 
-    `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [batchId, "c2", "p1", "FOIA", "FOIA", "Completed", 500, "CT-002"]
+  run(db,
+    `INSERT INTO contracts (batch_id, local_id, profile_local_id, name, case_type, status, value, contract_id, group_title)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [batchId, "c2", "p1", "FOIA", "FOIA", "Create Project", 500, "CT-002", "Closed Fee Ks"]
   );
 
   run(db, 
@@ -178,7 +180,7 @@ describe("handleClientContracts", () => {
     expect(body.data.active.length).toBe(1);
     expect(body.data.active[0].caseType).toBe("I-485");
     expect(body.data.closed.length).toBe(1);
-    expect(body.data.closed[0].status).toBe("Completed");
+    expect(body.data.closed[0].statusLabel).toBe("Completed");
   });
 
   test("returns empty arrays for client with no contracts", async () => {

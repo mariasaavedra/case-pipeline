@@ -1,8 +1,8 @@
 import { ContractsSection } from "./ContractsSection";
-import type { ContractSummary } from "../api";
+import type { ClientContracts } from "../api";
 
 interface Props {
-  contracts: { active: ContractSummary[]; closed: ContractSummary[] };
+  contracts: ClientContracts;
 }
 
 export function ContractsTab({ contracts }: Props) {

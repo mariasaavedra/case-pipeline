@@ -26,12 +26,72 @@ export interface ProfileSummary {
   consultFile?: string | null;
 }
 
+/**
+ * A contract's status as it matters for understanding the CASE, not the daily
+ * Monday workflow. Derived from the Monday group (the reliable signal), not the
+ * raw status label:
+ *   completed          — contracting done (paid, e-file created). "Create Project".
+ *   paid               — paid, e-file being opened.
+ *   pending            — genuinely awaiting something (payment, review, signature).
+ *   not_going_forward  — dead.
+ *   other              — anything the groups don't cover.
+ */
+export type ContractStatusKey =
+  | "completed"
+  | "paid"
+  | "pending"
+  | "not_going_forward"
+  | "other";
+
+/** Badge tone; matches the web's StatusBadge color keys. */
+export type StatusTone = "green" | "blue" | "yellow" | "red" | "gray" | "purple";
+
+/** The case (Open Form / Court Case / …) a contract represents, resolved live. */
+export interface ContractLinkedCase {
+  boardKey: string;
+  name: string;
+  status: string | null;
+}
+
 export interface ContractSummary {
   localId: string;
   caseType: string | null;
+  /** Raw Monday status, kept for reference. Prefer statusLabel for display. */
   status: string;
+  /** Legacy seed-only column; never populated by the live sync. */
   value: number | null;
   contractId: string | null;
+  /** Normalized case-status classification (drives active/closed + paid totals). */
+  statusKey: ContractStatusKey;
+  /** Human label for the case view — e.g. "Create Project" → "Completed". */
+  statusLabel: string;
+  tone: StatusTone;
+  /** Annual fee paid, in dollars (parsed from Monday). Null when unset. */
+  af: number | null;
+  /** Processing fee paid, in dollars. Null when unset. */
+  pf: number | null;
+  /** What the contract becomes (it_will_go_to): "Open Forms", "Court Cases", … */
+  goesTo: string | null;
+  /** The actual linked case + its current status, or null when not linked. */
+  linkedCase: ContractLinkedCase | null;
+}
+
+/** Roll-up of a client's contract payments. */
+export interface ContractTotals {
+  /** Sum of AF across contracts whose contracting is paid/completed. */
+  afPaid: number;
+  /** Sum of PF across paid/completed contracts. */
+  pfPaid: number;
+  /** afPaid + pfPaid. */
+  totalPaid: number;
+  /** How many contracts are counted as paid. */
+  paidCount: number;
+}
+
+export interface ClientContracts {
+  active: ContractSummary[];
+  closed: ContractSummary[];
+  totals: ContractTotals;
 }
 
 export interface BoardItemSummary {
@@ -73,10 +133,7 @@ export interface ClientUpdate {
 
 export interface ClientCaseSummary {
   profile: ProfileSummary;
-  contracts: {
-    active: ContractSummary[];
-    closed: ContractSummary[];
-  };
+  contracts: ClientContracts;
   boardItems: Record<string, BoardItemSummary[]>;
   appointments: BoardItemSummary[];
   updates: ClientUpdate[];
@@ -119,12 +176,84 @@ export interface TypedSearchResult {
 }
 
 // Contract statuses considered "closed"
+//
+// DEPRECATED for live data: these labels do not exist in the real Monday
+// workspace (the real terminal statuses are "Create Project", "Not going
+// forward", etc.), so this set never matched and left completed contracts
+// showing as active. normalizeContractStatus() below is the live-data path;
+// this stays only for the Faker seed generator, which emits these labels.
 export const CLOSED_CONTRACT_STATUSES = new Set([
   "Completed",
   "Cancelled",
   "Refunded",
   "Withdrawn",
 ]);
+
+// ---- Contract status translation (case view) -------------------------------
+//
+// The Monday group is the reliable classifier; the raw status label is for the
+// daily workflow and often means little for "where is this case". This layer
+// maps both into a case-oriented status. Domain staff can tune the labels/tones
+// in CONTRACT_STATUS_LABELS without touching the classification logic.
+
+/** Curated per-status display overrides. Falls back to a group-derived label. */
+export const CONTRACT_STATUS_LABELS: Record<string, { label: string; tone: StatusTone }> = {
+  "Create Project": { label: "Completed", tone: "green" },
+  "E-File opened": { label: "Paid · E-file open", tone: "green" },
+  "Open E-File": { label: "Paid · opening e-file", tone: "blue" },
+  "Payment link sent": { label: "Awaiting payment", tone: "yellow" },
+  "Sent to Client": { label: "Sent to client", tone: "yellow" },
+  "Client coming to the office": { label: "Client coming in", tone: "yellow" },
+  "Atty Reviewing": { label: "Attorney reviewing", tone: "yellow" },
+  HOLD: { label: "On hold", tone: "yellow" },
+  "Needs to be sent": { label: "Needs to be sent", tone: "yellow" },
+  "Needs to be Amended": { label: "Needs amendment", tone: "yellow" },
+  "Not going forward": { label: "Not going forward", tone: "gray" },
+  "Needs Refund": { label: "Needs refund", tone: "red" },
+  "Paralegal to be assigned": { label: "Awaiting paralegal", tone: "yellow" },
+};
+
+const GROUP_DEFAULTS: Record<ContractStatusKey, { label: string; tone: StatusTone }> = {
+  completed: { label: "Completed", tone: "green" },
+  paid: { label: "Paid", tone: "blue" },
+  pending: { label: "Pending", tone: "yellow" },
+  not_going_forward: { label: "Not going forward", tone: "gray" },
+  other: { label: "—", tone: "gray" },
+};
+
+/** Classify a contract by its Monday group (the reliable signal). */
+export function contractStatusKey(groupTitle: string | null): ContractStatusKey {
+  const g = (groupTitle ?? "").toLowerCase();
+  if (g.includes("closed")) return "completed";
+  if (g.includes("paid") || g.includes("waiver")) return "paid";
+  if (g.includes("pending")) return "pending";
+  if (g.includes("not going forward")) return "not_going_forward";
+  return "other";
+}
+
+/** True when the contracting was settled — counts toward paid totals. */
+export function isContractPaid(key: ContractStatusKey): boolean {
+  return key === "completed" || key === "paid";
+}
+
+/**
+ * Translate a contract's (group, raw status) into a case-oriented status.
+ * The KEY comes from the group; the label/tone prefer a curated override for the
+ * specific status, else the group's default.
+ */
+export function normalizeContractStatus(
+  groupTitle: string | null,
+  rawStatus: string | null,
+): { key: ContractStatusKey; label: string; tone: StatusTone } {
+  const key = contractStatusKey(groupTitle);
+  const override = rawStatus ? CONTRACT_STATUS_LABELS[rawStatus] : undefined;
+  const base = GROUP_DEFAULTS[key];
+  return {
+    key,
+    label: override?.label ?? (key === "other" ? (rawStatus ?? "—") : base.label),
+    tone: override?.tone ?? base.tone,
+  };
+}
 
 // Board keys that represent appointment boards
 export const APPOINTMENT_BOARD_KEYS = new Set([

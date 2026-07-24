@@ -4,9 +4,16 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
-import type { ClientCaseSummary, ClientUpdate, ProfileSummary } from "./types";
+import type { ClientCaseSummary, ClientContracts, ClientUpdate, ProfileSummary } from "./types";
 import { getClientProfile } from "./client";
 import { getClientContracts, batchGetClientContracts } from "./contracts";
+
+/** Zero-contract fallback for a profile with no contracts in a batch. */
+const EMPTY_CONTRACTS: ClientContracts = {
+  active: [],
+  closed: [],
+  totals: { afPaid: 0, pfPaid: 0, totalPaid: 0, paidCount: 0 },
+};
 import { getClientBoardItems, batchGetClientBoardItems } from "./board-items";
 import { getClientUpdates } from "./updates";
 
@@ -92,7 +99,7 @@ export function batchGetClientCaseSummaries(
     const profile = profileMap.get(id);
     if (!profile) continue;
 
-    const contracts = contractsMap.get(id) ?? { active: [], closed: [] };
+    const contracts = contractsMap.get(id) ?? EMPTY_CONTRACTS;
     const { byBoard, appointments } = boardItemsMap.get(id) ?? { byBoard: {}, appointments: [] };
     const updates = updatesMap.get(id) ?? [];
     const courtLinkedItemIds = courtLinkedMap.get(id) ?? [];
