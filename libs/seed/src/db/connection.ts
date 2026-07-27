@@ -17,20 +17,27 @@ export interface DatabaseOptions {
  * opens a database must call this — which is why `openDatabase()` exists.
  *
  * - journal_mode = WAL    readers never block the single writer (sync / write-back).
- * - synchronous  = NORMAL safe with WAL, far fewer fsyncs than the FULL default.
+ * - synchronous  = NORMAL|FULL  see `durable` below.
  * - busy_timeout = 5000   wait up to 5s for a lock instead of throwing SQLITE_BUSY
  *                         (lets the sync process and the API coexist on live.db).
  * - foreign_keys = ON     SQLite enforces FK constraints per-connection; OFF by default.
  * - cache_size   = -32000 32MB page cache for multi-table JOINs (e.g. case-summary).
  * - temp_store   = MEMORY ORDER BY / GROUP BY temporaries stay in RAM, not on disk.
  *
+ * `durable` (synchronous=FULL): in WAL mode, synchronous=NORMAL leaves a real
+ * corruption window — a power loss or host reset DURING a checkpoint can tear the
+ * main database file (a DigitalOcean host failure / live-migration counts as a
+ * reset). FULL fsyncs so that window is closed. It costs extra fsyncs, negligible
+ * on this low-write workload, and worth it for live.db which is the ONLY copy of
+ * real client data. Regenerable databases (seed.db) stay NORMAL for speed.
+ *
  * WAL/synchronous are skipped for read-only handles (they cannot change the
  * journal mode of a DB they only opened for reading).
  */
-export function applyPragmas(db: DatabaseInstance, readonly = false): void {
+export function applyPragmas(db: DatabaseInstance, readonly = false, durable = false): void {
   if (!readonly) {
     db.pragma("journal_mode = WAL");
-    db.pragma("synchronous = NORMAL");
+    db.pragma(durable ? "synchronous = FULL" : "synchronous = NORMAL");
   }
   db.pragma("busy_timeout = 5000");
   db.pragma("foreign_keys = ON");
@@ -42,12 +49,29 @@ export function applyPragmas(db: DatabaseInstance, readonly = false): void {
  * Open a SQLite database with the standard hardening pragmas applied. This is
  * the single entry point every process should use (API, sync, seeder, scripts)
  * so connection settings can never drift between them.
+ *
+ * Pass `durable: true` for the live production DB (synchronous=FULL). Leave it
+ * off for regenerable data (seed) where speed matters more than the last-commit
+ * durability.
  */
-export function openDatabase(dbPath: string, options: { readonly?: boolean } = {}): DatabaseInstance {
+export function openDatabase(
+  dbPath: string,
+  options: { readonly?: boolean; durable?: boolean } = {},
+): DatabaseInstance {
   const readonly = options.readonly ?? false;
   const db = new Database(dbPath, { readonly });
-  applyPragmas(db, readonly);
+  applyPragmas(db, readonly, options.durable ?? false);
   return db;
+}
+
+/** Full-scan integrity check. Returns true when the DB reports "ok". */
+export function isDatabaseHealthy(db: DatabaseInstance): boolean {
+  try {
+    const rows = db.pragma("quick_check") as Array<{ quick_check: string }>;
+    return rows.length === 1 && rows[0]?.quick_check === "ok";
+  } catch {
+    return false;
+  }
 }
 
 let instance: DatabaseInstance | null = null;

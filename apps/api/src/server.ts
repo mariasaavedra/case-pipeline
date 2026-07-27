@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import cron from "node-cron";
 import { initializeSchema, getSchemaVersion, SCHEMA_VERSION } from "@case-pipeline/seed/db/schema";
-import { openDatabase } from "@case-pipeline/seed/db/connection";
+import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
 import { startWriteQueueProcessor, enqueueWrite } from "./write-queue/processor.js";
 import {
   handleListClients,
@@ -96,7 +96,8 @@ if (!fs.existsSync(DB_PATH)) {
   process.exit(1);
 }
 
-const db = openDatabase(DB_PATH);
+// durable (synchronous=FULL) for live — it is the only copy of client data.
+const db = openDatabase(DB_PATH, { durable: DB_SOURCE === "live" });
 
 // Auto-migrate on startup. A schema mismatch on real client data must never mean
 // "re-seed" (that would wipe it) — apply the incremental migrations instead. For
@@ -111,6 +112,24 @@ async function backupBeforeMigrate(fromVersion: number): Promise<void> {
   const key = backupEncryptionKey();
   const final = key ? await encryptFile(dest, key) : dest;
   console.log(`[migrate] Backed up ${DB_SOURCE}.db (v${fromVersion}) → ${final}`);
+}
+
+// Integrity gate — BEFORE anything reads the whole file. On 2026-07-24 a corrupt
+// live.db sent the API into a crash loop: the pre-migrate VACUUM INTO tripped on
+// the corruption and threw, over and over, spamming 0-byte backup files. Catch it
+// here with a clean, single, actionable message instead. quick_check is a fast
+// structural scan; it would have flagged that corruption days before it surfaced.
+if (!isDatabaseHealthy(db)) {
+  console.error("=".repeat(70));
+  console.error(`FATAL: ${DB_SOURCE}.db failed its integrity check — the file is corrupt.`);
+  console.error("The API will NOT start (a corrupt DB must not be migrated or served).");
+  console.error("Restore from a known-good backup, e.g.:");
+  console.error("  1. docker compose down");
+  console.error("  2. move data/live.db + -wal + -shm aside");
+  console.error("  3. decrypt a backup: npx tsx scripts/restore-backup.ts data/backups/<file>.db.enc data/live.db");
+  console.error("  4. verify it (quick_check) before swapping it in, then docker compose up -d");
+  console.error("=".repeat(70));
+  process.exit(1);
 }
 
 const currentVersion = getSchemaVersion(db);
@@ -730,14 +749,34 @@ function scheduleNightlySync() {
 
 function scheduleWalCheckpoint() {
   cron.schedule("0 * * * *", () => {
+    // Skip while a sync holds the write lock. A TRUNCATE checkpoint needs an
+    // exclusive lock and rewrites the main DB file; running it against a file the
+    // sync process is actively writing was the leading suspect for the 2026-07-24
+    // corruption. PASSIVE (below) already avoids the exclusive lock, but not
+    // overlapping at all is cheaper and safer.
+    if (syncInFlight) {
+      console.log("[wal] checkpoint skipped — sync in flight.");
+      return;
+    }
+    const held = (db.prepare("SELECT locked_by FROM sync_state WHERE id = 1").get() as
+      | { locked_by: string | null }
+      | undefined)?.locked_by;
+    if (held) {
+      console.log(`[wal] checkpoint skipped — sync lock held by ${held}.`);
+      return;
+    }
     try {
-      db.pragma("wal_checkpoint(TRUNCATE)");
-      usersDb.pragma("wal_checkpoint(TRUNCATE)");
+      // PASSIVE, not TRUNCATE: it never demands an exclusive lock and never
+      // blocks — it flushes what it safely can and returns. SQLite's own
+      // auto-checkpoint keeps the WAL from growing unbounded; this is a gentle
+      // nudge, not a forced rewrite.
+      db.pragma("wal_checkpoint(PASSIVE)");
+      usersDb.pragma("wal_checkpoint(PASSIVE)");
     } catch (err) {
       console.error("[wal] checkpoint error:", err);
     }
   });
-  console.log("[wal] Hourly WAL checkpoint scheduled.");
+  console.log("[wal] Hourly WAL checkpoint scheduled (passive, skipped during sync).");
 }
 
 async function runBackup(): Promise<void> {

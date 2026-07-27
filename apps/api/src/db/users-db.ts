@@ -9,7 +9,9 @@ const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const USERS_DB_PATH = path.join(DATA_DIR, "users.db");
-const usersDb = openDatabase(USERS_DB_PATH);
+// durable (synchronous=FULL): users.db is the only copy of accounts, preferences
+// and Monday OAuth tokens. It is tiny, so the extra fsyncs are free.
+const usersDb = openDatabase(USERS_DB_PATH, { durable: true });
 
 // =============================================================================
 // Versioned schema for users.db

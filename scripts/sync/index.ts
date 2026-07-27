@@ -51,7 +51,7 @@ import {
 import type { MondayItem, MondayTimelineItem } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
-import { openDatabase } from "@case-pipeline/seed/db/connection";
+import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
 import { backupDatabase } from "../backup-db.js";
 import { acquireSyncLock, releaseSyncLock, recordSyncResult } from "@case-pipeline/seed/db/sync-lock";
 import { normalizeANumber } from "@case-pipeline/core";
@@ -154,7 +154,10 @@ async function main() {
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, "live.db");
 
-  const db = openDatabase(dbPath);
+  // durable (synchronous=FULL): live.db is the only copy of client data, and the
+  // sync is its heaviest writer — the run most likely to coincide with a host
+  // reset, which is exactly the WAL corruption window FULL closes.
+  const db = openDatabase(dbPath, { durable: true });
 
   // The sync is UPSERT-based and non-destructive (schema v15+): rows are matched
   // on the stable monday_item_id and updated in place, so local_id survives every
@@ -836,9 +839,22 @@ async function main() {
   console.log(`  → ${dbPath}`);
   console.log(`\nRun the API against it with: DB_SOURCE=live npm run dev:api`);
 
-  recordSyncResult(db, partial ? "partial" : "synced");
+  // Integrity check before we call it done. The sync is live.db's heaviest
+  // writer, so if a run is going to damage the file this is where to catch it —
+  // within the cycle, not days later once it has poisoned the backups. The
+  // pre-sync snapshot taken at the top is the fallback if this trips.
+  const healthy = isDatabaseHealthy(db);
+  if (!healthy) {
+    console.error("\n" + "=".repeat(60));
+    console.error("  ✗ INTEGRITY CHECK FAILED after sync — live.db may be corrupt.");
+    console.error("  Restore from the pre-sync backup in data/backups/live-presync-*.db");
+    console.error("=".repeat(60));
+  }
+
+  recordSyncResult(db, !healthy ? "corrupt" : partial ? "partial" : "synced");
   releaseSyncLock(db, SYNC_HOLDER);
   db.close();
+  if (!healthy) process.exit(2);
 }
 
 main().catch((err) => {

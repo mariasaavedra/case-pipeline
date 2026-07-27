@@ -22,6 +22,21 @@ import { fileURLToPath } from "node:url";
 
 type DatabaseInstance = InstanceType<typeof Database>;
 
+/**
+ * Full-scan structural check. Returns true only when SQLite reports "ok".
+ * quick_check THROWS on a badly-malformed file (not just returns error rows), so
+ * the throw is caught and treated as unhealthy. Kept local so this script stays
+ * free of workspace-alias imports (it is unit-tested by the root vitest config).
+ */
+function sourceIsHealthy(db: DatabaseInstance): boolean {
+  try {
+    const rows = db.pragma("quick_check") as Array<{ quick_check: string }>;
+    return rows.length === 1 && rows[0]?.quick_check === "ok";
+  } catch {
+    return false;
+  }
+}
+
 export function defaultDataDir(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../data");
 }
@@ -68,10 +83,26 @@ export async function backupDatabase(opts: BackupOptions = {}): Promise<string |
   const destPath = path.join(backupDir, `${label}-${stamp}.db`);
 
   const db = opts.existing ?? new Database(srcPath, { readonly: true });
+  let sourceHealthy = true;
   try {
+    // Is the SOURCE sound before we let this backup age out older ones? On
+    // 2026-07-24 the daily backup faithfully copied an already-corrupt live.db;
+    // had that kept pruning, every good restore point would have aged out. A
+    // corrupt source still gets backed up (it's evidence, and .backup() may well
+    // succeed on it — that is how the poisoning happened), but must NOT be
+    // allowed to prune the last-known-good backups.
+    sourceHealthy = sourceIsHealthy(db);
     await db.backup(destPath);
   } finally {
     if (!opts.existing) db.close();
+  }
+
+  if (!sourceHealthy) {
+    console.warn(
+      `⚠ ${source}.db failed its integrity check — backup written for evidence, ` +
+        `but pruning is SKIPPED so no known-good backup is lost.`,
+    );
+    return destPath;
   }
 
   // Prune older backups of THIS label. The pattern requires a digit right after
