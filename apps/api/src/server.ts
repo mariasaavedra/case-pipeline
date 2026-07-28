@@ -801,19 +801,29 @@ async function runBackup(): Promise<void> {
     console.warn("[backup] BACKUP_ENCRYPTION_KEY not set — backups written UNENCRYPTED.");
   }
 
-  // Prune daily backups to the 14 most recent per prefix. Matches both plain
-  // (.db) and encrypted (.db.enc) outputs. Pre-migration snapshots
-  // (…-premigrate-…) are kept separately and never pruned here.
-  const KEEP = 14;
-  for (const prefix of [DB_SOURCE, "users"]) {
+  // Prune the daily series to the BACKUP_KEEP most recent (default 4). At
+  // ~820 MB per live backup on a 24 GB disk, the old KEEP=14 (~11 GB) silently
+  // filled the disk — which was the root cause of the 2026-07 corruptions
+  // (a sync that runs out of room mid-write tears the file). See nightly 07-27.
+  //
+  // The pattern requires a DIGIT right after the prefix (the ISO year) so the
+  // "live-" daily series never swallows the "live-presync-" safety snapshots,
+  // and integrity-gates pruning: if a DB went corrupt after startup, its series
+  // is NOT pruned, so a bad copy can't age out the last known-good backup.
+  const KEEP = Number(process.env.BACKUP_KEEP) || 4;
+  const series: Array<{ prefix: string; healthy: boolean }> = [
+    { prefix: DB_SOURCE, healthy: isDatabaseHealthy(db) },
+    { prefix: "users", healthy: isDatabaseHealthy(usersDb) },
+  ];
+  for (const { prefix, healthy } of series) {
+    if (!healthy) {
+      console.warn(`[backup] ${prefix}.db failed integrity — keeping all backups (no prune).`);
+      continue;
+    }
+    const re = new RegExp(`^${prefix}-\\d.*\\.db(\\.enc)?$`);
     const files = fs
       .readdirSync(backupDir)
-      .filter(
-        (f) =>
-          f.startsWith(`${prefix}-`) &&
-          (f.endsWith(".db") || f.endsWith(".db.enc")) &&
-          !f.includes("premigrate"),
-      )
+      .filter((f) => re.test(f) && !f.includes("premigrate"))
       .sort();
     for (const f of files.slice(0, Math.max(0, files.length - KEEP))) {
       fs.unlinkSync(path.join(backupDir, f));

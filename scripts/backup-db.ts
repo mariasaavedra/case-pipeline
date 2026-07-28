@@ -69,7 +69,7 @@ export interface BackupOptions {
  */
 export async function backupDatabase(opts: BackupOptions = {}): Promise<string | null> {
   const source = opts.source ?? "live";
-  const keep = opts.keep ?? 14;
+  const keep = opts.keep ?? (Number(process.env.BACKUP_KEEP) || 4);
   const dataDir = opts.dataDir ?? defaultDataDir();
   const label = opts.label ?? source;
   const srcPath = path.join(dataDir, `${source}.db`);
@@ -124,7 +124,9 @@ export async function backupDatabase(opts: BackupOptions = {}): Promise<string |
 function parseArgs() {
   const args = process.argv.slice(2);
   let source = "live";
-  let keep = 14; // ~2 weeks of daily backups by default
+  // 4 by default: at ~820 MB per live backup, more than a handful fills a small
+  // disk, which was the root cause of the 2026-07 corruptions. Override with --keep.
+  let keep = Number(process.env.BACKUP_KEEP) || 4;
   for (const arg of args) {
     if (arg.startsWith("--db=")) source = arg.split("=")[1] ?? source;
     else if (arg.startsWith("--keep=")) keep = parseInt(arg.split("=")[1] ?? "") || keep;
