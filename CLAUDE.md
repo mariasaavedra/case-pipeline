@@ -178,6 +178,7 @@ Run with `tsx scripts/<name>.ts`:
 
 | Script | Description |
 |---|---|
+| `health.ts` | One-shot health check (integrity, schema, sync state, counts, disk, backups). `npm run health`; exits non-zero on a hard failure. |
 | `export-stats.ts` | Print DB statistics (row counts per table). `--db=live` uses `live.db`. |
 | `snapshot.ts` | Fetch all 19 boards from Monday.com → `data/monday-snapshot.md` + `.json`. |
 | `sample-real-data.ts` | Pull sample profile + linked item data from Monday.com → `data/samples/`. |
