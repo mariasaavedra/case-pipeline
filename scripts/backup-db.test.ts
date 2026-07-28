@@ -48,7 +48,7 @@ describe("backupDatabase", () => {
     makeGoodDb("live.db");
     for (let i = 0; i < 4; i++) {
       await backupDatabase({ source: "live", keep: 2, dataDir });
-      await new Promise((r) => setTimeout(r, 1100)); // distinct ISO stamps
+      await new Promise((r) => setTimeout(r, 20)); // distinct ISO stamps (ms precision)
     }
     expect(backupsFor("live").length).toBe(2);
   });
@@ -59,13 +59,13 @@ describe("backupDatabase", () => {
     // Two good backups already on disk (the known-good restore points).
     makeGoodDb("live.db");
     await backupDatabase({ source: "live", keep: 2, dataDir });
-    await new Promise((r) => setTimeout(r, 1100));
+    await new Promise((r) => setTimeout(r, 20));
     await backupDatabase({ source: "live", keep: 2, dataDir });
     expect(backupsFor("live").length).toBe(2);
 
     // Source goes corrupt; a backup with keep=1 would normally prune to 1.
     corrupt("live.db");
-    await new Promise((r) => setTimeout(r, 1100));
+    await new Promise((r) => setTimeout(r, 20));
     await backupDatabase({ source: "live", keep: 1, dataDir });
 
     // The corrupt copy is written (evidence) but the two good ones survive.
