@@ -25,6 +25,13 @@ sudo docker compose pull
 echo "▶ Restarting stack…"
 sudo docker compose up -d
 
+# Reclaim the previous images' layers. Each deploy pulls fresh api+web images and
+# the old ones go dangling; on a 24 GB disk a few deploys' worth quietly fills it
+# (which starves the nightly sync of the room it needs — see nightly 2026-07-27).
+# -f = no prompt; only untagged images not used by a running container are removed.
+echo "▶ Reclaiming old image layers…"
+sudo docker image prune -f
+
 echo "▶ Waiting for API to report healthy…"
 for i in $(seq 1 30); do
   status="$(sudo docker compose ps --format '{{.Name}} {{.Status}}' | grep api-1 || true)"
