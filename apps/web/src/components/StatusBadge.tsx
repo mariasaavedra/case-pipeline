@@ -1,4 +1,4 @@
-import { getStatusColor } from "../config";
+import { translateStatus } from "../config";
 
 const COLOR_STYLES: Record<string, { bg: string; text: string }> = {
   green:  { bg: "var(--color-status-green-bg)", text: "var(--color-status-green)" },
@@ -9,17 +9,23 @@ const COLOR_STYLES: Record<string, { bg: string; text: string }> = {
   purple: { bg: "var(--color-status-purple-bg)", text: "var(--color-status-purple)" },
 };
 
-export function StatusBadge({ status }: { status: string | null }) {
+/**
+ * A Monday status rendered case-oriented: the translated label + tone (see
+ * translateStatus). `raw` shows the original Monday label instead — for places
+ * that must mirror Monday exactly. The original status is always the tooltip.
+ */
+export function StatusBadge({ status, raw = false }: { status: string | null; raw?: boolean }) {
   if (!status) return null;
-  const color = getStatusColor(status);
-  const style = COLOR_STYLES[color] ?? COLOR_STYLES.gray!;
+  const { label, tone } = translateStatus(status);
+  const style = COLOR_STYLES[tone] ?? COLOR_STYLES.gray!;
 
   return (
     <span
       className="status-pill"
       style={{ backgroundColor: style.bg, color: style.text }}
+      title={status}
     >
-      {status}
+      {raw ? status : label}
     </span>
   );
 }

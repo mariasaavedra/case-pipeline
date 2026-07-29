@@ -14,6 +14,7 @@ import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { Link } from "./Link";
 import { clientPath } from "../router";
 import { ModalPortal } from "./ModalPortal";
+import { StatusBadge } from "./StatusBadge";
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
@@ -336,6 +337,9 @@ function Row({ item, columnId }: { item: KpiDetailItem; columnId: string | null 
   // column is never a dead space.
   const raw = columnId ? item.columnValues[columnId] : item.status;
   const display = formatColumnValue(raw);
+  // The status column gets the case-oriented translation + tone; other label
+  // columns (paralegal, etc.) stay as neutral chips.
+  const isStatusColumn = !columnId || columnId === "status";
 
   return (
     <tr style={{ borderBottom: "1px solid var(--color-border-light)" }}>
@@ -359,7 +363,9 @@ function Row({ item, columnId }: { item: KpiDetailItem; columnId: string | null 
       </td>
       <td className="px-6 py-2.5 align-top">
         {display ? (
-          isLabelValue(raw) || !columnId ? (
+          isStatusColumn ? (
+            <StatusBadge status={display} />
+          ) : isLabelValue(raw) ? (
             <span className="board-tag">{display}</span>
           ) : (
             <span style={{ color: "var(--color-ink)" }}>{display}</span>

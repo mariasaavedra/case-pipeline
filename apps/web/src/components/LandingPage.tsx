@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { fetchDashboard, getPreferences, updatePreferences } from "../api";
 import type { KpiCard, KpiItem } from "../api";
 import { Link } from "./Link";
+import { StatusBadge } from "./StatusBadge";
 import { QuickAccess } from "./QuickAccess";
 import { KpiDetailModal } from "./KpiDetailModal";
 import { formatColumnValue } from "../utils/columnValue";
@@ -73,10 +74,11 @@ function formatItemDate(dateStr: string | null): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function KpiItemRow({ item, columnLabel }: { item: KpiItem; columnLabel: string | null }) {
+function KpiItemRow({ item, columnId, columnLabel }: { item: KpiItem; columnId: string | null; columnLabel: string | null }) {
   // The configured column is the useful signal. Fall back to the board tag only
   // when no column is set — on a single-board card it just repeats the heading.
   const columnText = formatColumnValue(item.columnValue);
+  const isStatusColumn = columnId === "status";
 
   return (
     <div className="kpi-item-row">
@@ -88,9 +90,13 @@ function KpiItemRow({ item, columnLabel }: { item: KpiItem; columnLabel: string 
           <span className="kpi-item-date">{formatItemDate(item.date)}</span>
         )}
         {columnText ? (
-          <span className="board-tag" title={columnLabel ?? undefined}>
-            {columnText}
-          </span>
+          isStatusColumn ? (
+            <StatusBadge status={columnText} />
+          ) : (
+            <span className="board-tag" title={columnLabel ?? undefined}>
+              {columnText}
+            </span>
+          )
         ) : (
           item.boardKey && (
             <span className="board-tag">{BOARD_DISPLAY_NAMES[item.boardKey] ?? item.boardKey}</span>
@@ -204,7 +210,7 @@ function KpiCardComponent({
           <div className="kpi-empty">{KPI_EMPTY_MESSAGES[card.key] ?? "No items"}</div>
         ) : (
           card.items.map((item) => (
-            <KpiItemRow key={item.localId} item={item} columnLabel={card.columnLabel} />
+            <KpiItemRow key={item.localId} item={item} columnId={card.columnId} columnLabel={card.columnLabel} />
           ))
         )}
       </div>

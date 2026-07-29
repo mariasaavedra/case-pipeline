@@ -1,6 +1,6 @@
 import type { ContractSummary, ClientContracts, StatusTone } from "../api";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
-import { getStatusColor } from "../config";
+import { translateStatus } from "../config";
 
 const TONE_STYLES: Record<StatusTone, { bg: string; text: string }> = {
   green: { bg: "var(--color-status-green-bg)", text: "var(--color-status-green)" },
@@ -145,14 +145,15 @@ function ContractRow({ contract: c }: { contract: ContractSummary }) {
 
 /** The linked case's own Monday status, colored by the existing status palette. */
 function CaseStatus({ status }: { status: string }) {
-  const color = getStatusColor(status) as StatusTone;
-  const s = TONE_STYLES[color] ?? TONE_STYLES.gray;
+  const { label, tone } = translateStatus(status);
+  const s = TONE_STYLES[tone] ?? TONE_STYLES.gray;
   return (
     <span
       className="text-[11px] px-1.5 py-0.5 rounded"
       style={{ backgroundColor: s.bg, color: s.text, fontFamily: "var(--font-body)" }}
+      title={status}
     >
-      {status}
+      {label}
     </span>
   );
 }

@@ -36,41 +36,83 @@ export const SECTION_LABELS: Record<string, string> = {
 
 export const SECTIONS = ["cases", "mail", "admin"] as const;
 
-const STATUS_COLORS: Record<string, string> = {
-  // Active / positive
-  "Active": "green",
-  "Signed": "green",
-  "Approved": "green",
-  "Granted": "green",
-  "Atty Approved": "green",
-  "Filed": "blue",
-  "Set for Hearing": "blue",
-  "In Progress": "blue",
-  "Submitted": "blue",
-  "Sent": "blue",
-  // Waiting
-  "Pending": "yellow",
-  "Waiting": "yellow",
-  "Payment link sent": "yellow",
-  "Create Project": "yellow",
-  "Forms Appt Scheduled": "yellow",
-  // Attention
-  "Urgent": "red",
-  "Overdue": "red",
-  "RFE Received": "red",
-  "Denied": "red",
-  "Received": "red",
-  // Closed
-  "Completed": "gray",
-  "Cancelled": "gray",
-  "Withdrawn": "gray",
-  "Refunded": "gray",
-  "No Action Needed": "gray",
+// =============================================================================
+// Status translation — case-oriented labels + tone
+// =============================================================================
+// Monday statuses serve the daily workflow; this maps them into how a case READS.
+// Two layers:
+//   1. STATUS_OVERRIDES — curated per-status rules: rename and/or recolor. This
+//      is the map a future admin editor manages (Phase 2); keeping it a plain
+//      constant now means that phase just swaps the source, not the mechanism —
+//      translateStatus() already takes the map as an argument.
+//   2. inferTone — a keyword fallback for the long tail (100+ firm-specific
+//      statuses). It reads obvious English meaning only, never invents workflow
+//      semantics, and replaces the old "everything unknown = blue" default.
+
+export type StatusTone = "green" | "blue" | "yellow" | "red" | "gray" | "purple";
+
+export interface StatusRule {
+  /** Display name; omit to keep the raw Monday label. */
+  label?: string;
+  tone: StatusTone;
+}
+
+export const STATUS_OVERRIDES: Record<string, StatusRule> = {
+  // ---- Firm relabels (case-oriented) ----
+  "Sent Out": { label: "Filed", tone: "green" },
+  "918b Request pending": { label: "Pending", tone: "yellow" },
+  "Create Project": { label: "Completed", tone: "green" }, // matches the contracts tab
+  "Send to North Pole": { tone: "gray" }, // parked; keep the name
+  "Interview done": { tone: "green" }, // keep the name
+  // ---- Typo cleanups (display only) ----
+  "Inverview going alone": { label: "Interview going alone", tone: "blue" },
+  // ---- Explicit tones that keyword inference would otherwise get wrong ----
+  Filed: { tone: "green" },
+  "RFE Received": { tone: "red" },
+  Received: { tone: "blue" },
+  Completed: { tone: "green" },
+  "Set for Hearing": { tone: "blue" },
 };
 
+/** Keyword → tone for statuses without an explicit override. Obvious meaning only. */
+function inferTone(status: string): StatusTone {
+  const s = status.toLowerCase();
+  if (/(denied|reject|expired|removed|refus)/.test(s)) return "red";
+  if (/(refund|not going forward|not proceeding|not hiring|withdrawn|cancel|to close|closed|declined)/.test(s)) return "gray";
+  // Word boundaries on the short, false-positive-prone stems: \bsign avoids
+  // "assigned"; \bpaid avoids "unpaid".
+  if (/(sent out|filed|\bdone\b|approv|grant|\bsigned\b|submitted|complet|hired|\bpaid\b)/.test(s)) return "green";
+  if (/(pending|waiting|scheduled|payment link|signature|needs|hold|to be|prep|review|follow up|request)/.test(s)) return "yellow";
+  return "blue";
+}
+
+/** Case/whitespace-insensitive index of an override map, so "SENT OUT",
+ *  "Sent out" and "Sent Out" all resolve to the same rule. */
+function indexByKey(map: Record<string, StatusRule>): Record<string, StatusRule> {
+  const out: Record<string, StatusRule> = {};
+  for (const [k, v] of Object.entries(map)) out[k.toLowerCase().trim()] = v;
+  return out;
+}
+const DEFAULT_INDEX = indexByKey(STATUS_OVERRIDES);
+
+/**
+ * Translate a raw Monday status into a case-oriented { label, tone }. Pass a
+ * merged override map (base + admin config) once Phase 2 exists; defaults to the
+ * code-seeded map today. Matching is case/whitespace-insensitive so the firm's
+ * casing variants of the same status resolve identically.
+ */
+export function translateStatus(
+  status: string | null,
+  overrides: Record<string, StatusRule> = STATUS_OVERRIDES,
+): { label: string; tone: StatusTone } {
+  if (!status) return { label: "—", tone: "gray" };
+  const index = overrides === STATUS_OVERRIDES ? DEFAULT_INDEX : indexByKey(overrides);
+  const rule = index[status.toLowerCase().trim()];
+  return { label: rule?.label ?? status, tone: rule?.tone ?? inferTone(status) };
+}
+
 export function getStatusColor(status: string | null): string {
-  if (!status) return "gray";
-  return STATUS_COLORS[status] ?? "blue";
+  return translateStatus(status).tone;
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
