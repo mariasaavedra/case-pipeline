@@ -29,6 +29,18 @@ describe("sanitizeStatusOverrides", () => {
     expect(sanitizeStatusOverrides({ A: { label: "  Hi  ", tone: "red" } })).toEqual({ A: { label: "Hi", tone: "red" } });
   });
 
+  test("keeps a valid urgency and drops a bad one", () => {
+    expect(
+      sanitizeStatusOverrides({
+        A: { tone: "red", urgency: "critical" },
+        B: { tone: "blue", urgency: "later" }, // 'later' is not an assignable status urgency
+      }),
+    ).toEqual({
+      A: { tone: "red", urgency: "critical" },
+      B: { tone: "blue" },
+    });
+  });
+
   test("drops non-object rules, blank keys, and non-object input", () => {
     expect(sanitizeStatusOverrides({ "": { tone: "blue" }, A: "nope", B: null })).toEqual({});
     expect(sanitizeStatusOverrides(null)).toEqual({});

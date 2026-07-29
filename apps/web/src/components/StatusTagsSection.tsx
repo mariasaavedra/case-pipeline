@@ -18,9 +18,11 @@ import {
 import {
   STATUS_OVERRIDES,
   STATUS_TONES,
+  STATUS_URGENCIES,
   translateStatus,
   type StatusRule,
   type StatusTone,
+  type StatusUrgency,
 } from "../config";
 import { useStatusOverridesAdmin } from "../StatusOverridesProvider";
 
@@ -63,18 +65,20 @@ export function StatusTagsSection() {
   }, [catalog, query]);
 
   /** The effective rule for a status under the current draft (base ∪ draft). */
-  function effective(status: string): { label: string; tone: StatusTone } {
+  function effective(status: string): { label: string; tone: StatusTone; urgency?: StatusUrgency } {
     return translateStatus(status, { ...STATUS_OVERRIDES, ...draft });
   }
 
   function setRule(status: string, patch: Partial<StatusRule>) {
     setDraft((prev) => {
       const cur = effective(status);
-      const next: StatusRule = {
-        label: patch.label ?? prev[status]?.label ?? (cur.label === status ? undefined : cur.label),
-        tone: (patch.tone ?? prev[status]?.tone ?? cur.tone) as StatusTone,
-      };
-      if (!next.label) delete next.label;
+      const existing = prev[status];
+      const label = "label" in patch ? patch.label : existing?.label ?? (cur.label === status ? undefined : cur.label);
+      const tone = ("tone" in patch ? patch.tone : existing?.tone ?? cur.tone) as StatusTone;
+      const urgency = "urgency" in patch ? patch.urgency : existing?.urgency ?? cur.urgency;
+      const next: StatusRule = { tone };
+      if (label) next.label = label;
+      if (urgency) next.urgency = urgency;
       return { ...prev, [status]: next };
     });
     setSavedAt(null);
@@ -196,6 +200,22 @@ export function StatusTagsSection() {
                           />
                         ))}
                       </div>
+                    </td>
+
+                    {/* Urgency */}
+                    <td className="px-3 py-2 align-middle">
+                      <select
+                        value={eff.urgency ?? ""}
+                        onChange={(e) => setRule(entry.status, { urgency: (e.target.value || undefined) as StatusUrgency | undefined })}
+                        className="text-sm px-2 py-1 rounded"
+                        style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border-light)", color: "var(--color-ink)" }}
+                        title="Elevates this case on the Active Cases board"
+                      >
+                        <option value="">No urgency</option>
+                        {STATUS_URGENCIES.map((u) => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
                     </td>
 
                     {/* Reset */}

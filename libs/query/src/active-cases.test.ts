@@ -466,3 +466,44 @@ describe("North Pole snooze rule", () => {
     db.close();
   });
 });
+
+describe("getActiveCases — urgency config", () => {
+  test("editable thresholds change the date urgency", () => {
+    const db = freshDb();
+    const b = insertBatch(db);
+    insertBoardItem(db, b, { localId: "c1", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Ana", nextDate: daysFromToday(5) });
+    // Default: 5 days out → "soon". Tighten "critical" to ≤7 → same date is now critical.
+    expect(getActiveCases(db).assignees[0]!.cases[0]!.dateUrgency).toBe("soon");
+    expect(getActiveCases(db, { criticalDays: 7, soonDays: 14 }).assignees[0]!.cases[0]!.dateUrgency).toBe("critical");
+    db.close();
+  });
+
+  test("status urgency reorders the board when enabled (most urgent wins)", () => {
+    const db = freshDb();
+    const b = insertBatch(db);
+    // A far-off date (later) but a status flagged critical.
+    insertBoardItem(db, b, { localId: "c1", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Ana", nextDate: daysFromToday(60), status: "Denied" });
+    const opts = { statusUrgency: { Denied: "critical" as const } };
+
+    // Off: board stays date-driven (later); status urgency is just informational.
+    const off = getActiveCases(db, { ...opts, statusUrgencyAffectsBoard: false }).assignees[0]!.cases[0]!;
+    expect(off.dateUrgency).toBe("later");
+    expect(off.statusUrgency).toBe("critical");
+    expect(off.urgency).toBe("later");
+
+    // On: most urgent wins → critical.
+    const on = getActiveCases(db, { ...opts, statusUrgencyAffectsBoard: true }).assignees[0]!.cases[0]!;
+    expect(on.urgency).toBe("critical");
+    db.close();
+  });
+
+  test("a nearer date still wins over a lower status urgency", () => {
+    const db = freshDb();
+    const b = insertBatch(db);
+    insertBoardItem(db, b, { localId: "c1", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Ana", nextDate: daysFromToday(-2), status: "Denied" });
+    // Overdue by date, status only "soon" → overdue wins.
+    const c = getActiveCases(db, { statusUrgency: { Denied: "soon" }, statusUrgencyAffectsBoard: true }).assignees[0]!.cases[0]!;
+    expect(c.urgency).toBe("overdue");
+    db.close();
+  });
+});

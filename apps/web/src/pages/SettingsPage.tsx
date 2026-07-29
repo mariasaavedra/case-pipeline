@@ -5,6 +5,7 @@ import type { Theme, DefaultPage, DateFormat } from "../hooks/usePreferences";
 import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, getAzureToken, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser, fetchAuditLog } from "../api";
 import type { AttorneyBoard, PublicUser, AuditEntry } from "../api";
 import { StatusTagsSection } from "../components/StatusTagsSection";
+import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 
 // =============================================================================
 // User management (admin section)
@@ -821,6 +822,9 @@ export function SettingsPage() {
 
       {/* Status tags — admin only */}
       {user?.role === "admin" && <StatusTagsSection />}
+
+      {/* Urgency scoring — admin only */}
+      {user?.role === "admin" && <UrgencySettingsSection />}
 
       {/* Users — admin only */}
       {user?.role === "admin" && <UsersSection />}

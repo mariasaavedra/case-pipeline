@@ -17,10 +17,16 @@ import path from "node:path";
 export const STATUS_TONES = ["green", "blue", "yellow", "red", "gray", "purple"] as const;
 export type StatusTone = (typeof STATUS_TONES)[number];
 
+/** Urgency levels a status may carry (elevations only; absence = not urgent). */
+export const STATUS_URGENCIES = ["soon", "critical", "overdue"] as const;
+export type StatusUrgency = (typeof STATUS_URGENCIES)[number];
+
 export interface StatusRule {
   /** Display name; omitted/empty means keep the raw Monday label. */
   label?: string;
   tone: StatusTone;
+  /** Elevates a case's urgency regardless of its date (see active-cases). */
+  urgency?: StatusUrgency;
 }
 
 export type StatusOverrides = Record<string, StatusRule>;
@@ -65,6 +71,9 @@ export function sanitizeStatusOverrides(input: unknown): StatusOverrides {
     if (typeof r.tone !== "string" || !(STATUS_TONES as readonly string[]).includes(r.tone)) continue;
     const rule: StatusRule = { tone: r.tone as StatusTone };
     if (typeof r.label === "string" && r.label.trim() !== "") rule.label = r.label.trim();
+    if (typeof r.urgency === "string" && (STATUS_URGENCIES as readonly string[]).includes(r.urgency)) {
+      rule.urgency = r.urgency as StatusUrgency;
+    }
     out[status] = rule;
   }
   return out;

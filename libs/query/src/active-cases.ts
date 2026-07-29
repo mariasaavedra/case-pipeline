@@ -22,6 +22,10 @@ export interface ActiveCase {
   targetDate: string | null;
   urgency: Urgency;
   daysUntilTarget: number | null;
+  /** Urgency from the case's target date alone (before any status contribution). */
+  dateUrgency: Urgency;
+  /** Urgency the case's status carries, if any (from the admin Status Tags editor). */
+  statusUrgency: Urgency;
   isCourtCase: boolean;
   /** All paralegals assigned to this case. Empty when unassigned. */
   assignees: string[];
@@ -46,6 +50,19 @@ export interface ActiveCasesResult {
 export interface ActiveCasesOptions {
   /** Include cases currently snoozed in North Pole (default false). */
   includeSnoozed?: boolean;
+  /** Date threshold (days) for "critical". Default 3. */
+  criticalDays?: number;
+  /** Date threshold (days) for "soon". Default 7. */
+  soonDays?: number;
+  /** Per-status urgency, from the admin Status Tags editor. */
+  statusUrgency?: Record<string, Urgency>;
+  /**
+   * When true, a status's urgency combines with its date urgency (most urgent
+   * wins) and reorders the board. When false, status urgency is informational
+   * only and the board stays date-driven. Default false here; the API passes the
+   * firm setting (which defaults true).
+   */
+  statusUrgencyAffectsBoard?: boolean;
 }
 
 // The status the team uses to temporarily park a case. A parked case is hidden
@@ -63,10 +80,12 @@ function toDateInt(iso: string): number {
   return parseInt(iso.replace(/-/g, ""), 10);
 }
 
-function computeUrgency(targetDate: string | null, todayIso: string): {
-  urgency: Urgency;
-  daysUntilTarget: number | null;
-} {
+function computeUrgency(
+  targetDate: string | null,
+  todayIso: string,
+  criticalDays: number,
+  soonDays: number,
+): { urgency: Urgency; daysUntilTarget: number | null } {
   if (!targetDate) return { urgency: "none", daysUntilTarget: null };
 
   const todayMs = new Date(todayIso).getTime();
@@ -74,10 +93,10 @@ function computeUrgency(targetDate: string | null, todayIso: string): {
   const diff = Math.round((targetMs - todayMs) / 86_400_000);
 
   let urgency: Urgency;
-  if (diff < 0)     urgency = "overdue";
-  else if (diff <= 3) urgency = "critical";
-  else if (diff <= 7) urgency = "soon";
-  else                urgency = "later";
+  if (diff < 0)              urgency = "overdue";
+  else if (diff <= criticalDays) urgency = "critical";
+  else if (diff <= soonDays)     urgency = "soon";
+  else                       urgency = "later";
 
   return { urgency, daysUntilTarget: diff };
 }
@@ -85,6 +104,11 @@ function computeUrgency(targetDate: string | null, todayIso: string): {
 const URGENCY_ORDER: Record<Urgency, number> = {
   overdue: 0, critical: 1, soon: 2, later: 3, none: 4,
 };
+
+/** The more urgent of two levels (lower URGENCY_ORDER = more urgent). */
+function mostUrgent(a: Urgency, b: Urgency): Urgency {
+  return URGENCY_ORDER[a] <= URGENCY_ORDER[b] ? a : b;
+}
 
 /**
  * Parse a Monday people-column value into a de-duplicated list of names.
@@ -123,6 +147,10 @@ interface RawActiveCaseRow {
 
 export function getActiveCases(db: Database, options: ActiveCasesOptions = {}): ActiveCasesResult {
   const todayIso = new Date().toISOString().slice(0, 10);
+  const criticalDays = options.criticalDays ?? 3;
+  const soonDays = Math.max(criticalDays, options.soonDays ?? 7);
+  const statusUrgencyMap = options.statusUrgency ?? {};
+  const affectsBoard = options.statusUrgencyAffectsBoard ?? false;
 
   const rows = db.prepare(`
     SELECT
@@ -158,7 +186,12 @@ export function getActiveCases(db: Database, options: ActiveCasesOptions = {}): 
       if (!options.includeSnoozed) continue;
     }
     const assignees = parseAssignees(row.paralegals);
-    const { urgency, daysUntilTarget } = computeUrgency(row.targetDate, todayIso);
+    const { urgency: dateUrgency, daysUntilTarget } = computeUrgency(
+      row.targetDate, todayIso, criticalDays, soonDays,
+    );
+    const statusUrgency = (row.status && statusUrgencyMap[row.status]) || "none";
+    // Most urgent wins; status only reorders the board when the firm opts in.
+    const urgency = affectsBoard ? mostUrgent(dateUrgency, statusUrgency) : dateUrgency;
 
     const activeCase: ActiveCase = {
       localId: row.localId,
@@ -168,6 +201,8 @@ export function getActiveCases(db: Database, options: ActiveCasesOptions = {}): 
       status: row.status,
       targetDate: row.targetDate,
       urgency,
+      dateUrgency,
+      statusUrgency,
       daysUntilTarget,
       isCourtCase: row.groupTitle === "Court Forms",
       assignees,

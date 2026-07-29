@@ -312,6 +312,24 @@ export function fetchStatusCatalog(): Promise<StatusCatalogEntry[]> {
   return apiFetch<StatusCatalogEntry[]>("/api/settings/status-catalog");
 }
 
+// ---- Urgency settings (date thresholds + status-urgency mode) ----
+
+export interface UrgencySettings {
+  criticalDays: number;
+  soonDays: number;
+  statusUrgencyAffectsBoard: boolean;
+}
+export function fetchUrgencySettings(): Promise<UrgencySettings> {
+  return apiFetch<UrgencySettings>("/api/settings/urgency");
+}
+export function updateUrgencySettings(s: UrgencySettings): Promise<UrgencySettings> {
+  return apiFetch<UrgencySettings>("/api/settings/urgency", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(s),
+  });
+}
+
 // =============================================================================
 // User customization — preferences, profile, my-cases, watchlist, saved views
 // =============================================================================

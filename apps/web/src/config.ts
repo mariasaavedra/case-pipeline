@@ -54,10 +54,16 @@ export type StatusTone = "green" | "blue" | "yellow" | "red" | "gray" | "purple"
 /** All tones, for the admin editor's color picker. */
 export const STATUS_TONES: StatusTone[] = ["green", "blue", "yellow", "red", "gray", "purple"];
 
+/** Urgency a status can carry (elevations only). Matches the server + query layer. */
+export type StatusUrgency = "soon" | "critical" | "overdue";
+export const STATUS_URGENCIES: StatusUrgency[] = ["soon", "critical", "overdue"];
+
 export interface StatusRule {
   /** Display name; omit to keep the raw Monday label. */
   label?: string;
   tone: StatusTone;
+  /** Elevates the case on the Active Cases board and marks the badge. */
+  urgency?: StatusUrgency;
 }
 
 export const STATUS_OVERRIDES: Record<string, StatusRule> = {
@@ -107,11 +113,11 @@ const DEFAULT_INDEX = indexByKey(STATUS_OVERRIDES);
 export function translateStatus(
   status: string | null,
   overrides: Record<string, StatusRule> = STATUS_OVERRIDES,
-): { label: string; tone: StatusTone } {
+): { label: string; tone: StatusTone; urgency?: StatusUrgency } {
   if (!status) return { label: "—", tone: "gray" };
   const index = overrides === STATUS_OVERRIDES ? DEFAULT_INDEX : indexByKey(overrides);
   const rule = index[status.toLowerCase().trim()];
-  return { label: rule?.label ?? status, tone: rule?.tone ?? inferTone(status) };
+  return { label: rule?.label ?? status, tone: rule?.tone ?? inferTone(status), urgency: rule?.urgency };
 }
 
 export function getStatusColor(status: string | null): string {

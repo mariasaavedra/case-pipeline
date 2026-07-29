@@ -196,6 +196,9 @@ export function handleAlerts(req: Request, db: Database): Response {
   return json(result);
 }
 
+// NOTE: /api/active-cases is defined inline in server.ts — it folds in the
+// firm's editable urgency config (thresholds + per-status urgency), which these
+// Fetch-style handlers don't carry. Kept here only for reference/back-compat.
 export function handleActiveCases(req: Request, db: Database): Response {
   const url = new URL(req.url);
   const includeSnoozed = url.searchParams.get("includeSnoozed") === "1";

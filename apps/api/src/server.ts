@@ -25,10 +25,10 @@ import {
   handleBoardItemDetail,
   handleClientUpdates,
   handleClientRelationships,
-  handleActiveCases,
   handleAlerts,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases } from "@case-pipeline/query";
+import type { Urgency } from "@case-pipeline/query";
 import { setApiToken, createUpdate, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
 import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
@@ -66,6 +66,11 @@ import {
   loadStatusOverrides,
   saveStatusOverrides,
 } from "./routes/status-overrides.js";
+import {
+  initUrgencySettings,
+  loadUrgencySettings,
+  saveUrgencySettings,
+} from "./routes/urgency-settings.js";
 import { currentUserId } from "./db/user-context.js";
 import { sanitizeKpiColumns } from "./db/users-types.js";
 import { auditFromReq } from "./audit/log.js";
@@ -172,6 +177,16 @@ const ATTORNEY_BOARDS_PATH = path.join(DATA_DIR, "attorney-boards.json");
 
 initKpiColumns(DATA_DIR);
 initStatusOverrides(DATA_DIR);
+initUrgencySettings(DATA_DIR);
+
+/** Build the status → urgency map the Active Cases query consumes. */
+function statusUrgencyMap(): Record<string, Urgency> {
+  const out: Record<string, Urgency> = {};
+  for (const [status, rule] of Object.entries(loadStatusOverrides())) {
+    if (rule.urgency) out[status] = rule.urgency;
+  }
+  return out;
+}
 
 function loadAttorneyBoards(): AttorneyBoard[] {
   try {
@@ -296,7 +311,22 @@ app.get("/api/appointments", (req, res) => {
   res.json({ data: result });
 });
 
-app.get("/api/active-cases", adapt(handleActiveCases));
+// Active Cases — inline so it can fold in the firm's urgency config (editable
+// thresholds + per-status urgency) rather than the query layer's defaults.
+app.get("/api/active-cases", (req, res) => {
+  const url = new URL(`http://localhost${req.originalUrl}`);
+  const includeSnoozed = url.searchParams.get("includeSnoozed") === "1";
+  const u = loadUrgencySettings();
+  res.json({
+    data: getActiveCases(db, {
+      includeSnoozed,
+      criticalDays: u.criticalDays,
+      soonDays: u.soonDays,
+      statusUrgency: statusUrgencyMap(),
+      statusUrgencyAffectsBoard: u.statusUrgencyAffectsBoard,
+    }),
+  });
+});
 app.get("/api/alerts", adapt(handleAlerts));
 app.get("/api/search", adapt(handleTypedSearch));
 app.get("/api/filter-options", adapt(handleFilterOptions));
@@ -602,6 +632,20 @@ app.put("/api/settings/status-overrides", requireAdmin, (req, res) => {
   } catch (err) {
     res.status(400).json({ error: (err as Error).message });
   }
+});
+
+app.get("/api/settings/urgency", (_req, res) => {
+  res.json({ data: loadUrgencySettings() });
+});
+
+app.put("/api/settings/urgency", requireAdmin, (req, res) => {
+  const saved = saveUrgencySettings(req.body);
+  auditFromReq(req, "urgency_settings.updated", {
+    targetType: "settings",
+    targetId: "urgency",
+    metadata: saved,
+  });
+  res.json({ data: saved });
 });
 
 app.get("/api/settings/status-catalog", (_req, res) => {
