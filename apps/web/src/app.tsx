@@ -16,6 +16,7 @@ import { matchRoute, navigate } from "./router";
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
 import { AuthProvider } from "./auth/AuthProvider";
+import { StatusOverridesProvider } from "./StatusOverridesProvider";
 import { useAuth } from "./auth/useAuth";
 import { usePreferences } from "./hooks/usePreferences";
 import { useViewport } from "./hooks/useViewport";
@@ -282,7 +283,9 @@ const root = createRoot(document.getElementById("root")!);
 root.render(
   <ErrorBoundary>
     <AuthProvider>
-      <App />
+      <StatusOverridesProvider>
+        <App />
+      </StatusOverridesProvider>
     </AuthProvider>
   </ErrorBoundary>
 );

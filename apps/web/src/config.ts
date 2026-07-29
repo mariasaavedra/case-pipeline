@@ -51,6 +51,9 @@ export const SECTIONS = ["cases", "mail", "admin"] as const;
 
 export type StatusTone = "green" | "blue" | "yellow" | "red" | "gray" | "purple";
 
+/** All tones, for the admin editor's color picker. */
+export const STATUS_TONES: StatusTone[] = ["green", "blue", "yellow", "red", "gray", "purple"];
+
 export interface StatusRule {
   /** Display name; omit to keep the raw Monday label. */
   label?: string;

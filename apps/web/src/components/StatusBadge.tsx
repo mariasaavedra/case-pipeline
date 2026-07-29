@@ -1,4 +1,5 @@
 import { translateStatus } from "../config";
+import { useStatusOverrides } from "../StatusOverridesProvider";
 
 const COLOR_STYLES: Record<string, { bg: string; text: string }> = {
   green:  { bg: "var(--color-status-green-bg)", text: "var(--color-status-green)" },
@@ -15,8 +16,9 @@ const COLOR_STYLES: Record<string, { bg: string; text: string }> = {
  * that must mirror Monday exactly. The original status is always the tooltip.
  */
 export function StatusBadge({ status, raw = false }: { status: string | null; raw?: boolean }) {
+  const overrides = useStatusOverrides();
   if (!status) return null;
-  const { label, tone } = translateStatus(status);
+  const { label, tone } = translateStatus(status, overrides);
   const style = COLOR_STYLES[tone] ?? COLOR_STYLES.gray!;
 
   return (

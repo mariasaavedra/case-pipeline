@@ -158,6 +158,8 @@ Writes and user/account routes:
 | `GET /api/my-cases`, `GET /api/paralegals` | Paralegal-linked case list and identity options |
 | `GET/POST/DELETE /api/settings/attorney-boards` | Attorney appointment board config (mutations admin-only) |
 | `GET/PUT /api/settings/kpi-columns` | Firm-wide default display column per KPI card (PUT admin-only); users override via `preferences.kpiColumns` |
+| `GET/PUT /api/settings/status-overrides` | Firm-wide status label/color overrides (PUT admin-only, audited); merged over the code base map by the web's `translateStatus` |
+| `GET /api/settings/status-catalog` | Distinct board-item statuses + counts, for the admin status-tag editor |
 | `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only) |
 | `/api/auth/monday`, `/callback`, `/status` | Personal Monday.com OAuth connection (`routes/monday-oauth.ts`) |
 

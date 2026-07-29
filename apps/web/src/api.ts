@@ -292,6 +292,26 @@ export function updateGlobalKpiColumns(
   });
 }
 
+// ---- Status tag overrides (admin-editable label + color per Monday status) ----
+
+import type { StatusRule } from "./config";
+export type StatusOverrides = Record<string, StatusRule>;
+export interface StatusCatalogEntry { status: string; count: number; }
+
+export function fetchStatusOverrides(): Promise<StatusOverrides> {
+  return apiFetch<StatusOverrides>("/api/settings/status-overrides");
+}
+export function updateStatusOverrides(overrides: StatusOverrides): Promise<StatusOverrides> {
+  return apiFetch<StatusOverrides>("/api/settings/status-overrides", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(overrides),
+  });
+}
+export function fetchStatusCatalog(): Promise<StatusCatalogEntry[]> {
+  return apiFetch<StatusCatalogEntry[]>("/api/settings/status-catalog");
+}
+
 // =============================================================================
 // User customization — preferences, profile, my-cases, watchlist, saved views
 // =============================================================================

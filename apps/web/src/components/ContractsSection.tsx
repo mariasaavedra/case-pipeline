@@ -1,6 +1,7 @@
 import type { ContractSummary, ClientContracts, StatusTone } from "../api";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { translateStatus } from "../config";
+import { useStatusOverrides } from "../StatusOverridesProvider";
 
 const TONE_STYLES: Record<StatusTone, { bg: string; text: string }> = {
   green: { bg: "var(--color-status-green-bg)", text: "var(--color-status-green)" },
@@ -145,7 +146,7 @@ function ContractRow({ contract: c }: { contract: ContractSummary }) {
 
 /** The linked case's own Monday status, colored by the existing status palette. */
 function CaseStatus({ status }: { status: string }) {
-  const { label, tone } = translateStatus(status);
+  const { label, tone } = translateStatus(status, useStatusOverrides());
   const s = TONE_STYLES[tone] ?? TONE_STYLES.gray;
   return (
     <span

@@ -61,6 +61,11 @@ import {
   saveGlobalKpiColumns,
   resolveKpiColumns,
 } from "./routes/kpi-columns.js";
+import {
+  initStatusOverrides,
+  loadStatusOverrides,
+  saveStatusOverrides,
+} from "./routes/status-overrides.js";
 import { currentUserId } from "./db/user-context.js";
 import { sanitizeKpiColumns } from "./db/users-types.js";
 import { auditFromReq } from "./audit/log.js";
@@ -166,6 +171,7 @@ export interface AttorneyBoard {
 const ATTORNEY_BOARDS_PATH = path.join(DATA_DIR, "attorney-boards.json");
 
 initKpiColumns(DATA_DIR);
+initStatusOverrides(DATA_DIR);
 
 function loadAttorneyBoards(): AttorneyBoard[] {
   try {
@@ -571,6 +577,42 @@ app.put("/api/settings/kpi-columns", requireAdmin, (req, res) => {
     metadata: saved,
   });
   res.json({ data: saved });
+});
+
+// =============================================================================
+// Settings — Status tag overrides (firm-wide label + color per Monday status)
+// =============================================================================
+// Readable by anyone (the web needs it to render badges); writable only by
+// admins, audited. `status-catalog` enumerates the distinct statuses that exist
+// in the synced data so the editor can list what there is to override.
+
+app.get("/api/settings/status-overrides", (_req, res) => {
+  res.json({ data: loadStatusOverrides() });
+});
+
+app.put("/api/settings/status-overrides", requireAdmin, (req, res) => {
+  try {
+    const saved = saveStatusOverrides(req.body);
+    auditFromReq(req, "status_overrides.updated", {
+      targetType: "settings",
+      targetId: "status-overrides",
+      metadata: { count: Object.keys(saved).length },
+    });
+    res.json({ data: saved });
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+app.get("/api/settings/status-catalog", (_req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT status, COUNT(*) AS count FROM board_items
+       WHERE status IS NOT NULL AND status <> ''
+       GROUP BY status ORDER BY count DESC`,
+    )
+    .all() as Array<{ status: string; count: number }>;
+  res.json({ data: rows });
 });
 
 // Health check — cheap liveness/readiness probe for container orchestration.
