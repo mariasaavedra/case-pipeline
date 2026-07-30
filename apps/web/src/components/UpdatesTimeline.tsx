@@ -1,7 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { ClientUpdate } from "../api";
-import { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS } from "@case-pipeline/query/types";
-import { DOCUMENT_BOARD_KEYS } from "../config";
+import {
+  BOARD_DISPLAY_NAMES,
+  APPOINTMENT_BOARD_KEYS,
+  DOCUMENT_BOARD_KEYS,
+  NOTICE_BOARD_KEYS as NOTICE_KEYS,
+} from "@case-pipeline/query/types";
 import type { TimelineFilter } from "./TimelineFilters";
 
 function formatDateTime(iso: string): { date: string; time: string } {
@@ -50,8 +54,6 @@ function getAvatarColor(name: string) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]!;
 }
 
-const NOTICE_KEYS = new Set(["rfes_all", "nvc_notices", "_na_originals_cards_notices"]);
-
 // E&A source types that come from the Emails & Activities timeline.
 const EA_ACTIVITY_TYPES = new Set(["activity", "custom"]);
 
@@ -98,10 +100,17 @@ interface Props {
   updates: ClientUpdate[];
   filter?: TimelineFilter;
   last30Days?: boolean;
+  loading?: boolean;
 }
 
-export function UpdatesTimeline({ updates, filter = "all", last30Days = false }: Props) {
+export function UpdatesTimeline({ updates, filter = "all", last30Days = false, loading = false }: Props) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // Reset the display window when the underlying feed changes (e.g. the filter
+  // switched and a fresh category set arrived from the server).
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filter, last30Days]);
 
   const filtered = useMemo(() => {
     let result = updates;
@@ -123,7 +132,7 @@ export function UpdatesTimeline({ updates, filter = "all", last30Days = false }:
     return (
       <div className="py-10 text-center">
         <p className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-          {filter === "all" ? "No updates yet." : `No ${filter} found.`}
+          {loading ? "Loading…" : filter === "all" ? "No updates yet." : `No ${filter} found.`}
         </p>
       </div>
     );

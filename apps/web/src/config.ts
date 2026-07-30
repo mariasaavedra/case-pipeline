@@ -136,12 +136,9 @@ export function getPriorityColor(priority: string | null): string {
 }
 
 /** Board keys shown in the Documents & Notices tab */
-export const DOCUMENT_BOARD_KEYS = new Set([
-  "rfes_all",
-  "_na_originals_cards_notices",
-  "nvc_notices",
-  "address_changes",
-]);
+// Single source of truth lives in the shared query types so the web timeline
+// filter and the server-side category filter can't drift apart.
+export { DOCUMENT_BOARD_KEYS, NOTICE_BOARD_KEYS } from "@case-pipeline/query/types";
 
 // =============================================================================
 // Monday.com deep links

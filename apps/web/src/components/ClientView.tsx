@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import type { ClientCaseSummary, ClientUpdate } from "../api";
+import { fetchClientUpdates } from "../api";
 import { BOARD_CONFIG } from "../config";
 import { NoteComposer } from "./NoteComposer";
 import { navigate, clientPath } from "../router";
@@ -26,10 +27,44 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
   const [last30Days, setLast30Days] = useState(false);
   const [pendingUpdates, setPendingUpdates] = useState<ClientUpdate[]>([]);
 
+  // Timeline feed. The 360 summary seeds the newest page for an instant paint;
+  // then we fetch the COMPLETE set for the active category server-side. The old
+  // behavior filtered a 50-item page client-side, so a busy inbox (emails) could
+  // push activities/notes out of that window entirely — they looked "missing".
+  const [timelineFeed, setTimelineFeed] = useState<ClientUpdate[]>(data.updates);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+
   // Sync activeTab when the route changes (back/forward, direct URL load)
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
+
+  // Fetch the full timeline for the active category (complete per category, not
+  // just the newest page filtered). Max updates for any one profile is well
+  // under this cap, so this returns everything for that category.
+  useEffect(() => {
+    let cancelled = false;
+    setTimelineLoading(true);
+    fetchClientUpdates(data.profile.localId, { category: timelineFilter, limit: 500 })
+      .then((rows) => {
+        if (!cancelled) setTimelineFeed(rows);
+      })
+      .catch(() => {
+        /* keep the seeded/previous feed on error */
+      })
+      .finally(() => {
+        if (!cancelled) setTimelineLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data.profile.localId, timelineFilter]);
+
+  // Locally-posted notes belong to the "all" and "notes" views.
+  const timelineUpdates = useMemo(() => {
+    const showPending = timelineFilter === "all" || timelineFilter === "notes";
+    return showPending ? [...pendingUpdates, ...timelineFeed] : timelineFeed;
+  }, [pendingUpdates, timelineFeed, timelineFilter]);
 
   const handleTabChange = (tab: TabId) => {
     setActiveTab(tab);
@@ -117,9 +152,10 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
               />
 
               <UpdatesTimeline
-                updates={[...pendingUpdates, ...data.updates]}
+                updates={timelineUpdates}
                 filter={timelineFilter}
                 last30Days={last30Days}
+                loading={timelineLoading}
               />
             </div>
           )}

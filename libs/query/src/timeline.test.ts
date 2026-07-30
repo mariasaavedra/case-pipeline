@@ -89,6 +89,57 @@ describe("unified timeline", () => {
   });
 });
 
+describe("timeline category filter", () => {
+  // Category filtering happens server-side so a filtered view is complete, not
+  // "the newest page, then filtered" (which starved activities on busy inboxes).
+  let db: DatabaseInstance;
+  const insCat = (o: { localId: string; sourceType: string; createdAt: string; boardKey?: string | null; timelineId?: string | null }) =>
+    db
+      .prepare(
+        `INSERT INTO client_updates
+           (batch_id, local_id, monday_timeline_id, profile_local_id, board_key, author_name, text_body, source_type, created_at_source, sync_status)
+         VALUES (?, ?, ?, 'p1', ?, 'A', 'body', ?, ?, 'synced')`
+      )
+      .run(batchId(db), o.localId, o.timelineId ?? null, o.boardKey ?? null, o.sourceType, o.createdAt);
+
+  beforeEach(() => {
+    db = freshDb();
+    insCat({ localId: "em", sourceType: "email", timelineId: "t-em", createdAt: "2026-01-10T10:00:00Z" });
+    insCat({ localId: "ac", sourceType: "custom", timelineId: "t-ac", createdAt: "2026-01-09T10:00:00Z" });
+    insCat({ localId: "nt", sourceType: "note", timelineId: "t-nt", createdAt: "2026-01-08T10:00:00Z" });
+    insCat({ localId: "up", sourceType: "update", createdAt: "2026-01-07T10:00:00Z" });
+    insCat({ localId: "doc", sourceType: "note", boardKey: "address_changes", timelineId: "t-doc", createdAt: "2026-01-06T10:00:00Z" });
+    insCat({ localId: "notice", sourceType: "note", boardKey: "nvc_notices", timelineId: "t-notice", createdAt: "2026-01-05T10:00:00Z" });
+    insCat({ localId: "appt", sourceType: "note", boardKey: "appointments_r", timelineId: "t-appt", createdAt: "2026-01-04T10:00:00Z" });
+  });
+
+  const ids = (category: Parameters<typeof getClientUpdates>[5]) =>
+    getClientUpdates(db, "p1", 500, 0, undefined, category).map((r) => r.localId).sort();
+
+  test("emails category returns only emails", () => {
+    expect(ids("emails")).toEqual(["em"]);
+  });
+  test("activities category returns activity/custom", () => {
+    expect(ids("activities")).toEqual(["ac"]);
+  });
+  test("notes excludes document/appointment board entries", () => {
+    // up (update), nt (note) qualify; doc/notice/appt live on excluded boards.
+    expect(ids("notes")).toEqual(["nt", "up"]);
+  });
+  test("documents category matches document board keys", () => {
+    expect(ids("documents")).toEqual(["doc", "notice"]); // both are document board keys
+  });
+  test("notices category matches notice board keys", () => {
+    expect(ids("notices")).toEqual(["notice"]);
+  });
+  test("appointments category matches appointment board keys", () => {
+    expect(ids("appointments")).toEqual(["appt"]);
+  });
+  test("all category returns everything", () => {
+    expect(ids("all")).toHaveLength(7);
+  });
+});
+
 describe("E&A dedup", () => {
   test("same (profile, timeline id) is stored once via INSERT OR IGNORE", () => {
     const db = freshDb();

@@ -4,7 +4,8 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
-import type { ClientUpdate, TimelineSourceType } from "./types";
+import type { ClientUpdate, TimelineSourceType, TimelineCategory } from "./types";
+import { APPOINTMENT_BOARD_KEYS, DOCUMENT_BOARD_KEYS, NOTICE_BOARD_KEYS } from "./types";
 
 interface UpdateRow {
   local_id: string;
@@ -52,6 +53,52 @@ function typeFilter(types?: TimelineSourceType[]): { clause: string; params: str
   if (!types || types.length === 0) return { clause: "", params: [] };
   const placeholders = types.map(() => "?").join(",");
   return { clause: ` AND source_type IN (${placeholders})`, params: types };
+}
+
+function inClause(column: string, values: Set<string>): { clause: string; params: string[] } {
+  const params = [...values];
+  const placeholders = params.map(() => "?").join(",");
+  return { clause: `${column} IN (${placeholders})`, params };
+}
+
+/**
+ * Build a WHERE fragment for a timeline category. This mirrors the web's
+ * `matchesFilter` (UpdatesTimeline.tsx) in SQL so a filtered view returns the
+ * complete set for that category, not just whatever survives filtering the
+ * newest page. Categories combine source_type and board_key rules.
+ */
+function categoryFilter(category?: TimelineCategory): { clause: string; params: string[] } {
+  switch (category) {
+    case undefined:
+    case "all":
+      return { clause: "", params: [] };
+    case "emails":
+      return { clause: " AND source_type = 'email'", params: [] };
+    case "activities":
+      return { clause: " AND source_type IN ('activity','custom')", params: [] };
+    case "notes": {
+      // Genuine notes/comments: Monday updates+replies and E&A notes, excluding
+      // entries that belong to document/appointment boards.
+      const excluded = new Set([...DOCUMENT_BOARD_KEYS, ...APPOINTMENT_BOARD_KEYS]);
+      const ex = inClause("board_key", excluded);
+      return {
+        clause: ` AND source_type IN ('update','reply','note') AND (board_key IS NULL OR board_key NOT IN (${ex.params.map(() => "?").join(",")}))`,
+        params: ex.params,
+      };
+    }
+    case "documents": {
+      const f = inClause("board_key", DOCUMENT_BOARD_KEYS);
+      return { clause: ` AND ${f.clause}`, params: f.params };
+    }
+    case "notices": {
+      const f = inClause("board_key", NOTICE_BOARD_KEYS);
+      return { clause: ` AND ${f.clause}`, params: f.params };
+    }
+    case "appointments": {
+      const f = inClause("board_key", APPOINTMENT_BOARD_KEYS);
+      return { clause: ` AND ${f.clause}`, params: f.params };
+    }
+  }
 }
 
 /**
@@ -102,9 +149,14 @@ export function getClientUpdates(
   profileLocalId: string,
   limit = 50,
   offset = 0,
-  types?: TimelineSourceType[]
+  types?: TimelineSourceType[],
+  category?: TimelineCategory
 ): ClientUpdate[] {
-  const filter = typeFilter(types);
+  // A category (from the timeline chips) takes precedence over a raw type list:
+  // it filters by the exact same rule the web uses, computed server-side so a
+  // filtered view is complete rather than "the newest page, then filtered".
+  const filter =
+    category && category !== "all" ? categoryFilter(category) : typeFilter(types);
   const rows = db
     .prepare(
       `SELECT ${SELECT_COLUMNS}

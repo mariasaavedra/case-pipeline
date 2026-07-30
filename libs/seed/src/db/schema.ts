@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -158,6 +158,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_content_dedup
 CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_timeline_dedup
     ON client_updates(profile_local_id, monday_timeline_id)
     WHERE monday_timeline_id IS NOT NULL;
+-- Monday update/reply dedup: these carry a monday_update_id (not a content_sig
+-- or timeline id), so the two indexes above don't cover them. Without this,
+-- the non-destructive sync re-inserts every update/reply on each full run.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_update_dedup
+    ON client_updates(profile_local_id, monday_update_id)
+    WHERE monday_update_id IS NOT NULL;
 
 -- Relationships between items
 CREATE TABLE IF NOT EXISTS item_relationships (
@@ -817,6 +823,40 @@ export function initializeSchema(db: Database): void {
             updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
         );
       `);
+    }
+
+    // Migration v16 → v17: dedup Monday updates/replies. These rows carry a
+    // monday_update_id but no content_sig/timeline id, so neither existing dedup
+    // index covered them. Under the non-destructive sync (v15+) each full run
+    // re-inserted them via a plain INSERT, accumulating up to N copies after N
+    // runs. Collapse existing duplicates (keep the earliest row per
+    // profile+monday_update_id), then add the unique index that prevents recurrence.
+    if (fromVersion < 17) {
+      const hasUpdates = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='client_updates'")
+        .get();
+      if (hasUpdates) {
+        // monday_update_id has existed since v4, but guard against a creation
+        // path that skipped it so this migration can't fail depending on lineage.
+        const hasCol = db
+          .prepare("SELECT COUNT(*) AS cnt FROM pragma_table_info('client_updates') WHERE name='monday_update_id'")
+          .get() as { cnt: number };
+        if (hasCol.cnt === 0) {
+          db.exec("ALTER TABLE client_updates ADD COLUMN monday_update_id TEXT");
+        }
+        db.exec(`
+          DELETE FROM client_updates
+           WHERE monday_update_id IS NOT NULL
+             AND id NOT IN (
+               SELECT MIN(id) FROM client_updates
+                WHERE monday_update_id IS NOT NULL
+                GROUP BY profile_local_id, monday_update_id
+             );
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_update_dedup
+            ON client_updates(profile_local_id, monday_update_id)
+            WHERE monday_update_id IS NOT NULL;
+        `);
+      }
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

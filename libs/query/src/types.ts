@@ -263,6 +263,32 @@ export const APPOINTMENT_BOARD_KEYS = new Set([
   "appointments_wh",
 ]);
 
+// Board keys whose timeline entries read as documents on the client timeline.
+export const DOCUMENT_BOARD_KEYS = new Set([
+  "rfes_all",
+  "_na_originals_cards_notices",
+  "nvc_notices",
+  "address_changes",
+]);
+
+// Board keys whose timeline entries read as official notices / RFEs.
+export const NOTICE_BOARD_KEYS = new Set([
+  "rfes_all",
+  "nvc_notices",
+  "_na_originals_cards_notices",
+]);
+
+// Timeline filter categories, mirrored between the web chips and the server
+// query so a filtered view is complete (not just the newest page filtered).
+export type TimelineCategory =
+  | "all"
+  | "notes"
+  | "emails"
+  | "activities"
+  | "documents"
+  | "notices"
+  | "appointments";
+
 // Contract statuses considered "paid" (needs action)
 export const PAID_CONTRACT_STATUSES = new Set([
   "Paid Needs Action",

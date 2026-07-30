@@ -121,8 +121,16 @@ export async function getClient(localId: string): Promise<ClientCaseSummary> {
   return apiFetch<ClientCaseSummary>(`/api/clients/${encodeURIComponent(localId)}`);
 }
 
-export async function fetchClientUpdates(localId: string, limit = 50, offset = 0): Promise<ClientUpdate[]> {
-  return apiFetch<ClientUpdate[]>(`/api/clients/${encodeURIComponent(localId)}/updates?limit=${limit}&offset=${offset}`);
+export async function fetchClientUpdates(
+  localId: string,
+  opts: { limit?: number; offset?: number; category?: string } = {},
+): Promise<ClientUpdate[]> {
+  const { limit = 50, offset = 0, category } = opts;
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (category && category !== "all") params.set("category", category);
+  return apiFetch<ClientUpdate[]>(
+    `/api/clients/${encodeURIComponent(localId)}/updates?${params.toString()}`,
+  );
 }
 
 export async function fetchClientRelationships(localId: string): Promise<RelationshipWithDetails[]> {

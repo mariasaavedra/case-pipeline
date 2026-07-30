@@ -19,7 +19,7 @@ import {
   getAlerts,
   getActiveCases,
 } from "@case-pipeline/query";
-import type { SearchType, TimelineSourceType } from "@case-pipeline/query";
+import type { SearchType, TimelineSourceType, TimelineCategory } from "@case-pipeline/query";
 
 // =============================================================================
 // Helpers
@@ -140,7 +140,23 @@ export function handleClientUpdates(req: Request, db: Database): Response {
         .filter((t) => VALID_TYPES.has(t)) as TimelineSourceType[])
     : undefined;
 
-  const updates = getClientUpdates(db, localId, limit, offset, types && types.length ? types : undefined);
+  // Optional ?category=activities — the timeline chip filter, applied server-side
+  // (source_type + board_key rule) so a filtered view is complete, not just the
+  // newest page filtered down. Takes precedence over ?types when both are present.
+  const VALID_CATEGORIES = new Set([
+    "all", "notes", "emails", "activities", "documents", "notices", "appointments",
+  ]);
+  const categoryParam = url.searchParams.get("category");
+  const category =
+    categoryParam && VALID_CATEGORIES.has(categoryParam)
+      ? (categoryParam as TimelineCategory)
+      : undefined;
+
+  const updates = getClientUpdates(
+    db, localId, limit, offset,
+    types && types.length ? types : undefined,
+    category,
+  );
   return json(updates);
 }
 

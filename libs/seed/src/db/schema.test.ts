@@ -170,6 +170,74 @@ describe("v13 → v14 content-signature dedup", () => {
   });
 });
 
+describe("v16 → v17 update/reply dedup migration", () => {
+  // A v16-era client_updates with monday_update_id but no update-dedup index —
+  // the state where the non-destructive sync's plain INSERT re-inserted every
+  // update/reply on each full run, accumulating duplicate copies.
+  function makeV16Db(): DatabaseInstance {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (16);
+      CREATE TABLE client_updates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        local_id TEXT,
+        monday_update_id TEXT,
+        monday_timeline_id TEXT,
+        profile_local_id TEXT NOT NULL,
+        board_item_local_id TEXT,
+        author_name TEXT NOT NULL DEFAULT 'x',
+        title TEXT,
+        text_body TEXT NOT NULL DEFAULT '',
+        source_type TEXT NOT NULL DEFAULT 'update',
+        content_sig TEXT,
+        created_at_source TEXT NOT NULL DEFAULT ''
+      );
+    `);
+    return db;
+  }
+  const insUpd = (db: DatabaseInstance, o: { localId: string; profile: string; updateId: string; type?: string }) =>
+    db
+      .prepare(
+        `INSERT INTO client_updates (local_id, monday_update_id, profile_local_id, source_type, created_at_source)
+         VALUES (?, ?, ?, ?, '2026-06-20T00:00:00Z')`
+      )
+      .run(o.localId, o.updateId, o.profile, o.type ?? "update");
+
+  test("collapses duplicate updates to the earliest, keeps distinct ones", () => {
+    const db = makeV16Db();
+    // Same update inserted 4× (four full syncs) under p1.
+    insUpd(db, { localId: "a1", profile: "p1", updateId: "u1" });
+    insUpd(db, { localId: "a2", profile: "p1", updateId: "u1" });
+    insUpd(db, { localId: "a3", profile: "p1", updateId: "u1" });
+    insUpd(db, { localId: "a4", profile: "p1", updateId: "u1" });
+    // A distinct reply, and the same update id under a different profile.
+    insUpd(db, { localId: "r1", profile: "p1", updateId: "u2", type: "reply" });
+    insUpd(db, { localId: "b1", profile: "p2", updateId: "u1" });
+
+    initializeSchema(db);
+
+    const p1 = db.prepare("SELECT local_id FROM client_updates WHERE profile_local_id='p1' ORDER BY id").all() as { local_id: string }[];
+    expect(p1.map((r) => r.local_id)).toEqual(["a1", "r1"]); // earliest copy of u1 + the distinct reply
+    expect((db.prepare("SELECT COUNT(*) AS c FROM client_updates WHERE profile_local_id='p2'").get() as { c: number }).c).toBe(1);
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+  });
+
+  test("the update-dedup index blocks a re-insert of the same update", () => {
+    const db = makeV16Db();
+    initializeSchema(db);
+    const ins = (localId: string) =>
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO client_updates (local_id, monday_update_id, profile_local_id, source_type, created_at_source)
+           VALUES (?, 'u9', 'p9', 'update', '2026-06-20T00:00:00Z')`
+        )
+        .run(localId);
+    expect(ins("x").changes).toBe(1);
+    expect(ins("y").changes).toBe(0); // same profile + monday_update_id → skipped
+  });
+});
+
 describe("v14 → v15 stable-identity migration", () => {
   // Minimal pre-v15 shape: the three client tables with the old
   // NOT NULL + ON DELETE CASCADE batch_id, plus seed_batches.

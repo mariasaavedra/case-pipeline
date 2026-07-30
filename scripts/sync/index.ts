@@ -568,8 +568,11 @@ async function main() {
       // custom_activity id → name, so E&A rows of type=custom get a readable label.
       const customActivityNames = await fetchCustomActivities();
 
+      // INSERT OR IGNORE honors the (profile_local_id, monday_update_id) unique
+      // index: the non-destructive sync re-walks every item on each full run, so
+      // without OR IGNORE the same update/reply would be re-inserted every time.
       const insertUpdate = db.prepare(`
-        INSERT INTO client_updates (
+        INSERT OR IGNORE INTO client_updates (
           batch_id, local_id, monday_update_id, profile_local_id,
           board_item_local_id, board_key, author_name, author_email,
           text_body, body_html, source_type, reply_to_update_id,
