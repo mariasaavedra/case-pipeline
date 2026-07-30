@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS client_updates (
     source_type TEXT NOT NULL DEFAULT 'update',   -- update | reply | email | note | activity | custom
     activity_type_name TEXT,                       -- E&A custom activity name (e.g. "Consult note")
     content_sig TEXT,                              -- E&A content signature for dedup (NULL for update/reply)
+    attachments TEXT,                              -- JSON array of Monday update assets (NULL if none)
     reply_to_update_id TEXT,
     created_at_source TEXT NOT NULL,
     raw_json TEXT,
@@ -856,6 +857,24 @@ export function initializeSchema(db: Database): void {
             ON client_updates(profile_local_id, monday_update_id)
             WHERE monday_update_id IS NOT NULL;
         `);
+      }
+    }
+
+    // Migration v17 → v18: store Monday update attachments. Purely additive —
+    // a nullable JSON column on client_updates holding the update's assets
+    // (name/url/thumbnail/…). Existing rows stay NULL until the next sync
+    // re-fetches updates with the new `assets` GraphQL field.
+    if (fromVersion < 18) {
+      const hasUpdates = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='client_updates'")
+        .get();
+      if (hasUpdates) {
+        const hasCol = db
+          .prepare("SELECT COUNT(*) AS cnt FROM pragma_table_info('client_updates') WHERE name='attachments'")
+          .get() as { cnt: number };
+        if (hasCol.cnt === 0) {
+          db.exec("ALTER TABLE client_updates ADD COLUMN attachments TEXT");
+        }
       }
     }
 

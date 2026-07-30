@@ -17,6 +17,7 @@ function makeUpdate(overrides: Partial<ClientUpdate> = {}): ClientUpdate {
     activityTypeName: null,
     replyToUpdateId: null,
     createdAtSource: "2026-01-15T10:00:00Z",
+    attachments: [],
     ...overrides,
   };
 }

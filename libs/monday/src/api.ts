@@ -701,6 +701,14 @@ export async function fetchItemUpdatesBatch(
           body
           created_at
           creator { name email }
+          assets {
+            id
+            name
+            url
+            url_thumbnail
+            file_extension
+            file_size
+          }
           replies {
             id
             body

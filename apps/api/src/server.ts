@@ -406,8 +406,11 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
     textBody: text,
     bodyHtml: null,
     sourceType: "update" as const,
+    title: null,
+    activityTypeName: null,
     replyToUpdateId: null,
     createdAtSource: now,
+    attachments: [],
     pending,
   });
 

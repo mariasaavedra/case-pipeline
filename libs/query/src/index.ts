@@ -28,6 +28,7 @@ export type {
   BoardItemSummary,
   ClientCaseSummary,
   ClientUpdate,
+  ClientUpdateAttachment,
   TimelineSourceType,
   TimelineCategory,
   SearchResult,

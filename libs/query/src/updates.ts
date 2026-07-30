@@ -4,7 +4,7 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
-import type { ClientUpdate, TimelineSourceType, TimelineCategory } from "./types";
+import type { ClientUpdate, ClientUpdateAttachment, TimelineSourceType, TimelineCategory } from "./types";
 import { APPOINTMENT_BOARD_KEYS, DOCUMENT_BOARD_KEYS, NOTICE_BOARD_KEYS } from "./types";
 
 interface UpdateRow {
@@ -21,11 +21,12 @@ interface UpdateRow {
   activity_type_name: string | null;
   reply_to_update_id: string | null;
   created_at_source: string;
+  attachments: string | null;
 }
 
 const SELECT_COLUMNS = `local_id, profile_local_id, board_item_local_id, board_key,
               author_name, author_email, title, text_body, body_html,
-              source_type, activity_type_name, reply_to_update_id, created_at_source`;
+              source_type, activity_type_name, reply_to_update_id, created_at_source, attachments`;
 
 function mapRow(row: UpdateRow): ClientUpdate {
   return {
@@ -42,7 +43,19 @@ function mapRow(row: UpdateRow): ClientUpdate {
     activityTypeName: row.activity_type_name,
     replyToUpdateId: row.reply_to_update_id,
     createdAtSource: row.created_at_source,
+    attachments: parseAttachments(row.attachments),
   };
+}
+
+/** Parse the stored attachments JSON, tolerating null/legacy/corrupt values. */
+function parseAttachments(raw: string | null): ClientUpdateAttachment[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as ClientUpdateAttachment[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 /**

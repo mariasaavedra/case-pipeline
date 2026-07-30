@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import type { ClientUpdate } from "../api";
+import type { ReactNode } from "react";
+import type { ClientUpdate, ClientUpdateAttachment } from "../api";
 import {
   BOARD_DISPLAY_NAMES,
   APPOINTMENT_BOARD_KEYS,
@@ -56,6 +57,68 @@ function getAvatarColor(name: string) {
 
 // E&A source types that come from the Emails & Activities timeline.
 const EA_ACTIVITY_TYPES = new Set(["activity", "custom"]);
+
+// Turn bare http(s) URLs in note/email text into clickable links. Emails often
+// carry attachment/download links inline as plain text; this makes them usable.
+const URL_RE = /(https?:\/\/[^\s<>"')]+)/g;
+const URL_TEST = /^https?:\/\//;
+function renderTextWithLinks(text: string): ReactNode[] {
+  const parts = text.split(URL_RE);
+  return parts.map((part, i) =>
+    URL_TEST.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: "var(--color-status-blue)", textDecoration: "underline", wordBreak: "break-word" }}
+      >
+        {part}
+      </a>
+    ) : (
+      part
+    )
+  );
+}
+
+function formatFileSize(bytes: number | null): string {
+  if (bytes == null || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function Attachments({ items }: { items: ClientUpdateAttachment[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {items.map((a, i) => {
+        const size = formatFileSize(a.fileSize);
+        return (
+          <a
+            key={i}
+            href={a.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs"
+            style={{
+              backgroundColor: "var(--color-surface-warm)",
+              border: "1px solid var(--color-border-light)",
+              color: "var(--color-ink-muted)",
+              fontFamily: "var(--font-body)",
+              maxWidth: 260,
+            }}
+            title={size ? `${a.name} · ${size}` : a.name}
+          >
+            <span aria-hidden>📎</span>
+            <span className="truncate">{a.name}</span>
+            {size && <span style={{ color: "var(--color-ink-faint)" }}>· {size}</span>}
+          </a>
+        );
+      })}
+    </div>
+  );
+}
 
 function matchesFilter(u: ClientUpdate, filter: TimelineFilter): boolean {
   switch (filter) {
@@ -231,8 +294,9 @@ export function UpdatesTimeline({ updates, filter = "all", last30Days = false, l
                         fontWeight: 300,
                       }}
                     >
-                      {u.textBody}
+                      {renderTextWithLinks(u.textBody)}
                     </p>
+                    <Attachments items={u.attachments} />
                   </div>
                 </div>
               );

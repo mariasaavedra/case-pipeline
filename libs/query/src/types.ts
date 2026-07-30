@@ -113,6 +113,15 @@ export interface BoardItemSummary {
  */
 export type TimelineSourceType = "update" | "reply" | "email" | "note" | "activity" | "custom";
 
+/** A file attached to a Monday update. `url` opens the asset in Monday. */
+export interface ClientUpdateAttachment {
+  name: string;
+  url: string;
+  thumbnailUrl: string | null;
+  fileExtension: string | null;
+  fileSize: number | null;
+}
+
 export interface ClientUpdate {
   localId: string;
   profileLocalId: string;
@@ -129,6 +138,8 @@ export interface ClientUpdate {
   activityTypeName: string | null;
   replyToUpdateId: string | null;
   createdAtSource: string;
+  /** Files attached to a Monday update; empty when none. */
+  attachments: ClientUpdateAttachment[];
 }
 
 export interface ClientCaseSummary {

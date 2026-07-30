@@ -61,12 +61,24 @@ export interface MondayReply {
   creator: MondayUpdateCreator | null;
 }
 
+/** A file attached to a Monday.com update. `url` opens the asset in Monday
+ * (requires a Monday session); `public_url` is short-lived so we don't persist it. */
+export interface MondayAsset {
+  id: string;
+  name: string;
+  url: string;
+  url_thumbnail: string | null;
+  file_extension: string | null;
+  file_size: number | null;
+}
+
 export interface MondayUpdate {
   id: string;
   body: string;
   created_at: string;
   creator: MondayUpdateCreator | null;
   replies: MondayReply[];
+  assets: MondayAsset[] | null;
 }
 
 // -----------------------------------------------------------------------------

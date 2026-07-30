@@ -48,7 +48,7 @@ import {
   fetchCustomActivities,
   resolveAllColumns,
 } from "@case-pipeline/monday";
-import type { MondayItem, MondayTimelineItem } from "@case-pipeline/monday";
+import type { MondayItem, MondayTimelineItem, MondayAsset } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
@@ -576,9 +576,25 @@ async function main() {
           batch_id, local_id, monday_update_id, profile_local_id,
           board_item_local_id, board_key, author_name, author_email,
           text_body, body_html, source_type, reply_to_update_id,
-          created_at_source, raw_json, sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+          attachments, created_at_source, raw_json, sync_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
       `);
+
+      // Normalize a Monday update's assets to the slim shape the query layer
+      // reads directly. Replies carry no assets (the Reply type has no field).
+      function serializeAssets(assets: MondayAsset[] | null | undefined): string | null {
+        if (!assets || assets.length === 0) return null;
+        return JSON.stringify(
+          assets.map((a) => ({
+            name: a.name,
+            url: a.url,
+            // Monday returns "" (not null) for non-image assets; normalize.
+            thumbnailUrl: a.url_thumbnail || null,
+            fileExtension: a.file_extension || null,
+            fileSize: a.file_size ?? null,
+          }))
+        );
+      }
 
       // E&A rows. INSERT OR IGNORE honors the content-signature unique index:
       // the same event surfaces on the profile AND its connected board items
@@ -629,6 +645,7 @@ async function main() {
                 update.creator?.name ?? "Unknown", update.creator?.email ?? null,
                 stripHtml(update.body), update.body,
                 "update", null,
+                serializeAssets(update.assets),
                 update.created_at, JSON.stringify(update),
               );
               totalUpdates++;
@@ -640,6 +657,7 @@ async function main() {
                   reply.creator?.name ?? "Unknown", reply.creator?.email ?? null,
                   stripHtml(reply.body), reply.body,
                   "reply", update.id,
+                  null,
                   reply.created_at, JSON.stringify(reply),
                 );
                 totalUpdates++;

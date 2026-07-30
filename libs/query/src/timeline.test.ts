@@ -140,6 +140,42 @@ describe("timeline category filter", () => {
   });
 });
 
+describe("update attachments", () => {
+  let db: DatabaseInstance;
+  beforeEach(() => {
+    db = freshDb();
+  });
+
+  const insertWithAttachments = (localId: string, attachments: string | null) =>
+    db
+      .prepare(
+        `INSERT INTO client_updates
+           (batch_id, local_id, profile_local_id, author_name, text_body, source_type, attachments, created_at_source, sync_status)
+         VALUES (?, ?, 'p1', 'A', 'see attached', 'update', ?, '2026-01-01T10:00:00Z', 'synced')`
+      )
+      .run(batchId(db), localId, attachments);
+
+  test("parses stored attachment JSON onto the mapped result", () => {
+    insertWithAttachments(
+      "u1",
+      JSON.stringify([{ name: "contract.pdf", url: "https://m/1", thumbnailUrl: null, fileExtension: ".pdf", fileSize: 1024 }])
+    );
+    const u = getClientUpdates(db, "p1")[0]!;
+    expect(u.attachments).toHaveLength(1);
+    expect(u.attachments[0]).toEqual({ name: "contract.pdf", url: "https://m/1", thumbnailUrl: null, fileExtension: ".pdf", fileSize: 1024 });
+  });
+
+  test("null attachments map to an empty array", () => {
+    insertWithAttachments("u2", null);
+    expect(getClientUpdates(db, "p1")[0]!.attachments).toEqual([]);
+  });
+
+  test("corrupt attachment JSON degrades to an empty array", () => {
+    insertWithAttachments("u3", "{not json");
+    expect(getClientUpdates(db, "p1")[0]!.attachments).toEqual([]);
+  });
+});
+
 describe("E&A dedup", () => {
   test("same (profile, timeline id) is stored once via INSERT OR IGNORE", () => {
     const db = freshDb();
