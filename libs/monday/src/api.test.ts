@@ -9,6 +9,7 @@ import {
   findColumnByTitle,
   parseColumnLabels,
   getExistingLabelNames,
+  parseStatusOptions,
 } from "./api";
 import type { MondayItem, MondayColumn } from "./types";
 
@@ -215,6 +216,42 @@ describe("parseColumnLabels", () => {
 // =============================================================================
 // getExistingLabelNames tests
 // =============================================================================
+
+describe("parseStatusOptions", () => {
+  const column: MondayColumn = {
+    id: "status",
+    title: "Status",
+    type: "status",
+    settings_str: JSON.stringify({
+      labels: { "0": "Sent Out", "2": "Filed", "5": "" },
+      labels_colors: {
+        "0": { color: "#00c875", border: "#00b461", var_name: "green" },
+        "2": { color: "#df2f4a", border: "#ce3048", var_name: "red" },
+      },
+    }),
+  };
+
+  test("returns options with native colors, ordered by index", () => {
+    expect(parseStatusOptions(column)).toEqual([
+      { index: 0, label: "Sent Out", color: "#00c875", border: "#00b461" },
+      { index: 2, label: "Filed", color: "#df2f4a", border: "#ce3048" },
+    ]);
+  });
+
+  test("skips blank labels and tolerates missing colors", () => {
+    const col: MondayColumn = {
+      id: "s",
+      title: "S",
+      type: "status",
+      settings_str: JSON.stringify({ labels: { "0": "Open", "1": "" } }),
+    };
+    expect(parseStatusOptions(col)).toEqual([{ index: 0, label: "Open", color: null, border: null }]);
+  });
+
+  test("returns [] for unparseable settings", () => {
+    expect(parseStatusOptions({ id: "x", title: "X", type: "status", settings_str: "nope" })).toEqual([]);
+  });
+});
 
 describe("getExistingLabelNames", () => {
   test("returns label names from status column", () => {

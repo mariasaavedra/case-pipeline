@@ -6,8 +6,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 
-const { createUpdateMock } = vi.hoisted(() => ({ createUpdateMock: vi.fn() }));
-vi.mock("@case-pipeline/monday", () => ({ createUpdate: createUpdateMock }));
+const { createUpdateMock, changeSimpleColumnValueMock } = vi.hoisted(() => ({
+  createUpdateMock: vi.fn(),
+  changeSimpleColumnValueMock: vi.fn(),
+}));
+vi.mock("@case-pipeline/monday", () => ({
+  createUpdate: createUpdateMock,
+  changeSimpleColumnValue: changeSimpleColumnValueMock,
+}));
 
 import { enqueueWrite, drainWriteQueue } from "./processor";
 
@@ -29,7 +35,10 @@ const queueRow = (db: DatabaseInstance) =>
   db.prepare("SELECT status, attempts, last_error, next_attempt_at FROM write_queue").get() as Row;
 
 describe("write-queue processor", () => {
-  beforeEach(() => createUpdateMock.mockReset());
+  beforeEach(() => {
+    createUpdateMock.mockReset();
+    changeSimpleColumnValueMock.mockReset();
+  });
 
   it("syncs a create_update op and marks it synced", async () => {
     const db = freshDb();
@@ -91,13 +100,44 @@ describe("write-queue processor", () => {
   it("dead-letters an unsupported op_type without calling Monday.com", async () => {
     const db = freshDb();
 
-    enqueueWrite(db, { opType: "change_column", mondayItemId: "123", payload: {}, maxAttempts: 1 });
+    // `reschedule` is still a TODO — a genuinely unsupported op_type.
+    enqueueWrite(db, { opType: "reschedule", mondayItemId: "123", payload: {}, maxAttempts: 1 });
     await drainWriteQueue(db);
 
     const row = queueRow(db);
     expect(row.status).toBe("failed");
     expect(row.last_error).toContain("Unsupported");
     expect(createUpdateMock).not.toHaveBeenCalled();
+    db.close();
+  });
+
+  it("syncs a change_column op via change_simple_column_value", async () => {
+    const db = freshDb();
+    changeSimpleColumnValueMock.mockResolvedValue("123");
+
+    enqueueWrite(db, {
+      opType: "change_column",
+      mondayItemId: "123",
+      payload: { boardId: "board-9", columnId: "status", value: "Filed" },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    expect(changeSimpleColumnValueMock).toHaveBeenCalledWith("board-9", "123", "status", "Filed", "tok");
+    expect(queueRow(db).status).toBe("synced");
+    db.close();
+  });
+
+  it("dead-letters a change_column op missing board/column ids", async () => {
+    const db = freshDb();
+
+    enqueueWrite(db, { opType: "change_column", mondayItemId: "123", payload: { value: "Filed" }, maxAttempts: 1 });
+    await drainWriteQueue(db);
+
+    const row = queueRow(db);
+    expect(row.status).toBe("failed");
+    expect(row.last_error).toContain("boardId");
+    expect(changeSimpleColumnValueMock).not.toHaveBeenCalled();
     db.close();
   });
 

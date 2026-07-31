@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 18;
+export const SCHEMA_VERSION = 19;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -230,6 +230,18 @@ CREATE TABLE IF NOT EXISTS sync_watermarks (
     last_updated_at    TEXT,
     last_full_sweep_at TEXT,
     updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Per-board status column definition (id + selectable options with native Monday
+-- colors), refreshed every sync. Powers the status editor: restricts writes to
+-- existing labels and renders each in its real Monday color. The options column is
+-- a JSON array of { index, label, color, border }.
+CREATE TABLE IF NOT EXISTS board_status_options (
+    board_key        TEXT PRIMARY KEY,
+    monday_board_id  TEXT NOT NULL,
+    status_column_id TEXT NOT NULL,
+    options          TEXT NOT NULL,
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Schema version tracking
@@ -876,6 +888,21 @@ export function initializeSchema(db: Database): void {
           db.exec("ALTER TABLE client_updates ADD COLUMN attachments TEXT");
         }
       }
+    }
+
+    // Migration v18 → v19: per-board status column options (id + colored labels).
+    // Additive — an empty table means the status editor has no options until the
+    // next sync populates it, which is the safe starting state.
+    if (fromVersion < 19) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS board_status_options (
+            board_key        TEXT PRIMARY KEY,
+            monday_board_id  TEXT NOT NULL,
+            status_column_id TEXT NOT NULL,
+            options          TEXT NOT NULL,
+            updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

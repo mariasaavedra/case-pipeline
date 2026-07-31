@@ -7,6 +7,7 @@ import type {
   MondayColumn,
   MondayItem,
   ColumnLabels,
+  StatusOption,
   MondayUpdate,
   MondayTimelineItem,
   MondayCustomActivity,
@@ -677,6 +678,41 @@ export function getExistingLabelNames(column: MondayColumn): string[] {
   return Object.values(labels);
 }
 
+/**
+ * Parse a status/single-select column's selectable options WITH their native
+ * Monday colors, from `settings_str` (`labels` + `labels_colors`). Preserves the
+ * label index (needed to write the value back) and orders by index. Returns [] for
+ * non-status columns or unparseable settings.
+ */
+export function parseStatusOptions(column: MondayColumn): StatusOption[] {
+  let settings: {
+    labels?: Record<string, string> | { id: number | string; name: string }[];
+    labels_colors?: Record<string, { color?: string; border?: string }>;
+  };
+  try {
+    settings = JSON.parse(column.settings_str);
+  } catch {
+    return [];
+  }
+  const labels = parseColumnLabels(column); // {indexStr: name}, tolerant of both shapes
+  const colors = settings.labels_colors ?? {};
+  const options: StatusOption[] = [];
+  for (const [indexStr, label] of Object.entries(labels)) {
+    if (!label) continue; // skip removed/blank labels
+    const index = Number(indexStr);
+    if (!Number.isFinite(index)) continue;
+    const c = colors[indexStr];
+    options.push({
+      index,
+      label,
+      color: c?.color ?? null,
+      border: c?.border ?? null,
+    });
+  }
+  options.sort((a, b) => a.index - b.index);
+  return options;
+}
+
 // =============================================================================
 // Updates fetching
 // =============================================================================
@@ -744,6 +780,28 @@ export async function createUpdate(itemId: string, body: string, tokenOverride?:
     tokenOverride
   );
   return result.data.create_update.id;
+}
+
+/**
+ * Set a simple column value on an item (status label, date, text). For a status
+ * column, `value` is the label text — Monday matches it to an existing label
+ * (so callers must pass a label that exists on the column). Returns the item id.
+ */
+export async function changeSimpleColumnValue(
+  boardId: string,
+  itemId: string,
+  columnId: string,
+  value: string,
+  tokenOverride?: string
+): Promise<string> {
+  const result = await mondayRequest<{ data: { change_simple_column_value: { id: string } } }>(
+    `mutation ChangeSimpleColumnValue($boardId: ID!, $itemId: ID!, $columnId: String!, $value: String!) {
+       change_simple_column_value(board_id: $boardId, item_id: $itemId, column_id: $columnId, value: $value) { id }
+     }`,
+    { boardId, itemId, columnId, value },
+    tokenOverride
+  );
+  return result.data.change_simple_column_value.id;
 }
 
 // =============================================================================

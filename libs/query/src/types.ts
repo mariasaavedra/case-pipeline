@@ -113,6 +113,22 @@ export interface BoardItemSummary {
  */
 export type TimelineSourceType = "update" | "reply" | "email" | "note" | "activity" | "custom";
 
+/** One selectable value of a board's status column, with its native Monday color. */
+export interface StatusColumnOption {
+  index: number;
+  label: string;
+  color: string | null;
+  border: string | null;
+}
+
+/** A board's status column definition — its Monday ids and colored options. */
+export interface BoardStatusOptions {
+  boardKey: string;
+  mondayBoardId: string;
+  statusColumnId: string;
+  options: StatusColumnOption[];
+}
+
 /** A file attached to a Monday update. `url` opens the asset in Monday. */
 export interface ClientUpdateAttachment {
   name: string;

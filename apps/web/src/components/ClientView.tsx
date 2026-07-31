@@ -15,6 +15,8 @@ import { DocumentsTab } from "./DocumentsTab";
 import { TimelineFilters, type TimelineFilter } from "./TimelineFilters";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { RelationsView } from "./RelationsView";
+import { DebugTab } from "./DebugTab";
+import { useAuth } from "../auth/useAuth";
 
 interface Props {
   data: ClientCaseSummary;
@@ -22,6 +24,7 @@ interface Props {
 }
 
 export function ClientView({ data, initialTab = "overview" }: Props) {
+  const isAdmin = useAuth().user?.role === "admin";
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
   const [last30Days, setLast30Days] = useState(false);
@@ -111,6 +114,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
         <ClientTabs
           activeTab={activeTab}
           onTabChange={handleTabChange}
+          showDebug={isAdmin}
           counts={{
             appointments: data.appointments.length,
             contracts: contractCount,
@@ -188,6 +192,10 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
 
           {activeTab === "relations" && (
             <RelationsView profileLocalId={data.profile.localId} />
+          )}
+
+          {activeTab === "debug" && isAdmin && (
+            <DebugTab data={data} />
           )}
         </div>
       </div>

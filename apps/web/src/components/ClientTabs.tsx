@@ -1,4 +1,4 @@
-export type TabId = "overview" | "appointments" | "contracts" | "active_cases" | "court_cases" | "documents" | "relations";
+export type TabId = "overview" | "appointments" | "contracts" | "active_cases" | "court_cases" | "documents" | "relations" | "debug";
 
 interface Props {
   activeTab: TabId;
@@ -10,9 +10,11 @@ interface Props {
     courtCases: number;
     relations: number;
   };
+  /** Show the admin-only Debug tab. */
+  showDebug?: boolean;
 }
 
-const TABS: { id: TabId; label: string; countKey?: keyof NonNullable<Props["counts"]> }[] = [
+const TABS: { id: TabId; label: string; countKey?: keyof NonNullable<Props["counts"]>; adminOnly?: boolean }[] = [
   { id: "overview", label: "Overview" },
   { id: "appointments", label: "Appointments", countKey: "appointments" },
   { id: "contracts", label: "Contracts", countKey: "contracts" },
@@ -20,12 +22,13 @@ const TABS: { id: TabId; label: string; countKey?: keyof NonNullable<Props["coun
   { id: "court_cases", label: "Court Cases", countKey: "courtCases" },
   { id: "documents", label: "Documents" },
   { id: "relations", label: "Relations", countKey: "relations" },
+  { id: "debug", label: "Debug", adminOnly: true },
 ];
 
-export function ClientTabs({ activeTab, onTabChange, counts }: Props) {
+export function ClientTabs({ activeTab, onTabChange, counts, showDebug = false }: Props) {
   return (
     <nav className="tab-bar animate-in animate-in-delay-2" role="tablist" aria-label="Client sections">
-      {TABS.map((tab) => {
+      {TABS.filter((tab) => !tab.adminOnly || showDebug).map((tab) => {
         const count = tab.countKey && counts ? counts[tab.countKey] : undefined;
         const isActive = activeTab === tab.id;
 

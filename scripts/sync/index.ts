@@ -47,6 +47,7 @@ import {
   fetchTimelineBatch,
   fetchCustomActivities,
   resolveAllColumns,
+  parseStatusOptions,
 } from "@case-pipeline/monday";
 import type { MondayItem, MondayTimelineItem, MondayAsset } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
@@ -298,11 +299,35 @@ async function main() {
     }
   }
 
+  // Refresh a board's status column definition (id + colored options) every run,
+  // so the status editor always mirrors what exists in Monday right now.
+  const upsertStatusOptions = db.prepare(`
+    INSERT INTO board_status_options (board_key, monday_board_id, status_column_id, options, updated_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(board_key) DO UPDATE SET
+      monday_board_id = excluded.monday_board_id,
+      status_column_id = excluded.status_column_id,
+      options = excluded.options,
+      updated_at = excluded.updated_at
+  `);
+
   // ---- Helper: resolve a board's columns once ----
   async function resolveBoard(key: string) {
     const config = boardsConfig[key]!;
     const structure = await fetchBoardStructure(config.id);
     const resolved = resolveAllColumns(structure.columns, config) as Record<string, ResolvedColumnMeta | undefined>;
+
+    // Capture the status column's selectable options + native colors.
+    const statusMeta = resolved.status;
+    if (statusMeta) {
+      const statusCol = structure.columns.find((c) => c.id === statusMeta.id);
+      if (statusCol) {
+        const options = parseStatusOptions(statusCol);
+        if (options.length > 0) {
+          upsertStatusOptions.run(key, config.id, statusMeta.id, JSON.stringify(options));
+        }
+      }
+    }
     const since = watermarkFor(key);
     if (since) incrementalBoards.add(key);
     const items = await fetchAllBoardItems(config.id, {

@@ -2,14 +2,14 @@
 // API Client — Typed fetch wrappers
 // =============================================================================
 
-import type { SearchResult, ClientCaseSummary, ClientUpdate, KpiCard, KpiCardDetail, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
+import type { SearchResult, ClientCaseSummary, ClientUpdate, KpiCard, KpiCardDetail, TypedSearchResult, SearchType, BoardStatusOptions } from "@case-pipeline/query/types";
 import type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
 import type { ActiveCasesResult, ActiveCase } from "@case-pipeline/query";
 
-export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
+export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
 export type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
 export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "@case-pipeline/query/appointments";
@@ -130,6 +130,22 @@ export async function fetchClientUpdates(
   if (category && category !== "all") params.set("category", category);
   return apiFetch<ClientUpdate[]>(
     `/api/clients/${encodeURIComponent(localId)}/updates?${params.toString()}`,
+  );
+}
+
+export async function fetchBoardStatusOptions(): Promise<BoardStatusOptions[]> {
+  return apiFetch<BoardStatusOptions[]>("/api/boards/status-options");
+}
+
+/** Change a board item's status in Monday. Returns { status, pending } — pending
+ * means Monday was unreachable and the write was queued for retry. */
+export async function changeBoardItemStatus(
+  localId: string,
+  status: string,
+): Promise<{ localId: string; status: string; pending: boolean }> {
+  return apiFetch<{ localId: string; status: string; pending: boolean }>(
+    `/api/board-items/${encodeURIComponent(localId)}/status`,
+    { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) },
   );
 }
 

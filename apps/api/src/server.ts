@@ -27,9 +27,9 @@ import {
   handleClientRelationships,
   handleAlerts,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor } from "@case-pipeline/query";
 import type { Urgency } from "@case-pipeline/query";
-import { setApiToken, createUpdate, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
+import { setApiToken, createUpdate, changeSimpleColumnValue, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
 import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
@@ -443,6 +443,95 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
 });
 
 // =============================================================================
+// Status write-back — change a board item's status in Monday.com
+// =============================================================================
+// Any authed staffer can change a status; the write is attributed to their
+// personal Monday token when connected. The new value is restricted to the
+// board's existing labels (from board_status_options), so we never invent a
+// status Monday doesn't have. Same resilient pattern as note write-back: write
+// through to Monday, fall back to the durable queue on outage, update live.db
+// optimistically (the next sync reconciles authoritatively), and audit.
+
+app.patch("/api/board-items/:localId/status", requireAuth, async (req, res) => {
+  if (!MONDAY_API_TOKEN) {
+    res.status(503).json({ error: "Monday.com write-back not configured (MONDAY_API_TOKEN missing)" });
+    return;
+  }
+
+  const localId = String(req.params.localId);
+  const status = ((req.body as { status?: unknown }).status ?? "").toString().trim();
+  if (!status) {
+    res.status(400).json({ error: "status is required" });
+    return;
+  }
+
+  const item = db
+    .prepare("SELECT monday_item_id, board_key, status FROM board_items WHERE local_id = ?")
+    .get(localId) as { monday_item_id: string | null; board_key: string; status: string | null } | null;
+  if (!item) {
+    res.status(404).json({ error: "Board item not found" });
+    return;
+  }
+  if (!item.monday_item_id) {
+    res.status(400).json({ error: "Board item has no Monday.com item ID — cannot change status" });
+    return;
+  }
+
+  // Restrict to a label that exists on this board's status column.
+  const def = getBoardStatusOptionsFor(db, item.board_key);
+  if (!def) {
+    res.status(409).json({ error: "No status options synced for this board yet — run a sync first" });
+    return;
+  }
+  if (!def.options.some((o) => o.label === status)) {
+    res.status(400).json({
+      error: "Status is not a valid option for this board",
+      allowed: def.options.map((o) => o.label),
+    });
+    return;
+  }
+
+  const previous = item.status;
+  const applyLocal = () =>
+    db.prepare("UPDATE board_items SET status = ? WHERE local_id = ?").run(status, localId);
+
+  try {
+    const userToken = getUserMondayToken(req.user?.oid ?? "");
+    await changeSimpleColumnValue(def.mondayBoardId, item.monday_item_id, def.statusColumnId, status, userToken ?? undefined);
+    applyLocal();
+    auditFromReq(req, "monday.status_changed", {
+      targetType: "board_item",
+      targetId: localId,
+      metadata: {
+        mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId: def.statusColumnId,
+        from: previous, to: status, usedPersonalToken: !!userToken,
+      },
+    });
+    res.json({ data: { localId, status, pending: false } });
+  } catch (err) {
+    console.error("[write-back] changeSimpleColumnValue failed; queueing for retry:", err);
+    applyLocal();
+    enqueueWrite(db, {
+      opType: "change_column",
+      targetTable: "board_items",
+      targetLocalId: localId,
+      mondayItemId: item.monday_item_id,
+      authorOid: req.user?.oid ?? null,
+      payload: { boardId: def.mondayBoardId, columnId: def.statusColumnId, value: status },
+    });
+    auditFromReq(req, "monday.status_changed", {
+      targetType: "board_item",
+      targetId: localId,
+      metadata: {
+        mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId: def.statusColumnId,
+        from: previous, to: status, queued: true,
+      },
+    });
+    res.status(202).json({ data: { localId, status, pending: true } });
+  }
+});
+
+// =============================================================================
 // Document generation — render a DOCX for a profile from live Monday.com data
 // =============================================================================
 // Same pipeline as the CLI `render` command: fetch the item from Monday.com,
@@ -651,6 +740,11 @@ app.put("/api/settings/urgency", requireAdmin, (req, res) => {
   res.json({ data: saved });
 });
 
+// Per-board status column options (labels + native Monday colors) for the status
+// editor. Any authed user — needed to render/choose statuses inline.
+app.get("/api/boards/status-options", (_req, res) => {
+  res.json({ data: getBoardStatusOptions(db) });
+});
 app.get("/api/settings/status-catalog", (_req, res) => {
   const rows = db
     .prepare(

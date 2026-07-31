@@ -447,6 +447,39 @@ body {
 }
 
 /* =============================================================================
+   Status chip / editor (native Monday colors)
+   ============================================================================= */
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  line-height: 1.4;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.status-chip-editable {
+  transition: filter 0.12s ease, box-shadow 0.12s ease;
+}
+.status-chip-editable:hover {
+  filter: brightness(0.95);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
+}
+.status-chip-editable:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 1px;
+}
+
+.status-menu-item:hover {
+  background: var(--color-surface-warm) !important;
+}
+
+/* =============================================================================
    Action Buttons
    ============================================================================= */
 

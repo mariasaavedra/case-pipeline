@@ -8,6 +8,7 @@ export { getClientContracts } from "./contracts";
 export { getClientBoardItems, getBoardItemDetail } from "./board-items";
 export { getClientCaseSummary } from "./case-summary";
 export { getClientUpdates } from "./updates";
+export { getBoardStatusOptions, getBoardStatusOptionsFor } from "./status-options";
 export { getClientRelationships } from "./relationships";
 export type { RelationshipWithDetails } from "./relationships";
 export { getDashboardKpis, getKpiCardDetail } from "./dashboard";
@@ -29,6 +30,8 @@ export type {
   ClientCaseSummary,
   ClientUpdate,
   ClientUpdateAttachment,
+  BoardStatusOptions,
+  StatusColumnOption,
   TimelineSourceType,
   TimelineCategory,
   SearchResult,

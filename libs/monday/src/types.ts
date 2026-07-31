@@ -49,6 +49,15 @@ export interface ColumnLabels {
   [key: string]: string;
 }
 
+/** One selectable value of a Monday status/single-select column, with its
+ * native color. `index` is Monday's internal label index (needed for writes). */
+export interface StatusOption {
+  index: number;
+  label: string;
+  color: string | null;
+  border: string | null;
+}
+
 export interface MondayUpdateCreator {
   name: string;
   email: string;
