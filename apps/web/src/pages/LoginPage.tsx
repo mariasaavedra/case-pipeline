@@ -1,4 +1,5 @@
 import { useAuth } from "../auth/useAuth";
+import { VersionBadge } from "../components/VersionBadge";
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -96,6 +97,10 @@ export function LoginPage() {
           </svg>
           Sign in with Microsoft
         </button>
+      </div>
+
+      <div style={{ position: "fixed", bottom: "16px", left: 0, right: 0, display: "flex", justifyContent: "center" }}>
+        <VersionBadge />
       </div>
     </div>
   );

@@ -480,6 +480,75 @@ body {
 }
 
 /* =============================================================================
+   Version badge + changelog modal
+   ============================================================================= */
+
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--color-surface-warm);
+  border: 1px solid var(--color-border-light);
+  color: var(--color-ink-faint);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.version-badge:hover {
+  color: var(--color-ink-muted);
+  border-color: var(--color-border);
+}
+.version-badge > span:first-child {
+  color: var(--color-status-green);
+  font-size: 9px;
+}
+
+.version-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.version-modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+}
+.version-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+.version-modal-close {
+  border: none;
+  background: transparent;
+  color: var(--color-ink-faint);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+.version-modal-close:hover { color: var(--color-ink); }
+.version-modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+
+/* =============================================================================
    Action Buttons
    ============================================================================= */
 

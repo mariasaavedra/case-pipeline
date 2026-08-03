@@ -29,6 +29,13 @@ COPY libs/seed/package.json libs/seed/
 RUN npm ci
 
 COPY . .
+
+# Build stamp — the CI passes the commit SHA + build date so the running page can
+# report exactly which build it is (see apps/web/src/version.ts).
+ARG BUILD_SHA=dev
+ARG BUILD_DATE=
+ENV BUILD_SHA=$BUILD_SHA
+ENV BUILD_DATE=$BUILD_DATE
 RUN npm run build -w @case-pipeline/web
 
 # ---- Serve stage ----

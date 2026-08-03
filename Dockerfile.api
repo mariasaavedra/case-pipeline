@@ -38,6 +38,10 @@ RUN npm ci
 # Copy the rest of the source.
 COPY . .
 
+# Build stamp — CI passes the commit SHA so /health can report the running build.
+ARG BUILD_SHA=dev
+ENV BUILD_SHA=$BUILD_SHA
+
 ENV NODE_ENV=production
 # Bind to all interfaces so the web (nginx) container can reach the API over the
 # compose network. The port is not published to the host in compose.

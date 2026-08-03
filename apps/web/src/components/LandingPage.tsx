@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { fetchDashboard, getPreferences, updatePreferences } from "../api";
+import { VersionBadge } from "./VersionBadge";
 import type { KpiCard, KpiItem } from "../api";
 import { Link } from "./Link";
 import { StatusBadge } from "./StatusBadge";
@@ -324,16 +325,19 @@ export function LandingPage() {
   return (
     <div className="animate-in">
       {/* Greeting */}
-      <div className="mb-6">
-        <h1
-          className="text-2xl mb-1"
-          style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
-        >
-          {getGreeting()}
-        </h1>
-        <p className="text-sm" style={{ color: "var(--color-ink-faint)" }}>
-          Here's what needs your attention today.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1
+            className="text-2xl mb-1"
+            style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
+          >
+            {getGreeting()}
+          </h1>
+          <p className="text-sm" style={{ color: "var(--color-ink-faint)" }}>
+            Here's what needs your attention today.
+          </p>
+        </div>
+        <VersionBadge className="flex-shrink-0" />
       </div>
 
       {error && (

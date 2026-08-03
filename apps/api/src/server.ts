@@ -762,7 +762,9 @@ app.get("/api/settings/status-catalog", (_req, res) => {
 app.get("/health", (_req, res) => {
   try {
     db.prepare("SELECT 1").get();
-    res.status(200).json({ status: "ok", db: DB_SOURCE });
+    // `version` = the API image's baked commit SHA (set in Dockerfile.api). Lets
+    // us confirm the running backend build without auth.
+    res.status(200).json({ status: "ok", db: DB_SOURCE, version: process.env.BUILD_SHA ?? "dev" });
   } catch (err) {
     // Log the detail server-side; don't leak internals (paths, driver errors)
     // in the response — /health is outside auth and reachable by the proxy.
