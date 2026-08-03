@@ -13,6 +13,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import { STATUS_OVERRIDES, type StatusRule } from "./config";
 import { fetchStatusOverrides, type StatusOverrides } from "./api";
+import { useAuth } from "./auth/useAuth";
 
 interface StatusOverridesValue {
   /** Base ∪ admin, admin winning — pass straight to translateStatus. */
@@ -30,19 +31,24 @@ const StatusOverridesContext = createContext<StatusOverridesValue>({
 });
 
 export function StatusOverridesProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [admin, setAdmin] = useState<StatusOverrides>({});
 
   const refresh = useCallback(() => {
     fetchStatusOverrides()
       .then(setAdmin)
       .catch(() => {
-        /* not signed in yet / offline — base map still renders every badge */
+        /* offline / transient — base map still renders every badge */
       });
   }, []);
 
+  // Fetch once authenticated: the API token getter is wired only after auth
+  // resolves, so a mount-time fetch would 401 and never retry (the admin layer
+  // would silently never load, leaving only the base map). Re-run on sign-in.
   useEffect(() => {
+    if (!user) return;
     refresh();
-  }, [refresh]);
+  }, [user, refresh]);
 
   const merged = { ...STATUS_OVERRIDES, ...admin };
   return (

@@ -9,6 +9,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import { fetchBoardStatusOptions, type BoardStatusOptions } from "./api";
+import { useAuth } from "./auth/useAuth";
 
 interface StatusOptionsValue {
   /** board_key → its status column definition (id + colored options). */
@@ -25,6 +26,7 @@ const StatusOptionsContext = createContext<StatusOptionsValue>({
 });
 
 export function StatusOptionsProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [byBoard, setByBoard] = useState<Record<string, BoardStatusOptions>>({});
   const [loaded, setLoaded] = useState(false);
 
@@ -36,14 +38,19 @@ export function StatusOptionsProvider({ children }: { children: ReactNode }) {
         setByBoard(map);
       })
       .catch(() => {
-        /* not signed in yet / offline — inline editing simply won't offer options */
+        /* offline / transient — inline editing simply won't offer options this load */
       })
       .finally(() => setLoaded(true));
   }, []);
 
+  // Fetch once the user is authenticated. The API token getter is only wired
+  // AFTER auth resolves, so fetching on mount would go out unauthenticated (401)
+  // and never retry — leaving every status non-editable. Keying on `user` re-runs
+  // the fetch the moment sign-in completes (token ready) and on account switch.
   useEffect(() => {
+    if (!user) return;
     refresh();
-  }, [refresh]);
+  }, [user, refresh]);
 
   const value = useMemo(() => ({ byBoard, loaded, refresh }), [byBoard, loaded, refresh]);
   return <StatusOptionsContext.Provider value={value}>{children}</StatusOptionsContext.Provider>;
