@@ -1,17 +1,17 @@
 // =============================================================================
 // DebugTab — admin "debug mode" for a client's board entries
 // =============================================================================
-// Lists every board entry for the client, grouped by board, and lets an admin
-// change each entry's status directly (StatusEditor → Monday write-back). Status
-// choices are restricted to each board's real labels, shown in native Monday
-// colors. Admin-only surface; mounted from ClientView behind a role check.
+// Lists every board entry for the client, grouped by board. Click an entry to
+// open its editor popup (status editable now; more fields next). A header line
+// reports how many boards' status options actually loaded, so a silent gap
+// (stale bundle / unsynced board) is always visible. Admin-only surface.
 // =============================================================================
 
 import { useMemo, useState } from "react";
-import type { ClientCaseSummary } from "../api";
+import type { ClientCaseSummary, BoardItemSummary } from "../api";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
-import { StatusEditor } from "./StatusEditor";
 import { useStatusOptions } from "../StatusOptionsProvider";
+import { EntryEditorModal } from "./EntryEditorModal";
 
 interface Props {
   data: ClientCaseSummary;
@@ -19,8 +19,12 @@ interface Props {
 
 export function DebugTab({ data }: Props) {
   const { byBoard, loaded } = useStatusOptions();
+  const loadedCount = Object.keys(byBoard).length;
 
-  // Boards that actually have entries for this client, in a stable order.
+  // Local status overrides so a row reflects an edit immediately.
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<{ entry: BoardItemSummary; boardKey: string } | null>(null);
+
   const boards = useMemo(
     () =>
       Object.entries(data.boardItems)
@@ -38,9 +42,24 @@ export function DebugTab({ data }: Props) {
         className="rounded-lg p-3 text-sm"
         style={{ backgroundColor: "var(--color-surface-warm)", border: "1px solid var(--color-border-light)", color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}
       >
-        <strong style={{ color: "var(--color-ink)" }}>Debug mode.</strong> Change any entry's status directly in
-        Monday.com. Choices are limited to each board's existing labels and shown in their native colors. Changes are
-        written to Monday under your account and reconciled on the next sync.
+        <strong style={{ color: "var(--color-ink)" }}>Debug mode.</strong> Click any entry to open its editor and change
+        its status in Monday.com (limited to that board's real labels, in native colors; written under your account).
+        <div style={{ marginTop: 6, fontSize: 12 }}>
+          {loaded ? (
+            loadedCount > 0 ? (
+              <span style={{ color: "var(--color-status-green)" }}>
+                ● Status options loaded for {loadedCount} board{loadedCount === 1 ? "" : "s"}.
+              </span>
+            ) : (
+              <span style={{ color: "var(--color-status-red)" }}>
+                ● Status options failed to load (0 boards). The editor can't offer choices — hard-refresh
+                (Cmd/Ctrl+Shift+R); if it persists after a fresh sync, tell me.
+              </span>
+            )
+          ) : (
+            <span style={{ color: "var(--color-ink-faint)" }}>● Loading status options…</span>
+          )}
+        </div>
       </div>
 
       <input
@@ -73,37 +92,58 @@ export function DebugTab({ data }: Props) {
               </span>
               {loaded && !hasOptions && (
                 <span className="text-[11px]" style={{ color: "var(--color-ink-faint)" }}>
-                  (no editable status — not synced)
+                  (no editable status — no mapped column)
                 </span>
               )}
             </div>
             <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border-light)" }}>
-              {visible.map((it, i) => (
-                <div
-                  key={it.localId}
-                  className="flex items-center justify-between gap-3 px-3 py-2"
-                  style={{
-                    borderTop: i === 0 ? "none" : "1px solid var(--color-border-light)",
-                    background: "var(--color-surface)",
-                  }}
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm truncate" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
-                      {it.name}
-                    </div>
-                    {it.groupTitle && (
-                      <div className="text-[11px] truncate" style={{ color: "var(--color-ink-faint)" }}>
-                        {it.groupTitle}
+              {visible.map((it, i) => {
+                const status = statusOverrides[it.localId] ?? it.status;
+                return (
+                  <button
+                    key={it.localId}
+                    type="button"
+                    onClick={() => setSelected({ entry: { ...it, status }, boardKey })}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left"
+                    style={{
+                      borderTop: i === 0 ? "none" : "1px solid var(--color-border-light)",
+                      background: "var(--color-surface)",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm truncate" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
+                        {it.name}
                       </div>
-                    )}
-                  </div>
-                  <StatusEditor boardKey={boardKey} boardItemLocalId={it.localId} status={it.status} />
-                </div>
-              ))}
+                      {it.groupTitle && (
+                        <div className="text-[11px] truncate" style={{ color: "var(--color-ink-faint)" }}>
+                          {it.groupTitle}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="status-chip" style={{ backgroundColor: "var(--color-surface-warm)", color: "var(--color-ink-muted)", border: "1px solid var(--color-border-light)" }}>
+                        {status ?? "—"}
+                      </span>
+                      <span aria-hidden style={{ color: "var(--color-ink-faint)", fontSize: 12 }}>›</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </section>
         );
       })}
+
+      {selected && (
+        <EntryEditorModal
+          entry={selected.entry}
+          boardKey={selected.boardKey}
+          onClose={() => setSelected(null)}
+          onStatusChanged={(localId, s) => setStatusOverrides((prev) => ({ ...prev, [localId]: s }))}
+        />
+      )}
     </div>
   );
 }
