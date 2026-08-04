@@ -17,6 +17,7 @@ import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
 import { AuthProvider } from "./auth/AuthProvider";
 import { StatusOverridesProvider } from "./StatusOverridesProvider";
+import { StatusOptionsProvider } from "./StatusOptionsProvider";
 import { useAuth } from "./auth/useAuth";
 import { usePreferences } from "./hooks/usePreferences";
 import { useViewport } from "./hooks/useViewport";
@@ -284,7 +285,9 @@ root.render(
   <ErrorBoundary>
     <AuthProvider>
       <StatusOverridesProvider>
-        <App />
+        <StatusOptionsProvider>
+          <App />
+        </StatusOptionsProvider>
       </StatusOverridesProvider>
     </AuthProvider>
   </ErrorBoundary>
