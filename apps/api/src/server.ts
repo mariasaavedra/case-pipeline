@@ -14,6 +14,7 @@ import cron from "node-cron";
 import { initializeSchema, getSchemaVersion, SCHEMA_VERSION } from "@case-pipeline/seed/db/schema";
 import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
 import { startWriteQueueProcessor, enqueueWrite } from "./write-queue/processor.js";
+import { refreshBoardSchema } from "./schema-refresh.js";
 import {
   handleListClients,
   handleSearch,
@@ -983,6 +984,13 @@ const server = app.listen(PORT, HOST, () => {
     if (MONDAY_API_TOKEN) {
       // Drain queued Monday.com write-backs in the background, with retries.
       startWriteQueueProcessor(db, { token: MONDAY_API_TOKEN, resolveUserToken: getUserMondayToken });
+
+      // Refresh board/column schema in the background so the editors work right
+      // after a deploy without a manual data sync. Light (structure only) and
+      // non-blocking; a failure leaves the last-good schema in place.
+      refreshBoardSchema(db)
+        .then((r) => console.log(`[schema-refresh] board schema refreshed: ${r.boards} boards${r.failed ? `, ${r.failed} failed` : ""}`))
+        .catch((e) => console.error("[schema-refresh] failed:", e));
     }
   }
 });
