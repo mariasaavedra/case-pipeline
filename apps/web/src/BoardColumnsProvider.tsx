@@ -60,3 +60,10 @@ export function useBoardColumns(boardKey: string | null | undefined): BoardColum
   const { byBoard } = useContext(Ctx);
   return boardKey ? byBoard[boardKey] ?? null : null;
 }
+
+/** Load state of the schema fetch, so callers can tell "still loading" from
+ * "loaded but this board has no synced columns" (run a sync) or an error. */
+export function useBoardColumnsMeta(): { loaded: boolean; error: string | null; refresh: () => void } {
+  const { loaded, error, refresh } = useContext(Ctx);
+  return { loaded, error, refresh };
+}

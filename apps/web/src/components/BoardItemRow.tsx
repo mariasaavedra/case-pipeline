@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { BoardItemSummary } from "../api";
 import { StatusBadge } from "./StatusBadge";
-import { useBoardColumns } from "../BoardColumnsProvider";
+import { useBoardColumns, useBoardColumnsMeta } from "../BoardColumnsProvider";
 import { ColumnField } from "./ColumnField";
 
 function formatDate(dateStr: string | null): string {
@@ -34,6 +34,7 @@ function coerceDate(s: string): string {
 export function BoardItemRow({ item }: { item: BoardItemSummary }) {
   const [open, setOpen] = useState(false);
   const schema = useBoardColumns(item.boardKey);
+  const { loaded, error, refresh } = useBoardColumnsMeta();
   const [values, setValues] = useState<Record<string, string>>({});
 
   const editable = (schema?.columns ?? []).filter((c) => EDITABLE_TYPES.has(c.type) && c.title.trim() !== "");
@@ -70,7 +71,18 @@ export function BoardItemRow({ item }: { item: BoardItemSummary }) {
       {open && (
         <div className="px-4 pb-3 pt-1" style={{ background: "var(--color-surface-warm)" }}>
           {!schema ? (
-            <p className="text-xs py-2" style={{ color: "var(--color-ink-faint)" }}>Loading fields…</p>
+            !loaded ? (
+              <p className="text-xs py-2" style={{ color: "var(--color-ink-faint)" }}>Loading fields…</p>
+            ) : error ? (
+              <p className="text-xs py-2" style={{ color: "var(--color-status-red)" }}>
+                Couldn't load fields: {error}.{" "}
+                <button type="button" onClick={refresh} style={{ color: "var(--color-status-blue)", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit" }}>Retry</button>
+              </p>
+            ) : (
+              <p className="text-xs py-2" style={{ color: "var(--color-ink-faint)" }}>
+                Fields for this board aren't synced yet — run a sync, then reopen.
+              </p>
+            )
           ) : editable.length === 0 ? (
             <p className="text-xs py-2" style={{ color: "var(--color-ink-faint)" }}>No editable fields on this board.</p>
           ) : (
