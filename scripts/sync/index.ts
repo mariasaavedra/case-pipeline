@@ -49,7 +49,7 @@ import {
   resolveAllColumns,
   parseStatusOptions,
 } from "@case-pipeline/monday";
-import type { MondayItem, MondayTimelineItem, MondayAsset } from "@case-pipeline/monday";
+import type { MondayItem, MondayTimelineItem, MondayAsset, MondayColumn } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
@@ -311,6 +311,27 @@ async function main() {
       updated_at = excluded.updated_at
   `);
 
+  // Refresh the full column schema per board every run. Delete-then-insert so a
+  // column removed in Monday disappears here too.
+  const deleteBoardColumns = db.prepare("DELETE FROM board_columns WHERE board_key = ?");
+  const insertBoardColumn = db.prepare(`
+    INSERT INTO board_columns (board_key, monday_board_id, column_id, title, type, options, position, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  `);
+  function captureBoardColumns(boardKey: string, boardId: string, columns: MondayColumn[]): void {
+    const tx = db.transaction(() => {
+      deleteBoardColumns.run(boardKey);
+      columns.forEach((col, i) => {
+        const opts = parseStatusOptions(col); // labels+colors for choice columns, [] otherwise
+        insertBoardColumn.run(
+          boardKey, boardId, col.id, col.title, col.type,
+          opts.length > 0 ? JSON.stringify(opts) : null, i,
+        );
+      });
+    });
+    tx();
+  }
+
   // ---- Helper: resolve a board's columns once ----
   async function resolveBoard(key: string) {
     const config = boardsConfig[key]!;
@@ -328,6 +349,9 @@ async function main() {
         }
       }
     }
+
+    // Capture the FULL column schema (every column + choice options).
+    captureBoardColumns(key, config.id, structure.columns);
     const since = watermarkFor(key);
     if (since) incrementalBoards.add(key);
     const items = await fetchAllBoardItems(config.id, {

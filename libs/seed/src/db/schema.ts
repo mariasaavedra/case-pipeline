@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -242,6 +242,23 @@ CREATE TABLE IF NOT EXISTS board_status_options (
     status_column_id TEXT NOT NULL,
     options          TEXT NOT NULL,
     updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Full per-board column schema (every column: id, title, type, and options for
+-- status/dropdown/color columns), refreshed every sync. Powers the all-columns
+-- expand/edit view: what fields exist, their types (which editor to render), and
+-- for choice columns the allowed labels + native colors. The options column is a
+-- JSON array of { index, label, color, border } (empty/NULL for non-choice columns).
+CREATE TABLE IF NOT EXISTS board_columns (
+    board_key        TEXT NOT NULL,
+    monday_board_id  TEXT NOT NULL,
+    column_id        TEXT NOT NULL,
+    title            TEXT NOT NULL,
+    type             TEXT NOT NULL,
+    options          TEXT,
+    position         INTEGER NOT NULL DEFAULT 0,
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (board_key, column_id)
 );
 
 -- Schema version tracking
@@ -901,6 +918,24 @@ export function initializeSchema(db: Database): void {
             status_column_id TEXT NOT NULL,
             options          TEXT NOT NULL,
             updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    }
+
+    // Migration v19 → v20: full per-board column schema. Additive — empty until
+    // the next sync populates it (the all-columns view just shows nothing until then).
+    if (fromVersion < 20) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS board_columns (
+            board_key        TEXT NOT NULL,
+            monday_board_id  TEXT NOT NULL,
+            column_id        TEXT NOT NULL,
+            title            TEXT NOT NULL,
+            type             TEXT NOT NULL,
+            options          TEXT,
+            position         INTEGER NOT NULL DEFAULT 0,
+            updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (board_key, column_id)
         );
       `);
     }

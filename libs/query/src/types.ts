@@ -129,6 +129,24 @@ export interface BoardStatusOptions {
   options: StatusColumnOption[];
 }
 
+/** One column in a board's schema — id, title, type, and choice options if any. */
+export interface BoardColumn {
+  columnId: string;
+  title: string;
+  /** Monday column type: status, dropdown, color, date, numbers, text, mirror, … */
+  type: string;
+  /** Selectable options for status/dropdown/color columns; empty otherwise. */
+  options: StatusColumnOption[];
+  position: number;
+}
+
+/** A board's full column schema. */
+export interface BoardColumns {
+  boardKey: string;
+  mondayBoardId: string;
+  columns: BoardColumn[];
+}
+
 /** A file attached to a Monday update. `url` opens the asset in Monday. */
 export interface ClientUpdateAttachment {
   name: string;

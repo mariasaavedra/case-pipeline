@@ -9,6 +9,7 @@ export { getClientBoardItems, getBoardItemDetail } from "./board-items";
 export { getClientCaseSummary } from "./case-summary";
 export { getClientUpdates } from "./updates";
 export { getBoardStatusOptions, getBoardStatusOptionsFor } from "./status-options";
+export { getBoardColumns, getBoardColumnsFor } from "./board-columns";
 export { getClientRelationships } from "./relationships";
 export type { RelationshipWithDetails } from "./relationships";
 export { getDashboardKpis, getKpiCardDetail } from "./dashboard";
@@ -32,6 +33,8 @@ export type {
   ClientUpdateAttachment,
   BoardStatusOptions,
   StatusColumnOption,
+  BoardColumns,
+  BoardColumn,
   TimelineSourceType,
   TimelineCategory,
   SearchResult,

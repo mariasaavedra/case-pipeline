@@ -27,7 +27,7 @@ import {
   handleClientRelationships,
   handleAlerts,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor, getBoardColumns } from "@case-pipeline/query";
 import type { Urgency } from "@case-pipeline/query";
 import { setApiToken, createUpdate, changeSimpleColumnValue, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
 import { loadConfig } from "@case-pipeline/config";
@@ -744,6 +744,11 @@ app.put("/api/settings/urgency", requireAdmin, (req, res) => {
 // editor. Any authed user — needed to render/choose statuses inline.
 app.get("/api/boards/status-options", (_req, res) => {
   res.json({ data: getBoardStatusOptions(db) });
+});
+// Full per-board column schema (all columns + choice options) for the
+// all-columns expand/edit view. Any authed user.
+app.get("/api/boards/columns", (_req, res) => {
+  res.json({ data: getBoardColumns(db) });
 });
 app.get("/api/settings/status-catalog", (_req, res) => {
   const rows = db
