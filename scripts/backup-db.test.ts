@@ -43,6 +43,10 @@ afterEach(() => {
 });
 
 describe("backupDatabase", () => {
+  // Real online-backup + integrity-check I/O — inherently variable and slower on
+  // shared CI runners, so allow well past the 5s default (locally it's sub-second).
+  const IO_TIMEOUT = 20000;
+
   test("prunes to the retention limit for a healthy source", async () => {
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "cp-bk-"));
     makeGoodDb("live.db");
@@ -51,7 +55,7 @@ describe("backupDatabase", () => {
       await new Promise((r) => setTimeout(r, 20)); // distinct ISO stamps (ms precision)
     }
     expect(backupsFor("live").length).toBe(2);
-  });
+  }, IO_TIMEOUT);
 
   test("a corrupt source is still backed up but NEVER prunes good backups", async () => {
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "cp-bk-"));
@@ -70,5 +74,5 @@ describe("backupDatabase", () => {
 
     // The corrupt copy is written (evidence) but the two good ones survive.
     expect(backupsFor("live").length).toBe(3);
-  });
+  }, IO_TIMEOUT);
 });
