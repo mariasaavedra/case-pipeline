@@ -6,13 +6,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 
-const { createUpdateMock, changeSimpleColumnValueMock } = vi.hoisted(() => ({
+const { createUpdateMock, changeSimpleColumnValueMock, createItemMock } = vi.hoisted(() => ({
   createUpdateMock: vi.fn(),
   changeSimpleColumnValueMock: vi.fn(),
+  createItemMock: vi.fn(),
 }));
 vi.mock("@case-pipeline/monday", () => ({
   createUpdate: createUpdateMock,
   changeSimpleColumnValue: changeSimpleColumnValueMock,
+  createItem: createItemMock,
 }));
 
 import { enqueueWrite, drainWriteQueue } from "./processor";
@@ -38,6 +40,7 @@ describe("write-queue processor", () => {
   beforeEach(() => {
     createUpdateMock.mockReset();
     changeSimpleColumnValueMock.mockReset();
+    createItemMock.mockReset();
   });
 
   it("syncs a create_update op and marks it synced", async () => {
@@ -124,6 +127,22 @@ describe("write-queue processor", () => {
 
     expect(synced).toBe(1);
     expect(changeSimpleColumnValueMock).toHaveBeenCalledWith("board-9", "123", "status", "Filed", "tok");
+    expect(queueRow(db).status).toBe("synced");
+    db.close();
+  });
+
+  it("syncs a create_item op via create_item", async () => {
+    const db = freshDb();
+    createItemMock.mockResolvedValue("new-item-1");
+
+    enqueueWrite(db, {
+      opType: "create_item",
+      payload: { boardId: "board-9", itemName: "Jane — U-Visa", columnValues: { deal_value: 5000 } },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    expect(createItemMock).toHaveBeenCalledWith("board-9", "Jane — U-Visa", { deal_value: 5000 }, "tok");
     expect(queueRow(db).status).toBe("synced");
     db.close();
   });

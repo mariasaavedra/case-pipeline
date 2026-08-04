@@ -167,6 +167,18 @@ export async function changeBoardItemColumn(
   });
 }
 
+/** Create a Fee K (contract) for a client on Monday. pending=queued. */
+export async function createContract(
+  profileLocalId: string,
+  input: { caseType: string; af?: number | null; ff?: number | null; pf?: number | null },
+): Promise<{ name: string; feeKItemId?: string; pending: boolean }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/contracts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
 export async function fetchClientRelationships(localId: string): Promise<RelationshipWithDetails[]> {
   return apiFetch<RelationshipWithDetails[]>(`/api/clients/${encodeURIComponent(localId)}/relationships`);
 }

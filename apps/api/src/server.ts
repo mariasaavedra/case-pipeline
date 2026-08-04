@@ -29,7 +29,7 @@ import {
 } from "./handlers/handlers";
 import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor, getBoardColumns, getBoardColumnsFor } from "@case-pipeline/query";
 import type { Urgency } from "@case-pipeline/query";
-import { setApiToken, createUpdate, changeSimpleColumnValue, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
+import { setApiToken, createUpdate, changeSimpleColumnValue, createItem, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
 import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
@@ -607,6 +607,102 @@ app.patch("/api/board-items/:localId/columns", requireAuth, async (req, res) => 
       metadata: { mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId, columnType: col.type, value, queued: true },
     });
     res.status(202).json({ data: { localId, columnId, value, pending: true } });
+  }
+});
+
+// =============================================================================
+// Create a contract (Fee K) for a client
+// =============================================================================
+// Creates a new item on the Fee Ks board with the case type + AF/FF/PF amounts,
+// named "<client> — <case type>", auto-linked to the client's profile (and their
+// Open Forms entries when present). Columns are resolved by title from the synced
+// schema (no hardcoded ids). Surcharges are intentionally NOT set here — they're
+// a post-signing decision. Same rails: personal token, queue fallback, audit.
+
+app.post("/api/profiles/:localId/contracts", requireAuth, async (req, res) => {
+  if (!MONDAY_API_TOKEN) {
+    res.status(503).json({ error: "Monday.com write-back not configured" });
+    return;
+  }
+  const localId = String(req.params.localId);
+  const body = req.body as { caseType?: unknown; af?: unknown; ff?: unknown; pf?: unknown };
+  const caseType = (body.caseType ?? "").toString().trim();
+  const num = (v: unknown): number | null => {
+    if (v === "" || v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const af = num(body.af), ff = num(body.ff), pf = num(body.pf);
+  if (!caseType) {
+    res.status(400).json({ error: "caseType is required" });
+    return;
+  }
+
+  const profile = db
+    .prepare("SELECT monday_item_id, name FROM profiles WHERE local_id = ?")
+    .get(localId) as { monday_item_id: string | null; name: string } | null;
+  if (!profile) {
+    res.status(404).json({ error: "Profile not found" });
+    return;
+  }
+
+  const schema = getBoardColumnsFor(db, "fee_ks");
+  if (!schema) {
+    res.status(409).json({ error: "Fee Ks column schema not synced yet — run a sync first" });
+    return;
+  }
+  const byTitle = (pred: (t: string) => boolean, type?: string) =>
+    schema.columns.find((c) => pred(c.title.trim().toLowerCase()) && (!type || c.type === type));
+  const caseTypeCol = byTitle((t) => t.startsWith("contract for"), "dropdown");
+  const afCol = byTitle((t) => t === "af", "numbers");
+  const ffCol = byTitle((t) => t === "ff", "numbers");
+  const pfCol = byTitle((t) => t === "pf", "numbers");
+  const profileCol = byTitle((t) => t === "profile", "board_relation");
+  const openFormsCol = byTitle((t) => t.includes("open forms"), "board_relation");
+
+  if (!caseTypeCol) {
+    res.status(409).json({ error: "Could not resolve the 'Contract for...' column on Fee Ks" });
+    return;
+  }
+  if (caseTypeCol.options.length > 0 && !caseTypeCol.options.some((o) => o.label === caseType)) {
+    res.status(400).json({ error: "caseType is not a valid option", allowed: caseTypeCol.options.map((o) => o.label) });
+    return;
+  }
+
+  const columnValues: Record<string, unknown> = { [caseTypeCol.columnId]: { labels: [caseType] } };
+  if (afCol && af != null) columnValues[afCol.columnId] = af;
+  if (ffCol && ff != null) columnValues[ffCol.columnId] = ff;
+  if (pfCol && pf != null) columnValues[pfCol.columnId] = pf;
+  if (profileCol && profile.monday_item_id) columnValues[profileCol.columnId] = { item_ids: [Number(profile.monday_item_id)] };
+  if (openFormsCol) {
+    const ofIds = (db
+      .prepare("SELECT monday_item_id FROM board_items WHERE profile_local_id = ? AND board_key = '_cd_open_forms' AND monday_item_id IS NOT NULL")
+      .all(localId) as { monday_item_id: string }[]).map((r) => Number(r.monday_item_id)).filter((n) => Number.isFinite(n));
+    if (ofIds.length > 0) columnValues[openFormsCol.columnId] = { item_ids: ofIds };
+  }
+
+  const itemName = `${profile.name} — ${caseType}`;
+
+  try {
+    const userToken = getUserMondayToken(req.user?.oid ?? "");
+    const newId = await createItem(schema.mondayBoardId, itemName, columnValues, userToken ?? undefined);
+    auditFromReq(req, "monday.contract_created", {
+      targetType: "profile", targetId: localId,
+      metadata: { feeKItemId: newId, caseType, af, ff, pf, name: itemName, usedPersonalToken: !!userToken },
+    });
+    res.json({ data: { feeKItemId: newId, name: itemName, pending: false } });
+  } catch (err) {
+    console.error("[write-back] createItem failed; queueing for retry:", err);
+    enqueueWrite(db, {
+      opType: "create_item", targetTable: "profiles", targetLocalId: localId,
+      mondayItemId: profile.monday_item_id, authorOid: req.user?.oid ?? null,
+      payload: { boardId: schema.mondayBoardId, itemName, columnValues },
+    });
+    auditFromReq(req, "monday.contract_created", {
+      targetType: "profile", targetId: localId,
+      metadata: { caseType, af, ff, pf, name: itemName, queued: true },
+    });
+    res.status(202).json({ data: { name: itemName, pending: true } });
   }
 });
 

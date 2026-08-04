@@ -169,7 +169,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
           )}
 
           {activeTab === "contracts" && (
-            <ContractsTab contracts={data.contracts} />
+            <ContractsTab contracts={data.contracts} profileLocalId={data.profile.localId} clientName={data.profile.name} />
           )}
 
           {activeTab === "active_cases" && (

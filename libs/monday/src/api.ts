@@ -804,6 +804,28 @@ export async function changeSimpleColumnValue(
   return result.data.change_simple_column_value.id;
 }
 
+/**
+ * Create a new item on a board with column values set in one call. `columnValues`
+ * is a plain object keyed by column id (e.g. { deal_value: 5000, link_to_profiles__1:
+ * { item_ids: [123] }, dropdown_x: { labels: ["U-Visa"] } }); it's JSON-encoded for
+ * Monday's `column_values` arg. Returns the new item id.
+ */
+export async function createItem(
+  boardId: string,
+  itemName: string,
+  columnValues: Record<string, unknown>,
+  tokenOverride?: string
+): Promise<string> {
+  const result = await mondayRequest<{ data: { create_item: { id: string } } }>(
+    `mutation CreateItem($boardId: ID!, $itemName: String!, $columnValues: JSON) {
+       create_item(board_id: $boardId, item_name: $itemName, column_values: $columnValues, create_labels_if_missing: false) { id }
+     }`,
+    { boardId, itemName, columnValues: JSON.stringify(columnValues) },
+    tokenOverride
+  );
+  return result.data.create_item.id;
+}
+
 // =============================================================================
 // Emails & Activities (E&A) timeline fetching (read)
 // =============================================================================

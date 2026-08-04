@@ -14,13 +14,13 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import cron from "node-cron";
-import { createUpdate, changeSimpleColumnValue } from "@case-pipeline/monday";
+import { createUpdate, changeSimpleColumnValue, createItem } from "@case-pipeline/monday";
 import { acquireSyncLock, releaseSyncLock } from "@case-pipeline/seed/db/sync-lock";
 
 const LOCK_HOLDER = "write-queue";
 const BATCH_SIZE = 20;
 
-export type WriteOpType = "create_update" | "change_column" | "reschedule";
+export type WriteOpType = "create_update" | "change_column" | "create_item" | "reschedule";
 
 export interface EnqueueInput {
   opType: WriteOpType;
@@ -109,6 +109,14 @@ async function dispatch(row: QueueRow, token?: string): Promise<void> {
       const value = String(payload.value ?? "");
       if (!boardId || !columnId) throw new Error("change_column requires boardId and columnId");
       await changeSimpleColumnValue(boardId, row.monday_item_id, columnId, value, token);
+      return;
+    }
+    case "create_item": {
+      const boardId = String(payload.boardId ?? "");
+      const itemName = String(payload.itemName ?? "");
+      const columnValues = (payload.columnValues ?? {}) as Record<string, unknown>;
+      if (!boardId || !itemName) throw new Error("create_item requires boardId and itemName");
+      await createItem(boardId, itemName, columnValues, token);
       return;
     }
     // TODO(monday-write): case "reschedule" → change a date column value
