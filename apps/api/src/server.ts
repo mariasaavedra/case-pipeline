@@ -27,7 +27,7 @@ import {
   handleClientRelationships,
   handleAlerts,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor, getBoardColumns } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor, getBoardColumns, getBoardColumnsFor } from "@case-pipeline/query";
 import type { Urgency } from "@case-pipeline/query";
 import { setApiToken, createUpdate, changeSimpleColumnValue, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
 import { loadConfig } from "@case-pipeline/config";
@@ -528,6 +528,85 @@ app.patch("/api/board-items/:localId/status", requireAuth, async (req, res) => {
       },
     });
     res.status(202).json({ data: { localId, status, pending: true } });
+  }
+});
+
+// =============================================================================
+// Generic column write-back — change any editable column on a board item
+// =============================================================================
+// Generalizes the status endpoint to any simple column (status/dropdown/color,
+// date, numbers, text). Value goes through change_simple_column_value; choice
+// columns are validated against the board's real options. Same resilient rails:
+// personal token, queue fallback, audit. Complex/computed columns are rejected.
+
+const SIMPLE_EDITABLE_TYPES = new Set([
+  "status", "dropdown", "color", "date", "numbers", "numeric", "text", "long-text", "long_text",
+]);
+const CHOICE_TYPES = new Set(["status", "dropdown", "color"]);
+
+app.patch("/api/board-items/:localId/columns", requireAuth, async (req, res) => {
+  if (!MONDAY_API_TOKEN) {
+    res.status(503).json({ error: "Monday.com write-back not configured (MONDAY_API_TOKEN missing)" });
+    return;
+  }
+
+  const localId = String(req.params.localId);
+  const body = req.body as { columnId?: unknown; value?: unknown };
+  const columnId = (body.columnId ?? "").toString();
+  const value = (body.value ?? "").toString();
+  if (!columnId) {
+    res.status(400).json({ error: "columnId is required" });
+    return;
+  }
+
+  const item = db
+    .prepare("SELECT monday_item_id, board_key FROM board_items WHERE local_id = ?")
+    .get(localId) as { monday_item_id: string | null; board_key: string } | null;
+  if (!item) {
+    res.status(404).json({ error: "Board item not found" });
+    return;
+  }
+  if (!item.monday_item_id) {
+    res.status(400).json({ error: "Board item has no Monday.com item ID" });
+    return;
+  }
+
+  const schema = getBoardColumnsFor(db, item.board_key);
+  const col = schema?.columns.find((c) => c.columnId === columnId);
+  if (!schema || !col) {
+    res.status(409).json({ error: "Column schema not synced for this board yet — run a sync first" });
+    return;
+  }
+  if (!SIMPLE_EDITABLE_TYPES.has(col.type)) {
+    res.status(400).json({ error: `Column type '${col.type}' is not editable here` });
+    return;
+  }
+  // Choice columns: value must be an existing label (empty clears).
+  if (value && CHOICE_TYPES.has(col.type) && !col.options.some((o) => o.label === value)) {
+    res.status(400).json({ error: "Value is not a valid option for this column", allowed: col.options.map((o) => o.label) });
+    return;
+  }
+
+  try {
+    const userToken = getUserMondayToken(req.user?.oid ?? "");
+    await changeSimpleColumnValue(schema.mondayBoardId, item.monday_item_id, columnId, value, userToken ?? undefined);
+    auditFromReq(req, "monday.column_changed", {
+      targetType: "board_item", targetId: localId,
+      metadata: { mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId, columnType: col.type, value, usedPersonalToken: !!userToken },
+    });
+    res.json({ data: { localId, columnId, value, pending: false } });
+  } catch (err) {
+    console.error("[write-back] column change failed; queueing for retry:", err);
+    enqueueWrite(db, {
+      opType: "change_column", targetTable: "board_items", targetLocalId: localId,
+      mondayItemId: item.monday_item_id, authorOid: req.user?.oid ?? null,
+      payload: { boardId: schema.mondayBoardId, columnId, value },
+    });
+    auditFromReq(req, "monday.column_changed", {
+      targetType: "board_item", targetId: localId,
+      metadata: { mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId, columnType: col.type, value, queued: true },
+    });
+    res.status(202).json({ data: { localId, columnId, value, pending: true } });
   }
 });
 

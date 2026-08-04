@@ -2,14 +2,14 @@
 // API Client — Typed fetch wrappers
 // =============================================================================
 
-import type { SearchResult, ClientCaseSummary, ClientUpdate, KpiCard, KpiCardDetail, TypedSearchResult, SearchType, BoardStatusOptions } from "@case-pipeline/query/types";
+import type { SearchResult, ClientCaseSummary, ClientUpdate, KpiCard, KpiCardDetail, TypedSearchResult, SearchType, BoardStatusOptions, BoardColumns } from "@case-pipeline/query/types";
 import type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
 import type { ActiveCasesResult, ActiveCase } from "@case-pipeline/query";
 
-export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
+export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
 export type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
 export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "@case-pipeline/query/appointments";
@@ -147,6 +147,24 @@ export async function changeBoardItemStatus(
     `/api/board-items/${encodeURIComponent(localId)}/status`,
     { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) },
   );
+}
+
+export async function fetchBoardColumns(): Promise<BoardColumns[]> {
+  return apiFetch<BoardColumns[]>("/api/boards/columns");
+}
+
+/** Change any editable column on a board item. `value` is the label (choice
+ * columns), YYYY-MM-DD (dates), or the raw text/number. pending=queued. */
+export async function changeBoardItemColumn(
+  localId: string,
+  columnId: string,
+  value: string,
+): Promise<{ localId: string; columnId: string; value: string; pending: boolean }> {
+  return apiFetch(`/api/board-items/${encodeURIComponent(localId)}/columns`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ columnId, value }),
+  });
 }
 
 export async function fetchClientRelationships(localId: string): Promise<RelationshipWithDetails[]> {

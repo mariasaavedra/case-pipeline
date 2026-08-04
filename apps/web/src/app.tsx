@@ -18,6 +18,7 @@ import type { ClientCaseSummary } from "./api";
 import { AuthProvider } from "./auth/AuthProvider";
 import { StatusOverridesProvider } from "./StatusOverridesProvider";
 import { StatusOptionsProvider } from "./StatusOptionsProvider";
+import { BoardColumnsProvider } from "./BoardColumnsProvider";
 import { useAuth } from "./auth/useAuth";
 import { usePreferences } from "./hooks/usePreferences";
 import { useViewport } from "./hooks/useViewport";
@@ -286,7 +287,9 @@ root.render(
     <AuthProvider>
       <StatusOverridesProvider>
         <StatusOptionsProvider>
-          <App />
+          <BoardColumnsProvider>
+            <App />
+          </BoardColumnsProvider>
         </StatusOptionsProvider>
       </StatusOverridesProvider>
     </AuthProvider>
