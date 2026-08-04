@@ -59,8 +59,10 @@ jobs:
           tags: |
             ${{ steps.refs.outputs.api }}:latest
             ${{ steps.refs.outputs.api }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # No layer cache: the gha cache was restoring stale source into `COPY . .`,
+          # producing images with old code stamped with the new commit SHA (a whole
+          # release of "fixes" never reached users). Clean builds, every time.
+          no-cache: true
 
       - name: Build & push web
         uses: docker/build-push-action@v6
@@ -75,5 +77,6 @@ jobs:
           tags: |
             ${{ steps.refs.outputs.web }}:latest
             ${{ steps.refs.outputs.web }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # See the API build above — clean builds so the shipped bundle always
+          # matches the committed source.
+          no-cache: true
