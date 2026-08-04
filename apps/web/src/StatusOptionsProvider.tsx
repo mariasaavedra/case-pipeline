@@ -16,29 +16,46 @@ interface StatusOptionsValue {
   byBoard: Record<string, BoardStatusOptions>;
   /** True once the initial fetch has resolved (success or failure). */
   loaded: boolean;
+  /** The last fetch error message, if any (so the UI can show why it's empty). */
+  error: string | null;
   refresh: () => void;
 }
 
 const StatusOptionsContext = createContext<StatusOptionsValue>({
   byBoard: {},
   loaded: false,
+  error: null,
   refresh: () => {},
 });
+
+// The fetch must never leave the UI stuck on "loading": bound it so a hung
+// request resolves to an error the user can see (and retry).
+const FETCH_TIMEOUT_MS = 12000;
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timed out after ${ms / 1000}s`)), ms)),
+  ]);
+}
 
 export function StatusOptionsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [byBoard, setByBoard] = useState<Record<string, BoardStatusOptions>>({});
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
-    fetchBoardStatusOptions()
+    setError(null);
+    withTimeout(fetchBoardStatusOptions(), FETCH_TIMEOUT_MS)
       .then((list) => {
         const map: Record<string, BoardStatusOptions> = {};
         for (const b of list) map[b.boardKey] = b;
         setByBoard(map);
       })
-      .catch(() => {
-        /* offline / transient — inline editing simply won't offer options this load */
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[status-options] fetch failed:", msg);
+        setError(msg);
       })
       .finally(() => setLoaded(true));
   }, []);
@@ -52,7 +69,7 @@ export function StatusOptionsProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [user, refresh]);
 
-  const value = useMemo(() => ({ byBoard, loaded, refresh }), [byBoard, loaded, refresh]);
+  const value = useMemo(() => ({ byBoard, loaded, error, refresh }), [byBoard, loaded, error, refresh]);
   return <StatusOptionsContext.Provider value={value}>{children}</StatusOptionsContext.Provider>;
 }
 

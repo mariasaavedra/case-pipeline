@@ -18,7 +18,7 @@ interface Props {
 }
 
 export function DebugTab({ data }: Props) {
-  const { byBoard, loaded } = useStatusOptions();
+  const { byBoard, loaded, error, refresh } = useStatusOptions();
   const loadedCount = Object.keys(byBoard).length;
 
   // Local status overrides so a row reflects an edit immediately.
@@ -45,19 +45,34 @@ export function DebugTab({ data }: Props) {
         <strong style={{ color: "var(--color-ink)" }}>Debug mode.</strong> Click any entry to open its editor and change
         its status in Monday.com (limited to that board's real labels, in native colors; written under your account).
         <div style={{ marginTop: 6, fontSize: 12 }}>
-          {loaded ? (
-            loadedCount > 0 ? (
-              <span style={{ color: "var(--color-status-green)" }}>
-                ● Status options loaded for {loadedCount} board{loadedCount === 1 ? "" : "s"}.
-              </span>
-            ) : (
-              <span style={{ color: "var(--color-status-red)" }}>
-                ● Status options failed to load (0 boards). The editor can't offer choices — hard-refresh
-                (Cmd/Ctrl+Shift+R); if it persists after a fresh sync, tell me.
-              </span>
-            )
-          ) : (
+          {!loaded ? (
             <span style={{ color: "var(--color-ink-faint)" }}>● Loading status options…</span>
+          ) : error ? (
+            <span style={{ color: "var(--color-status-red)" }}>
+              ● Couldn't load status options: {error}.{" "}
+              <button
+                type="button"
+                onClick={refresh}
+                style={{ color: "var(--color-status-blue)", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit" }}
+              >
+                Retry
+              </button>
+            </span>
+          ) : loadedCount > 0 ? (
+            <span style={{ color: "var(--color-status-green)" }}>
+              ● Status options loaded for {loadedCount} board{loadedCount === 1 ? "" : "s"}.
+            </span>
+          ) : (
+            <span style={{ color: "var(--color-status-red)" }}>
+              ● Status options loaded but empty (0 boards). Run a sync so options populate, then Retry.{" "}
+              <button
+                type="button"
+                onClick={refresh}
+                style={{ color: "var(--color-status-blue)", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit" }}
+              >
+                Retry
+              </button>
+            </span>
           )}
         </div>
       </div>
