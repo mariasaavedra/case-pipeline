@@ -57,9 +57,12 @@ function verifyState(state: string): string | null {
 
 function buildOAuthUrl(azureOid: string): string {
   const state = signState(azureOid);
-  // Build manually to avoid encoding colons in scope (me:read not me%3Aread)
+  // Build manually to avoid encoding colons in scope (me:read not me%3Aread).
+  // boards:write is required for change_simple_column_value (status write-back);
+  // updates:write covers posting notes. Users must re-connect Monday to grant a
+  // newly-added scope — an existing token keeps only the scopes it was issued with.
   const params = new URLSearchParams({ client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, state });
-  return `https://auth.monday.com/oauth2/authorize?${params.toString()}&scope=me:read%20updates:write`;
+  return `https://auth.monday.com/oauth2/authorize?${params.toString()}&scope=me:read%20updates:write%20boards:write`;
 }
 
 async function handleRedirect(req: Request, res: Response): Promise<void> {
