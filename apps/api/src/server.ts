@@ -28,7 +28,7 @@ import {
   handleClientRelationships,
   handleAlerts,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor, getBoardColumns, getBoardColumnsFor } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor, getBoardColumns, getBoardColumnsFor, getSyncHealth, getArchivedRows } from "@case-pipeline/query";
 import type { Urgency } from "@case-pipeline/query";
 import { setApiToken, createUpdate, changeSimpleColumnValue, createItem, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
 import { loadConfig } from "@case-pipeline/config";
@@ -247,6 +247,50 @@ app.get("/api/admin/users", requireAuth, requireAdmin, handleAdminListUsers);
 app.patch("/api/admin/users/:id/role", requireAuth, requireAdmin, handleAdminUpdateRole);
 app.patch("/api/admin/users/:id", requireAuth, requireAdmin, handleAdminUpdateUser);
 app.get("/api/admin/audit", requireAuth, requireAdmin, handleAdminAudit);
+
+// Sync health + the archive of reconciled-away rows (admin-only). Turns "I hope
+// it synced" into visible per-board coverage, and makes archived rows restorable.
+app.get("/api/admin/sync-health", requireAuth, requireAdmin, (_req, res) => {
+  res.json({ data: getSyncHealth(db) });
+});
+app.get("/api/admin/archived", requireAuth, requireAdmin, (req, res) => {
+  const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "100"), 10) || 100));
+  res.json({ data: getArchivedRows(db, limit) });
+});
+app.post("/api/admin/archived/:id/restore", requireAuth, requireAdmin, (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  const row = db
+    .prepare("SELECT source_table, snapshot_json, monday_item_id FROM archived_rows WHERE id = ?")
+    .get(id) as { source_table: string; snapshot_json: string; monday_item_id: string | null } | undefined;
+  if (!row) {
+    res.status(404).json({ error: "Archived row not found" });
+    return;
+  }
+  const ALLOWED = new Set(["profiles", "contracts", "board_items"]);
+  if (!ALLOWED.has(row.source_table)) {
+    res.status(400).json({ error: "Unrestorable source table" });
+    return;
+  }
+  try {
+    const snap = JSON.parse(row.snapshot_json) as Record<string, unknown>;
+    const cols = Object.keys(snap);
+    const restore = db.transaction(() => {
+      db.prepare(
+        `INSERT OR REPLACE INTO ${row.source_table} (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`,
+      ).run(...cols.map((c) => snap[c] as never));
+      db.prepare("DELETE FROM archived_rows WHERE id = ?").run(id);
+    });
+    restore();
+    auditFromReq(req, "sync.row_restored", {
+      targetType: row.source_table, targetId: row.monday_item_id ?? String(id),
+      metadata: { archivedRowId: id },
+    });
+    res.json({ data: { restored: true } });
+  } catch (err) {
+    console.error("[restore] failed:", err);
+    res.status(500).json({ error: "Restore failed" });
+  }
+});
 
 // Protect all remaining /api/* routes
 app.use("/api/", requireAuth);

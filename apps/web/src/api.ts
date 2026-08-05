@@ -153,6 +153,16 @@ export async function fetchBoardColumns(): Promise<BoardColumns[]> {
   return apiFetch<BoardColumns[]>("/api/boards/columns");
 }
 
+export async function fetchSyncHealth(): Promise<import("@case-pipeline/query").SyncHealth> {
+  return apiFetch("/api/admin/sync-health");
+}
+export async function fetchArchivedRows(limit = 100): Promise<import("@case-pipeline/query").ArchivedRow[]> {
+  return apiFetch(`/api/admin/archived?limit=${limit}`);
+}
+export async function restoreArchivedRow(id: number): Promise<{ restored: boolean }> {
+  return apiFetch(`/api/admin/archived/${id}/restore`, { method: "POST" });
+}
+
 /** Change any editable column on a board item. `value` is the label (choice
  * columns), YYYY-MM-DD (dates), or the raw text/number. pending=queued. */
 export async function changeBoardItemColumn(

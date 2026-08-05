@@ -6,6 +6,7 @@ import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, f
 import type { AttorneyBoard, PublicUser, AuditEntry } from "../api";
 import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
+import { SyncHealthSection } from "../components/SyncHealthSection";
 
 // =============================================================================
 // User management (admin section)
@@ -825,6 +826,18 @@ export function SettingsPage() {
 
       {/* Urgency scoring — admin only */}
       {user?.role === "admin" && <UrgencySettingsSection />}
+
+      {/* Sync health — admin only */}
+      {user?.role === "admin" && (
+        <section style={{ marginBottom: "40px" }}>
+          <h2 style={styles.sectionTitle}>Sync health</h2>
+          <p style={styles.sectionDesc}>
+            Coverage of the last Monday.com sync (per board), the write-back queue, and archived rows
+            (reconciled-away but recoverable — nothing is hard-deleted).
+          </p>
+          <SyncHealthSection />
+        </section>
+      )}
 
       {/* Users — admin only */}
       {user?.role === "admin" && <UsersSection />}

@@ -10,6 +10,8 @@ export { getClientCaseSummary } from "./case-summary";
 export { getClientUpdates } from "./updates";
 export { getBoardStatusOptions, getBoardStatusOptionsFor } from "./status-options";
 export { getBoardColumns, getBoardColumnsFor } from "./board-columns";
+export { getSyncHealth, getArchivedRows } from "./sync-health";
+export type { SyncHealth, SyncBoardCoverage, ArchivedRow } from "./sync-health";
 export { getClientRelationships } from "./relationships";
 export type { RelationshipWithDetails } from "./relationships";
 export { getDashboardKpis, getKpiCardDetail } from "./dashboard";
