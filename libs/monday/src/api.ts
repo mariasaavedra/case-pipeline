@@ -506,6 +506,12 @@ export async function fetchAllBoardItems(
      * never reconcile deletions from it).
      */
     since?: string;
+    /**
+     * Fired once at the end with what Monday reported (`expected`) vs what we
+     * actually returned (`fetched`). Lets the caller record per-board coverage
+     * and gate reconciliation on full coverage even when nothing was truncated.
+     */
+    onCoverage?: (info: { fetched: number; expected: number | null }) => void;
   } = {}
 ): Promise<MondayItem[]> {
   const maxItems = options.maxItems ?? 500;
@@ -552,6 +558,8 @@ export async function fetchAllBoardItems(
   } while (cursor);
 
   const items = allItems.slice(0, maxItems);
+
+  options.onCoverage?.({ fetched: items.length, expected });
 
   if (cappedWithMore) {
     options.onTruncated?.({ boardId, fetched: items.length, expected, reason: "max_items_cap" });

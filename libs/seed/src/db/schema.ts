@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -230,6 +230,46 @@ CREATE TABLE IF NOT EXISTS sync_watermarks (
     last_updated_at    TEXT,
     last_full_sweep_at TEXT,
     updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Archive of rows removed by reconciliation (v21+). Reconciliation used to hard-
+-- DELETE rows a full sweep stopped returning; now it snapshots each one here
+-- first, so nothing is ever truly lost and every removal is recoverable/auditable.
+-- snapshot_json is the full row as JSON at the moment it left the live table.
+CREATE TABLE IF NOT EXISTS archived_rows (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_table   TEXT NOT NULL,        -- profiles | contracts | board_items
+    board_key      TEXT,
+    monday_item_id TEXT,
+    local_id       TEXT,
+    snapshot_json  TEXT NOT NULL,
+    run_id         INTEGER,              -- sync_runs.id that archived it
+    archived_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_archived_monday ON archived_rows(monday_item_id);
+CREATE INDEX IF NOT EXISTS idx_archived_source ON archived_rows(source_table, board_key);
+
+-- Per-sync-run ledger (v21+) — turns "I hope it synced" into a visible history.
+CREATE TABLE IF NOT EXISTS sync_runs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at  TEXT NOT NULL,
+    finished_at TEXT,
+    mode        TEXT NOT NULL,           -- full | incremental
+    status      TEXT NOT NULL DEFAULT 'running'  -- running | synced | partial | error
+);
+
+-- Per-board coverage for each run (v21+): what Monday reported vs what we fetched,
+-- how many we upserted/archived, and whether the board came up short.
+CREATE TABLE IF NOT EXISTS sync_run_boards (
+    run_id    INTEGER NOT NULL,
+    board_key TEXT NOT NULL,
+    fetched   INTEGER,
+    expected  INTEGER,
+    upserted  INTEGER,
+    archived  INTEGER NOT NULL DEFAULT 0,
+    truncated INTEGER NOT NULL DEFAULT 0,
+    error     TEXT,
+    PRIMARY KEY (run_id, board_key)
 );
 
 -- Per-board status column definition (id + selectable options with native Monday
@@ -936,6 +976,42 @@ export function initializeSchema(db: Database): void {
             position         INTEGER NOT NULL DEFAULT 0,
             updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
             PRIMARY KEY (board_key, column_id)
+        );
+      `);
+    }
+
+    // Migration v20 → v21: lossless-sync tables. Additive.
+    if (fromVersion < 21) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS archived_rows (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_table   TEXT NOT NULL,
+            board_key      TEXT,
+            monday_item_id TEXT,
+            local_id       TEXT,
+            snapshot_json  TEXT NOT NULL,
+            run_id         INTEGER,
+            archived_at    TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_archived_monday ON archived_rows(monday_item_id);
+        CREATE INDEX IF NOT EXISTS idx_archived_source ON archived_rows(source_table, board_key);
+        CREATE TABLE IF NOT EXISTS sync_runs (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at  TEXT NOT NULL,
+            finished_at TEXT,
+            mode        TEXT NOT NULL,
+            status      TEXT NOT NULL DEFAULT 'running'
+        );
+        CREATE TABLE IF NOT EXISTS sync_run_boards (
+            run_id    INTEGER NOT NULL,
+            board_key TEXT NOT NULL,
+            fetched   INTEGER,
+            expected  INTEGER,
+            upserted  INTEGER,
+            archived  INTEGER NOT NULL DEFAULT 0,
+            truncated INTEGER NOT NULL DEFAULT 0,
+            error     TEXT,
+            PRIMARY KEY (run_id, board_key)
         );
       `);
     }

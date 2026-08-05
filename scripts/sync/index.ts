@@ -209,6 +209,13 @@ async function main() {
     .run(`live-sync ${new Date().toISOString()}`, JSON.stringify({ source: "monday", maxItems }));
   const batchId = Number(batchInfo.lastInsertRowid);
 
+  // Ledger row for this run (finished + per-board coverage recorded at the end).
+  const runId = Number(
+    db
+      .prepare("INSERT INTO sync_runs (started_at, mode, status) VALUES (?, ?, 'running')")
+      .run(runStartedAt, full ? "full" : "incremental").lastInsertRowid,
+  );
+
   const boardsConfig = await loadBoardsConfig();
 
   // Merge attorney boards from data/attorney-boards.json into the boards config.
@@ -286,6 +293,9 @@ async function main() {
   /** Boards that actually ran incrementally this run — never reconcilable. */
   const incrementalBoards = new Set<string>();
   const fetchedCounts: Record<string, number> = {};
+  // Per-board coverage: what Monday reported vs what we fetched. Feeds the
+  // reconcile gate (never delete from a board we didn't fully see) and the ledger.
+  const coverage: Record<string, { fetched: number; expected: number | null }> = {};
 
   // Run one board's sync in isolation: a failure logs and is skipped so one bad
   // board never aborts the rest of the sync.
@@ -359,6 +369,7 @@ async function main() {
       pageSize,
       ...(since ? { since } : {}),
       onProgress: (n) => process.stdout.write(`\r  ${key}: ${n} items${since ? " (changed)" : ""}`),
+      onCoverage: (info) => { coverage[key] = info; },
       onTruncated: (t) => {
         const detail =
           t.reason === "max_items_cap"
@@ -808,30 +819,53 @@ async function main() {
   // almost the entire board. Deletions are therefore only ever detected by a
   // --full run.
   const truncatedBoards = new Set(truncations.map((t) => t.board));
+  // Coverage gate (v21): never reconcile a board unless we KNOW we saw all of it —
+  // Monday's items_count is present AND we fetched at least that many. An unknown
+  // (null) or short count means we can't trust "not seen" == "deleted upstream".
+  const fullCoverage = (b: string): boolean => {
+    const c = coverage[b];
+    return !!c && c.expected != null && c.fetched >= c.expected;
+  };
   const reconcilable = [...syncedBoards].filter(
-    (b) => !truncatedBoards.has(b) && !incrementalBoards.has(b),
+    (b) => !truncatedBoards.has(b) && !incrementalBoards.has(b) && fullCoverage(b),
+  );
+  const coverageSkipped = [...syncedBoards].filter(
+    (b) => !truncatedBoards.has(b) && !incrementalBoards.has(b) && !fullCoverage(b),
   );
   const removed: Record<string, number> = {};
+
+  // Archive-before-delete (v21): snapshot every row we're about to remove into
+  // archived_rows first, so nothing is ever truly lost — a reconciliation can be
+  // reviewed and reversed. Generic JSON snapshot; deletions are typically few.
+  const insertArchive = db.prepare(`
+    INSERT INTO archived_rows (source_table, board_key, monday_item_id, local_id, snapshot_json, run_id, archived_at)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+  `);
+  function archiveThenDelete(sourceTable: string, boardKey: string | null, where: string, params: unknown[]): number {
+    const rows = db.prepare(`SELECT * FROM ${sourceTable} WHERE ${where}`).all(...params) as Array<Record<string, unknown>>;
+    for (const row of rows) {
+      insertArchive.run(
+        sourceTable, boardKey,
+        (row.monday_item_id as string) ?? null, (row.local_id as string) ?? null,
+        JSON.stringify(row), runId,
+      );
+    }
+    if (rows.length > 0) db.prepare(`DELETE FROM ${sourceTable} WHERE ${where}`).run(...params);
+    return rows.length;
+  }
 
   if (reconcilable.length > 0) {
     const reconcile = db.transaction(() => {
       for (const board of reconcilable) {
+        let n = 0;
         if (board === PROFILE_BOARD) {
-          const r = db
-            .prepare("DELETE FROM profiles WHERE last_seen_at IS NULL OR last_seen_at < ?")
-            .run(runStartedAt);
-          if (r.changes > 0) removed[PROFILE_BOARD] = r.changes;
+          n = archiveThenDelete("profiles", null, "last_seen_at IS NULL OR last_seen_at < ?", [runStartedAt]);
         } else if (board === CONTRACT_BOARD) {
-          const r = db
-            .prepare("DELETE FROM contracts WHERE last_seen_at IS NULL OR last_seen_at < ?")
-            .run(runStartedAt);
-          if (r.changes > 0) removed[CONTRACT_BOARD] = r.changes;
+          n = archiveThenDelete("contracts", null, "last_seen_at IS NULL OR last_seen_at < ?", [runStartedAt]);
         } else {
-          const r = db
-            .prepare("DELETE FROM board_items WHERE board_key = ? AND (last_seen_at IS NULL OR last_seen_at < ?)")
-            .run(board, runStartedAt);
-          if (r.changes > 0) removed[board] = r.changes;
+          n = archiveThenDelete("board_items", board, "board_key = ? AND (last_seen_at IS NULL OR last_seen_at < ?)", [board, runStartedAt]);
         }
+        if (n > 0) removed[board] = n;
       }
     });
     reconcile();
@@ -847,6 +881,27 @@ async function main() {
 
   db.prepare("UPDATE seed_batches SET status = ? WHERE id = ?")
     .run(partial ? "partial" : "synced", batchId);
+
+  // ---- Sync ledger (v21): per-board coverage + finalize the run row ----
+  const errorByBoard = new Map(errors.map((e) => [e.board, e.error]));
+  const ledgerBoards = new Set<string>([...syncedBoards, ...Object.keys(coverage), ...errors.map((e) => e.board)]);
+  const insertRunBoard = db.prepare(`
+    INSERT OR REPLACE INTO sync_run_boards (run_id, board_key, fetched, expected, upserted, archived, truncated, error)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const board of ledgerBoards) {
+    insertRunBoard.run(
+      runId, board,
+      coverage[board]?.fetched ?? fetchedCounts[board] ?? null,
+      coverage[board]?.expected ?? null,
+      counts[board] ?? null,
+      removed[board] ?? 0,
+      truncatedBoards.has(board) ? 1 : 0,
+      errorByBoard.get(board) ?? null,
+    );
+  }
+  const runStatus = errors.length ? "error" : partial ? "partial" : "synced";
+  db.prepare("UPDATE sync_runs SET finished_at = datetime('now'), status = ? WHERE id = ?").run(runStatus, runId);
 
   // ---- Summary ----
   console.log("\n" + "=".repeat(60));
@@ -882,8 +937,14 @@ async function main() {
   );
   if (totalRemoved > 0) {
     console.log(
-      `  Removed (gone from Monday): ${totalRemoved} — ` +
+      `  Archived (gone from Monday, recoverable): ${totalRemoved} — ` +
         Object.entries(removed).map(([b, n]) => `${b}:${n}`).join(", "),
+    );
+  }
+  if (coverageSkipped.length) {
+    console.log(
+      `\n  Reconciliation SKIPPED for ${coverageSkipped.length} board(s) with unknown/short coverage: ${coverageSkipped.join(", ")}` +
+        `\n    (Monday didn't report a full item_count — rows kept, nothing archived)`,
     );
   }
   if (skippedReconcile.length) {
