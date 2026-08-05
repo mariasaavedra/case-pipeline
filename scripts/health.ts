@@ -110,6 +110,40 @@ export function runChecks(db: DatabaseInstance, now: number = Date.now()): Check
     checks.push({ name: "last sync", status: "warn", detail: "never run" });
   }
 
+  // Sync coverage (v21): on the last run, did any board come up short of what
+  // Monday reports, or get truncated? A short board means the mirror is incomplete.
+  try {
+    const lastRun = db.prepare("SELECT id, mode FROM sync_runs ORDER BY id DESC LIMIT 1").get() as
+      | { id: number; mode: string }
+      | undefined;
+    if (lastRun) {
+      const bad = db
+        .prepare(
+          `SELECT board_key, fetched, expected, truncated FROM sync_run_boards
+           WHERE run_id = ? AND (truncated = 1 OR (expected IS NOT NULL AND fetched < expected))`,
+        )
+        .all(lastRun.id) as Array<{ board_key: string; fetched: number | null; expected: number | null; truncated: number }>;
+      if (bad.length === 0) {
+        checks.push({ name: "sync coverage", status: "pass", detail: `last run (${lastRun.mode}) complete` });
+      } else {
+        const list = bad.map((b) => `${b.board_key} ${b.fetched ?? "?"}/${b.expected ?? "?"}${b.truncated ? " trunc" : ""}`).join(", ");
+        checks.push({ name: "sync coverage", status: "warn", detail: `${bad.length} board(s) short: ${list}` });
+      }
+    }
+  } catch { /* pre-v21 DB — skip */ }
+
+  // Write-back queue: dead-lettered writes need attention (a change that never
+  // reached Monday).
+  try {
+    const dl = (db.prepare("SELECT COUNT(*) AS n FROM write_queue WHERE status = 'failed'").get() as { n: number }).n;
+    const pending = (db.prepare("SELECT COUNT(*) AS n FROM write_queue WHERE status = 'pending'").get() as { n: number }).n;
+    checks.push(
+      dl > 0
+        ? { name: "write queue", status: "warn", detail: `${dl} dead-lettered, ${pending} pending — writes not reaching Monday` }
+        : { name: "write queue", status: "pass", detail: `${pending} pending, 0 dead-lettered` },
+    );
+  } catch { /* no write_queue — skip */ }
+
   // Row counts — key tables must not be empty (that means data loss).
   try {
     const profiles = count(db, "profiles");

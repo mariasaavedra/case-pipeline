@@ -30,7 +30,8 @@ import {
 } from "./handlers/handlers";
 import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor, getBoardColumns, getBoardColumnsFor, getSyncHealth, getArchivedRows } from "@case-pipeline/query";
 import type { Urgency } from "@case-pipeline/query";
-import { setApiToken, createUpdate, changeSimpleColumnValue, createItem, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
+import { setApiToken, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
+import { dataSource } from "./data-source/index.js";
 import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
@@ -462,7 +463,7 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
   try {
     // Prefer the posting user's personal Monday.com token; fall back to shared token
     const userToken = getUserMondayToken(req.user?.oid ?? "");
-    const mondayUpdateId = await createUpdate(profile.monday_item_id, text, userToken ?? undefined);
+    const mondayUpdateId = await dataSource.postUpdate(profile.monday_item_id, text, userToken ?? undefined);
     insertUpdate(mondayUpdateId, "synced");
     auditFromReq(req, "monday.update_posted", {
       targetType: "profile",
@@ -542,7 +543,7 @@ app.patch("/api/board-items/:localId/status", requireAuth, async (req, res) => {
 
   try {
     const userToken = getUserMondayToken(req.user?.oid ?? "");
-    await changeSimpleColumnValue(def.mondayBoardId, item.monday_item_id, def.statusColumnId, status, userToken ?? undefined);
+    await dataSource.setColumnValue(def.mondayBoardId, item.monday_item_id, def.statusColumnId, status, userToken ?? undefined);
     applyLocal();
     auditFromReq(req, "monday.status_changed", {
       targetType: "board_item",
@@ -634,7 +635,7 @@ app.patch("/api/board-items/:localId/columns", requireAuth, async (req, res) => 
 
   try {
     const userToken = getUserMondayToken(req.user?.oid ?? "");
-    await changeSimpleColumnValue(schema.mondayBoardId, item.monday_item_id, columnId, value, userToken ?? undefined);
+    await dataSource.setColumnValue(schema.mondayBoardId, item.monday_item_id, columnId, value, userToken ?? undefined);
     auditFromReq(req, "monday.column_changed", {
       targetType: "board_item", targetId: localId,
       metadata: { mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId, columnType: col.type, value, usedPersonalToken: !!userToken },
@@ -730,7 +731,7 @@ app.post("/api/profiles/:localId/contracts", requireAuth, async (req, res) => {
 
   try {
     const userToken = getUserMondayToken(req.user?.oid ?? "");
-    const newId = await createItem(schema.mondayBoardId, itemName, columnValues, userToken ?? undefined);
+    const newId = await dataSource.createItem(schema.mondayBoardId, itemName, columnValues, userToken ?? undefined);
     auditFromReq(req, "monday.contract_created", {
       targetType: "profile", targetId: localId,
       metadata: { feeKItemId: newId, caseType, af, ff, pf, name: itemName, usedPersonalToken: !!userToken },
