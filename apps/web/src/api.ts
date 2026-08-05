@@ -162,6 +162,9 @@ export async function fetchArchivedRows(limit = 100): Promise<import("@case-pipe
 export async function restoreArchivedRow(id: number): Promise<{ restored: boolean }> {
   return apiFetch(`/api/admin/archived/${id}/restore`, { method: "POST" });
 }
+export async function clearFailedWrites(): Promise<{ removed: number }> {
+  return apiFetch("/api/admin/write-queue/clear-failed", { method: "POST" });
+}
 
 /** Change any editable column on a board item. `value` is the label (choice
  * columns), YYYY-MM-DD (dates), or the raw text/number. pending=queued. */

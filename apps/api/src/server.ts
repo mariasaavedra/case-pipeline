@@ -254,6 +254,14 @@ app.get("/api/admin/audit", requireAuth, requireAdmin, handleAdminAudit);
 app.get("/api/admin/sync-health", requireAuth, requireAdmin, (_req, res) => {
   res.json({ data: getSyncHealth(db) });
 });
+// Discard dead-lettered write-backs (e.g. stale writes that failed before a
+// permission/scope fix — retrying them could clobber newer Monday values, so we
+// drop rather than replay). The original attempts remain in the audit log.
+app.post("/api/admin/write-queue/clear-failed", requireAuth, requireAdmin, (req, res) => {
+  const r = db.prepare("DELETE FROM write_queue WHERE status = 'failed'").run();
+  auditFromReq(req, "sync.write_queue_cleared", { targetType: "write_queue", targetId: "failed", metadata: { removed: r.changes } });
+  res.json({ data: { removed: r.changes } });
+});
 app.get("/api/admin/archived", requireAuth, requireAdmin, (req, res) => {
   const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "100"), 10) || 100));
   res.json({ data: getArchivedRows(db, limit) });

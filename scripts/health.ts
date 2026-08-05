@@ -113,21 +113,23 @@ export function runChecks(db: DatabaseInstance, now: number = Date.now()): Check
   // Sync coverage (v21): on the last run, did any board come up short of what
   // Monday reports, or get truncated? A short board means the mirror is incomplete.
   try {
-    const lastRun = db.prepare("SELECT id, mode FROM sync_runs ORDER BY id DESC LIMIT 1").get() as
-      | { id: number; mode: string }
+    // Coverage is only meaningful on a FULL sweep — an incremental run fetches
+    // only changed items, so fetched << expected is normal and NOT a shortfall.
+    const fullRun = db.prepare("SELECT id FROM sync_runs WHERE mode = 'full' ORDER BY id DESC LIMIT 1").get() as
+      | { id: number }
       | undefined;
-    if (lastRun) {
+    if (fullRun) {
       const bad = db
         .prepare(
           `SELECT board_key, fetched, expected, truncated FROM sync_run_boards
            WHERE run_id = ? AND (truncated = 1 OR (expected IS NOT NULL AND fetched < expected))`,
         )
-        .all(lastRun.id) as Array<{ board_key: string; fetched: number | null; expected: number | null; truncated: number }>;
+        .all(fullRun.id) as Array<{ board_key: string; fetched: number | null; expected: number | null; truncated: number }>;
       if (bad.length === 0) {
-        checks.push({ name: "sync coverage", status: "pass", detail: `last run (${lastRun.mode}) complete` });
+        checks.push({ name: "sync coverage", status: "pass", detail: "last full sweep complete" });
       } else {
         const list = bad.map((b) => `${b.board_key} ${b.fetched ?? "?"}/${b.expected ?? "?"}${b.truncated ? " trunc" : ""}`).join(", ");
-        checks.push({ name: "sync coverage", status: "warn", detail: `${bad.length} board(s) short: ${list}` });
+        checks.push({ name: "sync coverage", status: "warn", detail: `${bad.length} board(s) short on last full sweep: ${list}` });
       }
     }
   } catch { /* pre-v21 DB — skip */ }

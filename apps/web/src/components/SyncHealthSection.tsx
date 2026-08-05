@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchSyncHealth, fetchArchivedRows, restoreArchivedRow } from "../api";
+import { fetchSyncHealth, fetchArchivedRows, restoreArchivedRow, clearFailedWrites } from "../api";
 import type { SyncHealth, ArchivedRow } from "@case-pipeline/query";
 
 function ago(iso: string | null): string {
@@ -50,14 +50,35 @@ export function SyncHealthSection() {
       <div className="flex flex-wrap items-center gap-4 mb-4 text-sm">
         <span>Last run: <strong>{ago(health.lastRun?.finishedAt ?? health.lastRun?.startedAt ?? null)}</strong> ({health.lastRun?.mode ?? "—"})</span>
         <span style={{ color: statusColor }}>● {health.lastRun?.status ?? "no runs yet"}</span>
-        <span>Queue: <strong>{health.queue.pending}</strong> pending{health.queue.failed > 0 && <span style={{ color: "var(--color-status-red)" }}>, {health.queue.failed} stuck</span>}</span>
+        <span>
+          Queue: <strong>{health.queue.pending}</strong> pending
+          {health.queue.failed > 0 && (
+            <>
+              <span style={{ color: "var(--color-status-red)" }}>, {health.queue.failed} stuck</span>
+              <button
+                type="button"
+                onClick={() => clearFailedWrites().then(load)}
+                title="Discard dead-lettered writes (stale; the attempts stay in the audit log)"
+                style={{ marginLeft: 6, fontSize: 11, color: "var(--color-status-blue)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+              >
+                clear
+              </button>
+            </>
+          )}
+        </span>
         <span>Archived: <strong>{health.archivedTotal}</strong></span>
         <button type="button" onClick={load} style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-status-blue)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Refresh</button>
       </div>
 
-      {/* Per-board coverage */}
+      {/* Per-board coverage — from the last FULL sweep (incremental runs fetch
+          only changed items, so their fetched/expected is not a coverage measure). */}
+      <div style={{ fontSize: 12, color: "var(--color-ink-faint)", marginBottom: 6 }}>
+        {health.lastFullRun
+          ? <>Coverage as of the last <strong>full sweep</strong> — {ago(health.lastFullRun.finishedAt ?? health.lastFullRun.startedAt)}.</>
+          : <>No full sync recorded yet — coverage appears after a nightly full run (or <code>--full</code>). The numbers above from an incremental run only reflect <em>changed</em> items, not completeness.</>}
+      </div>
       <div style={{ border: "1px solid var(--color-border-light)", borderRadius: 8, overflow: "hidden" }}>
-        {health.boards.length === 0 && <p style={{ padding: 12, fontSize: 13, color: "var(--color-ink-faint)" }}>No board data in the last run.</p>}
+        {health.boards.length === 0 && <p style={{ padding: 12, fontSize: 13, color: "var(--color-ink-faint)" }}>No full-sweep coverage yet.</p>}
         {health.boards.map((b, i) => {
           const pct = b.coveragePct;
           const bad = b.truncated || !!b.error || (pct != null && pct < 100);

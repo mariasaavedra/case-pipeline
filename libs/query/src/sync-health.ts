@@ -20,8 +20,16 @@ export interface SyncBoardCoverage {
   coveragePct: number | null;
 }
 
+interface RunRow { id: number; started_at: string; finished_at: string | null; mode: string; status: string }
+type RunInfo = { id: number; startedAt: string; finishedAt: string | null; mode: string; status: string };
+
 export interface SyncHealth {
-  lastRun: { id: number; startedAt: string; finishedAt: string | null; mode: string; status: string } | null;
+  /** Most recent run, any mode — for recency/status. */
+  lastRun: RunInfo | null;
+  /** Most recent FULL run — the only mode where per-board coverage is meaningful
+   * (an incremental run fetches only changed items, so fetched << expected is normal). */
+  lastFullRun: RunInfo | null;
+  /** Per-board coverage from the last FULL run (empty until one has run). */
   boards: SyncBoardCoverage[];
   queue: { pending: number; failed: number };
   lastFullSweepAt: string | null;
@@ -31,15 +39,20 @@ export interface SyncHealth {
 export function getSyncHealth(db: Database): SyncHealth {
   const lastRun = db
     .prepare("SELECT id, started_at, finished_at, mode, status FROM sync_runs ORDER BY id DESC LIMIT 1")
-    .get() as { id: number; started_at: string; finished_at: string | null; mode: string; status: string } | undefined;
+    .get() as RunRow | undefined;
+  // Coverage is only meaningful for a full sweep — incremental runs fetch just
+  // the changed items, so use the last FULL run for the per-board bars.
+  const fullRun = db
+    .prepare("SELECT id, started_at, finished_at, mode, status FROM sync_runs WHERE mode = 'full' ORDER BY id DESC LIMIT 1")
+    .get() as RunRow | undefined;
 
-  const boards: SyncBoardCoverage[] = lastRun
+  const boards: SyncBoardCoverage[] = fullRun
     ? (db
         .prepare(
           `SELECT board_key, fetched, expected, upserted, archived, truncated, error
            FROM sync_run_boards WHERE run_id = ? ORDER BY board_key`,
         )
-        .all(lastRun.id) as Array<{
+        .all(fullRun.id) as Array<{
           board_key: string; fetched: number | null; expected: number | null;
           upserted: number | null; archived: number; truncated: number; error: string | null;
         }>).map((r) => ({
@@ -66,10 +79,12 @@ export function getSyncHealth(db: Database): SyncHealth {
 
   const archived = db.prepare("SELECT COUNT(*) AS n FROM archived_rows").get() as { n: number };
 
+  const toInfo = (r: RunRow | undefined): RunInfo | null =>
+    r ? { id: r.id, startedAt: r.started_at, finishedAt: r.finished_at, mode: r.mode, status: r.status } : null;
+
   return {
-    lastRun: lastRun
-      ? { id: lastRun.id, startedAt: lastRun.started_at, finishedAt: lastRun.finished_at, mode: lastRun.mode, status: lastRun.status }
-      : null,
+    lastRun: toInfo(lastRun),
+    lastFullRun: toInfo(fullRun),
     boards,
     queue: { pending: queueRow.pending ?? 0, failed: queueRow.failed ?? 0 },
     lastFullSweepAt: lastFull.t,
