@@ -46,6 +46,8 @@ jobs:
           owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           echo "api=${{ env.REGISTRY }}/${owner}/case-pipeline-api" >> "$GITHUB_OUTPUT"
           echo "web=${{ env.REGISTRY }}/${owner}/case-pipeline-web" >> "$GITHUB_OUTPUT"
+          # Fallback build date for runs with no head_commit (workflow_dispatch).
+          echo "now=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Build & push API
         uses: docker/build-push-action@v6
@@ -73,7 +75,11 @@ jobs:
           push: true
           build-args: |
             BUILD_SHA=${{ github.sha }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            # head_commit exists only on `push`. This workflow also runs via
+            # workflow_dispatch (used whenever a push event is delayed or lost),
+            # where it is empty and the badge would ship with no date — so fall
+            # back to the run's own start time.
+            BUILD_DATE=${{ github.event.head_commit.timestamp || steps.refs.outputs.now }}
           tags: |
             ${{ steps.refs.outputs.web }}:latest
             ${{ steps.refs.outputs.web }}:${{ github.sha }}

@@ -14,6 +14,34 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-06",
+    title: "Monday changes now show up in about a minute",
+    items: [
+      "The dashboard used to refresh on a timer, so a change made in Monday could take up to two hours to appear. Monday now tells us the moment something changes, and the dashboard catches up within about a minute.",
+      "Deleted items disappear right away instead of waiting for the overnight sweep — and they are still archived first, so nothing is lost.",
+      "New notes appear almost immediately, and editing a note in Monday now updates the text here too.",
+      "The scheduled refreshes still run in the background as a safety net.",
+    ],
+  },
+  {
+    date: "2026-08-05",
+    title: "Nothing can be silently deleted, and you can check",
+    items: [
+      "When the overnight sweep sees an item is gone from Monday, it files a full copy in an archive before removing it — every removal is recoverable in one click.",
+      "It only removes anything when Monday confirms the whole board was read. If a board comes back short, everything is kept.",
+      "A new Sync Health screen (admins) shows, board by board, that the data is complete.",
+    ],
+  },
+  {
+    date: "2026-08-04",
+    title: "Edit case fields and create contracts, in place",
+    items: [
+      "Items under Active Cases expand with a click so you can change a status, date, amount, or text right there — it writes straight to Monday.com under your account.",
+      "Contracts can be created from a client's page without leaving the dashboard.",
+      "Only fields you can actually change are shown; calculated and mirrored fields are left out on purpose.",
+    ],
+  },
+  {
     date: "2026-07-30",
     title: "Edit statuses from the dashboard",
     items: [
