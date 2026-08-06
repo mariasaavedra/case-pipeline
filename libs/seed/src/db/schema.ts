@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 21;
+export const SCHEMA_VERSION = 22;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -271,6 +271,27 @@ CREATE TABLE IF NOT EXISTS sync_run_boards (
     error     TEXT,
     PRIMARY KEY (run_id, board_key)
 );
+
+-- Durable inbox for Monday.com webhook events (v22+). The receiver endpoint only
+-- validates + INSERTs here (so it answers Monday within its timeout no matter
+-- what); the background processor drains it: deletions are archived+removed
+-- directly, everything else marks its board for a targeted incremental sync.
+-- Statuses: pending → processed | skipped (unknown board/type) | failed (attempts
+-- exhausted). Processed rows are pruned after 30 days.
+CREATE TABLE IF NOT EXISTS webhook_events (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type      TEXT NOT NULL,
+    monday_board_id TEXT,
+    monday_item_id  TEXT,
+    payload         TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending',
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    last_error      TEXT,
+    next_attempt_at TEXT,
+    received_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    processed_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_events_status ON webhook_events(status, id);
 
 -- Per-board status column definition (id + selectable options with native Monday
 -- colors), refreshed every sync. Powers the status editor: restricts writes to
@@ -1013,6 +1034,27 @@ export function initializeSchema(db: Database): void {
             error     TEXT,
             PRIMARY KEY (run_id, board_key)
         );
+      `);
+    }
+
+    // Migration v21 → v22: webhook event inbox. Additive — empty until Monday
+    // webhooks are registered (scripts/setup-webhooks.ts) and start delivering.
+    if (fromVersion < 22) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS webhook_events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type      TEXT NOT NULL,
+            monday_board_id TEXT,
+            monday_item_id  TEXT,
+            payload         TEXT NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'pending',
+            attempts        INTEGER NOT NULL DEFAULT 0,
+            last_error      TEXT,
+            next_attempt_at TEXT,
+            received_at     TEXT NOT NULL DEFAULT (datetime('now')),
+            processed_at    TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_webhook_events_status ON webhook_events(status, id);
       `);
     }
 

@@ -75,6 +75,7 @@ See `.env.example` for the full list. Key variables:
 | `PROFILES_BOARD_ID` | No | Override board ID from `config/boards.yaml` |
 | `CONTRACTS_BOARD_ID` | No | Override board ID from `config/boards.yaml` |
 | `MONDAY_API_VERSION` | No (default: `2024-10`) | Monday.com API version |
+| `MONDAY_WEBHOOK_SECRET` | No | Enables the Monday webhook receiver + processor (near-real-time mirror refresh). See `docs/webhooks.md` |
 
 tsx/Node loads `.env` automatically via `--env-file` flag in the sync command. For other scripts, ensure `.env` is present at the repo root.
 
@@ -163,6 +164,7 @@ Writes and user/account routes:
 | `GET/PUT /api/settings/urgency` | Urgency thresholds (criticalDays/soonDays) + whether status urgency reorders Active Cases (PUT admin-only, audited) |
 | `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only) |
 | `/api/auth/monday`, `/callback`, `/status` | Personal Monday.com OAuth connection (`routes/monday-oauth.ts`) |
+| `POST /api/webhooks/monday/:token` | Monday.com webhook receiver (unauthenticated by design — secret URL token, constant-time compare). Persists events to the `webhook_events` inbox; a background processor applies them (deletions archived directly, notes re-fetched, column changes via targeted incremental sync). See `docs/webhooks.md` |
 
 ## Key Directories
 
@@ -186,5 +188,6 @@ Run with `tsx scripts/<name>.ts`:
 | `snapshot.ts` | Fetch all 19 boards from Monday.com → `data/monday-snapshot.md` + `.json`. |
 | `sample-real-data.ts` | Pull sample profile + linked item data from Monday.com → `data/samples/`. |
 | `fetch-profile.ts` | Fetch a single profile by ID and dump it to stdout. |
+| `setup-webhooks.ts` | Register/list/remove Monday.com webhooks for all tracked boards. `npm run webhooks:setup -- --url=https://<host>` (requires the API deployed with `MONDAY_WEBHOOK_SECRET` first). |
 | `sync-config/` | Internal sync logic called by `npm run dev:cli -- sync`. |
 | `preflight.sh` | Checks Node 22+, npm, and data directory writability. |

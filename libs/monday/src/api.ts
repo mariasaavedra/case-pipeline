@@ -835,6 +835,67 @@ export async function createItem(
 }
 
 // =============================================================================
+// Webhooks — register/list/delete board webhooks
+// =============================================================================
+// Monday POSTs a JSON challenge to the callback URL at creation time and the
+// endpoint must echo it back, so the receiver has to be live and publicly
+// reachable BEFORE create_webhook is called (see scripts/setup-webhooks.ts).
+
+/** Subscription event names accepted by create_webhook (WebhookEventType). */
+export type WebhookEventType =
+  | "change_column_value"
+  | "change_status_column_value"
+  | "change_specific_column_value"
+  | "change_name"
+  | "create_item"
+  | "item_archived"
+  | "item_deleted"
+  | "item_moved_to_any_group"
+  | "item_restored"
+  | "create_update"
+  | "edit_update"
+  | "delete_update";
+
+export interface MondayWebhook {
+  id: string;
+  board_id: string;
+  event: string;
+  config: string | null;
+}
+
+export async function fetchWebhooks(boardId: string): Promise<MondayWebhook[]> {
+  const result = await mondayRequest<{ data: { webhooks: MondayWebhook[] | null } }>(
+    `query ($boardId: ID!) {
+       webhooks(board_id: $boardId) { id event board_id config }
+     }`,
+    { boardId }
+  );
+  return result.data.webhooks ?? [];
+}
+
+export async function createWebhook(
+  boardId: string,
+  url: string,
+  event: WebhookEventType,
+  config?: Record<string, unknown>
+): Promise<MondayWebhook> {
+  const result = await mondayRequest<{ data: { create_webhook: MondayWebhook } }>(
+    `mutation ($boardId: ID!, $url: String!, $event: WebhookEventType!, $config: JSON) {
+       create_webhook(board_id: $boardId, url: $url, event: $event, config: $config) { id event board_id config }
+     }`,
+    { boardId, url, event, config: config ? JSON.stringify(config) : undefined }
+  );
+  return result.data.create_webhook;
+}
+
+export async function deleteWebhook(webhookId: string): Promise<void> {
+  await mondayRequest<{ data: { delete_webhook: { id: string } } }>(
+    `mutation ($id: ID!) { delete_webhook(id: $id) { id } }`,
+    { id: webhookId }
+  );
+}
+
+// =============================================================================
 // Emails & Activities (E&A) timeline fetching (read)
 // =============================================================================
 

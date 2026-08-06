@@ -79,6 +79,8 @@ import { auditFromReq } from "./audit/log.js";
 import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
 import { registerMondayOAuth, getUserMondayToken } from "./routes/monday-oauth.js";
+import { registerMondayWebhook, webhookSecret } from "./webhooks/receiver.js";
+import { startWebhookProcessor, createBoardKeyResolver } from "./webhooks/processor.js";
 
 // =============================================================================
 // Database
@@ -241,6 +243,11 @@ app.get("/api/auth/me", requireAuth, handleAuthMe);
 
 // Monday.com OAuth (callback is intentionally unauthenticated — browser redirect)
 registerMondayOAuth(app);
+
+// Monday.com webhook receiver (intentionally outside requireAuth — Monday can't
+// send an Azure AD token; it authenticates via the secret URL path segment).
+// Must be registered BEFORE the /api/ requireAuth catch-all below.
+registerMondayWebhook(app, db);
 
 // Admin — requireAdmin gates the role once here, so a future admin route can't
 // forget the check.
@@ -1044,6 +1051,24 @@ const server = app.listen(PORT, HOST, () => {
       refreshBoardSchema(db)
         .then((r) => console.log(`[schema-refresh] board schema refreshed: ${r.boards} boards${r.failed ? `, ${r.failed} failed` : ""}`))
         .catch((e) => console.error("[schema-refresh] failed:", e));
+
+      // Drain Monday webhook events (near-real-time mirror freshness). Only
+      // useful once webhooks are registered — see scripts/setup-webhooks.ts
+      // and docs/webhooks.md. Board refreshes ride the same runSync guard as
+      // the scheduled syncs, so they can never overlap one.
+      if (webhookSecret()) {
+        createBoardKeyResolver(DATA_DIR)
+          .then((boardKeyForId) => {
+            startWebhookProcessor(db, {
+              boardKeyForId,
+              runTargetedSync: (boards) =>
+                runSync("webhook", ["--skip-timeline", `--boards=${boards.join(",")}`]),
+            });
+          })
+          .catch((e) => console.error("[webhooks] processor not started:", e));
+      } else {
+        console.log("[webhooks] receiver disabled (set MONDAY_WEBHOOK_SECRET to enable).");
+      }
     }
   }
 });
@@ -1093,11 +1118,12 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  */
 let syncInFlight: string | null = null;
 
-function runSync(label: string, args: string[]): Promise<void> {
+/** Resolves true when the sync ran, false when skipped because one is in flight. */
+function runSync(label: string, args: string[]): Promise<boolean> {
   return new Promise((resolve, reject) => {
     if (syncInFlight) {
       console.log(`[sync] ${label} skipped — a ${syncInFlight} sync is still running.`);
-      resolve();
+      resolve(false);
       return;
     }
     syncInFlight = label;
@@ -1113,7 +1139,7 @@ function runSync(label: string, args: string[]): Promise<void> {
       syncInFlight = null;
       if (code === 0) {
         console.log(`[sync] ${label} sync complete.`);
-        resolve();
+        resolve(true);
       } else {
         console.error(`[sync] ${label} sync failed (exit code ${code}).`);
         reject(new Error(`sync exited with code ${code}`));
