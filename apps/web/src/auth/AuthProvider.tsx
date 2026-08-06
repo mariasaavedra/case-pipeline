@@ -53,6 +53,7 @@ function AuthConsumer({ children }: { children: ReactNode }) {
     if (inProgress !== InteractionStatus.None) return;
 
     if (!isAuthenticated) {
+      setTokenGetter(null); // release API calls waiting on auth — they'd hang otherwise
       setIsLoading(false);
       setUser(null);
       return;
@@ -61,21 +62,24 @@ function AuthConsumer({ children }: { children: ReactNode }) {
     async function initUser() {
       const account = instance.getActiveAccount() ?? accounts[0];
       if (!account) {
+        setTokenGetter(null);
         setIsLoading(false);
         return;
       }
 
+      // Registered before the first token is fetched: the getter acquires its
+      // own token lazily, and API calls made while this runs must not slip out
+      // unauthenticated (that was the 401-on-refresh bug).
+      setTokenGetter(async () => {
+        const acc = instance.getActiveAccount();
+        if (!acc) return null;
+        const r = await instance.acquireTokenSilent({ ...loginRequest, account: acc });
+        return r.idToken;
+      });
+
       try {
         const result = await instance.acquireTokenSilent({ ...loginRequest, account });
         const token = result.idToken;
-
-        // Wire up the token getter for all subsequent API calls.
-        setTokenGetter(async () => {
-          const acc = instance.getActiveAccount();
-          if (!acc) return null;
-          const r = await instance.acquireTokenSilent({ ...loginRequest, account: acc });
-          return r.idToken;
-        });
 
         const res = await fetch("/api/auth/me", {
           headers: { Authorization: `Bearer ${token}` },

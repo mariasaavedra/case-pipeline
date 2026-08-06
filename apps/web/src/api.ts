@@ -18,11 +18,30 @@ export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from
 
 let _tokenGetter: (() => Promise<string | null>) | null = null;
 
-export function setTokenGetter(fn: () => Promise<string | null>) {
+// A hard page refresh mounts the data providers immediately, while MSAL is
+// still restoring the session — so the getter below isn't registered yet.
+// Sending those requests anyway produced a bare 401 "Unauthorized" on refresh.
+// Callers now wait for auth to settle instead of racing it. AuthProvider must
+// call setTokenGetter on EVERY path (including "not signed in", with null), or
+// requests would sit here until the timeout.
+let _resolveAuthReady: () => void = () => {};
+const _authReady = new Promise<void>((resolve) => {
+  _resolveAuthReady = resolve;
+});
+const AUTH_READY_TIMEOUT_MS = 15_000;
+
+export function setTokenGetter(fn: (() => Promise<string | null>) | null) {
   _tokenGetter = fn;
+  _resolveAuthReady();
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
+  // Timeout guard: a wedged auth init degrades to the old behaviour (an honest
+  // 401) rather than hanging every request forever.
+  await Promise.race([
+    _authReady,
+    new Promise<void>((resolve) => setTimeout(resolve, AUTH_READY_TIMEOUT_MS)),
+  ]);
   if (!_tokenGetter) return {};
   const token = await _tokenGetter();
   return token ? { Authorization: `Bearer ${token}` } : {};
