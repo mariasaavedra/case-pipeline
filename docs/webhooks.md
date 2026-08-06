@@ -135,6 +135,39 @@ script identifies "our" webhooks by event type. If another integration also
 uses webhooks on these boards, scope with `--boards`/`--events`, especially for
 `--remove`.
 
+### Pre-existing webhooks from other integrations
+
+This workspace already had 22 webhooks before this feature (Monday automations
+and older integrations). Registration skips any (board, event) pair that
+already has a webhook, which is right for re-runs but wrong when the existing
+one belongs to someone else — our receiver then never hears that event for that
+board, silently. Each skip is printed by name for exactly this reason.
+
+At first registration, five pairs were skipped this way — two of them on core
+boards:
+
+| Board | Events without our coverage |
+|---|---|
+| `court_cases` | `change_column_value`, `create_item` |
+| `fee_ks` | `change_column_value`, `create_item` |
+| `appointments_r` | `change_column_value` |
+
+`--force` creates ours alongside the existing one. Monday supports several
+webhooks per (board, event) and delivers to every callback URL — `court_cases`
+already carries two `change_column_value` webhooks, so this is how the platform
+is meant to be used, and the other integration is unaffected.
+
+Because `--force` also re-creates pairs that are already ours, scope it to the
+gaps rather than running it broadly:
+
+```bash
+npm run webhooks:setup -- --url=https://<host> --force --boards=court_cases,fee_ks --events=change_column_value,create_item
+```
+
+```bash
+npm run webhooks:setup -- --url=https://<host> --force --boards=appointments_r --events=change_column_value
+```
+
 ## Event lifecycle & statuses
 
 Every delivery lands in `webhook_events` and moves through:

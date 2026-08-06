@@ -17,6 +17,7 @@
 //   npm run webhooks:setup -- --remove                                       # delete ours
 //   npm run webhooks:setup -- --boards=profiles,fee_ks --url=…               # subset
 //   npm run webhooks:setup -- --events=change_column_value,create_update …   # subset
+//   npm run webhooks:setup -- --url=… --force                                # ignore skips
 //
 // Caveat: Monday's `webhooks` query does not return the callback URL, so
 // "ours" can only be inferred by event type. Registration skips a (board,
@@ -24,6 +25,13 @@
 // deletes every webhook on tracked boards whose event is in the target set —
 // including ones another integration created. If other Monday integrations
 // use webhooks on these boards, prefer --boards/--events to scope operations.
+//
+// When the pre-existing webhook belongs to ANOTHER integration, that skip is a
+// silent coverage hole: our receiver never hears that event for that board.
+// Each skip is logged by name, and --force creates ours anyway (Monday allows
+// several webhooks per board+event, delivering to every callback URL, so the
+// other integration keeps working). Re-running WITH --force duplicates our own
+// webhooks, so scope it: --force --boards=court_cases,fee_ks --events=…
 // =============================================================================
 
 import fs from "node:fs";
@@ -67,6 +75,7 @@ interface Args {
   dryRun: boolean;
   onlyBoards: string[] | null;
   events: WebhookEventType[];
+  force: boolean;
 }
 
 function parseArgs(): Args {
@@ -78,12 +87,14 @@ function parseArgs(): Args {
     dryRun: false,
     onlyBoards: null,
     events: DEFAULT_EVENTS,
+    force: false,
   };
   for (const arg of args) {
     if (arg.startsWith("--url=")) out.url = arg.slice("--url=".length);
     else if (arg === "--list") out.list = true;
     else if (arg === "--remove") out.remove = true;
     else if (arg === "--dry-run") out.dryRun = true;
+    else if (arg === "--force") out.force = true;
     else if (arg.startsWith("--boards=")) {
       out.onlyBoards = arg.slice("--boards=".length).split(",").map((s) => s.trim()).filter(Boolean);
     } else if (arg.startsWith("--events=")) {
@@ -198,9 +209,14 @@ async function main() {
   for (const board of boards) {
     const existing = new Set((await fetchWebhooks(board.id)).map((h) => h.event));
     for (const event of args.events) {
-      if (existing.has(event)) {
+      if (existing.has(event) && !args.force) {
+        // See header caveat: Monday doesn't return callback URLs, so an
+        // existing webhook for this event MIGHT be ours (a re-run) or might
+        // belong to another integration — in which case this board silently
+        // loses coverage for that event. Name it so the gap is visible.
+        console.log(`skipped ${board.key} ← ${event} (a webhook for this event already exists)`);
         skipped++;
-        continue; // see header caveat — assumed to be ours
+        continue;
       }
       if (args.dryRun) {
         console.log(`[dry-run] would create ${board.key} ← ${event}`);
