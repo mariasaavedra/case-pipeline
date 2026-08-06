@@ -58,6 +58,7 @@ const DEFAULT_EVENTS: WebhookEventType[] = [
   "item_restored",
   "create_update", // notes
   "edit_update",
+  "delete_update", // without this, a note deleted in Monday lingers until the nightly full sweep
 ];
 
 const VALID_EVENTS = new Set<string>([

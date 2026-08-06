@@ -119,15 +119,6 @@ export function ActionButtons({ data, onViewRelations }: Props) {
         </span>
       )}
 
-      <button className="action-btn" disabled title="Coming soon">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-          <polyline points="15 3 21 3 21 9" />
-          <line x1="10" y1="14" x2="21" y2="3" />
-        </svg>
-        <span>Monday</span>
-      </button>
-
       <button onClick={onViewRelations} className="action-btn" title="View item relationships">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="18" cy="5" r="3" />

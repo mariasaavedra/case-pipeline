@@ -49,7 +49,45 @@ const RETENTION = "-30 days";
 // is the safe default: an unrecognized change type still refreshes the board.
 const DELETE_EVENTS = new Set(["item_deleted", "delete_pulse", "item_archived", "archive_pulse"]);
 const NOTE_EVENTS = new Set(["create_update", "edit_update"]);
-const IGNORED_EVENTS = new Set(["delete_update"]);
+const NOTE_DELETE_EVENTS = new Set(["delete_update"]);
+const IGNORED_EVENTS = new Set<string>();
+
+/**
+ * Pull the deleted update's id out of a delete_update payload. Monday spells
+ * this differently across API versions, and a wrong guess must not delete the
+ * wrong note — so unknown shapes return null and the event is skipped, leaving
+ * the nightly full sweep to reconcile exactly as before.
+ */
+export function deletedUpdateIdFrom(payloadJson: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payloadJson);
+  } catch {
+    return null;
+  }
+  const event = (parsed as { event?: Record<string, unknown> } | null)?.event;
+  if (!event || typeof event !== "object") return null;
+  for (const key of ["updateId", "updateFullId", "update_id", "id"]) {
+    const v = event[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  }
+  return null;
+}
+
+/** Remove one note (and any replies threaded under it). Returns rows deleted. */
+export function deleteNoteByMondayUpdateId(db: Database, updateId: string): number {
+  const tx = db.transaction(() => {
+    const replies = db
+      .prepare("DELETE FROM client_updates WHERE reply_to_update_id = ?")
+      .run(updateId).changes;
+    const own = db
+      .prepare("DELETE FROM client_updates WHERE monday_update_id = ?")
+      .run(updateId).changes;
+    return replies + own;
+  });
+  return tx();
+}
 
 export interface WebhookProcessorDeps {
   /** Resolve a Monday board id to its boards.yaml key (null = untracked). */
@@ -68,6 +106,7 @@ interface EventRow {
   monday_board_id: string | null;
   monday_item_id: string | null;
   attempts: number;
+  payload: string;
 }
 
 export interface DrainStats {
@@ -283,7 +322,7 @@ export async function processWebhookEvents(db: Database, deps: WebhookProcessorD
   const now = new Date().toISOString();
   const rows = db
     .prepare(
-      `SELECT id, event_type, monday_board_id, monday_item_id, attempts
+      `SELECT id, event_type, monday_board_id, monday_item_id, attempts, payload
          FROM webhook_events
         WHERE status = 'pending'
           AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
@@ -321,10 +360,13 @@ export async function processWebhookEvents(db: Database, deps: WebhookProcessorD
   // Partition the batch.
   const deletions: EventRow[] = [];
   const notes: EventRow[] = [];
+  const noteDeletions: EventRow[] = [];
   const refreshByBoard = new Map<string, EventRow[]>(); // board key → events
   for (const row of rows) {
     if (DELETE_EVENTS.has(row.event_type) && row.monday_item_id) {
       deletions.push(row);
+    } else if (NOTE_DELETE_EVENTS.has(row.event_type)) {
+      noteDeletions.push(row);
     } else if (NOTE_EVENTS.has(row.event_type) && row.monday_item_id) {
       notes.push(row);
     } else if (IGNORED_EVENTS.has(row.event_type)) {
@@ -348,9 +390,25 @@ export async function processWebhookEvents(db: Database, deps: WebhookProcessorD
 
   // Direct writes (deletions + notes) run under the sync advisory lock so they
   // never interleave with a full sync. If the lock is held, leave them pending.
-  if (deletions.length > 0 || notes.length > 0) {
+  if (deletions.length > 0 || notes.length > 0 || noteDeletions.length > 0) {
     if (acquireSyncLock(db, LOCK_HOLDER)) {
       try {
+        for (const row of noteDeletions) {
+          try {
+            const updateId = deletedUpdateIdFrom(row.payload);
+            if (!updateId) {
+              markSkipped.run(stamp(), "delete_update payload carried no update id — left to the nightly full sync", row.id);
+              stats.skipped++;
+              continue;
+            }
+            const removed = deleteNoteByMondayUpdateId(db, updateId);
+            markProcessed.run(stamp(), row.id);
+            stats.processed++;
+            console.log(`[webhooks] deleted note ${updateId} (${removed} row(s))`);
+          } catch (err) {
+            markFailure(row, err instanceof Error ? err.message : String(err));
+          }
+        }
         for (const row of deletions) {
           try {
             const removed = archiveItemByMondayId(db, row.monday_item_id!);

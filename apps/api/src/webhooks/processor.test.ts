@@ -13,7 +13,12 @@ vi.mock("@case-pipeline/monday", () => ({
   fetchItemUpdatesBatch: fetchItemUpdatesBatchMock,
 }));
 
-import { processWebhookEvents, archiveItemByMondayId } from "./processor";
+import {
+  processWebhookEvents,
+  archiveItemByMondayId,
+  deletedUpdateIdFrom,
+  deleteNoteByMondayUpdateId,
+} from "./processor";
 
 type DatabaseInstance = InstanceType<typeof Database>;
 
@@ -220,6 +225,40 @@ describe("archiveItemByMondayId", () => {
     expect(archived.board_key).toBe("court_cases");
 
     expect(archiveItemByMondayId(db, "does-not-exist")).toBe(false);
+    db.close();
+  });
+});
+
+describe("note deletions (delete_update)", () => {
+  it("reads the update id from the spellings Monday uses", () => {
+    expect(deletedUpdateIdFrom(JSON.stringify({ event: { updateId: 4242 } }))).toBe("4242");
+    expect(deletedUpdateIdFrom(JSON.stringify({ event: { update_id: "77" } }))).toBe("77");
+    expect(deletedUpdateIdFrom(JSON.stringify({ event: { updateFullId: 9 } }))).toBe("9");
+  });
+
+  it("returns null for shapes it does not recognise, so nothing is deleted on a guess", () => {
+    expect(deletedUpdateIdFrom("not json")).toBeNull();
+    expect(deletedUpdateIdFrom(JSON.stringify({ event: {} }))).toBeNull();
+    expect(deletedUpdateIdFrom(JSON.stringify({ event: { updateId: "  " } }))).toBeNull();
+    expect(deletedUpdateIdFrom(JSON.stringify({ nope: true }))).toBeNull();
+  });
+
+  it("removes the note and its replies, leaving other notes alone", () => {
+    const db = freshDb();
+    insertProfile(db, "100", "p1");
+    const insert = db.prepare(
+      `INSERT INTO client_updates (batch_id, local_id, monday_update_id, profile_local_id, author_name, text_body, source_type, reply_to_update_id, created_at_source)
+       VALUES (1, ?, ?, 'p1', 'Tester', ?, ?, ?, '2026-08-06T00:00:00Z')`,
+    );
+    insert.run("u1", "500", "the note", "update", null);
+    insert.run("u2", "501", "a reply", "reply", "500");
+    insert.run("u3", "600", "an unrelated note", "update", null);
+
+    expect(deleteNoteByMondayUpdateId(db, "500")).toBe(2);
+    const left = db.prepare("SELECT monday_update_id FROM client_updates").all() as { monday_update_id: string }[];
+    expect(left.map((r) => r.monday_update_id)).toEqual(["600"]);
+
+    expect(deleteNoteByMondayUpdateId(db, "does-not-exist")).toBe(0);
     db.close();
   });
 });
