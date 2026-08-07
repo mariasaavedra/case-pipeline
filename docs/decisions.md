@@ -365,3 +365,35 @@ Docker is reasonable and recommended **specifically for reproducible deployment 
 **Why now-ish, not urgent**: if usage is still local-only, Docker can wait. The moment attorneys/staff start using the dashboard from a shared deployment, containerize first to get a consistent runtime independent of any one machine.
 
 **Explicit non-goal**: Docker here is about deployment packaging only. It does **not** pull Redis in with it — the two decisions are independent, and Decision 1 stands regardless of whether Docker is adopted.
+
+---
+
+## 2026-08-07 — Write-Back Token Policy: Personal First, Shared as a Net
+
+**Context**: Every Monday.com write (notes, status, any column, contract creation) prefers the acting staff member's personal OAuth token so the change is attributed to them in Monday. A personal token carries only the scopes it was **issued** with, and Monday never widens an existing token — the user must re-consent. `boards:write` joined the consent screen on 2026-08-04 (`4652709`); a brief window on 2026-06-30 (`1b42bf8`) issued `me:read` only. Every connection made before those dates was therefore under-scoped for the writes the app had since grown.
+
+The failure mode was worse than a plain error. The endpoint applied the change to `live.db` optimistically and returned `202 pending`, so the UI showed success; the write queue then retried the *same* refused token five times and dead-lettered it; the next sync pulled Monday's unchanged value back over the local one. Sync Health reported a count of stuck writes with no reason attached.
+
+### Decision 1 — Fall back to the shared service token on a permission refusal
+
+`apps/api/src/write-auth.ts` wraps every write: personal token first, and **only** on a permission refusal (HTTP 401/403, or a scope error Monday returns as a GraphQL error inside an HTTP 200) retry once with `MONDAY_API_TOKEN`.
+
+**The tradeoff is explicit**: a stale connection loses *attribution* in Monday rather than losing the *edit*. Attribution is recoverable (reconnect); a silently dropped edit is not.
+
+**The fallback is deliberately narrow.** A rate limit, timeout, or 5xx still throws, so the existing queue-and-retry path handles outages unchanged. Falling back there would burn the shared token against the same outage for no gain, and would convert a recoverable transient failure into two failed calls.
+
+Applied at both layers — the request handlers *and* the queue drainer. The drainer was the more damaging omission: it was the component whose entire purpose is "retry until it works", retrying under a token that could never work.
+
+### Decision 2 — Surface a refused connection to the user who owns it
+
+`users.db` v10 adds `monday_token_rejected_at` / `monday_token_error`, set on refusal and cleared by the next successful OAuth callback. `/api/auth/monday/status` exposes `needsReconnect`; Settings renders the connect button as a call to action rather than a quiet grey "Reconnect".
+
+**Why a flag and not a forced re-auth**: the write is already succeeding via Decision 1. Interrupting someone mid-task to fix an attribution problem would trade a small, invisible cost for a large, visible one. The nudge is correct; a block is not.
+
+### Decision 3 — Dead-lettered writes are not replayed after the fix
+
+Writes that dead-lettered during the broken window are **discarded, not retried**. They were never applied in Monday, and replaying them now would overwrite whatever has been set there since — a stale write beating a fresh human decision. The admin "clear" action drops them; the original attempts remain in the audit log. Affected changes must be redone by hand.
+
+### Consequence for future scope additions
+
+Adding a scope to the consent screen is a **breaking change for every existing connection**, silently. Any future scope addition must ship together with the rejection flag being surfaced, or it will reproduce this exact failure. `buildOAuthUrl` in `apps/api/src/routes/monday-oauth.ts` carries a comment to that effect.

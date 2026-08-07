@@ -86,6 +86,7 @@ tsx/Node loads `.env` automatically via `--env-file` flag in the sync command. F
 - **Seed-first development:** `npm run seed` generates realistic local data via Faker.js so the full app can run without Monday.com API calls.
 - **Template-driven documents:** Handlebars templates in `templates/` are logic-light; all data preparation happens in `libs/template` before rendering.
 - **Batch query pattern:** Multi-profile queries (e.g. appointments) use batch preload via `IN (...)` + `GROUP BY`, not per-row sub-queries. See `libs/query/src/appointments.ts`.
+- **Write-back token policy:** Writes go out under the acting user's personal Monday OAuth token (for attribution), falling back to the shared `MONDAY_API_TOKEN` **only** when Monday refuses theirs on permission grounds — a rate limit or outage still throws so the write queue retries it. See `apps/api/src/write-auth.ts`. Adding a scope to `buildOAuthUrl` silently breaks every existing connection (Monday never widens an issued token), so a scope change must ship with the reconnect prompt. See `docs/decisions.md`, 2026-08-07.
 
 ## Query Layer (`libs/query`)
 
@@ -103,12 +104,16 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 
 | Module | Responsibility |
 |---|---|
+| `active-cases.ts` | Swim-lane board data (paralegal rows × urgency columns) |
 | `alerts.ts` | Overdue deadlines, stale cases, idle contracts |
+| `board-columns.ts` | Per-board column schema for the in-place field editors |
 | `board-items.ts` | Per-profile board item queries + `batchGetClientBoardItems` |
 | `case-summary.ts` | Full 360° client summary + `batchGetClientCaseSummaries` |
 | `contracts.ts` | Contract queries + `batchGetClientContracts` |
 | `dashboard.ts` | KPI card queries (6 cards, 7-day windows) |
 | `search.ts` | Cross-type search (contracts, court cases, etc.) |
+| `status-options.ts` | Each board's real status labels + colors (write-back validates against these) |
+| `sync-health.ts` | Sync-run ledger, per-board coverage, write-queue depth + failures, archived rows |
 | `updates.ts` | Client update queries + `batchGetClientUpdates` |
 
 ## CLI Commands (`apps/cli`)

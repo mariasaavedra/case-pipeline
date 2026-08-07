@@ -1,6 +1,24 @@
 # Next Steps — What to Pick Up
 
-## Current State (after Active Cases Board + schema v8, 2026-05-26)
+## Current State (schema v22, 2026-08-07)
+
+**539 tests passing.** The app runs on real Monday.com data in production, deployed via GHCR images (`.github/workflows/build-push.yml`) with a Docker Compose pull on the server.
+
+Shipped since this document was last rewritten (2026-05-26), newest first — see `docs/nightly/` for the day-by-day account:
+
+- **Write-back token fallback + reconnect prompt** (2026-08-07) — a personal Monday token refused on permission grounds falls back to the shared token instead of silently dropping the edit. `docs/decisions.md`, 2026-08-07.
+- **Near-real-time mirror via Monday webhooks** (2026-08-06) — `POST /api/webhooks/monday/:token` + a background processor; changes land in ~1 minute instead of up to 2 hours. Scheduled syncs remain as the safety net. `docs/webhooks.md`.
+- **Lossless reconciliation + Sync Health** (2026-08-05) — archive-before-delete, coverage guard, sync ledger, admin visibility into per-board coverage and the write queue.
+- **In-place field editing + contract creation** (2026-08-04) — expand any Active Cases item to edit its columns; create a Fee K from a client's page.
+- **Status write-back** (2026-07-30) — statuses editable from the dashboard, validated against each board's real labels.
+- **Azure AD SSO + the user layer** (July) — preferences, watchlist, saved views, My Cases, admin user management, audit log; per-user Monday OAuth.
+- **Data-layer hardening** (2026-06-30) — hardened SQLite, the `write_queue` outbox, encrypted backups + retention, Docker deployment.
+- **Live data sync** — `DB_SOURCE=seed|live`, `npm run sync:live`, full + incremental modes.
+
+The feature inventory below predates all of that and describes the read-only app as it stood in May. It is still broadly accurate about *those* screens, and is kept for that reason — but treat anything it says about what is missing as superseded.
+
+<details>
+<summary>Feature inventory as of 2026-05-26 (historical)</summary>
 
 Phases 1 through 6d are complete and production-quality bugs have been resolved. The app has:
 - Client-side routing with sidebar nav (`apps/web/src/router.ts`)
@@ -32,6 +50,10 @@ Database at **v8** (`libs/seed/src/db/schema.ts`). Key changes from v7:
 - `board_items.next_date` backfill extended to cover `$.target_date.date` for open forms (was missing from v3 migration)
 - Index: `idx_board_items_paralegals ON board_items(board_key, paralegals)`
 
+</details>
+
+The mirror schema is now at **v22** and `users.db` at **v10**; both apply ordered, idempotent migrations on API startup, taking a snapshot first (`libs/seed/src/db/schema.ts`, `apps/api/src/db/users-db.ts`).
+
 ---
 
 ## Phase 6d — Appointment Focus Modal ✅ DONE
@@ -50,7 +72,9 @@ Database at **v8** (`libs/seed/src/db/schema.ts`). Key changes from v7:
 
 ---
 
-## Phase — Live Data Mode (Dual Database)
+## Phase — Live Data Mode (Dual Database) ✅ DONE
+
+Shipped as designed below. `DB_SOURCE=seed|live` switches the database, `npm run sync:live` runs the sync (full and incremental), `data/live.db` is gitignored, and both vars are documented in `.env.example`. The sync has since grown a run ledger, archive-before-delete reconciliation, and a coverage guard — see `libs/query/src/sync-health.ts` and the 2026-08-05 nightly.
 
 ### Goal
 Use real Monday.com data for testing alongside the existing fake seeder data, without exposing sensitive client information in the repository.
@@ -135,9 +159,20 @@ This is the feature that turns the dashboard from a "data viewer" into a "case m
 
 ---
 
-## Deferred — Monday.com Write-Back
+## Monday.com Write-Back ✅ LIVE (partial)
 
-The appointments page is the first feature that will need editing (update status, add notes, reschedule). `TODO(monday-write)` markers are placed in the query layer and component. See `docs/decisions.md` for the planned write-back architecture.
+No longer deferred. Shipped and in daily use:
+
+- **Notes** — `POST /api/profiles/:id/updates`
+- **Status** — `PATCH /api/board-items/:id/status`, validated against the board's real labels
+- **Any simple column** — `PATCH /api/board-items/:id/columns` (status, dropdown, date, numbers, text)
+- **Create a contract** — `POST /api/profiles/:id/contracts`
+
+All four share the same rails: personal Monday token with a shared-token fallback (`apps/api/src/write-auth.ts`), the durable `write_queue` outbox for outages, an optimistic local write, and an audit-log entry.
+
+**Still TODO**: `reschedule` (a date-column op is stubbed in `apps/api/src/write-queue/processor.ts`), and complex column types (people, board relations, files) which the generic column endpoint deliberately rejects.
+
+See `docs/decisions.md` — 2026-03-03 for the original design, 2026-08-07 for the token policy.
 
 ---
 

@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-07",
+    title: "Notes and status changes reach Monday again",
+    items: [
+      "If you connected your Monday account before August 4th, your status changes were not actually reaching Monday — the dashboard showed them as saved and then quietly put them back a while later. Notes were affected for anyone who connected on June 30th. This is fixed: the change now goes through either way.",
+      "When your Monday connection is out of date, the change is saved under the firm's shared account instead of your name, and Settings turns amber asking you to reconnect. Reconnecting takes one click and restores your name on future changes.",
+      "Changes that were lost over the past days were not recovered — they have to be redone. Anything you change from now on lands.",
+      "Admins: Sync Health now shows why a write-back failed, not just how many did.",
+    ],
+  },
+  {
     date: "2026-08-06",
     title: "Monday changes now show up in about a minute",
     items: [
