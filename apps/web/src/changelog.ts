@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-08-07",
+    title: "New filters on a client's timeline",
+    items: [
+      "The seven filter buttons above a client's timeline are now two: All and Notes. Notes means everything that isn't an email — including notes written on a document or against an appointment, which the old Notes button was hiding.",
+      "The \"Last 30 days\" toggle became a proper period: All time, 30 days, 90 days, 12 months, plus a date range for a specific stretch like a past month.",
+      "On clients with a lot of email, picking an older period used to come back empty even when entries existed. It now looks at the whole history, not just the most recent page.",
+      "More filters will be added over time — this is the foundation, not the finished set.",
+    ],
+  },
+  {
+    date: "2026-08-07",
     title: "Notes and status changes reach Monday again",
     items: [
       "If you connected your Monday account before August 4th, your status changes were not actually reaching Monday — the dashboard showed them as saved and then quietly put them back a while later. Notes were affected for anyone who connected on June 30th. This is fixed: the change now goes through either way.",
