@@ -120,27 +120,17 @@ function Attachments({ items }: { items: ClientUpdateAttachment[] }) {
   );
 }
 
+/**
+ * Mirrors `categoryFilter` in libs/query/src/updates.ts. The server already
+ * applies this, so it only bites on entries the server never saw — locally
+ * posted notes still queued for Monday, which ClientView prepends to the feed.
+ */
 function matchesFilter(u: ClientUpdate, filter: TimelineFilter): boolean {
   switch (filter) {
     case "all":
       return true;
-    case "emails":
-      return u.sourceType === "email";
-    case "activities":
-      return EA_ACTIVITY_TYPES.has(u.sourceType);
     case "notes":
-      // Genuine notes/comments: Monday updates+replies and E&A notes, excluding
-      // emails, activities, and document/appointment board content.
-      return (
-        (u.sourceType === "update" || u.sourceType === "reply" || u.sourceType === "note") &&
-        (!u.boardKey || (!DOCUMENT_BOARD_KEYS.has(u.boardKey) && !APPOINTMENT_BOARD_KEYS.has(u.boardKey)))
-      );
-    case "documents":
-      return !!u.boardKey && DOCUMENT_BOARD_KEYS.has(u.boardKey);
-    case "notices":
-      return !!u.boardKey && NOTICE_KEYS.has(u.boardKey);
-    case "appointments":
-      return !!u.boardKey && APPOINTMENT_BOARD_KEYS.has(u.boardKey);
+      return u.sourceType !== "email";
   }
 }
 
@@ -195,7 +185,11 @@ export function UpdatesTimeline({ updates, filter = "all", last30Days = false, l
     return (
       <div className="py-10 text-center">
         <p className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-          {loading ? "Loading…" : filter === "all" ? "No updates yet." : `No ${filter} found.`}
+          {loading
+            ? "Loading…"
+            : filter === "all"
+              ? "No updates in this period."
+              : "No notes in this period."}
         </p>
       </div>
     );

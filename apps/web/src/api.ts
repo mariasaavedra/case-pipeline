@@ -142,11 +142,15 @@ export async function getClient(localId: string): Promise<ClientCaseSummary> {
 
 export async function fetchClientUpdates(
   localId: string,
-  opts: { limit?: number; offset?: number; category?: string } = {},
+  opts: { limit?: number; offset?: number; category?: string; from?: string; to?: string } = {},
 ): Promise<ClientUpdate[]> {
-  const { limit = 50, offset = 0, category } = opts;
+  const { limit = 50, offset = 0, category, from, to } = opts;
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (category && category !== "all") params.set("category", category);
+  // Date bounds are applied server-side — `limit` caps the newest rows, so an
+  // older range filtered in the browser would come back empty on a busy client.
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
   return apiFetch<ClientUpdate[]>(
     `/api/clients/${encodeURIComponent(localId)}/updates?${params.toString()}`,
   );

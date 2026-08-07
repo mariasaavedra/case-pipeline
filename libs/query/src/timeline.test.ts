@@ -116,27 +116,97 @@ describe("timeline category filter", () => {
   const ids = (category: Parameters<typeof getClientUpdates>[5]) =>
     getClientUpdates(db, "p1", 500, 0, undefined, category).map((r) => r.localId).sort();
 
-  test("emails category returns only emails", () => {
-    expect(ids("emails")).toEqual(["em"]);
+  test("notes is everything that is not an email", () => {
+    expect(ids("notes")).toEqual(["ac", "appt", "doc", "notice", "nt", "up"]);
   });
-  test("activities category returns activity/custom", () => {
-    expect(ids("activities")).toEqual(["ac"]);
+
+  test("notes INCLUDES document, notice and appointment board entries", () => {
+    // The regression this replaces: the old allow-list rule matched only
+    // update/reply/note off those boards, so a chip labelled "Notes" hid the
+    // notes attached to a document or an appointment.
+    const notes = ids("notes");
+    expect(notes).toContain("doc");
+    expect(notes).toContain("notice");
+    expect(notes).toContain("appt");
   });
-  test("notes excludes document/appointment board entries", () => {
-    // up (update), nt (note) qualify; doc/notice/appt live on excluded boards.
-    expect(ids("notes")).toEqual(["nt", "up"]);
+
+  test("notes keeps E&A activities, which are not emails either", () => {
+    expect(ids("notes")).toContain("ac");
   });
-  test("documents category matches document board keys", () => {
-    expect(ids("documents")).toEqual(["doc", "notice"]); // both are document board keys
-  });
-  test("notices category matches notice board keys", () => {
-    expect(ids("notices")).toEqual(["notice"]);
-  });
-  test("appointments category matches appointment board keys", () => {
-    expect(ids("appointments")).toEqual(["appt"]);
-  });
-  test("all category returns everything", () => {
+
+  test("all returns everything", () => {
     expect(ids("all")).toHaveLength(7);
+  });
+
+  test("an absent category returns everything", () => {
+    expect(ids(undefined)).toHaveLength(7);
+  });
+});
+
+describe("timeline date range", () => {
+  // Applied in SQL rather than in the browser: `limit` caps the NEWEST rows, so
+  // a client-side date filter returns nothing for an older range once a busy
+  // profile exceeds the page.
+  let db: DatabaseInstance;
+  const ins = (localId: string, createdAt: string, sourceType = "update") =>
+    db
+      .prepare(
+        `INSERT INTO client_updates
+           (batch_id, local_id, profile_local_id, author_name, text_body, source_type, created_at_source, sync_status)
+         VALUES (?, ?, 'p1', 'A', 'body', ?, ?, 'synced')`
+      )
+      .run(batchId(db), localId, sourceType, createdAt);
+
+  beforeEach(() => {
+    db = freshDb();
+    ins("jan01", "2026-01-01T10:00:00Z");
+    ins("mar01", "2026-03-01T00:30:00Z"); // first minutes of the day
+    ins("mar15", "2026-03-15T12:00:00Z");
+    ins("mar31", "2026-03-31T23:45:00Z"); // last minutes of the day
+    ins("apr01", "2026-04-01T08:00:00Z");
+    ins("mar20mail", "2026-03-20T09:00:00Z", "email");
+  });
+
+  const ids = (
+    range: Parameters<typeof getClientUpdates>[6],
+    category?: Parameters<typeof getClientUpdates>[5],
+  ) => getClientUpdates(db, "p1", 500, 0, undefined, category, range).map((r) => r.localId).sort();
+
+  test("from is inclusive of the whole starting day", () => {
+    // mar01 is at 00:30, so the lower bound has to catch entries made just
+    // after midnight on the start date.
+    expect(ids({ from: "2026-03-01" })).toEqual(["apr01", "mar01", "mar15", "mar20mail", "mar31"]);
+  });
+
+  test("to is inclusive of the whole ending day", () => {
+    // mar31 is at 23:45 — the bound is exclusive against Apr 1, not against
+    // midnight on Mar 31, which would have dropped nearly the entire last day.
+    expect(ids({ to: "2026-03-31" })).toEqual(["jan01", "mar01", "mar15", "mar20mail", "mar31"]);
+  });
+
+  test("from and to together bound both ends", () => {
+    expect(ids({ from: "2026-03-01", to: "2026-03-31" })).toEqual(["mar01", "mar15", "mar20mail", "mar31"]);
+  });
+
+  test("a single-day range returns just that day", () => {
+    expect(ids({ from: "2026-03-15", to: "2026-03-15" })).toEqual(["mar15"]);
+  });
+
+  test("the range composes with the category filter", () => {
+    expect(ids({ from: "2026-03-01", to: "2026-03-31" }, "notes")).toEqual(["mar01", "mar15", "mar31"]);
+  });
+
+  test("an empty range is no filter at all", () => {
+    expect(ids({})).toHaveLength(6);
+    expect(ids(undefined)).toHaveLength(6);
+  });
+
+  test("a range that matches nothing returns empty, not everything", () => {
+    expect(ids({ from: "2027-01-01" })).toEqual([]);
+  });
+
+  test("crossing a month boundary handles the next-day rollover", () => {
+    expect(ids({ from: "2026-03-31", to: "2026-04-01" })).toEqual(["apr01", "mar31"]);
   });
 });
 

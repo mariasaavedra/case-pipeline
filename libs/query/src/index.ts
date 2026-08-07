@@ -39,6 +39,7 @@ export type {
   BoardColumn,
   TimelineSourceType,
   TimelineCategory,
+  TimelineDateRange,
   SearchResult,
   KpiCard,
   KpiItem,

@@ -140,22 +140,32 @@ export function handleClientUpdates(req: Request, db: Database): Response {
         .filter((t) => VALID_TYPES.has(t)) as TimelineSourceType[])
     : undefined;
 
-  // Optional ?category=activities — the timeline chip filter, applied server-side
-  // (source_type + board_key rule) so a filtered view is complete, not just the
-  // newest page filtered down. Takes precedence over ?types when both are present.
-  const VALID_CATEGORIES = new Set([
-    "all", "notes", "emails", "activities", "documents", "notices", "appointments",
-  ]);
+  // Optional ?category=notes — the timeline chip filter, applied server-side so
+  // a filtered view is complete, not just the newest page filtered down. Takes
+  // precedence over ?types when both are present.
+  const VALID_CATEGORIES = new Set(["all", "notes"]);
   const categoryParam = url.searchParams.get("category");
   const category =
     categoryParam && VALID_CATEGORIES.has(categoryParam)
       ? (categoryParam as TimelineCategory)
       : undefined;
 
+  // Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD — inclusive calendar-day bounds.
+  // Anything not in that exact shape is ignored rather than rejected: a bad
+  // date should widen the view, never 400 a client's whole timeline.
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const dateParam = (name: string): string | undefined => {
+    const v = url.searchParams.get(name);
+    return v && DATE_RE.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) ? v : undefined;
+  };
+  const from = dateParam("from");
+  const to = dateParam("to");
+
   const updates = getClientUpdates(
     db, localId, limit, offset,
     types && types.length ? types : undefined,
     category,
+    from || to ? { from, to } : undefined,
   );
   return json(updates);
 }

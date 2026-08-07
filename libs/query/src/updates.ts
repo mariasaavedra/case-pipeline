@@ -4,8 +4,13 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
-import type { ClientUpdate, ClientUpdateAttachment, TimelineSourceType, TimelineCategory } from "./types";
-import { APPOINTMENT_BOARD_KEYS, DOCUMENT_BOARD_KEYS, NOTICE_BOARD_KEYS } from "./types";
+import type {
+  ClientUpdate,
+  ClientUpdateAttachment,
+  TimelineSourceType,
+  TimelineCategory,
+  TimelineDateRange,
+} from "./types";
 
 interface UpdateRow {
   local_id: string;
@@ -68,50 +73,59 @@ function typeFilter(types?: TimelineSourceType[]): { clause: string; params: str
   return { clause: ` AND source_type IN (${placeholders})`, params: types };
 }
 
-function inClause(column: string, values: Set<string>): { clause: string; params: string[] } {
-  const params = [...values];
-  const placeholders = params.map(() => "?").join(",");
-  return { clause: `${column} IN (${placeholders})`, params };
-}
-
 /**
  * Build a WHERE fragment for a timeline category. This mirrors the web's
  * `matchesFilter` (UpdatesTimeline.tsx) in SQL so a filtered view returns the
  * complete set for that category, not just whatever survives filtering the
- * newest page. Categories combine source_type and board_key rules.
+ * newest page.
+ *
+ * `notes` is "not an email" — deliberately defined by exclusion, so a new
+ * source type appearing in the mirror shows up under Notes by default instead
+ * of vanishing from every view until someone adds it to an allow-list.
+ * `source_type` is NOT NULL in the schema, so a plain `<>` is safe here.
  */
 function categoryFilter(category?: TimelineCategory): { clause: string; params: string[] } {
   switch (category) {
     case undefined:
     case "all":
       return { clause: "", params: [] };
-    case "emails":
-      return { clause: " AND source_type = 'email'", params: [] };
-    case "activities":
-      return { clause: " AND source_type IN ('activity','custom')", params: [] };
-    case "notes": {
-      // Genuine notes/comments: Monday updates+replies and E&A notes, excluding
-      // entries that belong to document/appointment boards.
-      const excluded = new Set([...DOCUMENT_BOARD_KEYS, ...APPOINTMENT_BOARD_KEYS]);
-      const ex = inClause("board_key", excluded);
-      return {
-        clause: ` AND source_type IN ('update','reply','note') AND (board_key IS NULL OR board_key NOT IN (${ex.params.map(() => "?").join(",")}))`,
-        params: ex.params,
-      };
-    }
-    case "documents": {
-      const f = inClause("board_key", DOCUMENT_BOARD_KEYS);
-      return { clause: ` AND ${f.clause}`, params: f.params };
-    }
-    case "notices": {
-      const f = inClause("board_key", NOTICE_BOARD_KEYS);
-      return { clause: ` AND ${f.clause}`, params: f.params };
-    }
-    case "appointments": {
-      const f = inClause("board_key", APPOINTMENT_BOARD_KEYS);
-      return { clause: ` AND ${f.clause}`, params: f.params };
-    }
+    case "notes":
+      return { clause: " AND source_type <> 'email'", params: [] };
   }
+}
+
+/** The day after `yyyyMmDd`, so an inclusive `to` can be compared exclusively. */
+function nextDay(yyyyMmDd: string): string {
+  const d = new Date(`${yyyyMmDd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Bound the query to a calendar-day range. `created_at_source` holds an ISO
+ * timestamp, so a lexicographic compare against `YYYY-MM-DD` works and keeps
+ * `idx_updates_created` usable: `'2026-03-01' <= '2026-03-01T09:12:00Z'` is
+ * true because the date is a prefix, and the upper bound is exclusive against
+ * the following day.
+ *
+ * The comparison is therefore in UTC, matching how the timestamps are stored.
+ * An entry made late at night can land on the neighbouring day relative to the
+ * date shown in the UI — the same approximation the previous "Last 30 days"
+ * toggle made, and not worth a timezone column to fix.
+ */
+function dateRangeFilter(range?: TimelineDateRange): { clause: string; params: string[] } {
+  if (!range?.from && !range?.to) return { clause: "", params: [] };
+  const parts: string[] = [];
+  const params: string[] = [];
+  if (range.from) {
+    parts.push(" AND created_at_source >= ?");
+    params.push(range.from);
+  }
+  if (range.to) {
+    parts.push(" AND created_at_source < ?");
+    params.push(nextDay(range.to));
+  }
+  return { clause: parts.join(""), params };
 }
 
 /**
@@ -163,22 +177,27 @@ export function getClientUpdates(
   limit = 50,
   offset = 0,
   types?: TimelineSourceType[],
-  category?: TimelineCategory
+  category?: TimelineCategory,
+  range?: TimelineDateRange
 ): ClientUpdate[] {
   // A category (from the timeline chips) takes precedence over a raw type list:
   // it filters by the exact same rule the web uses, computed server-side so a
   // filtered view is complete rather than "the newest page, then filtered".
   const filter =
     category && category !== "all" ? categoryFilter(category) : typeFilter(types);
+  // The date bound is applied server-side for the same reason: `limit` caps the
+  // NEWEST rows, so filtering a date range client-side would silently return
+  // nothing for an older range on a busy profile.
+  const dates = dateRangeFilter(range);
   const rows = db
     .prepare(
       `SELECT ${SELECT_COLUMNS}
        FROM client_updates
-       WHERE profile_local_id = ?${filter.clause}
+       WHERE profile_local_id = ?${filter.clause}${dates.clause}
        ORDER BY created_at_source DESC
        LIMIT ? OFFSET ?`
     )
-    .all(profileLocalId, ...filter.params, limit, offset) as UpdateRow[];
+    .all(profileLocalId, ...filter.params, ...dates.params, limit, offset) as UpdateRow[];
 
   return rows.map(mapRow);
 }

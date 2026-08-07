@@ -325,14 +325,19 @@ export const NOTICE_BOARD_KEYS = new Set([
 
 // Timeline filter categories, mirrored between the web chips and the server
 // query so a filtered view is complete (not just the newest page filtered).
-export type TimelineCategory =
-  | "all"
-  | "notes"
-  | "emails"
-  | "activities"
-  | "documents"
-  | "notices"
-  | "appointments";
+//
+// Rebuilt 2026-08-07 down to two, replacing seven board/source-specific chips.
+// `notes` is now defined by exclusion — everything that is NOT an email —
+// rather than by an allow-list of source types and boards. The old `notes`
+// silently dropped document and appointment board entries, so a chip labelled
+// "Notes" hid notes. Excluding one thing is a rule people can predict.
+export type TimelineCategory = "all" | "notes";
+
+/** Inclusive calendar-day bounds for a timeline query, as `YYYY-MM-DD`. */
+export interface TimelineDateRange {
+  from?: string;
+  to?: string;
+}
 
 // Contract statuses considered "paid" (needs action)
 export const PAID_CONTRACT_STATUSES = new Set([

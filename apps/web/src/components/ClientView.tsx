@@ -12,7 +12,13 @@ import { ContractsTab } from "./ContractsTab";
 import { ActiveCasesTab } from "./ActiveCasesTab";
 import { CourtCasesTab } from "./CourtCasesTab";
 import { DocumentsTab } from "./DocumentsTab";
-import { TimelineFilters, type TimelineFilter } from "./TimelineFilters";
+import {
+  TimelineFilters,
+  resolveRange,
+  type TimelineFilter,
+  type TimelinePeriod,
+  type DateRange,
+} from "./TimelineFilters";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { RelationsView } from "./RelationsView";
 import { DebugTab } from "./DebugTab";
@@ -27,7 +33,8 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
   const isAdmin = useAuth().user?.role === "admin";
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
-  const [last30Days, setLast30Days] = useState(false);
+  const [timelinePeriod, setTimelinePeriod] = useState<TimelinePeriod>("all");
+  const [timelineRange, setTimelineRange] = useState<DateRange>({});
   const [pendingUpdates, setPendingUpdates] = useState<ClientUpdate[]>([]);
 
   // Timeline feed. The 360 summary seeds the newest page for an instant paint;
@@ -45,10 +52,20 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
   // Fetch the full timeline for the active category (complete per category, not
   // just the newest page filtered). Max updates for any one profile is well
   // under this cap, so this returns everything for that category.
+  // The date bound goes to the server too: `limit` caps the NEWEST rows, so
+  // filtering a period in the browser would come back empty for an older range
+  // on a client with a busy inbox.
+  const { from: rangeFrom, to: rangeTo } = resolveRange(timelinePeriod, timelineRange);
+
   useEffect(() => {
     let cancelled = false;
     setTimelineLoading(true);
-    fetchClientUpdates(data.profile.localId, { category: timelineFilter, limit: 500 })
+    fetchClientUpdates(data.profile.localId, {
+      category: timelineFilter,
+      from: rangeFrom,
+      to: rangeTo,
+      limit: 500,
+    })
       .then((rows) => {
         if (!cancelled) setTimelineFeed(rows);
       })
@@ -61,13 +78,14 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [data.profile.localId, timelineFilter]);
+  }, [data.profile.localId, timelineFilter, rangeFrom, rangeTo]);
 
-  // Locally-posted notes belong to the "all" and "notes" views.
-  const timelineUpdates = useMemo(() => {
-    const showPending = timelineFilter === "all" || timelineFilter === "notes";
-    return showPending ? [...pendingUpdates, ...timelineFeed] : timelineFeed;
-  }, [pendingUpdates, timelineFeed, timelineFilter]);
+  // A note posted from here is never an email, so it belongs to both views —
+  // and it is shown regardless of the period, because it was just written.
+  const timelineUpdates = useMemo(
+    () => [...pendingUpdates, ...timelineFeed],
+    [pendingUpdates, timelineFeed],
+  );
 
   const handleTabChange = (tab: TabId) => {
     setActiveTab(tab);
@@ -151,14 +169,17 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
               <TimelineFilters
                 activeFilter={timelineFilter}
                 onFilterChange={setTimelineFilter}
-                last30Days={last30Days}
-                onToggle30Days={() => setLast30Days(!last30Days)}
+                period={timelinePeriod}
+                customRange={timelineRange}
+                onPeriodChange={(p, custom) => {
+                  setTimelinePeriod(p);
+                  setTimelineRange(custom);
+                }}
               />
 
               <UpdatesTimeline
                 updates={timelineUpdates}
                 filter={timelineFilter}
-                last30Days={last30Days}
                 loading={timelineLoading}
               />
             </div>
