@@ -20,7 +20,17 @@ export interface AuditEntry {
   actor: AuditActor;
   action: string;
   targetType?: string | null;
+  /**
+   * The local row id. Convenient for debugging a live session, but NOT an
+   * identity: profiles/board_items local_ids are per-sync surrogates that a
+   * full sweep regenerates, so this dangles the next morning.
+   */
   targetId?: string | null;
+  /**
+   * The stable Monday.com item id. This is what makes an entry still mean
+   * something a month later — always pass it when the target has one.
+   */
+  targetMondayId?: string | null;
   metadata?: unknown;
 }
 
@@ -34,8 +44,9 @@ export function actorFromReq(req: Request): AuditActor {
 }
 
 const insertAudit = usersDb.prepare(`
-  INSERT INTO audit_log (actor_user_id, actor_email, action, target_type, target_id, metadata_json)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT INTO audit_log
+    (actor_user_id, actor_email, action, target_type, target_id, target_monday_id, metadata_json)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
 
 export function recordAudit(entry: AuditEntry): void {
@@ -46,6 +57,7 @@ export function recordAudit(entry: AuditEntry): void {
       entry.action,
       entry.targetType ?? null,
       entry.targetId ?? null,
+      entry.targetMondayId ?? null,
       entry.metadata != null ? JSON.stringify(entry.metadata) : null,
     );
   } catch (err) {
@@ -57,7 +69,12 @@ export function recordAudit(entry: AuditEntry): void {
 export function auditFromReq(
   req: Request,
   action: string,
-  opts: { targetType?: string | null; targetId?: string | null; metadata?: unknown } = {},
+  opts: {
+    targetType?: string | null;
+    targetId?: string | null;
+    targetMondayId?: string | null;
+    metadata?: unknown;
+  } = {},
 ): void {
   recordAudit({ actor: actorFromReq(req), action, ...opts });
 }

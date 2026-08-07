@@ -509,9 +509,23 @@ export interface AuditEntry {
   actorEmail: string | null;
   action: string;
   targetType: string | null;
+  /** Local row id — a per-sync surrogate; do not use it to resolve anything. */
   targetId: string | null;
+  /** Stable Monday item id — what still resolves months later. */
+  targetMondayId: string | null;
   metadata: unknown;
   createdAt: string;
+}
+
+export interface AuditFilters {
+  /** users.db user id. */
+  actor?: number;
+  /** Exact action, or a prefix like "monday" for the whole family. */
+  action?: string;
+  /** Stable Monday item id — the case-scoped history. */
+  target?: string;
+  from?: string; // YYYY-MM-DD
+  to?: string;   // YYYY-MM-DD, inclusive
 }
 
 // ---- Preferences ----
@@ -599,6 +613,16 @@ export function updateAdminUser(
     body: JSON.stringify(patch),
   });
 }
-export function fetchAuditLog(limit = 100, offset = 0): Promise<AuditEntry[]> {
-  return apiFetch<AuditEntry[]>(`/api/admin/audit?limit=${limit}&offset=${offset}`);
+export function fetchAuditLog(
+  limit = 100,
+  offset = 0,
+  filters: AuditFilters = {},
+): Promise<AuditEntry[]> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (filters.actor != null) params.set("actor", String(filters.actor));
+  if (filters.action) params.set("action", filters.action);
+  if (filters.target) params.set("target", filters.target);
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  return apiFetch<AuditEntry[]>(`/api/admin/audit?${params.toString()}`);
 }

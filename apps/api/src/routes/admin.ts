@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { usersDb, type UserRow } from "../db/users-db.js";
 import { toPublicUser, type AuditLogRow } from "../db/users-types.js";
 import { auditFromReq } from "../audit/log.js";
+import { buildAuditQuery, type AuditFilter } from "./audit-query.js";
 
 // Role gating happens in the requireAdmin middleware (server.ts) — handlers
 // here can assume an admin caller.
@@ -120,12 +121,29 @@ export function handleAdminUpdateUser(req: Request, res: Response): void {
 // =============================================================================
 // GET /api/admin/audit — paginated audit trail
 // =============================================================================
+/**
+ * Audit trail, newest first.
+ *
+ * Filters: ?actor= (user id), ?action=, ?target= (Monday item id), ?from= /
+ * ?to= (YYYY-MM-DD, inclusive). Each maps onto an index added in users.db v11 —
+ * without them, answering "what did this person do yesterday" or "everything
+ * that ever happened to this case" meant pulling the newest 500 rows and
+ * filtering by hand, which silently lies as soon as the log outgrows the page.
+ */
 export function handleAdminAudit(req: Request, res: Response): void {
   const limit = Math.min(Math.max(Number(req.query.limit ?? 100) || 100, 1), 500);
   const offset = Math.max(Number(req.query.offset ?? 0) || 0, 0);
+
+  const { clause, params } = buildAuditQuery(req.query as AuditFilter);
   const rows = usersDb
-    .prepare("SELECT * FROM audit_log ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?")
-    .all(limit, offset) as AuditLogRow[];
+    .prepare(
+      `SELECT * FROM audit_log${clause} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+    )
+    .all(...params, limit, offset) as AuditLogRow[];
+  const total = (
+    usersDb.prepare(`SELECT COUNT(*) AS n FROM audit_log${clause}`).get(...params) as { n: number }
+  ).n;
+
   res.json({
     data: rows.map((r) => ({
       id: r.id,
@@ -134,9 +152,11 @@ export function handleAdminAudit(req: Request, res: Response): void {
       action: r.action,
       targetType: r.target_type,
       targetId: r.target_id,
+      targetMondayId: r.target_monday_id,
       metadata: r.metadata_json ? safeParse(r.metadata_json) : null,
       createdAt: r.created_at,
     })),
+    meta: { total, limit, offset },
   });
 }
 

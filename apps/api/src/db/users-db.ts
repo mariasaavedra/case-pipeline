@@ -255,6 +255,66 @@ const MIGRATIONS: Migration[] = [
       addCol("monday_token_error", "TEXT");
     },
   },
+  {
+    // Give the audit log a target identity that survives a sync, plus the
+    // indexes the "what did X do" and "who touched this case" questions need.
+    //
+    // audit_log.target_id holds a profiles/board_items `local_id` — the
+    // PER-SYNC surrogate that a full sweep regenerates (the same trap
+    // migration v9 fixed for the watchlist). Every audit row therefore stopped
+    // resolving the morning after it was written: the record survived, but
+    // "changed the status of b7f3-…" no longer pointed at anything.
+    //
+    // The stable identity is monday_item_id, and for the Monday actions it was
+    // already being written into metadata_json — so the existing history can be
+    // recovered rather than written off. That backfill runs below.
+    version: 11,
+    up: () => {
+      if (!columnExists("audit_log", "target_monday_id")) {
+        usersDb.exec(`ALTER TABLE audit_log ADD COLUMN target_monday_id TEXT`);
+      }
+
+      // Backfill from the metadata each Monday write already recorded.
+      // json_extract is available in the bundled SQLite; guard anyway so a
+      // build without JSON1 degrades to "no backfill" instead of a failed
+      // migration on real user data.
+      try {
+        const res = usersDb
+          .prepare(
+            `UPDATE audit_log
+                SET target_monday_id = json_extract(metadata_json, '$.mondayItemId')
+              WHERE target_monday_id IS NULL
+                AND metadata_json IS NOT NULL
+                AND json_valid(metadata_json)
+                AND json_extract(metadata_json, '$.mondayItemId') IS NOT NULL`,
+          )
+          .run();
+        if (res.changes > 0) {
+          console.log(`[users-db] Backfilled target_monday_id on ${res.changes} audit row(s).`);
+        }
+      } catch (err) {
+        console.warn("[users-db] audit target_monday_id backfill skipped:", err);
+      }
+
+      // "What did this person do, most recent first" — the query behind a
+      // per-user activity view. Previously a full scan of the table.
+      usersDb.exec(
+        `CREATE INDEX IF NOT EXISTS idx_audit_actor_created
+           ON audit_log(actor_user_id, created_at DESC)`,
+      );
+      // "Everything that ever happened to this case" — the case-scoped history,
+      // which is the view worth having in a legal context.
+      usersDb.exec(
+        `CREATE INDEX IF NOT EXISTS idx_audit_target_created
+           ON audit_log(target_monday_id, created_at DESC)`,
+      );
+      // Action-scoped queries (e.g. every status change) for the digest.
+      usersDb.exec(
+        `CREATE INDEX IF NOT EXISTS idx_audit_action_created
+           ON audit_log(action, created_at DESC)`,
+      );
+    },
+  },
 ];
 
 const TARGET_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

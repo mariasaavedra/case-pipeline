@@ -330,6 +330,7 @@ app.post("/api/admin/archived/:id/restore", requireAuth, requireAdmin, (req, res
     restore();
     auditFromReq(req, "sync.row_restored", {
       targetType: row.source_table, targetId: row.monday_item_id ?? String(id),
+      targetMondayId: row.monday_item_id,
       metadata: { archivedRowId: id },
     });
     res.json({ data: { restored: true } });
@@ -518,6 +519,7 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
     auditFromReq(req, "monday.update_posted", {
       targetType: "profile",
       targetId: localId,
+      targetMondayId: mondayItemId,
       metadata: {
         mondayItemId: profile.monday_item_id,
         mondayUpdateId: outcome.result,
@@ -606,6 +608,7 @@ app.patch("/api/board-items/:localId/status", requireAuth, async (req, res) => {
     auditFromReq(req, "monday.status_changed", {
       targetType: "board_item",
       targetId: localId,
+      targetMondayId: mondayItemId,
       metadata: {
         mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId: def.statusColumnId,
         from: previous, to: status, usedPersonalToken: outcome.usedPersonalToken,
@@ -627,6 +630,7 @@ app.patch("/api/board-items/:localId/status", requireAuth, async (req, res) => {
     auditFromReq(req, "monday.status_changed", {
       targetType: "board_item",
       targetId: localId,
+      targetMondayId: mondayItemId,
       metadata: {
         mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId: def.statusColumnId,
         from: previous, to: status, queued: true,
@@ -700,7 +704,7 @@ app.patch("/api/board-items/:localId/columns", requireAuth, async (req, res) => 
       writeTokenOptions(req),
     );
     auditFromReq(req, "monday.column_changed", {
-      targetType: "board_item", targetId: localId,
+      targetType: "board_item", targetId: localId, targetMondayId: mondayItemId,
       metadata: {
         mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId, columnType: col.type, value,
         usedPersonalToken: outcome.usedPersonalToken, fellBackToSharedToken: outcome.fellBackToSharedToken,
@@ -715,7 +719,7 @@ app.patch("/api/board-items/:localId/columns", requireAuth, async (req, res) => 
       payload: { boardId: schema.mondayBoardId, columnId, value },
     });
     auditFromReq(req, "monday.column_changed", {
-      targetType: "board_item", targetId: localId,
+      targetType: "board_item", targetId: localId, targetMondayId: mondayItemId,
       metadata: { mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId, columnType: col.type, value, queued: true },
     });
     res.status(202).json({ data: { localId, columnId, value, pending: true } });
@@ -801,7 +805,7 @@ app.post("/api/profiles/:localId/contracts", requireAuth, async (req, res) => {
       writeTokenOptions(req),
     );
     auditFromReq(req, "monday.contract_created", {
-      targetType: "profile", targetId: localId,
+      targetType: "profile", targetId: localId, targetMondayId: profile.monday_item_id,
       metadata: {
         feeKItemId: outcome.result, caseType, af, ff, pf, name: itemName,
         usedPersonalToken: outcome.usedPersonalToken, fellBackToSharedToken: outcome.fellBackToSharedToken,
@@ -816,7 +820,7 @@ app.post("/api/profiles/:localId/contracts", requireAuth, async (req, res) => {
       payload: { boardId: schema.mondayBoardId, itemName, columnValues },
     });
     auditFromReq(req, "monday.contract_created", {
-      targetType: "profile", targetId: localId,
+      targetType: "profile", targetId: localId, targetMondayId: profile.monday_item_id,
       metadata: { caseType, af, ff, pf, name: itemName, queued: true },
     });
     res.status(202).json({ data: { name: itemName, pending: true } });
@@ -892,6 +896,7 @@ app.post("/api/profiles/:localId/render", requireAuth, async (req, res) => {
     auditFromReq(req, "doc.generated", {
       targetType: "profile",
       targetId: localId,
+      targetMondayId: profile.monday_item_id,
       metadata: { template: templateName, mondayItemId: profile.monday_item_id },
     });
 

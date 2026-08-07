@@ -397,3 +397,42 @@ Writes that dead-lettered during the broken window are **discarded, not retried*
 ### Consequence for future scope additions
 
 Adding a scope to the consent screen is a **breaking change for every existing connection**, silently. Any future scope addition must ship together with the rejection flag being surfaced, or it will reproduce this exact failure. `buildOAuthUrl` in `apps/api/src/routes/monday-oauth.ts` carries a comment to that effect.
+
+---
+
+## 2026-08-07 — Audit Log: Stable Target Identity, and No Retention Policy (Yet)
+
+**Context**: `audit_log` (users.db) has been recording writes and config changes since the user layer landed — 14 action types, actor + target + metadata, append-only. It is the natural substrate for the per-user activity view and per-case history discussed this week. Two things blocked building on it.
+
+### Decision 1 — `target_monday_id` becomes the identity; `target_id` is demoted to a debugging aid
+
+`audit_log.target_id` held a `profiles`/`board_items` **`local_id`** — the per-sync surrogate that a full sweep regenerates. This is the identical trap users.db v9 fixed for the watchlist and recently-viewed: the audit row survived the night, but "changed the status of `b7f3-…`" stopped pointing at anything the next morning.
+
+users.db **v11** adds `target_monday_id`, and every write-back call site now passes it. `target_id` is kept — it is genuinely useful while debugging a live session — but its doc comment now says plainly that it is not an identity.
+
+**The existing history was recoverable.** Every Monday action already wrote `mondayItemId` into `metadata_json`, so the migration backfills the column with `json_extract` rather than writing off the rows already logged. Entries with no metadata, no `mondayItemId`, or malformed JSON are left null; the backfill is wrapped so a SQLite build without JSON1 degrades to "no backfill" instead of a failed migration on real user data.
+
+**Rule going forward:** an audit entry whose target has a Monday id must pass `targetMondayId`. An entry identified only by a `local_id` is worthless the moment the next full sync finishes.
+
+### Decision 2 — Indexes follow the two questions worth asking
+
+v11 adds `(actor_user_id, created_at DESC)`, `(target_monday_id, created_at DESC)` and `(action, created_at DESC)`, and `GET /api/admin/audit` grew `?actor= &action= &target= &from= &to=`. Before this, both questions were answered by fetching the newest page and filtering it in the browser — which stops being true the moment the log outgrows that page, without saying so.
+
+`action` matches as a prefix, so `?action=monday` returns the whole family.
+
+### Decision 3 — No pruning, deliberately
+
+The obvious companion to an activity log is a retention policy. Not yet, and the reason matters: **everything currently in `audit_log` is a write or a configuration change.** In a legal context those are exactly the records worth keeping — "who moved this deadline" is the question an audit trail exists to answer, and it can be asked years later. Deleting them on a timer would trade the log's entire purpose for disk space it does not meaningfully consume (writes are low-volume).
+
+Retention becomes necessary when **view events** are added ("opened case X"), which are high-volume, low-value after a few weeks, and the part of an activity log that most resembles surveillance. The policy to implement **at that point**, not before:
+
+| Class | Examples | Retention |
+|---|---|---|
+| Write / config | `monday.*`, `user.*`, `sync.*`, settings | Keep indefinitely |
+| View / read | `view.case_opened` | 90 days |
+
+Shipping a pruner today would be code that deletes nothing, guarding a policy nobody can yet violate.
+
+### Related — the surveillance boundary
+
+Recorded here because it constrains what gets built on top: the same table answers "what happened to this case" (an audit trail, which protects the firm) and "what did this person do yesterday" (productivity monitoring). The intended shape is per-user views scoped to **your own** activity, and the cross-user view scoped **by case rather than by person**. Staff should know the log exists — what damages trust is discovering it late, not its existence.

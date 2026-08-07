@@ -182,7 +182,10 @@ export interface AuditLogRow {
   actor_email: string | null;
   action: string;
   target_type: string | null;
+  /** Local row id — a per-sync surrogate, useful only within a session. */
   target_id: string | null;
+  /** Stable Monday.com item id — the identity that survives a full sync (v11). */
+  target_monday_id: string | null;
   metadata_json: string | null;
   created_at: string;
 }
