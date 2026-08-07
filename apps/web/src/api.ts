@@ -306,8 +306,19 @@ export async function deleteAttorneyBoard(boardKey: string): Promise<AttorneyBoa
 // Monday.com OAuth
 // =============================================================================
 
-export async function fetchMondayStatus(): Promise<{ connected: boolean; mondayName?: string }> {
-  return apiFetch<{ connected: boolean; mondayName?: string }>("/api/auth/monday/status");
+export interface MondayConnectionStatus {
+  connected: boolean;
+  mondayName?: string;
+  /** Monday refused this token (revoked, or missing a scope granted later).
+   * Writes still go through under the shared account — only attribution is
+   * lost — so this is a nudge, not a blocker. Reconnecting clears it. */
+  needsReconnect?: boolean;
+  rejectedAt?: string;
+  rejectionReason?: string;
+}
+
+export async function fetchMondayStatus(): Promise<MondayConnectionStatus> {
+  return apiFetch<MondayConnectionStatus>("/api/auth/monday/status");
 }
 
 export async function getAzureToken(): Promise<string | null> {

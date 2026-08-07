@@ -237,6 +237,24 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    // Track a personal Monday token that Monday has rejected on permission
+    // grounds, so the UI can ask that user to reconnect instead of failing
+    // silently. The trigger in practice: `boards:write` joined the consent
+    // screen on 2026-08-04 and Monday never widens an already-issued token, so
+    // every connection made before that date can post notes but not change a
+    // status. Cleared on the next successful OAuth callback.
+    version: 10,
+    up: () => {
+      const addCol = (col: string, decl: string) => {
+        if (!columnExists("users", col)) {
+          usersDb.exec(`ALTER TABLE users ADD COLUMN ${col} ${decl}`);
+        }
+      };
+      addCol("monday_token_rejected_at", "TEXT");
+      addCol("monday_token_error", "TEXT");
+    },
+  },
 ];
 
 const TARGET_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
@@ -296,4 +314,7 @@ export interface UserRow {
   phone_ext: string | null;
   login_count: number;
   last_active_at: string | null;
+  // v10 — personal Monday token rejected by Monday (needs re-consent)
+  monday_token_rejected_at: string | null;
+  monday_token_error: string | null;
 }

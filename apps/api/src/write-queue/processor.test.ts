@@ -11,12 +11,17 @@ const { createUpdateMock, changeSimpleColumnValueMock, createItemMock } = vi.hoi
   changeSimpleColumnValueMock: vi.fn(),
   createItemMock: vi.fn(),
 }));
-vi.mock("@case-pipeline/monday", () => ({
+// Only the three mutations are stubbed; the error classes stay real, because
+// the token-fallback logic keys off `instanceof` to tell a permission refusal
+// apart from a transient outage.
+vi.mock("@case-pipeline/monday", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@case-pipeline/monday")>()),
   createUpdate: createUpdateMock,
   changeSimpleColumnValue: changeSimpleColumnValueMock,
   createItem: createItemMock,
 }));
 
+import { AuthError, MondayApiError } from "@case-pipeline/monday";
 import { enqueueWrite, drainWriteQueue } from "./processor";
 
 type DatabaseInstance = InstanceType<typeof Database>;
@@ -157,6 +162,61 @@ describe("write-queue processor", () => {
     expect(row.status).toBe("failed");
     expect(row.last_error).toContain("boardId");
     expect(changeSimpleColumnValueMock).not.toHaveBeenCalled();
+    db.close();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Personal token → shared token fallback
+  // ---------------------------------------------------------------------------
+  // The regression this guards: a personal token issued before `boards:write`
+  // was requested burned all five attempts and dead-lettered a status change the
+  // shared token could have made — while the dashboard showed it as applied.
+
+  it("retries with the shared token when the author's personal token is refused", async () => {
+    const db = freshDb();
+    changeSimpleColumnValueMock
+      .mockRejectedValueOnce(new AuthError("Authentication failed: 403 Forbidden"))
+      .mockResolvedValueOnce("123");
+    const rejected = vi.fn();
+
+    enqueueWrite(db, {
+      opType: "change_column",
+      mondayItemId: "123",
+      authorOid: "oid-1",
+      payload: { boardId: "board-9", columnId: "status", value: "Filed" },
+    });
+    const synced = await drainWriteQueue(db, {
+      token: "shared-tok",
+      resolveUserToken: () => "personal-tok",
+      reportTokenRejected: rejected,
+    });
+
+    expect(synced).toBe(1);
+    expect(changeSimpleColumnValueMock).toHaveBeenNthCalledWith(1, "board-9", "123", "status", "Filed", "personal-tok");
+    expect(changeSimpleColumnValueMock).toHaveBeenNthCalledWith(2, "board-9", "123", "status", "Filed", "shared-tok");
+    expect(queueRow(db).status).toBe("synced");
+    expect(rejected).toHaveBeenCalledWith("oid-1", "Authentication failed: 403 Forbidden");
+    db.close();
+  });
+
+  it("keeps retrying later on a transient failure instead of burning the shared token", async () => {
+    const db = freshDb();
+    createUpdateMock.mockRejectedValue(new MondayApiError("Server error: 503", 503, true));
+
+    enqueueWrite(db, {
+      opType: "create_update",
+      mondayItemId: "123",
+      authorOid: "oid-1",
+      payload: { body: "hi" },
+    });
+    const synced = await drainWriteQueue(db, { token: "shared-tok", resolveUserToken: () => "personal-tok" });
+
+    expect(synced).toBe(0);
+    // One attempt only — no fallback call with the shared token.
+    expect(createUpdateMock).toHaveBeenCalledOnce();
+    const row = queueRow(db);
+    expect(row.status).toBe("pending");
+    expect(row.attempts).toBe(1);
     db.close();
   });
 

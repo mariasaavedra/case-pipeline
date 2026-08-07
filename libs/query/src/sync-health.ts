@@ -23,6 +23,22 @@ export interface SyncBoardCoverage {
 interface RunRow { id: number; started_at: string; finished_at: string | null; mode: string; status: string }
 type RunInfo = { id: number; startedAt: string; finishedAt: string | null; mode: string; status: string };
 
+/** A write-back that Monday refused, kept for inspection. Counts alone said
+ * "3 failed" without saying why — and the why (an under-scoped personal token,
+ * a deleted item, a label that no longer exists) is the whole diagnosis. */
+export interface WriteQueueFailure {
+  id: number;
+  opType: string;
+  mondayItemId: string | null;
+  targetTable: string | null;
+  targetLocalId: string | null;
+  attempts: number;
+  lastError: string | null;
+  updatedAt: string;
+  /** 'failed' (dead-lettered) or 'pending' (still retrying, but erroring). */
+  status: string;
+}
+
 export interface SyncHealth {
   /** Most recent run, any mode — for recency/status. */
   lastRun: RunInfo | null;
@@ -31,10 +47,17 @@ export interface SyncHealth {
   lastFullRun: RunInfo | null;
   /** Per-board coverage from the last FULL run (empty until one has run). */
   boards: SyncBoardCoverage[];
-  queue: { pending: number; failed: number };
+  queue: {
+    pending: number;
+    failed: number;
+    /** Most recent erroring write-backs (dead-lettered first), newest first. */
+    failures: WriteQueueFailure[];
+  };
   lastFullSweepAt: string | null;
   archivedTotal: number;
 }
+
+const QUEUE_FAILURE_LIMIT = 20;
 
 export function getSyncHealth(db: Database): SyncHealth {
   const lastRun = db
@@ -73,6 +96,33 @@ export function getSyncHealth(db: Database): SyncHealth {
     .prepare("SELECT SUM(status='pending') AS pending, SUM(status='failed') AS failed FROM write_queue")
     .get() as { pending: number | null; failed: number | null };
 
+  // Dead-lettered rows first (nothing will retry those), then pending rows that
+  // are erroring their way toward it.
+  const failures = (db
+    .prepare(
+      `SELECT id, op_type, monday_item_id, target_table, target_local_id,
+              attempts, last_error, updated_at, status
+         FROM write_queue
+        WHERE last_error IS NOT NULL
+        ORDER BY (status = 'failed') DESC, updated_at DESC
+        LIMIT ?`,
+    )
+    .all(QUEUE_FAILURE_LIMIT) as Array<{
+      id: number; op_type: string; monday_item_id: string | null;
+      target_table: string | null; target_local_id: string | null;
+      attempts: number; last_error: string | null; updated_at: string; status: string;
+    }>).map((r) => ({
+      id: r.id,
+      opType: r.op_type,
+      mondayItemId: r.monday_item_id,
+      targetTable: r.target_table,
+      targetLocalId: r.target_local_id,
+      attempts: r.attempts,
+      lastError: r.last_error,
+      updatedAt: r.updated_at,
+      status: r.status,
+    }));
+
   const lastFull = db
     .prepare("SELECT MAX(last_full_sweep_at) AS t FROM sync_watermarks")
     .get() as { t: string | null };
@@ -86,7 +136,7 @@ export function getSyncHealth(db: Database): SyncHealth {
     lastRun: toInfo(lastRun),
     lastFullRun: toInfo(fullRun),
     boards,
-    queue: { pending: queueRow.pending ?? 0, failed: queueRow.failed ?? 0 },
+    queue: { pending: queueRow.pending ?? 0, failed: queueRow.failed ?? 0, failures },
     lastFullSweepAt: lastFull.t,
     archivedTotal: archived.n,
   };

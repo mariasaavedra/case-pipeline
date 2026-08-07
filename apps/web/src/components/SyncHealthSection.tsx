@@ -70,6 +70,59 @@ export function SyncHealthSection() {
         <button type="button" onClick={load} style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-status-blue)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Refresh</button>
       </div>
 
+      {/* Why the queue is stuck. The counts above say "3 failed"; Monday's own
+          error message says whether it's a token, a deleted item, or a label
+          that no longer exists — which is the part you can act on. */}
+      {health.queue.failures.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: "var(--color-ink-faint)", marginBottom: 6 }}>
+            Recent write-back errors — <strong>failed</strong> is dead-lettered (nothing will retry it);
+            <strong> pending</strong> is still retrying.
+          </div>
+          <div style={{ border: "1px solid var(--color-border-light)", borderRadius: 8, overflow: "hidden" }}>
+            {health.queue.failures.map((f, i) => (
+              <div
+                key={f.id}
+                style={{
+                  padding: "6px 10px",
+                  borderTop: i === 0 ? "none" : "1px solid var(--color-border-light)",
+                  fontSize: 12,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 11,
+                      color: f.status === "failed" ? "var(--color-status-red)" : "var(--color-amber)",
+                    }}
+                  >
+                    {f.status}
+                  </span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>{f.opType}</span>
+                  <span style={{ color: "var(--color-ink-faint)" }}>
+                    {f.mondayItemId ? `item ${f.mondayItemId}` : f.targetTable ?? ""} · {f.attempts} attempt{f.attempts === 1 ? "" : "s"} · {ago(f.updatedAt)}
+                  </span>
+                </div>
+                {f.lastError && (
+                  <div
+                    style={{
+                      marginTop: 2,
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 11,
+                      color: "var(--color-ink-muted)",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {f.lastError}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Per-board coverage — from the last FULL sweep (incremental runs fetch
           only changed items, so their fetched/expected is not a coverage measure). */}
       <div style={{ fontSize: 12, color: "var(--color-ink-faint)", marginBottom: 6 }}>

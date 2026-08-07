@@ -3,7 +3,7 @@ import { useAuth } from "../auth/useAuth";
 import { usePreferences } from "../hooks/usePreferences";
 import type { Theme, DefaultPage, DateFormat } from "../hooks/usePreferences";
 import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, getAzureToken, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser, fetchAuditLog } from "../api";
-import type { AttorneyBoard, PublicUser, AuditEntry } from "../api";
+import type { AttorneyBoard, PublicUser, AuditEntry, MondayConnectionStatus } from "../api";
 import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
@@ -598,7 +598,7 @@ function AttorneyBoardsSection() {
 // =============================================================================
 
 function MondayConnectionSection() {
-  const [status, setStatus] = useState<{ connected: boolean; mondayName?: string } | null>(null);
+  const [status, setStatus] = useState<MondayConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -636,6 +636,22 @@ function MondayConnectionSection() {
                   ? `Connected${status.mondayName ? ` as ${status.mondayName}` : ""}`
                   : "Not connected — notes will post under the shared API account"}
             </div>
+            {status?.needsReconnect && (
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 12,
+                  color: "var(--color-amber)",
+                  fontFamily: "var(--font-body)",
+                  maxWidth: 420,
+                }}
+              >
+                Monday is refusing this connection — your changes are still being saved, but
+                under the shared account instead of your name. Reconnecting fixes the
+                attribution. (Connections made before the status-editing permission was added
+                need this once.)
+              </div>
+            )}
           </div>
           <button
             onClick={() => {
@@ -656,8 +672,12 @@ function MondayConnectionSection() {
               padding: "7px 16px",
               borderRadius: "8px",
               border: "none",
-              backgroundColor: status?.connected ? "var(--color-surface-warm)" : "var(--color-amber)",
-              color: status?.connected ? "var(--color-ink-muted)" : "#fff",
+              // A connection Monday has refused gets the same call-to-action
+              // weight as no connection at all — a quiet grey "Reconnect" is
+              // exactly what everyone scrolled past for the last three days.
+              backgroundColor:
+                status?.connected && !status.needsReconnect ? "var(--color-surface-warm)" : "var(--color-amber)",
+              color: status?.connected && !status.needsReconnect ? "var(--color-ink-muted)" : "#fff",
               fontFamily: "var(--font-body)",
               fontSize: "13px",
               fontWeight: 600,

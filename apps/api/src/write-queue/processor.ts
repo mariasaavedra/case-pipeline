@@ -16,6 +16,7 @@ type Database = BetterSqlite3.Database;
 import cron from "node-cron";
 import { createUpdate, changeSimpleColumnValue, createItem } from "@case-pipeline/monday";
 import { acquireSyncLock, releaseSyncLock } from "@case-pipeline/seed/db/sync-lock";
+import { withTokenFallback } from "../write-auth.js";
 
 const LOCK_HOLDER = "write-queue";
 const BATCH_SIZE = 20;
@@ -35,6 +36,9 @@ export interface EnqueueInput {
 
 /** Resolves a staff member's personal Monday.com token from their Azure OID. */
 export type TokenResolver = (authorOid: string) => string | null;
+
+/** Flags a personal token Monday refused, so the UI can ask them to reconnect. */
+export type TokenRejectionReporter = (authorOid: string, reason: string) => void;
 
 /** Append a write-back op to the durable queue. Returns the new row id. */
 export function enqueueWrite(db: Database, input: EnqueueInput): number {
@@ -137,7 +141,11 @@ function backoffMs(attempts: number): number {
  */
 export async function drainWriteQueue(
   db: Database,
-  opts: { token?: string; resolveUserToken?: TokenResolver } = {},
+  opts: {
+    token?: string;
+    resolveUserToken?: TokenResolver;
+    reportTokenRejected?: TokenRejectionReporter;
+  } = {},
 ): Promise<number> {
   if (!acquireSyncLock(db, LOCK_HOLDER)) return 0;
   try {
@@ -161,9 +169,17 @@ export async function drainWriteQueue(
       );
       try {
         // Prefer the author's personal token so the retry is attributed to them;
-        // fall back to the shared service token if they have none.
+        // fall back to the shared service token if they have none — or if Monday
+        // refuses theirs. Without that second fallback an under-scoped token
+        // (one issued before `boards:write` was requested) burned all five
+        // attempts and dead-lettered a write the shared token could have made.
         const authorToken = row.author_oid ? opts.resolveUserToken?.(row.author_oid) : null;
-        await dispatch(row, authorToken ?? opts.token);
+        await withTokenFallback((token) => dispatch(row, token), {
+          userToken: authorToken,
+          sharedToken: opts.token,
+          onPersonalTokenRejected: (reason) =>
+            row.author_oid && opts.reportTokenRejected?.(row.author_oid, reason),
+        });
         db.prepare(`UPDATE write_queue SET status = 'synced', updated_at = ? WHERE id = ?`).run(
           new Date().toISOString(),
           row.id,
@@ -197,16 +213,23 @@ export async function drainWriteQueue(
 /** Schedule the drainer on a cron cadence (every minute by default). */
 export function startWriteQueueProcessor(
   db: Database,
-  opts: { token?: string; schedule?: string; resolveUserToken?: TokenResolver } = {},
+  opts: {
+    token?: string;
+    schedule?: string;
+    resolveUserToken?: TokenResolver;
+    reportTokenRejected?: TokenRejectionReporter;
+  } = {},
 ): void {
   // Recover any rows stranded 'syncing' by a prior crash before draining.
   reconcileInFlightWrites(db);
 
   const schedule = opts.schedule ?? "* * * * *";
   cron.schedule(schedule, () => {
-    drainWriteQueue(db, { token: opts.token, resolveUserToken: opts.resolveUserToken }).catch((err) =>
-      console.error("[write-queue] drain error:", err),
-    );
+    drainWriteQueue(db, {
+      token: opts.token,
+      resolveUserToken: opts.resolveUserToken,
+      reportTokenRejected: opts.reportTokenRejected,
+    }).catch((err) => console.error("[write-queue] drain error:", err));
   });
   console.log(`[write-queue] processor scheduled (${schedule}).`);
 }

@@ -78,7 +78,8 @@ import { sanitizeKpiColumns } from "./db/users-types.js";
 import { auditFromReq } from "./audit/log.js";
 import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
-import { registerMondayOAuth, getUserMondayToken } from "./routes/monday-oauth.js";
+import { registerMondayOAuth, getUserMondayToken, markMondayTokenRejected } from "./routes/monday-oauth.js";
+import { withTokenFallback, type TokenFallbackOptions } from "./write-auth.js";
 import { registerMondayWebhook, webhookSecret } from "./webhooks/receiver.js";
 import { startWebhookProcessor, createBoardKeyResolver } from "./webhooks/processor.js";
 
@@ -162,6 +163,21 @@ if (currentVersion < SCHEMA_VERSION) {
 const MONDAY_API_TOKEN = process.env.MONDAY_API_TOKEN;
 if (MONDAY_API_TOKEN) {
   setApiToken(MONDAY_API_TOKEN);
+}
+
+/**
+ * Token strategy for a write made by an authenticated staff member: their
+ * personal Monday token first (for attribution), the shared service token as
+ * the net when Monday rejects it on permission grounds — and their connection
+ * gets flagged so Settings can ask them to reconnect.
+ */
+function writeTokenOptions(req: express.Request): TokenFallbackOptions {
+  const oid = req.user?.oid ?? "";
+  return {
+    userToken: oid ? getUserMondayToken(oid) : null,
+    sharedToken: MONDAY_API_TOKEN,
+    onPersonalTokenRejected: (reason) => markMondayTokenRejected(oid, reason),
+  };
 }
 
 console.log(`Database loaded (DB_SOURCE=${DB_SOURCE}): ${DB_PATH}`);
@@ -442,6 +458,7 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Profile has no Monday.com item ID — cannot post update" });
     return;
   }
+  const mondayItemId = profile.monday_item_id; // narrowed; the write closure below can't re-narrow a field
 
   const newLocalId = randomUUID();
   const now = new Date().toISOString();
@@ -476,14 +493,22 @@ app.post("/api/profiles/:localId/updates", requireAuth, async (req, res) => {
   });
 
   try {
-    // Prefer the posting user's personal Monday.com token; fall back to shared token
-    const userToken = getUserMondayToken(req.user?.oid ?? "");
-    const mondayUpdateId = await dataSource.postUpdate(profile.monday_item_id, text, userToken ?? undefined);
-    insertUpdate(mondayUpdateId, "synced");
+    // Prefer the posting user's personal Monday.com token; if Monday rejects it
+    // on permission grounds the shared token takes over (see write-auth.ts).
+    const outcome = await withTokenFallback(
+      (token) => dataSource.postUpdate(mondayItemId, text, token),
+      writeTokenOptions(req),
+    );
+    insertUpdate(outcome.result, "synced");
     auditFromReq(req, "monday.update_posted", {
       targetType: "profile",
       targetId: localId,
-      metadata: { mondayItemId: profile.monday_item_id, mondayUpdateId, usedPersonalToken: !!userToken },
+      metadata: {
+        mondayItemId: profile.monday_item_id,
+        mondayUpdateId: outcome.result,
+        usedPersonalToken: outcome.usedPersonalToken,
+        fellBackToSharedToken: outcome.fellBackToSharedToken,
+      },
     });
     res.json({ data: responseData(false) });
   } catch (err) {
@@ -552,20 +577,24 @@ app.patch("/api/board-items/:localId/status", requireAuth, async (req, res) => {
     return;
   }
 
+  const mondayItemId = item.monday_item_id; // narrowed; the write closure below can't re-narrow a field
   const previous = item.status;
   const applyLocal = () =>
     db.prepare("UPDATE board_items SET status = ? WHERE local_id = ?").run(status, localId);
 
   try {
-    const userToken = getUserMondayToken(req.user?.oid ?? "");
-    await dataSource.setColumnValue(def.mondayBoardId, item.monday_item_id, def.statusColumnId, status, userToken ?? undefined);
+    const outcome = await withTokenFallback(
+      (token) => dataSource.setColumnValue(def.mondayBoardId, mondayItemId, def.statusColumnId, status, token),
+      writeTokenOptions(req),
+    );
     applyLocal();
     auditFromReq(req, "monday.status_changed", {
       targetType: "board_item",
       targetId: localId,
       metadata: {
         mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId: def.statusColumnId,
-        from: previous, to: status, usedPersonalToken: !!userToken,
+        from: previous, to: status, usedPersonalToken: outcome.usedPersonalToken,
+        fellBackToSharedToken: outcome.fellBackToSharedToken,
       },
     });
     res.json({ data: { localId, status, pending: false } });
@@ -648,12 +677,19 @@ app.patch("/api/board-items/:localId/columns", requireAuth, async (req, res) => 
     return;
   }
 
+  const mondayItemId = item.monday_item_id; // narrowed; the write closure below can't re-narrow a field
+
   try {
-    const userToken = getUserMondayToken(req.user?.oid ?? "");
-    await dataSource.setColumnValue(schema.mondayBoardId, item.monday_item_id, columnId, value, userToken ?? undefined);
+    const outcome = await withTokenFallback(
+      (token) => dataSource.setColumnValue(schema.mondayBoardId, mondayItemId, columnId, value, token),
+      writeTokenOptions(req),
+    );
     auditFromReq(req, "monday.column_changed", {
       targetType: "board_item", targetId: localId,
-      metadata: { mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId, columnType: col.type, value, usedPersonalToken: !!userToken },
+      metadata: {
+        mondayItemId: item.monday_item_id, boardKey: item.board_key, columnId, columnType: col.type, value,
+        usedPersonalToken: outcome.usedPersonalToken, fellBackToSharedToken: outcome.fellBackToSharedToken,
+      },
     });
     res.json({ data: { localId, columnId, value, pending: false } });
   } catch (err) {
@@ -745,13 +781,18 @@ app.post("/api/profiles/:localId/contracts", requireAuth, async (req, res) => {
   const itemName = `${profile.name} — ${caseType}`;
 
   try {
-    const userToken = getUserMondayToken(req.user?.oid ?? "");
-    const newId = await dataSource.createItem(schema.mondayBoardId, itemName, columnValues, userToken ?? undefined);
+    const outcome = await withTokenFallback(
+      (token) => dataSource.createItem(schema.mondayBoardId, itemName, columnValues, token),
+      writeTokenOptions(req),
+    );
     auditFromReq(req, "monday.contract_created", {
       targetType: "profile", targetId: localId,
-      metadata: { feeKItemId: newId, caseType, af, ff, pf, name: itemName, usedPersonalToken: !!userToken },
+      metadata: {
+        feeKItemId: outcome.result, caseType, af, ff, pf, name: itemName,
+        usedPersonalToken: outcome.usedPersonalToken, fellBackToSharedToken: outcome.fellBackToSharedToken,
+      },
     });
-    res.json({ data: { feeKItemId: newId, name: itemName, pending: false } });
+    res.json({ data: { feeKItemId: outcome.result, name: itemName, pending: false } });
   } catch (err) {
     console.error("[write-back] createItem failed; queueing for retry:", err);
     enqueueWrite(db, {
@@ -1043,7 +1084,11 @@ const server = app.listen(PORT, HOST, () => {
     scheduleBackups();
     if (MONDAY_API_TOKEN) {
       // Drain queued Monday.com write-backs in the background, with retries.
-      startWriteQueueProcessor(db, { token: MONDAY_API_TOKEN, resolveUserToken: getUserMondayToken });
+      startWriteQueueProcessor(db, {
+        token: MONDAY_API_TOKEN,
+        resolveUserToken: getUserMondayToken,
+        reportTokenRejected: markMondayTokenRejected,
+      });
 
       // Refresh board/column schema in the background so the editors work right
       // after a deploy without a manual data sync. Light (structure only) and

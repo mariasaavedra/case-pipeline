@@ -143,8 +143,15 @@ async function handleCallback(req: Request, res: Response): Promise<void> {
 
     // Persist to users.db — the token is encrypted at rest (AES-256-GCM) so a
     // leaked DB or backup can't be used to impersonate the user on Monday.com.
+    // The fresh token carries today's scopes, so clear any rejection flag set
+    // against the token it replaces.
     usersDb
-      .prepare(`UPDATE users SET monday_access_token = ?, monday_name = ? WHERE azure_oid = ?`)
+      .prepare(
+        `UPDATE users
+            SET monday_access_token = ?, monday_name = ?,
+                monday_token_rejected_at = NULL, monday_token_error = NULL
+          WHERE azure_oid = ?`,
+      )
       .run(protect(access_token), mondayName, azureOid);
 
     res.redirect(`${FRONTEND_URL}/settings?monday=connected`);
@@ -157,13 +164,28 @@ async function handleCallback(req: Request, res: Response): Promise<void> {
 function handleStatus(req: Request, res: Response): void {
   const azureOid = req.user?.oid ?? req.user?.preferred_username ?? "";
   const row = usersDb
-    .prepare(`SELECT monday_access_token, monday_name FROM users WHERE azure_oid = ?`)
-    .get(azureOid) as { monday_access_token: string | null; monday_name: string | null } | null;
+    .prepare(
+      `SELECT monday_access_token, monday_name, monday_token_rejected_at, monday_token_error
+         FROM users WHERE azure_oid = ?`,
+    )
+    .get(azureOid) as {
+      monday_access_token: string | null;
+      monday_name: string | null;
+      monday_token_rejected_at: string | null;
+      monday_token_error: string | null;
+    } | null;
 
+  const connected = !!row?.monday_access_token;
   res.json({
     data: {
-      connected: !!row?.monday_access_token,
+      connected,
       mondayName: row?.monday_name ?? undefined,
+      // A connected-but-rejected token still writes (the shared token covers
+      // it), but the change is attributed to the service account instead of the
+      // user — so the UI nudges them to reconnect rather than blocking them.
+      needsReconnect: connected && !!row?.monday_token_rejected_at,
+      rejectedAt: row?.monday_token_rejected_at ?? undefined,
+      rejectionReason: row?.monday_token_error ?? undefined,
     },
   });
 }
@@ -188,4 +210,24 @@ export function getUserMondayToken(azureOid: string): string | null {
     .get(azureOid) as { monday_access_token: string | null } | null;
   // Stored encrypted (or legacy plaintext); reveal() handles both.
   return row?.monday_access_token ? reveal(row.monday_access_token) : null;
+}
+
+/**
+ * Flag a user's personal Monday token as rejected by Monday (revoked, expired,
+ * or — the common case — issued before a scope the write now needs was added to
+ * the consent screen). The token is kept: the write still succeeds via the
+ * shared token, and the user is asked to reconnect at their convenience.
+ *
+ * First rejection wins, so `monday_token_rejected_at` reads as "since when".
+ */
+export function markMondayTokenRejected(azureOid: string, reason: string): void {
+  if (!azureOid) return;
+  usersDb
+    .prepare(
+      `UPDATE users
+          SET monday_token_rejected_at = COALESCE(monday_token_rejected_at, ?),
+              monday_token_error = ?
+        WHERE azure_oid = ? AND monday_access_token IS NOT NULL`,
+    )
+    .run(new Date().toISOString(), reason.slice(0, 500), azureOid);
 }
