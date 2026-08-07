@@ -19,6 +19,7 @@
     "test": "vitest run && npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "preflight": "bash scripts/preflight.sh",
+    "check:env": "tsx --env-file-if-exists=.env scripts/check-env.ts",
     "seed": "tsx scripts/seed/index.ts",
     "sync:live": "tsx --env-file-if-exists=.env scripts/sync/index.ts",
     "webhooks:setup": "tsx --env-file-if-exists=.env scripts/setup-webhooks.ts",

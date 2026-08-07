@@ -23,7 +23,8 @@ npx vitest run apps/api/src/some.test.ts
 npm run lint           # NO-OP today: no workspace defines a lint script and there is no ESLint config yet
 
 # Other
-npm run preflight      # Pre-flight environment checks
+npm run preflight      # Pre-flight environment checks (Node version, npm, data dir writable)
+npm run check:env      # Validate .env — the same check the API runs at startup; exits 1 if the API would refuse to boot
 npm run seed           # Generate local test data (no Monday.com API needed)
 npm run stats          # Export statistics from local DB
 npm run stats:live     # Export statistics from live DB
@@ -188,6 +189,7 @@ Run with `tsx scripts/<name>.ts`:
 
 | Script | Description |
 |---|---|
+| `check-env.ts` | Validate `.env` (duplicate keys, placeholder values, token shape, localhost URLs in a production build, invalid cron). `npm run check:env`. Same code the API runs at startup — **run it on a server before deploying**, because from 2026-08-07 the API refuses to boot on a config error. `ENV_CHECK=warn` downgrades errors to warnings as an emergency override. Never prints values. |
 | `health.ts` | One-shot health check (integrity, schema, sync state, counts, disk, backups). `npm run health`; exits non-zero on a hard failure. |
 | `export-stats.ts` | Print DB statistics (row counts per table). `--db=live` uses `live.db`. |
 | `snapshot.ts` | Fetch all 19 boards from Monday.com → `data/monday-snapshot.md` + `.json`. |

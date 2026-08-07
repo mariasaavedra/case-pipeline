@@ -80,6 +80,7 @@ import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
 import { registerMondayOAuth, getUserMondayToken, markMondayTokenRejected } from "./routes/monday-oauth.js";
 import { withTokenFallback, type TokenFallbackOptions } from "./write-auth.js";
+import { checkEnvironment, reportEnvironment } from "./config/env-check.js";
 import { registerMondayWebhook, webhookSecret } from "./webhooks/receiver.js";
 import { startWebhookProcessor, createBoardKeyResolver } from "./webhooks/processor.js";
 
@@ -92,6 +93,20 @@ import { startWebhookProcessor, createBoardKeyResolver } from "./webhooks/proces
 //   live           → data/live.db (real Monday.com data, gitignored)
 // Both share the same schema, query layer, and UI — only the data differs.
 const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../data");
+// Validate the environment before anything reads it. Every check in env-check.ts
+// corresponds to a misconfiguration that once ran silently in production — a
+// value wrong in a way that produces no error is worse than one that is absent.
+if (
+  reportEnvironment(
+    checkEnvironment({
+      envFilePath: path.resolve(DATA_DIR, "../.env"),
+      examplePath: path.resolve(DATA_DIR, "../.env.example"),
+    }),
+  )
+) {
+  process.exit(1);
+}
+
 const DB_SOURCE = (process.env.DB_SOURCE ?? "seed").toLowerCase();
 
 if (DB_SOURCE !== "seed" && DB_SOURCE !== "live") {
