@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { openDatabase } from "@case-pipeline/seed/db/connection";
 import { backupEncryptionKey, encryptFileSync } from "../backup/crypto.js";
 import { protect, isEncrypted } from "../crypto/secrets.js";
+import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP } from "../backup/prune.js";
 
 const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -331,6 +332,10 @@ function backupBeforeMigrate(fromVersion: number): void {
   const key = backupEncryptionKey();
   const final = key ? encryptFileSync(dest, key) : dest;
   console.log(`[users-db] Backed up users.db (v${fromVersion}) → ${final}`);
+  // Same retention as the mirror's snapshots. These are kilobytes rather than
+  // gigabytes, so this is about not leaving an unbounded series behind rather
+  // than about disk — but an unbounded series is what the last one was too.
+  pruneBackupSeries(backupDir, premigratePattern("users"), PREMIGRATE_KEEP);
 }
 
 function migrate(): void {

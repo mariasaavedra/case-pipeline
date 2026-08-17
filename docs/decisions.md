@@ -436,3 +436,42 @@ Shipping a pruner today would be code that deletes nothing, guarding a policy no
 ### Related — the surveillance boundary
 
 Recorded here because it constrains what gets built on top: the same table answers "what happened to this case" (an audit trail, which protects the firm) and "what did this person do yesterday" (productivity monitoring). The intended shape is per-user views scoped to **your own** activity, and the cross-user view scoped **by case rather than by person**. Staff should know the log exists — what damages trust is discovering it late, not its existence.
+
+---
+
+## 2026-08-17 — Backup Retention: Prune on Failure, and Stop Being Blind to Disk
+
+**Context**: The production disk reached 100% (48 GB, 0 bytes free). `data/` held 33 GB, almost all of it backups. `live.db` passed `quick_check`, so unlike 2026-07-24 nothing was corrupted — but the daily backup had been failing silently since **August 10**, leaving a seven-day hole in the restore points before anyone noticed.
+
+### Decision 1 — Pruning runs in a `finally`, not as the last statement
+
+`runBackup()` wrote the new backup, encrypted it, and pruned the series — in that order, with no error handling between. So when the disk filled, `db.backup()` (or `encryptFile`) threw and **the prune never ran**.
+
+That is a trap door: the single condition that makes pruning urgent is the same one that prevents it. Once full, the disk could never recover on its own, and the daily job failed identically every morning for a week.
+
+Retention now runs in a `finally`. A failed backup still frees the room the next attempt needs.
+
+### Decision 2 — Refuse to write a backup onto a critically full disk
+
+`encryptFile` unlinks its plaintext source only *on success*. When it ran out of room mid-file on August 10 it left a **1.5 GB unencrypted copy of client data** on disk — PII in plaintext, from the routine designed to protect it, while consuming the space the retry needed.
+
+`runBackup` now measures headroom first and refuses below 1 GB, pruning before it throws.
+
+### Decision 3 — Pre-migration snapshots get retention
+
+`backupBeforeMigrate` writes a full copy of the database with `VACUUM INTO`, straight into `data/backups/`, bypassing `scripts/backup-db.ts` entirely — and the daily prune explicitly skips anything matching `premigrate`. Nothing had ever deleted one. Four (v16, v19, v20, v21) were on disk at ~1.2 GB each.
+
+Now pruned to `PREMIGRATE_KEEP` (default 2). Two details matter and are tested: the pattern must accept `.db.enc`, since snapshots are encrypted after being written; and ordering must use the embedded ISO stamp, because these names carry a version segment first — a plain sort puts `v16` before `v9` and deletes the newest.
+
+### Decision 4 — `/health` reports disk, as a coarse level, always 200
+
+The endpoint ran `SELECT 1` and nothing else. It answered "ok" throughout a week of failed backups on a full disk. `scripts/health.ts` measured disk correctly the whole time, but nothing ran it.
+
+Two constraints shaped this:
+
+- **A level, not free bytes.** `/health` sits outside auth; it should raise an alarm without publishing the machine's capacity.
+- **Always HTTP 200.** The compose healthcheck treats non-2xx as "restart me". Returning 503 on low disk would restart-loop the API and convert a warning into an outage.
+
+### Still open
+
+The daily series held **thirteen** backups where `BACKUP_KEEP` defaults to 4. Decisions 1 and 2 explain why it could not recover once full, but not why it grew past 4 beforehand — the most likely explanation is `BACKUP_KEEP` still set near 14 in the server's `.env`, left from before the 2026-07-28 change. **Unverified**; check the deployed value rather than assuming the code accounts for it.

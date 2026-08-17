@@ -34,7 +34,7 @@ function corrupt(name: string): void {
 function backupsFor(label: string): string[] {
   return fs
     .readdirSync(path.join(dataDir, "backups"))
-    .filter((f) => new RegExp(`^${label}-\\d.*\\.db$`).test(f))
+    .filter((f) => new RegExp(`^${label}-\\d.*\\.db(\\.enc)?$`).test(f))
     .sort();
 }
 
@@ -74,5 +74,43 @@ describe("backupDatabase", () => {
 
     // The corrupt copy is written (evidence) but the two good ones survive.
     expect(backupsFor("live").length).toBe(3);
+  }, IO_TIMEOUT);
+
+  test("prunes ENCRYPTED backups too", async () => {
+    // Backups are encrypted by the caller AFTER this returns, so everything
+    // already on disk ends in .db.enc. A pattern anchored on .db matched none
+    // of them: the prune ran daily, found nothing, and reported success while
+    // the series grew without limit. See nightly 2026-08-17.
+    dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "cp-bk-"));
+    makeGoodDb("live.db");
+
+    // Stand in for three already-encrypted daily backups from earlier runs.
+    const backupDir = path.join(dataDir, "backups");
+    fs.mkdirSync(backupDir, { recursive: true });
+    for (const stamp of ["2026-08-01T05-30-00-000Z", "2026-08-02T05-30-00-000Z", "2026-08-03T05-30-00-000Z"]) {
+      fs.writeFileSync(path.join(backupDir, `live-${stamp}.db.enc`), "ciphertext");
+    }
+
+    await backupDatabase({ source: "live", keep: 2, dataDir });
+
+    expect(backupsFor("live").length).toBe(2);
+  }, IO_TIMEOUT);
+
+  test("a mixed plaintext/encrypted series still prunes oldest-first", async () => {
+    // What the disk actually looked like: older runs encrypted, the newest left
+    // as plaintext because encryption ran out of room mid-file.
+    dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "cp-bk-"));
+    makeGoodDb("live.db");
+    const backupDir = path.join(dataDir, "backups");
+    fs.mkdirSync(backupDir, { recursive: true });
+    fs.writeFileSync(path.join(backupDir, "live-2026-08-01T05-30-00-000Z.db.enc"), "old");
+    fs.writeFileSync(path.join(backupDir, "live-2026-08-09T05-30-00-000Z.db.enc"), "newer");
+    fs.writeFileSync(path.join(backupDir, "live-2026-08-10T05-30-00-000Z.db"), "newest, unencrypted");
+
+    await backupDatabase({ source: "live", keep: 2, dataDir });
+
+    const left = backupsFor("live");
+    expect(left).toHaveLength(2);
+    expect(left.some((f) => f.includes("2026-08-01"))).toBe(false); // the oldest went
   }, IO_TIMEOUT);
 });

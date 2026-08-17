@@ -108,7 +108,14 @@ export async function backupDatabase(opts: BackupOptions = {}): Promise<string |
   // Prune older backups of THIS label. The pattern requires a digit right after
   // "label-" (the ISO year) so the "live" series never swallows "live-presync":
   // "live-2026-…" matches /^live-\d/, "live-presync-2026-…" does not.
-  const re = new RegExp(`^${label}-\\d.*\\.db$`);
+  //
+  // The `.enc` suffix is NOT optional decoration — omitting it is what filled a
+  // 48 GB disk on 2026-08-17. Backups are encrypted by the caller AFTER this
+  // function returns, so on a server with BACKUP_ENCRYPTION_KEY set every file
+  // already on disk is `…​.db.enc` and matched nothing. The prune ran daily,
+  // found zero candidates, and reported success while thirteen 1.5 GB backups
+  // accumulated. Retention had been a no-op in production for weeks.
+  const re = new RegExp(`^${label}-\\d.*\\.db(\\.enc)?$`);
   const backups = fs
     .readdirSync(backupDir)
     .filter((f) => re.test(f))

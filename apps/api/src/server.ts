@@ -78,6 +78,8 @@ import { sanitizeKpiColumns } from "./db/users-types.js";
 import { auditFromReq } from "./audit/log.js";
 import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
+import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP } from "./backup/prune.js";
+import { diskLevel, readDisk } from "./backup/disk.js";
 import { registerMondayOAuth, getUserMondayToken, markMondayTokenRejected } from "./routes/monday-oauth.js";
 import { withTokenFallback, type TokenFallbackOptions } from "./write-auth.js";
 import { checkEnvironment, reportEnvironment } from "./config/env-check.js";
@@ -142,6 +144,11 @@ async function backupBeforeMigrate(fromVersion: number): Promise<void> {
   const key = backupEncryptionKey();
   const final = key ? await encryptFile(dest, key) : dest;
   console.log(`[migrate] Backed up ${DB_SOURCE}.db (v${fromVersion}) → ${final}`);
+  // Prune AFTER writing the new one, so a failure here never costs the snapshot
+  // this migration just took. Each of these is a full copy of the database —
+  // four of them (v16 through v21) were still on disk when it hit 100% on
+  // 2026-08-17, because nothing had ever deleted one.
+  pruneBackupSeries(backupDir, premigratePattern(DB_SOURCE), PREMIGRATE_KEEP);
 }
 
 // Integrity gate — BEFORE anything reads the whole file. On 2026-07-24 a corrupt
@@ -1066,7 +1073,24 @@ app.get("/health", (_req, res) => {
     db.prepare("SELECT 1").get();
     // `version` = the API image's baked commit SHA (set in Dockerfile.api). Lets
     // us confirm the running backend build without auth.
-    res.status(200).json({ status: "ok", db: DB_SOURCE, version: process.env.BUILD_SHA ?? "dev" });
+    //
+    // `disk` exists because on 2026-08-17 the disk reached 100%, the daily
+    // backup had been failing silently for a week, and this endpoint answered
+    // "ok" throughout — it only ever ran SELECT 1. The condition that caused
+    // the July corruptions was invisible from outside right up to the moment
+    // someone thought to look.
+    //
+    // Reported as a coarse level, not free bytes: /health sits outside auth, so
+    // it should raise the alarm without publishing the machine's capacity. The
+    // status stays 200 in every case — the container healthcheck treats a
+    // non-2xx as "restart me", and restart-looping the API because a disk is
+    // filling would turn a warning into an outage.
+    res.status(200).json({
+      status: "ok",
+      db: DB_SOURCE,
+      version: process.env.BUILD_SHA ?? "dev",
+      disk: diskLevel(DATA_DIR),
+    });
   } catch (err) {
     // Log the detail server-side; don't leak internals (paths, driver errors)
     // in the response — /health is outside auth and reachable by the proxy.
@@ -1302,31 +1326,54 @@ async function runBackup(): Promise<void> {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const key = backupEncryptionKey();
 
-  // Back up the main client database, then encrypt at rest if a key is set.
-  const dest = path.join(backupDir, `${DB_SOURCE}-${stamp}.db`);
-  await db.backup(dest);
-  const destFinal = key ? await encryptFile(dest, key) : dest;
-  console.log(`[backup] wrote ${destFinal}`);
-
-  // Back up users.db alongside — it holds roles, prefs, and Monday tokens.
-  const usersDest = path.join(backupDir, `users-${stamp}.db`);
-  await usersDb.backup(usersDest);
-  const usersFinal = key ? await encryptFile(usersDest, key) : usersDest;
-  console.log(`[backup] wrote ${usersFinal}`);
-
-  if (!key) {
-    console.warn("[backup] BACKUP_ENCRYPTION_KEY not set — backups written UNENCRYPTED.");
+  // Refuse to start on a disk that cannot hold the result. Writing a partial
+  // backup is worse than not writing one: on 2026-08-17 the encryption step ran
+  // out of room mid-file, leaving a 1.5 GB PLAINTEXT copy of client data behind
+  // (encryptFile only unlinks its source on success) and consuming the very
+  // space the next attempt needed.
+  const disk = readDisk(DATA_DIR);
+  if (disk.level === "critical") {
+    // Prune first — that is what frees the room — then let the caller retry on
+    // the next tick rather than writing into a full filesystem.
+    pruneBackups(backupDir);
+    throw new Error(
+      `Refusing to back up: only ${disk.freeGb?.toFixed(1) ?? "?"} GB free (${disk.usedPct ?? "?"}% used). ` +
+        `Old backups were pruned; the next run will retry.`,
+    );
   }
 
-  // Prune the daily series to the BACKUP_KEEP most recent (default 4). At
-  // ~820 MB per live backup on a 24 GB disk, the old KEEP=14 (~11 GB) silently
-  // filled the disk — which was the root cause of the 2026-07 corruptions
-  // (a sync that runs out of room mid-write tears the file). See nightly 07-27.
-  //
-  // The pattern requires a DIGIT right after the prefix (the ISO year) so the
-  // "live-" daily series never swallows the "live-presync-" safety snapshots,
-  // and integrity-gates pruning: if a DB went corrupt after startup, its series
-  // is NOT pruned, so a bad copy can't age out the last known-good backup.
+  try {
+    // Back up the main client database, then encrypt at rest if a key is set.
+    const dest = path.join(backupDir, `${DB_SOURCE}-${stamp}.db`);
+    await db.backup(dest);
+    const destFinal = key ? await encryptFile(dest, key) : dest;
+    console.log(`[backup] wrote ${destFinal}`);
+
+    // Back up users.db alongside — it holds roles, prefs, and Monday tokens.
+    const usersDest = path.join(backupDir, `users-${stamp}.db`);
+    await usersDb.backup(usersDest);
+    const usersFinal = key ? await encryptFile(usersDest, key) : usersDest;
+    console.log(`[backup] wrote ${usersFinal}`);
+
+    if (!key) {
+      console.warn("[backup] BACKUP_ENCRYPTION_KEY not set — backups written UNENCRYPTED.");
+    }
+  } finally {
+    // Prune even when the write above failed. Retention used to be the last
+    // statement in this function, so a failure — a full disk, most obviously —
+    // skipped it entirely. That is a trap door: the one condition that makes
+    // pruning urgent is the same one that prevented it, and the disk could
+    // never recover on its own. It stayed full for a week.
+    pruneBackups(backupDir);
+  }
+}
+
+/**
+ * Prune each backup series to BACKUP_KEEP, integrity-gated: a database that
+ * fails its check does NOT prune, so a corrupt copy can never age out the last
+ * known-good restore point (the 2026-07-24 lesson).
+ */
+function pruneBackups(backupDir: string): void {
   const KEEP = Number(process.env.BACKUP_KEEP) || 4;
   const series: Array<{ prefix: string; healthy: boolean }> = [
     { prefix: DB_SOURCE, healthy: isDatabaseHealthy(db) },
@@ -1337,14 +1384,21 @@ async function runBackup(): Promise<void> {
       console.warn(`[backup] ${prefix}.db failed integrity — keeping all backups (no prune).`);
       continue;
     }
+    // The pattern requires a DIGIT right after the prefix (the ISO year) so the
+    // "live-" daily series never swallows the "live-presync-" safety snapshots.
+    // `.enc` is optional because backups are encrypted after being written.
     const re = new RegExp(`^${prefix}-\\d.*\\.db(\\.enc)?$`);
     const files = fs
       .readdirSync(backupDir)
       .filter((f) => re.test(f) && !f.includes("premigrate"))
       .sort();
     for (const f of files.slice(0, Math.max(0, files.length - KEEP))) {
-      fs.unlinkSync(path.join(backupDir, f));
-      console.log(`[backup] pruned old backup: ${f}`);
+      try {
+        fs.unlinkSync(path.join(backupDir, f));
+        console.log(`[backup] pruned old backup: ${f}`);
+      } catch (err) {
+        console.warn(`[backup] could not prune ${f}:`, err);
+      }
     }
   }
 }
