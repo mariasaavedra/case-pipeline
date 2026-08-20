@@ -54,6 +54,7 @@ import { loadBoardsConfig } from "@case-pipeline/config";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
 import { backupDatabase } from "../backup-db.js";
+import { backupEncryptionKey, encryptFile } from "../../apps/api/src/backup/crypto.js";
 import { acquireSyncLock, releaseSyncLock, recordSyncResult } from "@case-pipeline/seed/db/sync-lock";
 import { normalizeANumber } from "@case-pipeline/core";
 import {
@@ -177,7 +178,9 @@ async function main() {
         keep: PRESYNC_BACKUPS_KEPT,
         dataDir,
       });
-      console.log(`[sync] Pre-sync safety backup written: ${dest}`);
+      const encKey = backupEncryptionKey();
+      const finalDest = dest && encKey ? await encryptFile(dest, encKey) : dest;
+      console.log(`[sync] Pre-sync safety backup written: ${finalDest}`);
     } catch (err) {
       // The sync lock is acquired below, after this block, so nothing to
       // release here — just close the handle and bail before writing anything.
