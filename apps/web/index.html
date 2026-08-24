@@ -4,9 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Case Pipeline — 360 Client Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230c1222'/><path d='M11.2 21.4V10.6h3.9c2.6 0 4.2 1.4 4.2 3.7s-1.6 3.7-4.2 3.7h-1.7v3.4z' fill='%23b45309'/></svg>">
+  <!-- Fonts are self-hosted (src/fonts.css, pulled in through styles.css), so no
+       third-party origin sits on the critical path. These two preloads are the
+       faces every page paints with: Outfit for body copy, Fraunces for display
+       headings. crossorigin is required — font fetches are CORS-mode even
+       same-origin, and without it the preload is discarded and refetched. -->
+  <link rel="preload" href="./src/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./src/fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
