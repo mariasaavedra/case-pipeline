@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { createContract } from "../api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { useBoardColumns } from "../BoardColumnsProvider";
 
 interface Props {
@@ -21,6 +22,11 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
   const feeKs = useBoardColumns("fee_ks");
   const caseTypeCol = feeKs?.columns.find((c) => c.type === "dropdown" && c.title.trim().toLowerCase().startsWith("contract for"));
   const options = caseTypeCol?.options ?? [];
+  // See KpiDetailModal: `items` is what lets the closed trigger show a label.
+  const caseTypeItems = [
+    { value: "", label: "Select…" },
+    ...options.map((o) => ({ value: o.label, label: o.label })),
+  ];
 
   const [caseType, setCaseType] = useState("");
   const [af, setAf] = useState("");
@@ -80,12 +86,15 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
                   {options.length === 0 ? (
                     <span style={{ fontSize: 12, color: "var(--color-status-red)" }}>Fee Ks options not synced yet — run a sync first.</span>
                   ) : (
-                    <select value={caseType} onChange={(e) => setCaseType(e.target.value)}
-                      className="w-full rounded-md px-2 py-1.5 text-sm"
-                      style={{ border: "1px solid var(--color-border-light)", background: "var(--color-surface)", color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
-                      <option value="">Select…</option>
-                      {options.map((o) => <option key={o.index} value={o.label}>{o.label}</option>)}
-                    </select>
+                    <Select items={caseTypeItems} value={caseType} onValueChange={(v) => setCaseType(v ?? "")}>
+                      <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="w-[var(--anchor-width)]">
+                        <SelectItem value="">Select…</SelectItem>
+                        {caseTypeItems.slice(1).map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   )}
                 </label>
 

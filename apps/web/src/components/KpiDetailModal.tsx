@@ -14,6 +14,7 @@ import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { Link } from "./Link";
 import { clientPath } from "../router";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { StatusBadge } from "./StatusBadge";
 
 function formatDate(dateStr: string | null): string {
@@ -80,6 +81,12 @@ export function KpiDetailModal({
   }, [cardKey, hearingRange]);
 
   const columns = detail?.columns ?? [];
+  // `items` gives Base UI the value→label map the closed trigger needs;
+  // without it the trigger renders blank until the popup is opened once.
+  const columnItems = [
+    { value: "", label: "None" },
+    ...columns.map((col) => ({ value: col.id, label: `${col.label} (${col.populatedCount})` })),
+  ];
   const items = detail?.items ?? [];
 
   const filtered = useMemo(() => {
@@ -153,27 +160,26 @@ export function KpiDetailModal({
           {columns.length > 0 && (
             <label className="flex items-center gap-2 text-xs" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
               Show column
-              <select
+              <Select
+                items={columnItems}
                 value={columnId ?? ""}
-                onChange={(e) => {
+                onValueChange={(v) => {
                   setGlobalSaved(false);
-                  onSelectColumn(e.target.value || null);
-                }}
-                className="text-sm px-2 py-1.5 rounded-lg"
-                style={{
-                  backgroundColor: "var(--color-surface)",
-                  border: "1px solid var(--color-border-light)",
-                  color: "var(--color-ink)",
-                  fontFamily: "var(--font-body)",
+                  onSelectColumn(v || null);
                 }}
               >
-                <option value="">None</option>
-                {columns.map((col) => (
-                  <option key={col.id} value={col.id}>
-                    {col.label} ({col.populatedCount})
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger size="sm" className="border-border-light bg-surface">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {columns.map((col) => (
+                    <SelectItem key={col.id} value={col.id}>
+                      {col.label} ({col.populatedCount})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </label>
           )}
 
