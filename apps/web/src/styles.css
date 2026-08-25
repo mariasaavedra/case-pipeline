@@ -1,5 +1,13 @@
 @import "tailwindcss";
 @import "./fonts.css";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* shadcn components use Tailwind's `dark:` variant. This repo toggles theme
+   via [data-theme="dark"] on <html> (not a .dark class), so point the variant
+   at that instead of shadcn's default — every dark: utility then follows the
+   existing theme switch for free. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* =============================================================================
    Case Pipeline — Design System
@@ -40,6 +48,38 @@
   --font-display: "Fraunces", "Georgia", serif;
   --font-body: "Outfit", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Menlo", monospace;
+
+  /* shadcn/ui semantic tokens — mapped onto the palette above rather than
+     shadcn's own generated neutral theme, so components (Dialog, Select,
+     Sonner, Badge...) pick up this app's look for free. Tailwind v4 only
+     generates color utility classes (bg, text, border, ring, etc.) for keys
+     prefixed --color-, so every one of these needs that prefix even though
+     it is just aliasing an existing token. --color-card and --color-border
+     already exist above with compatible values, so those two are reused
+     as-is rather than redefined here (a --color-card: var(--color-card)
+     self-reference would be an invalid, empty value). Each alias resolves
+     through the palette's --color- custom properties, which
+     [data-theme="dark"] already redefines, so no separate dark-mode block
+     is needed here. */
+  --font-sans: var(--font-body);
+  --color-background: var(--color-surface);
+  --color-foreground: var(--color-ink);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-card);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary: var(--color-amber);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--color-surface-warm);
+  --color-secondary-foreground: var(--color-ink);
+  --color-muted: var(--color-surface-warm);
+  --color-muted-foreground: var(--color-ink-muted);
+  --color-accent: var(--color-amber-light);
+  --color-accent-foreground: var(--color-amber-dark);
+  --color-destructive: var(--color-status-red);
+  --color-destructive-foreground: #ffffff;
+  --color-input: var(--color-border);
+  --color-ring: var(--color-amber);
+  --radius: 0.625rem;
 }
 
 /* =============================================================================
@@ -56,6 +96,10 @@
   --color-border: #252838;
   --color-border-light: #1c1f2c;
   --color-amber-light: rgba(180, 83, 9, 0.15);
+  /* accent-foreground pairs with this translucent accent bg (see @theme
+     above) — the light-mode amber-dark (#92400e) is too low-contrast against
+     it here, so lighten it for this theme only. */
+  --color-amber-dark: #fbbf24;
   --color-status-green-bg: rgba(6, 95, 70, 0.15);
   --color-status-blue-bg: rgba(30, 64, 175, 0.15);
   --color-status-yellow-bg: rgba(146, 64, 14, 0.15);
@@ -730,24 +774,6 @@ body {
   box-shadow: 0 0 0 1px rgba(180, 83, 9, 0.1);
 }
 
-.snapshot-card.popover-open {
-  z-index: 60;
-}
-
-.snapshot-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  min-width: 240px;
-  max-width: 360px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 14px 16px;
-  z-index: 50;
-}
-
 /* =============================================================================
    KPI Dashboard Grid
    ============================================================================= */
@@ -995,12 +1021,6 @@ body {
   .mobile-menu-btn {
     display: flex;
   }
-
-  .snapshot-popover {
-    left: -8px;
-    right: -8px;
-    min-width: auto;
-  }
 }
 /* =============================================================================
    Responsive enhancements — approved responsive review (2026-06)
@@ -1060,5 +1080,26 @@ body {
   .tab-bar {
     -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
     mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  }
+}
+
+/* Radius scale, kept separate since it derives from --radius above rather
+   than being a fixed palette value. Sidebar/chart tokens are dropped for now
+   — nothing in this app uses shadcn's Sidebar or Chart components yet; add
+   them here if/when that changes. */
+@theme {
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
   }
 }

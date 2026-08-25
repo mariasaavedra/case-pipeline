@@ -17,7 +17,7 @@
 // =============================================================================
 
 import { useState } from "react";
-import { Popover } from "./Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { rangeLabel, type DateRange, type TimelinePeriod } from "../utils/timeline-range";
 
 export type { DateRange, TimelinePeriod };
@@ -57,9 +57,11 @@ export function TimelineFilters({
   // keystroke — the range only applies on Apply.
   const [draft, setDraft] = useState<DateRange>(customRange);
 
-  const openRange = () => {
-    setDraft(customRange);
-    setRangeOpen(true);
+  // Reset the draft every time the popover opens, so a range abandoned without
+  // applying doesn't come back on the next open.
+  const onRangeOpenChange = (open: boolean) => {
+    if (open) setDraft(customRange);
+    setRangeOpen(open);
   };
 
   const apply = () => {
@@ -107,49 +109,44 @@ export function TimelineFilters({
           </button>
         ))}
 
-        <div style={{ position: "relative" }}>
-          <button
+        <Popover open={rangeOpen} onOpenChange={onRangeOpenChange}>
+          <PopoverTrigger
             className={`filter-chip ${period === "custom" ? "filter-chip-active" : ""}`}
-            onClick={() => (rangeOpen ? setRangeOpen(false) : openRange())}
-            aria-expanded={rangeOpen}
-            aria-haspopup="dialog"
           >
             📅 {period === "custom" ? rangeLabel(customRange) : "Range…"}
-          </button>
+          </PopoverTrigger>
 
-          <Popover open={rangeOpen} onClose={() => setRangeOpen(false)}>
-            <div style={{ padding: 12, minWidth: 240 }}>
-              <label style={labelStyle}>
-                From
-                <input
-                  type="date"
-                  value={draft.from ?? ""}
-                  max={draft.to || undefined}
-                  onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value || undefined }))}
-                  style={inputStyle}
-                />
-              </label>
-              <label style={{ ...labelStyle, marginTop: 8 }}>
-                To
-                <input
-                  type="date"
-                  value={draft.to ?? ""}
-                  min={draft.from || undefined}
-                  onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value || undefined }))}
-                  style={inputStyle}
-                />
-              </label>
-              <div className="flex items-center gap-2" style={{ marginTop: 12 }}>
-                <button onClick={apply} style={primaryBtn}>
-                  Apply
-                </button>
-                <button onClick={clear} style={ghostBtn}>
-                  Clear
-                </button>
-              </div>
+          <PopoverContent align="end" className="w-60 p-3">
+            <label style={labelStyle}>
+              From
+              <input
+                type="date"
+                value={draft.from ?? ""}
+                max={draft.to || undefined}
+                onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value || undefined }))}
+                style={inputStyle}
+              />
+            </label>
+            <label style={{ ...labelStyle, marginTop: 8 }}>
+              To
+              <input
+                type="date"
+                value={draft.to ?? ""}
+                min={draft.from || undefined}
+                onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value || undefined }))}
+                style={inputStyle}
+              />
+            </label>
+            <div className="flex items-center gap-2" style={{ marginTop: 12 }}>
+              <button onClick={apply} style={primaryBtn}>
+                Apply
+              </button>
+              <button onClick={clear} style={ghostBtn}>
+                Clear
+              </button>
             </div>
-          </Popover>
-        </div>
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   );

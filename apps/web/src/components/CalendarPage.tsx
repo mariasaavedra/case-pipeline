@@ -7,7 +7,7 @@ import { fetchCalendarEvents } from "../api";
 import type { CalendarResult, CalendarEvent, CalendarCategory } from "../api";
 import { Link } from "./Link";
 import { clientPath } from "../router";
-import { ModalPortal } from "./ModalPortal";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 
 type ViewMode = "month" | "agenda";
 
@@ -294,61 +294,33 @@ function DayModal({
   events: CalendarEvent[];
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
-    };
-  }, [onClose]);
-
   return (
-    <ModalPortal>
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        style={{ backgroundColor: "rgba(12, 18, 34, 0.55)" }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
-      >
-        <div
-          className="relative w-full max-w-lg rounded-2xl shadow-2xl flex flex-col animate-in"
-          style={{ backgroundColor: "var(--color-surface)", maxHeight: "80vh", border: "1px solid var(--color-border)" }}
-        >
-          <div
-            className="flex items-center justify-between gap-4 px-5 py-4 flex-shrink-0"
-            style={{ borderBottom: "1px solid var(--color-border-light)" }}
-          >
-            <h2 className="text-base font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}>
-              {formatDayLabel(date)}
-            </h2>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: "none", border: "1px solid var(--color-border-light)", cursor: "pointer", color: "var(--color-ink-faint)" }}
-              aria-label="Close"
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[80vh] flex-col gap-0 p-0 sm:max-w-lg">
+        <DialogHeader className="flex-shrink-0 gap-0.5 border-b border-border px-5 py-4 pr-12">
+          <DialogTitle className="text-base" style={{ fontFamily: "var(--font-display)" }}>
+            {formatDayLabel(date)}
+          </DialogTitle>
+          {events.length > 0 && (
+            <DialogDescription>
+              {events.length} event{events.length !== 1 ? "s" : ""}
+            </DialogDescription>
+          )}
+        </DialogHeader>
+        <div className="flex-1 space-y-2 overflow-y-auto px-5 py-4">
+          {events.length === 0 ? (
+            <p
+              className="py-6 text-center text-sm"
+              style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M4 4l8 8M12 4l-8 8" />
-              </svg>
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-            {events.length === 0 ? (
-              <p className="text-sm text-center py-6" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-                Nothing on the calendar this day.
-              </p>
-            ) : (
-              events.map((e) => <EventRow key={`${e.boardKey}-${e.localId}`} event={e} />)
-            )}
-          </div>
+              Nothing on the calendar this day.
+            </p>
+          ) : (
+            events.map((e) => <EventRow key={`${e.boardKey}-${e.localId}`} event={e} />)
+          )}
         </div>
-      </div>
-    </ModalPortal>
+      </DialogContent>
+    </Dialog>
   );
 }
 

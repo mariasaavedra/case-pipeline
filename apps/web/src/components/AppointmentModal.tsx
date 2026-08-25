@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { useState } from "react";
 import type { AppointmentEntry, ClientUpdate } from "../api";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { NoteComposer } from "./NoteComposer";
@@ -7,7 +7,7 @@ import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { formatANumber } from "@case-pipeline/core";
 import { Link } from "./Link";
 import { clientPath } from "../router";
-import { ModalPortal } from "./ModalPortal";
+import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -81,101 +81,50 @@ export function AppointmentModal({ entry, onClose }: Props) {
   const priorityStyle = profile ? getPriorityStyle(profile.priority) : null;
   const [pendingUpdates, setPendingUpdates] = useState<ClientUpdate[]>([]);
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    },
-    [onClose]
-  );
-
-  useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
-    };
-  }, [handleKeyDown]);
-
   return (
-    <ModalPortal>
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(12, 18, 34, 0.55)" }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="relative w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col animate-in"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          maxHeight: "90vh",
-          border: "1px solid var(--color-border)",
-        }}
-      >
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-5xl">
         {/* Amber accent strip */}
-        <div className="h-1 rounded-t-2xl flex-shrink-0" style={{ backgroundColor: "var(--color-amber)" }} />
+        <div className="h-1 flex-shrink-0 rounded-t-xl" style={{ backgroundColor: "var(--color-amber)" }} />
 
         {/* Header */}
-        <div
-          className="flex items-start justify-between gap-4 px-6 py-4 flex-shrink-0"
-          style={{ borderBottom: "1px solid var(--color-border-light)" }}
-        >
-          <div className="flex-1 min-w-0">
-            {/* Board + status badges */}
-            <div className="flex items-center gap-2 flex-wrap mb-1.5">
-              <span className="board-tag">
-                {BOARD_DISPLAY_NAMES[appointment.boardKey] ?? appointment.boardKey}
-              </span>
-              {appointment.status && (
-                <span
-                  className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                  style={{
-                    backgroundColor: statusStyle.bg,
-                    color: statusStyle.text,
-                    fontFamily: "var(--font-body)",
-                  }}
-                >
-                  {appointment.status}
-                </span>
-              )}
-            </div>
-
-            {/* Appointment name */}
-            <h2
-              className="text-lg font-semibold leading-snug truncate"
-              style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
-            >
-              {appointment.name}
-            </h2>
-
-            {/* Date */}
-            {appointment.nextDate && (
-              <p
-                className="text-sm mt-0.5"
-                style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}
+        <div className="flex-shrink-0 border-b border-border px-6 py-4 pr-12">
+          {/* Board + status badges */}
+          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+            <span className="board-tag">
+              {BOARD_DISPLAY_NAMES[appointment.boardKey] ?? appointment.boardKey}
+            </span>
+            {appointment.status && (
+              <span
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                style={{
+                  backgroundColor: statusStyle.bg,
+                  color: statusStyle.text,
+                  fontFamily: "var(--font-body)",
+                }}
               >
-                {formatDate(appointment.nextDate)}
-              </p>
+                {appointment.status}
+              </span>
             )}
           </div>
 
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
-            style={{
-              background: "none",
-              border: "1px solid var(--color-border-light)",
-              cursor: "pointer",
-              color: "var(--color-ink-faint)",
-            }}
-            aria-label="Close"
+          {/* Appointment name */}
+          <DialogTitle
+            className="truncate text-lg font-semibold leading-snug"
+            style={{ fontFamily: "var(--font-display)" }}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M4 4l8 8M12 4l-8 8" />
-            </svg>
-          </button>
+            {appointment.name}
+          </DialogTitle>
+
+          {/* Date */}
+          {appointment.nextDate && (
+            <p
+              className="text-sm mt-0.5"
+              style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}
+            >
+              {formatDate(appointment.nextDate)}
+            </p>
+          )}
         </div>
 
         {/* Scrollable body */}
@@ -409,8 +358,7 @@ export function AppointmentModal({ entry, onClose }: Props) {
             </div>
           </div>
         </div>
-      </div>
-    </div>
-    </ModalPortal>
+      </DialogContent>
+    </Dialog>
   );
 }
