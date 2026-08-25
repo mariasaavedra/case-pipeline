@@ -10,7 +10,7 @@
 
 import type { BoardItemSummary } from "../api";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
-import { ModalPortal } from "./ModalPortal";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { StatusEditor } from "./StatusEditor";
 import { useBoardStatusOptions } from "../StatusOptionsProvider";
 
@@ -46,22 +46,16 @@ export function EntryEditorModal({ entry, boardKey, onClose, onStatusChanged }: 
     .filter(([, v]) => v !== "");
 
   return (
-    <ModalPortal>
-      <div className="version-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Edit entry">
-        <div className="version-modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-          <div className="version-modal-head">
-            <div style={{ minWidth: 0 }}>
-              <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--color-ink)", margin: 0 }} className="truncate">
-                {entry.name}
-              </h2>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-ink-faint)", margin: "2px 0 0" }}>
-                {boardName}
-              </p>
-            </div>
-            <button type="button" onClick={onClose} className="version-modal-close" aria-label="Close">✕</button>
-          </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[80vh] flex-col gap-0 p-0 sm:max-w-[520px]">
+        <DialogHeader className="gap-0.5 border-b border-border px-[18px] py-4 pr-12">
+          <DialogTitle className="truncate" style={{ fontFamily: "var(--font-display)" }}>
+            {entry.name}
+          </DialogTitle>
+          <DialogDescription style={{ fontFamily: "var(--font-mono)" }}>{boardName}</DialogDescription>
+        </DialogHeader>
 
-          <div className="version-modal-body">
+        <div className="min-h-0 flex-1 overflow-y-auto px-[18px] py-4">
             {/* Status — editable */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)", marginBottom: 6, fontFamily: "var(--font-body)" }}>
@@ -110,9 +104,8 @@ export function EntryEditorModal({ entry, boardKey, onClose, onStatusChanged }: 
                 </div>
               )}
             </div>
-          </div>
         </div>
-      </div>
-    </ModalPortal>
+      </DialogContent>
+    </Dialog>
   );
 }

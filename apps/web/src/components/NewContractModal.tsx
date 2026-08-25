@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { createContract } from "../api";
-import { ModalPortal } from "./ModalPortal";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { useBoardColumns } from "../BoardColumnsProvider";
 
 interface Props {
@@ -59,18 +59,14 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
   );
 
   return (
-    <ModalPortal>
-      <div className="version-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="New contract">
-        <div className="version-modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
-          <div className="version-modal-head">
-            <div>
-              <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--color-ink)", margin: 0 }}>New contract (Fee K)</h2>
-              <p style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--color-ink-faint)", margin: "2px 0 0" }}>{clientName}</p>
-            </div>
-            <button type="button" onClick={onClose} className="version-modal-close" aria-label="Close">✕</button>
-          </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="gap-0 p-0 sm:max-w-[460px]">
+        <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
+          <DialogTitle style={{ fontFamily: "var(--font-display)" }}>New contract (Fee K)</DialogTitle>
+          <DialogDescription>{clientName}</DialogDescription>
+        </DialogHeader>
 
-          <div className="version-modal-body">
+        <div className="px-5 py-4">
             {done ? (
               <div style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "var(--color-ink)" }}>
                 <p style={{ marginBottom: 8 }}>✓ Contract <strong>{done.name}</strong> {done.pending ? "queued (will sync to Monday shortly)" : "created in Monday"}.</p>
@@ -109,9 +105,8 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
                 </div>
               </>
             )}
-          </div>
         </div>
-      </div>
-    </ModalPortal>
+      </DialogContent>
+    </Dialog>
   );
 }
