@@ -1,8 +1,8 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import type { ClientCaseSummary } from "../api";
 import { getStatusColor, DOCUMENT_BOARD_KEYS } from "../config";
 import { StatusBadge } from "./StatusBadge";
-import { Popover } from "./Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { getMostRelevantUpdate } from "../utils/relevance";
 import { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS } from "@case-pipeline/query/types";
 
@@ -91,11 +91,13 @@ export function ClientSnapshot({ data }: Props) {
     setStatusMode(modes[(idx + 1) % modes.length]!);
   };
 
-  const togglePopover = useCallback((id: PopoverId) => {
-    setActivePopover((prev) => (prev === id ? null : id));
-  }, []);
-
-  const closePopover = useCallback(() => setActivePopover(null), []);
+  // One popover at a time: opening a card closes whichever was open, which is
+  // what the shared `activePopover` state bought us before each card had its
+  // own Popover root.
+  const popoverProps = (id: Exclude<PopoverId, null>) => ({
+    open: activePopover === id,
+    onOpenChange: (open: boolean) => setActivePopover(open ? id : null),
+  });
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr + "T00:00:00");
@@ -118,265 +120,289 @@ export function ClientSnapshot({ data }: Props) {
   return (
     <div className="snapshot-grid animate-in animate-in-delay-1">
       {/* Card 1: Case Status */}
-      <div className={`snapshot-card${activePopover === "status" ? " popover-open" : ""}`} onClick={() => togglePopover("status")}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="snapshot-label">Case Status</span>
-          <button
-            onClick={cycleMode}
-            className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-            style={{
-              backgroundColor: "var(--color-surface-warm)",
-              color: "var(--color-ink-faint)",
-              border: "1px solid var(--color-border-light)",
-              fontFamily: "var(--font-body)",
-              cursor: "pointer",
-            }}
-          >
-            {MODE_LABELS[statusMode]}
-          </button>
-        </div>
-        <div className="snapshot-value">
-          {statusMode === "worst" && (
-            worstStatus ? <StatusBadge status={worstStatus.status} /> : (
-              <span style={{ color: "var(--color-ink-faint)" }}>No cases</span>
-            )
-          )}
-          {statusMode === "primary" && (
-            primaryStatus ? <StatusBadge status={primaryStatus} /> : (
-              <span style={{ color: "var(--color-ink-faint)" }}>No active contract</span>
-            )
-          )}
-          {statusMode === "all" && (
-            statuses.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {statuses.map((s) => (
-                  <span key={s.status} className="flex items-center gap-1">
-                    <StatusBadge status={s.status} />
-                    <span
-                      className="text-[10px]"
-                      style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
-                    >
-                      {s.count}
+      <Popover {...popoverProps("status")}>
+        <PopoverTrigger nativeButton={false} render={<div className="snapshot-card" />}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="snapshot-label">Case Status</span>
+            <button
+              onClick={cycleMode}
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+              style={{
+                backgroundColor: "var(--color-surface-warm)",
+                color: "var(--color-ink-faint)",
+                border: "1px solid var(--color-border-light)",
+                fontFamily: "var(--font-body)",
+                cursor: "pointer",
+              }}
+            >
+              {MODE_LABELS[statusMode]}
+            </button>
+          </div>
+          <div className="snapshot-value">
+            {statusMode === "worst" && (
+              worstStatus ? <StatusBadge status={worstStatus.status} /> : (
+                <span style={{ color: "var(--color-ink-faint)" }}>No cases</span>
+              )
+            )}
+            {statusMode === "primary" && (
+              primaryStatus ? <StatusBadge status={primaryStatus} /> : (
+                <span style={{ color: "var(--color-ink-faint)" }}>No active contract</span>
+              )
+            )}
+            {statusMode === "all" && (
+              statuses.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {statuses.map((s) => (
+                    <span key={s.status} className="flex items-center gap-1">
+                      <StatusBadge status={s.status} />
+                      <span
+                        className="text-[10px]"
+                        style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
+                      >
+                        {s.count}
+                      </span>
                     </span>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ color: "var(--color-ink-faint)" }}>No cases</span>
+              )
+            )}
+          </div>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          className="w-[clamp(240px,var(--anchor-width),360px)] p-3.5"
+        >
+            <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
+              All Statuses
+            </div>
+            {statuses.length === 0 ? (
+              <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No cases found</p>
+            ) : (
+              <div className="space-y-2">
+                {statuses.map((s) => (
+                  <div key={s.status} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={s.status} />
+                      <span className="text-xs" style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-mono)" }}>
+                        x{s.count}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 justify-end">
+                      {s.boards.map((bk) => (
+                        <span key={bk} className="board-tag" style={{ fontSize: 10 }}>
+                          {BOARD_DISPLAY_NAMES[bk] ?? bk}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+        </PopoverContent>
+      </Popover>
+
+      {/* Card 2: Next Deadline */}
+      <Popover {...popoverProps("deadline")}>
+        <PopoverTrigger nativeButton={false} render={<div className="snapshot-card" />}>
+          <span className="snapshot-label">Next Deadline</span>
+          {nextDeadline ? (
+            <div>
+              <div
+                className="text-sm font-semibold"
+                style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)", fontVariantNumeric: "tabular-nums" }}
+              >
+                {formatDate(nextDeadline.date)}
+              </div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="board-tag" style={{ fontSize: 10 }}>
+                  {BOARD_DISPLAY_NAMES[nextDeadline.boardKey] ?? nextDeadline.boardKey}
+                </span>
+                <span
+                  className="text-[11px] truncate"
+                  style={{ color: "var(--color-ink-muted)", maxWidth: 120 }}
+                >
+                  {nextDeadline.itemName}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="snapshot-value" style={{ color: "var(--color-ink-faint)" }}>
+              No upcoming deadlines
+            </div>
+          )}
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          className="w-[clamp(240px,var(--anchor-width),360px)] p-3.5"
+        >
+            <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
+              Upcoming Deadlines
+            </div>
+            {deadlines.length === 0 ? (
+              <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No upcoming deadlines</p>
+            ) : (
+              <div className="space-y-2">
+                {deadlines.slice(0, 5).map((d, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span
+                      className="text-xs font-medium flex-shrink-0"
+                      style={{ color: "var(--color-ink)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", minWidth: 80 }}
+                    >
+                      {formatDate(d.date)}
+                    </span>
+                    <div className="min-w-0">
+                      <span className="board-tag" style={{ fontSize: 10 }}>
+                        {BOARD_DISPLAY_NAMES[d.boardKey] ?? d.boardKey}
+                      </span>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--color-ink-muted)" }}>
+                        {d.itemName}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {deadlines.length > 5 && (
+                  <p className="text-[11px]" style={{ color: "var(--color-ink-faint)" }}>
+                    +{deadlines.length - 5} more
+                  </p>
+                )}
+              </div>
+            )}
+        </PopoverContent>
+      </Popover>
+
+      {/* Card 3: Case Type / Relief */}
+      <Popover {...popoverProps("relief")}>
+        <PopoverTrigger nativeButton={false} render={<div className="snapshot-card" />}>
+          <span className="snapshot-label">Case Type / Relief</span>
+          <div className="snapshot-value">
+            {reliefTypes.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {reliefTypes.map((type) => (
+                  <span
+                    key={type}
+                    className="text-xs font-medium px-2 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: "var(--color-amber-light)",
+                      color: "var(--color-amber)",
+                      fontFamily: "var(--font-body)",
+                    }}
+                  >
+                    {type}
                   </span>
                 ))}
               </div>
             ) : (
-              <span style={{ color: "var(--color-ink-faint)" }}>No cases</span>
-            )
-          )}
-        </div>
-        <Popover open={activePopover === "status"} onClose={closePopover}>
-          <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
-            All Statuses
+              <span style={{ color: "var(--color-ink-faint)" }}>No active contracts</span>
+            )}
           </div>
-          {statuses.length === 0 ? (
-            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No cases found</p>
-          ) : (
-            <div className="space-y-2">
-              {statuses.map((s) => (
-                <div key={s.status} className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={s.status} />
-                    <span className="text-xs" style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-mono)" }}>
-                      x{s.count}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1 justify-end">
-                    {s.boards.map((bk) => (
-                      <span key={bk} className="board-tag" style={{ fontSize: 10 }}>
-                        {BOARD_DISPLAY_NAMES[bk] ?? bk}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          className="w-[clamp(240px,var(--anchor-width),360px)] p-3.5"
+        >
+            <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
+              All Contracts
             </div>
-          )}
-        </Popover>
-      </div>
-
-      {/* Card 2: Next Deadline */}
-      <div className={`snapshot-card${activePopover === "deadline" ? " popover-open" : ""}`} onClick={() => togglePopover("deadline")}>
-        <span className="snapshot-label">Next Deadline</span>
-        {nextDeadline ? (
-          <div>
-            <div
-              className="text-sm font-semibold"
-              style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)", fontVariantNumeric: "tabular-nums" }}
-            >
-              {formatDate(nextDeadline.date)}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="board-tag" style={{ fontSize: 10 }}>
-                {BOARD_DISPLAY_NAMES[nextDeadline.boardKey] ?? nextDeadline.boardKey}
-              </span>
-              <span
-                className="text-[11px] truncate"
-                style={{ color: "var(--color-ink-muted)", maxWidth: 120 }}
-              >
-                {nextDeadline.itemName}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="snapshot-value" style={{ color: "var(--color-ink-faint)" }}>
-            No upcoming deadlines
-          </div>
-        )}
-        <Popover open={activePopover === "deadline"} onClose={closePopover}>
-          <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
-            Upcoming Deadlines
-          </div>
-          {deadlines.length === 0 ? (
-            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No upcoming deadlines</p>
-          ) : (
-            <div className="space-y-2">
-              {deadlines.slice(0, 5).map((d, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <span
-                    className="text-xs font-medium flex-shrink-0"
-                    style={{ color: "var(--color-ink)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", minWidth: 80 }}
-                  >
-                    {formatDate(d.date)}
-                  </span>
-                  <div className="min-w-0">
-                    <span className="board-tag" style={{ fontSize: 10 }}>
-                      {BOARD_DISPLAY_NAMES[d.boardKey] ?? d.boardKey}
-                    </span>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--color-ink-muted)" }}>
-                      {d.itemName}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {deadlines.length > 5 && (
-                <p className="text-[11px]" style={{ color: "var(--color-ink-faint)" }}>
-                  +{deadlines.length - 5} more
-                </p>
-              )}
-            </div>
-          )}
-        </Popover>
-      </div>
-
-      {/* Card 3: Case Type / Relief */}
-      <div className={`snapshot-card${activePopover === "relief" ? " popover-open" : ""}`} onClick={() => togglePopover("relief")}>
-        <span className="snapshot-label">Case Type / Relief</span>
-        <div className="snapshot-value">
-          {reliefTypes.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {reliefTypes.map((type) => (
-                <span
-                  key={type}
-                  className="text-xs font-medium px-2 py-0.5 rounded-full"
-                  style={{
-                    backgroundColor: "var(--color-amber-light)",
-                    color: "var(--color-amber)",
-                    fontFamily: "var(--font-body)",
-                  }}
-                >
-                  {type}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <span style={{ color: "var(--color-ink-faint)" }}>No active contracts</span>
-          )}
-        </div>
-        <Popover open={activePopover === "relief"} onClose={closePopover}>
-          <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
-            All Contracts
-          </div>
-          {data.contracts.active.length === 0 && data.contracts.closed.length === 0 ? (
-            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No contracts</p>
-          ) : (
-            <div className="space-y-2">
-              {[...data.contracts.active, ...data.contracts.closed].map((c, i) => (
-                <div key={i} className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium" style={{ color: "var(--color-ink)" }}>
-                      {c.caseType}
-                    </p>
-                    {c.value != null && (
-                      <p className="text-[11px]" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)" }}>
-                        ${Number(c.value).toLocaleString()}
+            {data.contracts.active.length === 0 && data.contracts.closed.length === 0 ? (
+              <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No contracts</p>
+            ) : (
+              <div className="space-y-2">
+                {[...data.contracts.active, ...data.contracts.closed].map((c, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium" style={{ color: "var(--color-ink)" }}>
+                        {c.caseType}
                       </p>
-                    )}
+                      {c.value != null && (
+                        <p className="text-[11px]" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)" }}>
+                          ${Number(c.value).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                    <StatusBadge status={c.status ?? "Unknown"} />
                   </div>
-                  <StatusBadge status={c.status ?? "Unknown"} />
-                </div>
-              ))}
-            </div>
-          )}
-        </Popover>
-      </div>
+                ))}
+              </div>
+            )}
+        </PopoverContent>
+      </Popover>
 
       {/* Card 4: Last Action */}
-      <div className={`snapshot-card${activePopover === "action" ? " popover-open" : ""}`} onClick={() => togglePopover("action")}>
-        <span className="snapshot-label">Last Action</span>
-        {lastAction ? (
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span
-                className="text-xs font-medium"
-                style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
-              >
-                {lastAction.authorName}
-              </span>
-              <span
-                className="text-[11px]"
-                style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
-              >
-                {formatRelativeTime(lastAction.createdAtSource)}
-              </span>
-            </div>
-            <p
-              className="text-xs truncate"
-              style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)", fontWeight: 300 }}
-            >
-              {lastAction.textBody.slice(0, 80)}{lastAction.textBody.length > 80 ? "\u2026" : ""}
-            </p>
-          </div>
-        ) : (
-          <div className="snapshot-value" style={{ color: "var(--color-ink-faint)" }}>
-            No recent activity
-          </div>
-        )}
-        <Popover open={activePopover === "action"} onClose={closePopover}>
-          <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
-            Last Action Detail
-          </div>
+      <Popover {...popoverProps("action")}>
+        <PopoverTrigger nativeButton={false} render={<div className="snapshot-card" />}>
+          <span className="snapshot-label">Last Action</span>
           {lastAction ? (
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-medium" style={{ color: "var(--color-ink)" }}>
+              <div className="flex items-center gap-2 mb-1">
+                <span
+                  className="text-xs font-medium"
+                  style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
+                >
                   {lastAction.authorName}
                 </span>
                 <span
                   className="text-[11px]"
-                  style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)" }}
+                  style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
                 >
                   {formatRelativeTime(lastAction.createdAtSource)}
                 </span>
               </div>
-              {lastAction.boardKey && (
-                <span className="board-tag mb-2 inline-block" style={{ fontSize: 10 }}>
-                  {BOARD_DISPLAY_NAMES[lastAction.boardKey] ?? lastAction.boardKey}
-                </span>
-              )}
               <p
-                className="text-xs leading-relaxed"
-                style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)", whiteSpace: "pre-wrap" }}
+                className="text-xs truncate"
+                style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)", fontWeight: 300 }}
               >
-                {lastAction.textBody}
+                {lastAction.textBody.slice(0, 80)}{lastAction.textBody.length > 80 ? "\u2026" : ""}
               </p>
             </div>
           ) : (
-            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No recent activity</p>
+            <div className="snapshot-value" style={{ color: "var(--color-ink-faint)" }}>
+              No recent activity
+            </div>
           )}
-        </Popover>
-      </div>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          className="w-[clamp(240px,var(--anchor-width),360px)] p-3.5"
+        >
+            <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--color-ink-faint)" }}>
+              Last Action Detail
+            </div>
+            {lastAction ? (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-medium" style={{ color: "var(--color-ink)" }}>
+                    {lastAction.authorName}
+                  </span>
+                  <span
+                    className="text-[11px]"
+                    style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)" }}
+                  >
+                    {formatRelativeTime(lastAction.createdAtSource)}
+                  </span>
+                </div>
+                {lastAction.boardKey && (
+                  <span className="board-tag mb-2 inline-block" style={{ fontSize: 10 }}>
+                    {BOARD_DISPLAY_NAMES[lastAction.boardKey] ?? lastAction.boardKey}
+                  </span>
+                )}
+                <p
+                  className="text-xs leading-relaxed"
+                  style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)", whiteSpace: "pre-wrap" }}
+                >
+                  {lastAction.textBody}
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No recent activity</p>
+            )}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

@@ -774,24 +774,6 @@ body {
   box-shadow: 0 0 0 1px rgba(180, 83, 9, 0.1);
 }
 
-.snapshot-card.popover-open {
-  z-index: 60;
-}
-
-.snapshot-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  min-width: 240px;
-  max-width: 360px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 14px 16px;
-  z-index: 50;
-}
-
 /* =============================================================================
    KPI Dashboard Grid
    ============================================================================= */
@@ -1038,12 +1020,6 @@ body {
 
   .mobile-menu-btn {
     display: flex;
-  }
-
-  .snapshot-popover {
-    left: -8px;
-    right: -8px;
-    min-width: auto;
   }
 }
 /* =============================================================================
