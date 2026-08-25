@@ -6,14 +6,14 @@
 // (personal choice over a firm-wide default), and the picker here writes both.
 // =============================================================================
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { KpiCardDetail, KpiDetailItem } from "../api";
 import { fetchKpiCardItems, fetchGlobalKpiColumns, updateGlobalKpiColumns } from "../api";
 import { formatColumnValue, isLabelValue } from "../utils/columnValue";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { Link } from "./Link";
 import { clientPath } from "../router";
-import { ModalPortal } from "./ModalPortal";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { StatusBadge } from "./StatusBadge";
 
 function formatDate(dateStr: string | null): string {
@@ -53,22 +53,6 @@ export function KpiDetailModal({
   const [query, setQuery] = useState("");
   const [savingGlobal, setSavingGlobal] = useState(false);
   const [globalSaved, setGlobalSaved] = useState(false);
-
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    },
-    [onClose],
-  );
-
-  useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
-    };
-  }, [handleKeyDown]);
 
   // One fetch per card: every row arrives with ALL of its column values, so
   // switching the displayed column below is instant and offline from here on.
@@ -127,60 +111,22 @@ export function KpiDetailModal({
   };
 
   return (
-    <ModalPortal>
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(12, 18, 34, 0.55)" }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="relative w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col animate-in"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          maxHeight: "88vh",
-          border: "1px solid var(--color-border)",
-        }}
-        role="dialog"
-        aria-modal="true"
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="flex max-h-[88vh] flex-col gap-0 p-0 sm:max-w-4xl"
         aria-label={`${cardLabel} — all cases`}
       >
-        <div className="h-1 rounded-t-2xl flex-shrink-0" style={{ backgroundColor: "var(--color-amber)" }} />
+        <div className="h-1 flex-shrink-0 rounded-t-xl" style={{ backgroundColor: "var(--color-amber)" }} />
 
         {/* Header */}
-        <div
-          className="flex items-start justify-between gap-4 px-6 py-4 flex-shrink-0"
-          style={{ borderBottom: "1px solid var(--color-border-light)" }}
-        >
-          <div className="min-w-0">
-            <h2
-              className="text-lg font-semibold leading-snug"
-              style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
-            >
-              {cardLabel}
-            </h2>
-            <p className="text-sm mt-0.5" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-              {loading ? "Loading…" : `${filtered.length} of ${items.length} case${items.length === 1 ? "" : "s"}`}
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{
-              background: "none",
-              border: "1px solid var(--color-border-light)",
-              cursor: "pointer",
-              color: "var(--color-ink-faint)",
-            }}
-            aria-label="Close"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M4 4l8 8M12 4l-8 8" />
-            </svg>
-          </button>
-        </div>
+        <DialogHeader className="flex-shrink-0 gap-0.5 border-b border-border px-6 py-4 pr-12">
+          <DialogTitle className="text-lg leading-snug" style={{ fontFamily: "var(--font-display)" }}>
+            {cardLabel}
+          </DialogTitle>
+          <DialogDescription>
+            {loading ? "Loading…" : `${filtered.length} of ${items.length} case${items.length === 1 ? "" : "s"}`}
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Controls — search + which column to display */}
         <div
@@ -307,9 +253,8 @@ export function KpiDetailModal({
             </table>
           )}
         </div>
-      </div>
-    </div>
-    </ModalPortal>
+      </DialogContent>
+    </Dialog>
   );
 }
 

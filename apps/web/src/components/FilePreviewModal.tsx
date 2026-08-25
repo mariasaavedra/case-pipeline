@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { getPreviewUrl, GraphConsentRequiredError, GraphError, type DriveItem } from "../sharepoint/graph";
-import { ModalPortal } from "./ModalPortal";
+import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 
 interface Props {
   driveId: string;
@@ -31,10 +31,6 @@ export function FilePreviewModal({ driveId, item, onClose }: Props) {
   useEffect(() => {
     let cancelled = false;
 
-    // Close on Escape.
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-
     if (isImage(item) && downloadUrl) {
       setState({ kind: "image", url: downloadUrl });
     } else {
@@ -56,65 +52,20 @@ export function FilePreviewModal({ driveId, item, onClose }: Props) {
 
     return () => {
       cancelled = true;
-      window.removeEventListener("keydown", onKey);
     };
   }, [driveId, item, downloadUrl, onClose]);
 
   return (
-    <ModalPortal>
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 100,
-        background: "rgba(0,0,0,0.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "3vh 3vw",
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%",
-          height: "100%",
-          maxWidth: 1100,
-          background: "var(--color-card)",
-          borderRadius: 12,
-          border: "1px solid var(--color-border)",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex h-[94vh] w-[94vw] flex-col gap-0 p-0 sm:max-w-[1100px]">
         {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "12px 16px",
-            borderBottom: "1px solid var(--color-border)",
-            flexShrink: 0,
-          }}
-        >
-          <span
-            style={{
-              flex: 1,
-              minWidth: 0,
-              fontFamily: "var(--font-body)",
-              fontSize: 14,
-              fontWeight: 500,
-              color: "var(--color-ink)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
+        <div className="flex flex-shrink-0 items-center gap-3 border-b border-border px-4 py-3 pr-12">
+          <DialogTitle
+            className="min-w-0 flex-1 truncate text-sm font-medium"
+            style={{ fontFamily: "var(--font-body)", color: "var(--color-ink)" }}
           >
             {item.name}
-          </span>
+          </DialogTitle>
           <a href={item.webUrl} target="_blank" rel="noopener noreferrer" className="action-btn" style={{ textDecoration: "none", flexShrink: 0 }}>
             Open in SharePoint ↗
           </a>
@@ -123,9 +74,6 @@ export function FilePreviewModal({ driveId, item, onClose }: Props) {
               Download
             </a>
           )}
-          <button onClick={onClose} className="action-btn" style={{ flexShrink: 0 }} title="Close (Esc)">
-            ✕
-          </button>
         </div>
 
         {/* Body */}
@@ -145,8 +93,7 @@ export function FilePreviewModal({ driveId, item, onClose }: Props) {
             </span>
           )}
         </div>
-      </div>
-    </div>
-    </ModalPortal>
+      </DialogContent>
+    </Dialog>
   );
 }
