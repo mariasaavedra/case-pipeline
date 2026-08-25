@@ -1,3 +1,5 @@
+import { Button } from "./ui/button";
+
 interface Props {
   title: string;
   message: string;
@@ -40,24 +42,14 @@ export function SharePointPlaceholder({ title, message, action }: Props) {
           </p>
         </div>
         {action && (
-          <button
+          <Button
+            size="lg"
+            className="px-4.5 font-semibold"
             onClick={action.onClick}
             disabled={action.busy}
-            style={{
-              padding: "8px 18px",
-              borderRadius: "8px",
-              border: "none",
-              backgroundColor: "var(--color-amber)",
-              color: "#fff",
-              fontFamily: "var(--font-body)",
-              fontSize: "13px",
-              fontWeight: 600,
-              cursor: action.busy ? "wait" : "pointer",
-              opacity: action.busy ? 0.7 : 1,
-            }}
           >
             {action.busy ? "…" : action.label}
-          </button>
+          </Button>
         )}
       </div>
     </div>

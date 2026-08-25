@@ -8,6 +8,7 @@ import {
   NOTICE_BOARD_KEYS as NOTICE_KEYS,
 } from "@case-pipeline/query/types";
 import type { TimelineFilter } from "./TimelineFilters";
+import { Button } from "./ui/button";
 
 function formatDateTime(iso: string): { date: string; time: string } {
   const d = new Date(iso);
@@ -301,19 +302,14 @@ export function UpdatesTimeline({ updates, filter = "all", last30Days = false, l
 
       {hasMore && (
         <div className="pt-3 text-center">
-          <button
+          <Button
+            size="lg"
+            variant="secondary"
+            className="bg-accent px-4 text-primary hover:bg-accent/70"
             onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-            className="text-sm font-medium px-4 py-2 rounded-lg"
-            style={{
-              color: "var(--color-amber)",
-              fontFamily: "var(--font-body)",
-              backgroundColor: "var(--color-amber-light)",
-              border: "none",
-              cursor: "pointer",
-            }}
           >
             Load more ({filtered.length - visibleCount} remaining)
-          </button>
+          </Button>
         </div>
       )}
     </div>

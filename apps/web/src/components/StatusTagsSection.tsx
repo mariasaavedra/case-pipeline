@@ -26,6 +26,7 @@ import {
 } from "../config";
 import { useStatusOverridesAdmin } from "../StatusOverridesProvider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Button } from "./ui/button";
 
 const TONE_DOT: Record<StatusTone, string> = {
   green: "var(--color-status-green)",
@@ -139,20 +140,9 @@ export function StatusTagsSection() {
           className="text-sm px-3 py-1.5 rounded-lg flex-1 min-w-[200px]"
           style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border-light)", color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
         />
-        <button
-          onClick={save}
-          disabled={!dirty || saving}
-          className="text-sm px-3 py-1.5 rounded-lg font-medium"
-          style={{
-            backgroundColor: dirty ? "var(--color-amber)" : "var(--color-surface-warm)",
-            color: dirty ? "#fff" : "var(--color-ink-faint)",
-            border: "none",
-            cursor: dirty && !saving ? "pointer" : "default",
-            fontFamily: "var(--font-body)",
-          }}
-        >
+        <Button onClick={save} disabled={!dirty || saving}>
           {saving ? "Saving…" : savedAt ? "Saved ✓" : dirty ? "Save changes" : "No changes"}
-        </button>
+        </Button>
       </div>
 
       {loading ? (
