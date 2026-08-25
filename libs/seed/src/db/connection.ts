@@ -64,7 +64,21 @@ export function openDatabase(
   return db;
 }
 
-/** Full-scan integrity check. Returns true when the DB reports "ok". */
+/**
+ * Page-level integrity check. Returns true when the DB reports "ok".
+ *
+ * Deliberately `quick_check`, not `integrity_check`: it does the same page and
+ * b-tree verification but skips re-deriving every index from its table, which is
+ * the expensive half. Every caller is a gate on a hot path — API boot
+ * (`apps/api/src/server.ts`), the sync run, `npm run health`, and backup
+ * verification — where the job is "is this file readable or torn?", not "is an
+ * index subtly stale?". A torn page from a half-checkpointed WAL, which is the
+ * failure this guards against, is caught by both.
+ *
+ * Note this returns false in two ways: `quick_check` yields error rows on a
+ * recoverable inconsistency, but THROWS outright on a badly-malformed file
+ * (a clobbered page 1 never even parses as a schema) — hence the catch.
+ */
 export function isDatabaseHealthy(db: DatabaseInstance): boolean {
   try {
     const rows = db.pragma("quick_check") as Array<{ quick_check: string }>;

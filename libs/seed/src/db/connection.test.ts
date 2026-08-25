@@ -43,7 +43,13 @@ describe("isDatabaseHealthy", () => {
     seed.pragma("journal_mode = DELETE");
     seed.exec("CREATE TABLE t (x TEXT)");
     const ins = seed.prepare("INSERT INTO t VALUES (?)");
-    for (let i = 0; i < 500; i++) ins.run("row-" + i);
+    // One transaction, not 500. In journal_mode=DELETE every bare `ins.run()` is
+    // its own durable commit — a journal create/fsync/delete cycle per row. That
+    // cost is invisible locally (~105ms) but on an I/O-contended CI runner it was
+    // enough to blow the 5s test timeout. Batched, the same 500 rows take ~1ms.
+    seed.transaction(() => {
+      for (let i = 0; i < 500; i++) ins.run("row-" + i);
+    })();
     seed.close();
 
     // Clobber the first page's b-tree body (byte 100 onward is page-1 content).
@@ -54,7 +60,10 @@ describe("isDatabaseHealthy", () => {
     const db = new Database(p, { readonly: true });
     expect(isDatabaseHealthy(db)).toBe(false);
     db.close();
-  });
+    // Generous timeout: the assertion itself is ~1ms, but this test touches the
+    // real filesystem, and a stalled CI runner should not be reported as a
+    // corruption-detection failure.
+  }, 20_000);
 });
 
 describe("initializeDatabase", () => {
