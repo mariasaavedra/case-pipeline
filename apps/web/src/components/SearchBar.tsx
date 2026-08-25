@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { searchClients, typedSearch } from "../api";
 import type { SearchResult, TypedSearchResult, SearchType } from "../api";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const SEARCH_TYPE_OPTIONS: { value: SearchType; label: string }[] = [
   { value: "profiles", label: "Clients" },
@@ -75,8 +76,8 @@ export function SearchBar({ onResults, onTypedResults }: Props) {
   );
 
   const handleTypeChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const type = e.target.value as SearchType;
+    (value: SearchType | null) => {
+      const type = (value ?? "profiles") as SearchType;
       setSearchType(type);
       if (query.trim().length >= 2) {
         doSearch(query, type);
@@ -94,27 +95,18 @@ export function SearchBar({ onResults, onTypedResults }: Props) {
 
   return (
     <div className="flex-1 flex gap-2 items-center">
-      <select
-        value={searchType}
-        onChange={handleTypeChange}
-        className="text-sm rounded-lg px-3 py-2"
-        style={{
-          backgroundColor: "var(--color-surface-warm)",
-          border: "1px solid var(--color-border)",
-          color: "var(--color-ink)",
-          fontFamily: "var(--font-body)",
-          fontWeight: 400,
-          outline: "none",
-          cursor: "pointer",
-          minWidth: 110,
-        }}
-      >
-        {SEARCH_TYPE_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <Select items={SEARCH_TYPE_OPTIONS} value={searchType} onValueChange={handleTypeChange}>
+        <SelectTrigger className="min-w-27.5 bg-secondary font-normal" aria-label="Search type">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SEARCH_TYPE_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       <div className="flex-1 relative">
         <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">

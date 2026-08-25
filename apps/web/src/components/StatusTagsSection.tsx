@@ -25,6 +25,7 @@ import {
   type StatusUrgency,
 } from "../config";
 import { useStatusOverridesAdmin } from "../StatusOverridesProvider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const TONE_DOT: Record<StatusTone, string> = {
   green: "var(--color-status-green)",
@@ -34,6 +35,13 @@ const TONE_DOT: Record<StatusTone, string> = {
   gray: "var(--color-status-gray)",
   purple: "var(--color-status-purple)",
 };
+
+// `items` gives Base UI the value→label map the closed trigger needs; without
+// it the trigger renders blank until the popup has been opened once.
+const urgencyItems = [
+  { value: "", label: "No urgency" },
+  ...STATUS_URGENCIES.map((u) => ({ value: u, label: u })),
+];
 
 export function StatusTagsSection() {
   const { admin, refresh } = useStatusOverridesAdmin();
@@ -204,18 +212,26 @@ export function StatusTagsSection() {
 
                     {/* Urgency */}
                     <td className="px-3 py-2 align-middle">
-                      <select
+                      <Select
+                        items={urgencyItems}
                         value={eff.urgency ?? ""}
-                        onChange={(e) => setRule(entry.status, { urgency: (e.target.value || undefined) as StatusUrgency | undefined })}
-                        className="text-sm px-2 py-1 rounded"
-                        style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border-light)", color: "var(--color-ink)" }}
-                        title="Elevates this case on the Active Cases board"
+                        onValueChange={(v) => setRule(entry.status, { urgency: (v || undefined) as StatusUrgency | undefined })}
                       >
-                        <option value="">No urgency</option>
-                        {STATUS_URGENCIES.map((u) => (
-                          <option key={u} value={u}>{u}</option>
-                        ))}
-                      </select>
+                        <SelectTrigger
+                          size="sm"
+                          className="border-border-light bg-surface"
+                          title="Elevates this case on the Active Cases board"
+                          aria-label="Urgency"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">No urgency</SelectItem>
+                          {urgencyItems.slice(1).map((i) => (
+                            <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </td>
 
                     {/* Reset */}

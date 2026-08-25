@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { fetchFilterOptions } from "../api";
 import type { FilterOptions } from "../api";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 interface FilterValues {
   status: string;
@@ -33,7 +34,36 @@ export function FilterBar({ filters, onFilterChange, onClear, hasActiveFilters, 
     fetchFilterOptions().then(setOptions).catch(() => {});
   }, []);
 
-  const selectStyle: React.CSSProperties = {
+  // A filter that is actually filtering reads as active — amber border over a
+  // faint amber wash, the same signal the priority chips use.
+  const triggerClass = (active: boolean) =>
+    `min-w-25 bg-secondary text-[13px] ${active ? "border-primary bg-primary/6" : ""}`;
+
+  // One list per dropdown, fed to both `items` and the rendered options. `items`
+  // is what lets the closed trigger show a label: without it Base UI has no
+  // value→label map until the popup has been opened once, and every trigger
+  // renders blank.
+  const statusItems = [
+    { value: "", label: "All Statuses" },
+    { value: "pending_contracts", label: "Pending Contracts" },
+    { value: "paid_fee_ks", label: "Prescheduling" },
+    ...(options?.statuses ?? []).map((s) => ({ value: s, label: s })),
+  ];
+
+  const attorneyItems = [
+    { value: "", label: "All Attorneys" },
+    ...(options?.attorneys ?? []).map((a) => ({ value: a, label: a })),
+  ];
+
+  const boardTypeItems = [
+    { value: "", label: "All Board Types" },
+    ...(options?.boardTypes ?? []).map((b) => ({
+      value: b.key,
+      label: BOARD_DISPLAY_NAMES[b.key] ?? b.key,
+    })),
+  ];
+
+  const dateStyle: React.CSSProperties = {
     backgroundColor: "var(--color-surface-warm)",
     border: "1px solid var(--color-border)",
     borderRadius: 8,
@@ -43,17 +73,6 @@ export function FilterBar({ filters, onFilterChange, onClear, hasActiveFilters, 
     fontFamily: "var(--font-body)",
     outline: "none",
     cursor: "pointer",
-    minWidth: 100,
-  };
-
-  const activeSelectStyle: React.CSSProperties = {
-    ...selectStyle,
-    borderColor: "var(--color-amber)",
-    backgroundColor: "rgba(180,83,9,0.06)",
-  };
-
-  const dateStyle: React.CSSProperties = {
-    ...selectStyle,
     minWidth: 130,
   };
 
@@ -101,44 +120,52 @@ export function FilterBar({ filters, onFilterChange, onClear, hasActiveFilters, 
       <div style={{ width: 1, height: 24, backgroundColor: "var(--color-border)" }} />
 
       {/* Status dropdown */}
-      <select
+      <Select
+        items={statusItems}
         value={filters.status}
-        onChange={(e) => onFilterChange("status", e.target.value)}
-        style={filters.status ? activeSelectStyle : selectStyle}
+        onValueChange={(v) => onFilterChange("status", v ?? "")}
       >
-        <option value="">All Statuses</option>
-        <option value="pending_contracts">Pending Contracts</option>
-        <option value="paid_fee_ks">Prescheduling</option>
-        {options?.statuses.map((s) => (
-          <option key={s} value={s}>{s}</option>
-        ))}
-      </select>
+        <SelectTrigger size="sm" className={triggerClass(!!filters.status)} aria-label="Status">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {statusItems.map((i) => (
+            <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {/* Attorney dropdown */}
-      <select
+      <Select
+        items={attorneyItems}
         value={filters.attorney}
-        onChange={(e) => onFilterChange("attorney", e.target.value)}
-        style={filters.attorney ? activeSelectStyle : selectStyle}
+        onValueChange={(v) => onFilterChange("attorney", v ?? "")}
       >
-        <option value="">All Attorneys</option>
-        {options?.attorneys.map((a) => (
-          <option key={a} value={a}>{a}</option>
-        ))}
-      </select>
+        <SelectTrigger size="sm" className={triggerClass(!!filters.attorney)} aria-label="Attorney">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {attorneyItems.map((i) => (
+            <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {/* Board Type dropdown */}
-      <select
+      <Select
+        items={boardTypeItems}
         value={filters.board_type}
-        onChange={(e) => onFilterChange("board_type", e.target.value)}
-        style={filters.board_type ? activeSelectStyle : selectStyle}
+        onValueChange={(v) => onFilterChange("board_type", v ?? "")}
       >
-        <option value="">All Board Types</option>
-        {options?.boardTypes.map((b) => (
-          <option key={b.key} value={b.key}>
-            {BOARD_DISPLAY_NAMES[b.key] ?? b.key}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger size="sm" className={triggerClass(!!filters.board_type)} aria-label="Board type">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {boardTypeItems.map((i) => (
+            <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {/* Divider */}
       <div style={{ width: 1, height: 24, backgroundColor: "var(--color-border)" }} />
