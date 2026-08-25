@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -15,6 +15,7 @@ export type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "@case-pipeline/query/appointments";
 export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
+export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 
 let _tokenGetter: (() => Promise<string | null>) | null = null;
 
@@ -273,6 +274,18 @@ export async function fetchAlerts(attorney?: string): Promise<AlertsResult> {
   if (attorney) params.set("attorney", attorney);
   const qs = params.toString();
   return apiFetch<AlertsResult>(`/api/alerts${qs ? `?${qs}` : ""}`);
+}
+
+export async function fetchCalendarEvents(
+  from: string,
+  to: string,
+  categories?: CalendarCategory[],
+  attorney?: string,
+): Promise<CalendarResult> {
+  const params = new URLSearchParams({ from, to });
+  if (categories && categories.length > 0) params.set("categories", categories.join(","));
+  if (attorney) params.set("attorney", attorney);
+  return apiFetch<CalendarResult>(`/api/calendar?${params.toString()}`);
 }
 
 // =============================================================================

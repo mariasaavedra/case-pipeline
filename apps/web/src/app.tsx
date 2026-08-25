@@ -1,16 +1,23 @@
-import { useState, useEffect, useCallback, useRef, Component } from "react";
+import { useState, useEffect, useCallback, useRef, Component, lazy, Suspense } from "react";
 import type { ReactNode, ErrorInfo } from "react";
 import { createRoot } from "react-dom/client";
-import { ClientView } from "./components/ClientView";
 import { Sidebar } from "./components/Sidebar";
-import { LandingPage } from "./components/LandingPage";
-import { AppointmentsPage } from "./components/AppointmentsPage";
-import { ClientsPage } from "./components/ClientsPage";
-import { AlertsPage } from "./components/AlertsPage";
-import { ActiveCasesPage } from "./components/ActiveCasesPage";
-import { MyCasesPage } from "./components/MyCasesPage";
 import { LoginPage } from "./pages/LoginPage";
-import { SettingsPage } from "./pages/SettingsPage";
+
+// Route-level code splitting. These used to be static imports, which meant one
+// ~700 KB chunk where opening the dashboard also paid for Settings (1082 lines),
+// Appointments (1243) and Calendar (721). Sidebar and LoginPage stay eager:
+// Sidebar renders on every screen, and LoginPage is the first paint for a
+// signed-out user, so deferring either would only add a round trip.
+const ClientView = lazy(() => import("./components/ClientView").then((m) => ({ default: m.ClientView })));
+const LandingPage = lazy(() => import("./components/LandingPage").then((m) => ({ default: m.LandingPage })));
+const AppointmentsPage = lazy(() => import("./components/AppointmentsPage").then((m) => ({ default: m.AppointmentsPage })));
+const ClientsPage = lazy(() => import("./components/ClientsPage").then((m) => ({ default: m.ClientsPage })));
+const AlertsPage = lazy(() => import("./components/AlertsPage").then((m) => ({ default: m.AlertsPage })));
+const ActiveCasesPage = lazy(() => import("./components/ActiveCasesPage").then((m) => ({ default: m.ActiveCasesPage })));
+const MyCasesPage = lazy(() => import("./components/MyCasesPage").then((m) => ({ default: m.MyCasesPage })));
+const CalendarPage = lazy(() => import("./components/CalendarPage").then((m) => ({ default: m.CalendarPage })));
+const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 import type { TabId } from "./components/ClientTabs";
 import { matchRoute, navigate } from "./router";
 import { getClient } from "./api";
@@ -22,6 +29,32 @@ import { BoardColumnsProvider } from "./BoardColumnsProvider";
 import { useAuth } from "./auth/useAuth";
 import { usePreferences } from "./hooks/usePreferences";
 import { useViewport } from "./hooks/useViewport";
+
+// Shared loading indicator: used both for in-flight data and as the Suspense
+// fallback while a route chunk downloads, so the two states look identical.
+function PageLoading() {
+  return (
+    <div className="py-20 flex flex-col items-center gap-3 animate-in">
+      <div className="flex gap-1">
+        <div
+          className="w-2 h-2 rounded-full"
+          style={{ backgroundColor: "var(--color-amber)", animation: "pulse-subtle 1s ease-in-out infinite" }}
+        />
+        <div
+          className="w-2 h-2 rounded-full"
+          style={{ backgroundColor: "var(--color-amber)", animation: "pulse-subtle 1s ease-in-out 0.2s infinite" }}
+        />
+        <div
+          className="w-2 h-2 rounded-full"
+          style={{ backgroundColor: "var(--color-amber)", animation: "pulse-subtle 1s ease-in-out 0.4s infinite" }}
+        />
+      </div>
+      <span className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
+        Loading…
+      </span>
+    </div>
+  );
+}
 
 function App() {
   const { user, isLoading: authLoading, logout } = useAuth();
@@ -147,7 +180,9 @@ function App() {
       <div className="app-layout">
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} user={user} onLogout={logout} />
         <div className="app-content" style={{ marginLeft: sidebarWidth }}>
-          <SettingsPage />
+          <Suspense fallback={<PageLoading />}>
+            <SettingsPage />
+          </Suspense>
         </div>
       </div>
     );
@@ -215,44 +250,29 @@ function App() {
             </div>
           )}
 
-          {loading && (
-            <div className="py-20 flex flex-col items-center gap-3 animate-in">
-              <div className="flex gap-1">
-                <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: "var(--color-amber)", animation: "pulse-subtle 1s ease-in-out infinite" }}
-                />
-                <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: "var(--color-amber)", animation: "pulse-subtle 1s ease-in-out 0.2s infinite" }}
-                />
-                <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: "var(--color-amber)", animation: "pulse-subtle 1s ease-in-out 0.4s infinite" }}
-                />
-              </div>
-              <span className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-                Loading…
-              </span>
-            </div>
-          )}
+          {loading && <PageLoading />}
 
-          {/* Landing page — KPI dashboard */}
-          {route.page === "landing" && !loading && <LandingPage />}
+          {/* Route views are lazy chunks — one Suspense boundary covers them all,
+              since exactly one renders at a time. */}
+          <Suspense fallback={<PageLoading />}>
+            {/* Landing page — KPI dashboard */}
+            {route.page === "landing" && !loading && <LandingPage />}
 
-          {/* Appointments page */}
-          {route.page === "appointments" && !loading && <AppointmentsPage />}
-          {route.page === "active-cases" && !loading && <ActiveCasesPage />}
-          {route.page === "my-cases" && !loading && <MyCasesPage />}
+            {/* Appointments page */}
+            {route.page === "appointments" && !loading && <AppointmentsPage />}
+            {route.page === "active-cases" && !loading && <ActiveCasesPage />}
+            {route.page === "my-cases" && !loading && <MyCasesPage />}
+            {route.page === "calendar" && !loading && <CalendarPage />}
 
-          {/* Alerts page */}
-          {route.page === "alerts" && !loading && <AlertsPage />}
+            {/* Alerts page */}
+            {route.page === "alerts" && !loading && <AlertsPage />}
 
-          {/* Clients page — search + filtered browse */}
-          {route.page === "clients" && !loading && !client && <ClientsPage />}
+            {/* Clients page — search + filtered browse */}
+            {route.page === "clients" && !loading && !client && <ClientsPage />}
 
-          {/* Client 360 detail view */}
-          {isClientDetail && client && !loading && <ClientView data={client} initialTab={initialTab} />}
+            {/* Client 360 detail view */}
+            {isClientDetail && client && !loading && <ClientView data={client} initialTab={initialTab} />}
+          </Suspense>
         </main>
       </div>
     </div>

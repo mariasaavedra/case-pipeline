@@ -17,6 +17,8 @@ export type { RelationshipWithDetails } from "./relationships";
 export { getDashboardKpis, getKpiCardDetail } from "./dashboard";
 export { getAppointments, getAttorneyList } from "./appointments";
 export type { AppointmentEntry, AppointmentsResult, AppointmentSnapshot } from "./appointments";
+export { getCalendarEvents } from "./calendar";
+export type { CalendarCategory, CalendarEvent, CalendarResult, CalendarOptions } from "./calendar";
 export { searchByType } from "./search";
 export { getAlerts, getAlertsTotalCount } from "./alerts";
 export { getActiveCases } from "./active-cases";

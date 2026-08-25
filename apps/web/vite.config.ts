@@ -22,5 +22,20 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Split the vendors out of the app chunk. Two reasons: the app shipped as
+        // a single ~700 KB file, and every one-line change to our own code
+        // invalidated React and MSAL along with it. MSAL alone is ~240 KB and
+        // cannot be lazy-loaded — AuthProvider needs it on boot to restore the
+        // session — but as its own chunk it stays cached across deploys.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("@azure")) return "vendor-msal";
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return "vendor-react";
+          return "vendor";
+        },
+      },
+    },
   },
 });
