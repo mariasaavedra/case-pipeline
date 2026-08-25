@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -16,6 +16,7 @@ export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "
 export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
+export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
 
 let _tokenGetter: (() => Promise<string | null>) | null = null;
 
@@ -210,6 +211,73 @@ export async function createContract(
   input: { caseType: string; af?: number | null; ff?: number | null; pf?: number | null },
 ): Promise<{ name: string; feeKItemId?: string; pending: boolean }> {
   return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/contracts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+// =============================================================================
+// Call Log
+// =============================================================================
+
+export interface CallLogQuery {
+  status?: string;
+  takenBy?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  unlinkedOnly?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchCallLog(query: CallLogQuery = {}): Promise<CallLogListResult & { staffOptions: string[] }> {
+  const params = new URLSearchParams();
+  if (query.status) params.set("status", query.status);
+  if (query.takenBy) params.set("takenBy", query.takenBy);
+  if (query.dateFrom) params.set("dateFrom", query.dateFrom);
+  if (query.dateTo) params.set("dateTo", query.dateTo);
+  if (query.unlinkedOnly) params.set("unlinkedOnly", "1");
+  if (query.limit) params.set("limit", String(query.limit));
+  if (query.offset) params.set("offset", String(query.offset));
+  const qs = params.toString();
+  return apiFetch(`/api/call-log${qs ? `?${qs}` : ""}`);
+}
+
+export interface MondayStaffUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export async function fetchCallLogStaffDirectory(): Promise<MondayStaffUser[]> {
+  return apiFetch<MondayStaffUser[]>("/api/call-log/staff-directory");
+}
+
+export interface CreateCallLogInput {
+  /** The caller's name — becomes the Monday item's name. */
+  name: string;
+  /** Optional note — posted as an update/comment on the entry, not the item's name. */
+  note?: string;
+  phone?: string;
+  status?: string;
+  language?: string;
+  profileLocalId?: string | null;
+  takenByUserId?: string | null;
+  highlightedForUserId?: string | null;
+}
+
+export interface CreateCallLogResult {
+  localId: string;
+  mondayItemId: string | null;
+  name: string;
+  status: string | null;
+  profileLocalId: string | null;
+  pending: boolean;
+}
+
+export async function createCallLogEntry(input: CreateCallLogInput): Promise<CreateCallLogResult> {
+  return apiFetch("/api/call-log", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

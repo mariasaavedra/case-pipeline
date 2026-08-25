@@ -3660,3 +3660,45 @@ boards:
       link_to_fee_ks:
         resolve: by_type
         type: board_relation
+  call_log:
+    id: "6775627168"
+    name: Call Log
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems__1
+      phone:
+        resolve: by_id
+        id: phone__1
+      taken_by:
+        resolve: by_id
+        id: people6__1
+      date:
+        resolve: by_id
+        id: date__1
+      hour:
+        resolve: by_id
+        id: hour__1
+      status:
+        resolve: by_id
+        id: status__1
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2__1
+      language:
+        resolve: by_id
+        id: status_1__1
+      vm:
+        resolve: by_id
+        id: files__1
+      highlighted_for:
+        resolve: by_id
+        id: people__1
+      # Named "profile" (not "link_to_profiles") so scripts/sync PROFILE_RELATION_KEYS
+      # picks it up automatically and resolves board_items.profile_local_id.
+      profile:
+        resolve: by_id
+        id: board_relation_mm0hkn9k
+      last_updated:
+        resolve: by_id
+        id: pulse_updated_mm0v4s90

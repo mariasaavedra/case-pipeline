@@ -5,7 +5,7 @@
 import type { TabId } from "./components/ClientTabs";
 
 export interface Route {
-  page: "landing" | "clients" | "client-detail" | "appointments" | "active-cases" | "my-cases" | "calendar" | "alerts" | "login" | "admin" | "settings";
+  page: "landing" | "clients" | "client-detail" | "appointments" | "active-cases" | "my-cases" | "calendar" | "alerts" | "call-log" | "login" | "admin" | "settings";
   params: Record<string, string>;
 }
 
@@ -53,6 +53,10 @@ export function matchRoute(pathname: string): Route {
 
   if (path === "/alerts") {
     return { page: "alerts", params: {} };
+  }
+
+  if (path === "/call-log") {
+    return { page: "call-log", params: {} };
   }
 
   if (path === "/clients") {

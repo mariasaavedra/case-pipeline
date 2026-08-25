@@ -22,6 +22,8 @@ export type { CalendarCategory, CalendarEvent, CalendarResult, CalendarOptions }
 export { searchByType } from "./search";
 export { getAlerts, getAlertsTotalCount } from "./alerts";
 export { getActiveCases } from "./active-cases";
+export { getCallLogEntries, getCallLogStaffOptions } from "./call-log";
+export type { CallLogEntry, CallLogFilters, CallLogListResult } from "./types";
 export type { ActiveCase, ActiveCasesAssignee, ActiveCasesResult, ActiveCasesOptions, Urgency } from "./active-cases";
 export type {
   ProfileSummary,

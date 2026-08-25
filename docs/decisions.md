@@ -475,3 +475,18 @@ Two constraints shaped this:
 ### Still open
 
 The daily series held **thirteen** backups where `BACKUP_KEEP` defaults to 4. Decisions 1 and 2 explain why it could not recover once full, but not why it grew past 4 beforehand — the most likely explanation is `BACKUP_KEEP` still set near 14 in the server's `.env`, left from before the 2026-07-28 change. **Unverified**; check the deployed value rather than assuming the code accounts for it.
+
+---
+
+## 2026-08-25 — Call Log: New "Call Summary" Custom Activity Type
+
+**Context**: Logging a call (`POST /api/call-log`) posts its note as a Monday "update" (comment), and — when linked to a profile — the ask was to also surface it as an Emails & Activities entry on the profile, labeled "Call Summary" to match the label staff already see in Monday's own compose UI under "Essentials" (alongside "Meeting" and "Note").
+
+**Finding**: Monday's built-in Essentials activity presets (Meeting/Note/Call summary) are not exposed through the public API. Confirmed directly against the account's schema and data:
+- `create_timeline_item`'s `custom_activity_id` argument is non-nullable — it can only target a registered custom activity type, never a built-in preset.
+- A real "call summary"-style entry already in the data (created via Monday's UI) came back with `custom_activity_id: null` and no other field identifying which Essentials preset was used — the label is purely a client-side compose-time convenience with no durable, API-visible marker.
+- Searching `custom_activity` by name ("Call Summary", "Meeting", "Note") returned no matches — these presets have no backing custom-activity record to target.
+
+**Decision**: Created a new custom activity type via `create_custom_activity(name: "Call Summary", icon_id: HEADPHONES, color: VIVID_CERULEAN)` → id `eac83484-1fd4-432c-b9eb-755abb48efe7` (hardcoded in `apps/api/src/server.ts` next to the Call Log group id, same rationale as `CALL_LOG_GROUP_ID`: a one-time, account-specific magic value). Every call logged with a note and a linked profile creates a timeline item on the profile under this type.
+
+**Known tradeoff, accepted**: staff will see two entries labeled "Call Summary" in Monday's activity-type picker — the original built-in Essentials one, and this new custom one. They are not the same underlying type and are not merged. This was surfaced and accepted before creating the type.

@@ -14,14 +14,15 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import cron from "node-cron";
-import { createUpdate, changeSimpleColumnValue, createItem } from "@case-pipeline/monday";
+import { createUpdate, changeSimpleColumnValue, createItem, createTimelineItem } from "@case-pipeline/monday";
+import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { acquireSyncLock, releaseSyncLock } from "@case-pipeline/seed/db/sync-lock";
 import { withTokenFallback } from "../write-auth.js";
 
 const LOCK_HOLDER = "write-queue";
 const BATCH_SIZE = 20;
 
-export type WriteOpType = "create_update" | "change_column" | "create_item" | "reschedule";
+export type WriteOpType = "create_update" | "change_column" | "create_item" | "create_timeline_item" | "reschedule";
 
 export interface EnqueueInput {
   opType: WriteOpType;
@@ -73,6 +74,8 @@ interface QueueRow {
   payload: string;
   attempts: number;
   max_attempts: number;
+  target_table: string | null;
+  target_local_id: string | null;
 }
 
 /**
@@ -95,8 +98,14 @@ export function reconcileInFlightWrites(db: Database): number {
  * point as write-back grows: add a case per op_type. Currently `create_update`
  * is implemented (notes); `change_column` and `reschedule` land with the
  * write-back feature (they need change_simple_column_value mutations).
+ *
+ * Returns the new Monday item id for `create_item`, so a caller that inserted
+ * a placeholder local row (no monday_item_id yet, created while Monday was
+ * down) can attach the real id once the retry succeeds — otherwise that row
+ * stays orphaned forever and the next full sync inserts it again as a
+ * "new" item, duplicating it locally.
  */
-async function dispatch(row: QueueRow, token?: string): Promise<void> {
+async function dispatch(row: QueueRow, token?: string): Promise<string | undefined> {
   const payload = JSON.parse(row.payload) as Record<string, unknown>;
   switch (row.op_type) {
     case "create_update": {
@@ -104,7 +113,7 @@ async function dispatch(row: QueueRow, token?: string): Promise<void> {
       const body = String(payload.body ?? payload.text ?? "");
       if (!body) throw new Error("create_update requires a non-empty body");
       await createUpdate(row.monday_item_id, body, token);
-      return;
+      return undefined;
     }
     case "change_column": {
       if (!row.monday_item_id) throw new Error("change_column requires monday_item_id");
@@ -113,21 +122,46 @@ async function dispatch(row: QueueRow, token?: string): Promise<void> {
       const value = String(payload.value ?? "");
       if (!boardId || !columnId) throw new Error("change_column requires boardId and columnId");
       await changeSimpleColumnValue(boardId, row.monday_item_id, columnId, value, token);
-      return;
+      return undefined;
     }
     case "create_item": {
       const boardId = String(payload.boardId ?? "");
       const itemName = String(payload.itemName ?? "");
       const columnValues = (payload.columnValues ?? {}) as Record<string, unknown>;
       if (!boardId || !itemName) throw new Error("create_item requires boardId and itemName");
-      await createItem(boardId, itemName, columnValues, token);
-      return;
+      const groupId = payload.groupId ? String(payload.groupId) : undefined;
+      const newItemId = groupId
+        ? await createItem(boardId, itemName, columnValues, token, groupId)
+        : await createItem(boardId, itemName, columnValues, token);
+      // An optional note (e.g. a Call Log entry's comment) can only be posted
+      // once the item exists. Best-effort: the item itself is already created
+      // by this point, so a failure here must not throw — that would retry
+      // create_item and create a SECOND duplicate item.
+      const note = payload.note ? String(payload.note) : "";
+      if (note) {
+        try {
+          await createUpdate(newItemId, note, token);
+        } catch (err) {
+          console.error(`[write-queue] post-create note failed for new item ${newItemId}:`, err);
+        }
+      }
+      return newItemId;
+    }
+    case "create_timeline_item": {
+      const input = payload as unknown as CreateTimelineItemInput;
+      if (!input.itemId || !input.title || !input.customActivityId) {
+        throw new Error("create_timeline_item requires itemId, title, and customActivityId");
+      }
+      return await createTimelineItem(input, token);
     }
     // TODO(monday-write): case "reschedule" → change a date column value
     default:
       throw new Error(`Unsupported write_queue op_type: ${row.op_type}`);
   }
 }
+
+/** target_table values a queued write is allowed to reconcile back into. */
+const RECONCILABLE_TABLES = new Set(["board_items", "profiles", "contracts"]);
 
 /** Exponential backoff: 1m, 2m, 4m, 8m, 16m … capped at 30m. */
 function backoffMs(attempts: number): number {
@@ -152,7 +186,8 @@ export async function drainWriteQueue(
     const due = new Date().toISOString();
     const rows = db
       .prepare(
-        `SELECT id, op_type, monday_item_id, author_oid, payload, attempts, max_attempts
+        `SELECT id, op_type, monday_item_id, author_oid, payload, attempts, max_attempts,
+                target_table, target_local_id
            FROM write_queue
           WHERE status = 'pending'
             AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
@@ -174,7 +209,7 @@ export async function drainWriteQueue(
         // (one issued before `boards:write` was requested) burned all five
         // attempts and dead-lettered a write the shared token could have made.
         const authorToken = row.author_oid ? opts.resolveUserToken?.(row.author_oid) : null;
-        await withTokenFallback((token) => dispatch(row, token), {
+        const outcome = await withTokenFallback((token) => dispatch(row, token), {
           userToken: authorToken,
           sharedToken: opts.token,
           onPersonalTokenRejected: (reason) =>
@@ -184,6 +219,19 @@ export async function drainWriteQueue(
           new Date().toISOString(),
           row.id,
         );
+        // A queued create_item placeholder row has no monday_item_id yet (Monday
+        // was down when it was created) — attach the real one now, or the next
+        // full sync sees an untracked item upstream and inserts it a second time.
+        if (row.op_type === "create_item" && outcome.result && row.target_table && row.target_local_id) {
+          if (RECONCILABLE_TABLES.has(row.target_table)) {
+            db.prepare(`UPDATE ${row.target_table} SET monday_item_id = ?, sync_status = 'synced' WHERE local_id = ?`).run(
+              outcome.result,
+              row.target_local_id,
+            );
+          } else {
+            console.warn(`[write-queue] op ${row.id}: unrecognized target_table "${row.target_table}", skipped reconciliation`);
+          }
+        }
         synced++;
       } catch (err) {
         const attempts = row.attempts + 1;

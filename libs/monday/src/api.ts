@@ -822,16 +822,81 @@ export async function createItem(
   boardId: string,
   itemName: string,
   columnValues: Record<string, unknown>,
-  tokenOverride?: string
+  tokenOverride?: string,
+  groupId?: string
 ): Promise<string> {
   const result = await mondayRequest<{ data: { create_item: { id: string } } }>(
-    `mutation CreateItem($boardId: ID!, $itemName: String!, $columnValues: JSON) {
-       create_item(board_id: $boardId, item_name: $itemName, column_values: $columnValues, create_labels_if_missing: false) { id }
+    `mutation CreateItem($boardId: ID!, $itemName: String!, $columnValues: JSON, $groupId: String) {
+       create_item(board_id: $boardId, item_name: $itemName, column_values: $columnValues, group_id: $groupId, create_labels_if_missing: false) { id }
      }`,
-    { boardId, itemName, columnValues: JSON.stringify(columnValues) },
+    { boardId, itemName, columnValues: JSON.stringify(columnValues), groupId: groupId ?? null },
     tokenOverride
   );
   return result.data.create_item.id;
+}
+
+export interface CreateTimelineItemInput {
+  /** The Monday item the activity is logged on (e.g. a profile's item id). */
+  itemId: string;
+  title: string;
+  /** The account's custom activity type id (see `fetchCustomActivities`/`create_custom_activity`). */
+  customActivityId: string;
+  /** ISO8601 — defaults to now. */
+  timestamp?: string;
+  summary?: string;
+  content?: string;
+  phone?: string;
+  /** Monday numeric user id to attribute the activity to. */
+  userId?: number;
+}
+
+/**
+ * Create an Emails & Activities timeline entry on an item — distinct from a
+ * comment (`create_update`): it shows in the item's Activity Log under the
+ * given custom activity type, with its own icon/color. Returns the new
+ * timeline item id.
+ */
+export async function createTimelineItem(input: CreateTimelineItemInput, tokenOverride?: string): Promise<string> {
+  const result = await mondayRequest<{ data: { create_timeline_item: { id: string } } }>(
+    `mutation CreateTimelineItem($itemId: ID!, $title: String!, $timestamp: ISO8601DateTime!, $customActivityId: String!, $summary: String, $content: String, $phone: String, $userId: Int) {
+       create_timeline_item(
+         item_id: $itemId, title: $title, timestamp: $timestamp, custom_activity_id: $customActivityId,
+         summary: $summary, content: $content, phone: $phone, user_id: $userId
+       ) { id }
+     }`,
+    {
+      itemId: input.itemId,
+      title: input.title,
+      timestamp: input.timestamp ?? new Date().toISOString(),
+      customActivityId: input.customActivityId,
+      summary: input.summary ?? null,
+      content: input.content ?? null,
+      phone: input.phone ?? null,
+      userId: input.userId ?? null,
+    },
+    tokenOverride
+  );
+  return result.data.create_timeline_item.id;
+}
+
+export interface MondayWorkspaceUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+/**
+ * Active (non-guest) workspace users — id, name, email. Used to populate a
+ * "who logged this" people picker and to resolve it to the numeric Monday id
+ * a people column write needs (`{ personsAndTeams: [{ id, kind: "person" }] }`).
+ */
+export async function fetchWorkspaceUsers(tokenOverride?: string): Promise<MondayWorkspaceUser[]> {
+  const result = await mondayRequest<{ data: { users: MondayWorkspaceUser[] } }>(
+    `query { users(kind: non_guests) { id name email } }`,
+    {},
+    tokenOverride
+  );
+  return result.data.users;
 }
 
 // =============================================================================

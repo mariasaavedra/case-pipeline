@@ -3,6 +3,8 @@ import type { ReactNode, ErrorInfo } from "react";
 import { createRoot } from "react-dom/client";
 import { Sidebar } from "./components/Sidebar";
 import { LoginPage } from "./pages/LoginPage";
+import { LogCallModal } from "./components/LogCallModal";
+import { Button } from "./components/ui/button";
 
 // Route-level code splitting. These used to be static imports, which meant one
 // ~700 KB chunk where opening the dashboard also paid for Settings (1082 lines),
@@ -17,6 +19,7 @@ const AlertsPage = lazy(() => import("./components/AlertsPage").then((m) => ({ d
 const ActiveCasesPage = lazy(() => import("./components/ActiveCasesPage").then((m) => ({ default: m.ActiveCasesPage })));
 const MyCasesPage = lazy(() => import("./components/MyCasesPage").then((m) => ({ default: m.MyCasesPage })));
 const CalendarPage = lazy(() => import("./components/CalendarPage").then((m) => ({ default: m.CalendarPage })));
+const CallLogPage = lazy(() => import("./components/CallLogPage").then((m) => ({ default: m.CallLogPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 import type { TabId } from "./components/ClientTabs";
 import { matchRoute, navigate } from "./router";
@@ -65,6 +68,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showLogCallModal, setShowLogCallModal] = useState(false);
   const [pathname, setPathname] = useState(window.location.pathname);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
@@ -227,6 +231,10 @@ function App() {
                 Back
               </button>
             ) : null}
+
+            <div style={{ marginLeft: "auto" }}>
+              <Button type="button" size="sm" onClick={() => setShowLogCallModal(true)}>+ Log call</Button>
+            </div>
           </div>
         </header>
 
@@ -267,6 +275,9 @@ function App() {
             {/* Alerts page */}
             {route.page === "alerts" && !loading && <AlertsPage />}
 
+            {/* Call Log page */}
+            {route.page === "call-log" && !loading && <CallLogPage />}
+
             {/* Clients page — search + filtered browse */}
             {route.page === "clients" && !loading && !client && <ClientsPage />}
 
@@ -275,6 +286,8 @@ function App() {
           </Suspense>
         </main>
       </div>
+
+      {showLogCallModal && <LogCallModal onClose={() => setShowLogCallModal(false)} />}
     </div>
   );
 }

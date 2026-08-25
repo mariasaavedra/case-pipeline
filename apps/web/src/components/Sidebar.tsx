@@ -96,6 +96,16 @@ const NAV_ITEMS: NavItem[] = [
       </svg>
     ),
   },
+  {
+    id: "call-log",
+    label: "Call Log",
+    path: "/call-log",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M4 3.5c0-.6.4-1 1-1h1.8c.5 0 .9.3 1 .8l.6 2.4c.1.4 0 .8-.3 1.1l-1 1c1 2 2.6 3.6 4.6 4.6l1-1c.3-.3.7-.4 1.1-.3l2.4.6c.5.1.8.5.8 1V15c0 .6-.4 1-1 1h-1c-6.1 0-11-4.9-11-11v-1.5z" />
+      </svg>
+    ),
+  },
 ];
 
 function isActiveItem(item: NavItem, pathname: string): boolean {

@@ -18,6 +18,8 @@ import {
   searchByType,
   getAlerts,
   getActiveCases,
+  getCallLogEntries,
+  getCallLogStaffOptions,
 } from "@case-pipeline/query";
 import type { SearchType, TimelineSourceType, TimelineCategory } from "@case-pipeline/query";
 
@@ -235,6 +237,21 @@ export function handleActiveCases(req: Request, db: Database): Response {
 export function handleFilterOptions(_req: Request, db: Database): Response {
   const options = getFilterOptions(db);
   return json(options);
+}
+
+export function handleCallLog(req: Request, db: Database): Response {
+  const url = new URL(req.url);
+  const status = url.searchParams.get("status") ?? undefined;
+  const takenBy = url.searchParams.get("takenBy") ?? undefined;
+  const dateFrom = url.searchParams.get("dateFrom") ?? undefined;
+  const dateTo = url.searchParams.get("dateTo") ?? undefined;
+  const unlinkedOnly = url.searchParams.get("unlinkedOnly") === "1";
+  const limit = Number(url.searchParams.get("limit") ?? "50") || 50;
+  const offset = Number(url.searchParams.get("offset") ?? "0") || 0;
+
+  const result = getCallLogEntries(db, { status, takenBy, dateFrom, dateTo, unlinkedOnly, limit, offset });
+  const staffOptions = getCallLogStaffOptions(db);
+  return json({ ...result, staffOptions });
 }
 
 // =============================================================================

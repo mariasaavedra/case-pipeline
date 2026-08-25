@@ -27,10 +27,12 @@ import {
   handleClientUpdates,
   handleClientRelationships,
   handleAlerts,
+  handleCallLog,
 } from "./handlers/handlers";
 import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor, getBoardColumns, getBoardColumnsFor, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
-import { setApiToken, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
+import { setApiToken, fetchBoardStructure, fetchItem, resolveAllColumns, fetchWorkspaceUsers } from "@case-pipeline/monday";
+import type { MondayWorkspaceUser, CreateTimelineItemInput } from "@case-pipeline/monday";
 import { dataSource } from "./data-source/index.js";
 import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
@@ -478,6 +480,7 @@ app.get("/api/clients/:localId/board-items", adapt(handleClientBoardItems));
 app.get("/api/clients/:localId/updates", adapt(handleClientUpdates));
 app.get("/api/clients/:localId/relationships", adapt(handleClientRelationships));
 app.get("/api/board-items/:localId", adapt(handleBoardItemDetail));
+app.get("/api/call-log", adapt(handleCallLog));
 
 // =============================================================================
 // Profile Write-Back — Post update to Monday.com + persist locally
@@ -858,6 +861,295 @@ app.post("/api/profiles/:localId/contracts", requireAuth, async (req, res) => {
       metadata: { caseType, af, ff, pf, name: itemName, queued: true },
     });
     res.status(202).json({ data: { name: itemName, pending: true } });
+  }
+});
+
+// =============================================================================
+// Call Log — quick create + link to a profile
+// =============================================================================
+// Creates a new item on the real Call Log board, following the front desk's
+// existing convention of using the item's name as the note. Columns resolved
+// by title from the synced schema (no hardcoded ids), same rails as contract
+// creation above: personal token, queue fallback, audit. Unlike contract
+// creation, this also inserts the row into board_items immediately (matching
+// the shape scripts/sync/mapper.ts produces) so the new call appears in the
+// Call Log list right away instead of waiting for the next sync.
+
+let staffDirectoryCache: { users: MondayWorkspaceUser[]; fetchedAt: number } | null = null;
+const STAFF_DIRECTORY_TTL_MS = 5 * 60 * 1000;
+
+app.get("/api/call-log/staff-directory", async (_req, res) => {
+  if (!MONDAY_API_TOKEN) {
+    res.status(503).json({ error: "Monday.com not configured" });
+    return;
+  }
+  const now = Date.now();
+  if (staffDirectoryCache && now - staffDirectoryCache.fetchedAt < STAFF_DIRECTORY_TTL_MS) {
+    res.json({ data: staffDirectoryCache.users });
+    return;
+  }
+  try {
+    const users = await fetchWorkspaceUsers(MONDAY_API_TOKEN);
+    staffDirectoryCache = { users, fetchedAt: now };
+    res.json({ data: users });
+  } catch (err) {
+    console.error("[call-log] fetchWorkspaceUsers failed:", err);
+    res.status(502).json({ error: "Could not load Monday.com users" });
+  }
+});
+
+app.post("/api/call-log", requireAuth, async (req, res) => {
+  if (!MONDAY_API_TOKEN) {
+    res.status(503).json({ error: "Monday.com write-back not configured" });
+    return;
+  }
+
+  const body = req.body as {
+    name?: unknown; note?: unknown; phone?: unknown; status?: unknown; language?: unknown;
+    profileLocalId?: unknown; takenByUserId?: unknown; highlightedForUserId?: unknown;
+  };
+  const name = (body.name ?? "").toString().trim();
+  const note = (body.note ?? "").toString().trim();
+  const phone = (body.phone ?? "").toString().trim();
+  const language = (body.language ?? "").toString().trim();
+  const profileLocalId = body.profileLocalId ? String(body.profileLocalId) : null;
+  const toId = (v: unknown): number | null => {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const takenByUserId = toId(body.takenByUserId);
+  const highlightedForUserId = toId(body.highlightedForUserId);
+
+  if (!name) {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+
+  const schema = getBoardColumnsFor(db, "call_log");
+  if (!schema) {
+    res.status(409).json({ error: "Call Log column schema not synced yet — run a sync first" });
+    return;
+  }
+  const byTitle = (t: string) => schema.columns.find((c) => c.title.trim().toLowerCase() === t.toLowerCase());
+  const phoneCol = byTitle("Phone");
+  const statusCol = byTitle("Status");
+  const dateCol = byTitle("Date");
+  const languageCol = byTitle("Language");
+  const takenByCol = byTitle("Taken by");
+  const highlightedForCol = byTitle("Highlighted For");
+  const profileCol = byTitle("link to Profiles");
+
+  const statusDef = getBoardStatusOptionsFor(db, "call_log");
+  const requestedStatus = (body.status ?? "").toString().trim();
+  const status =
+    requestedStatus ||
+    statusDef?.options.find((o) => o.label.toLowerCase() === "pending")?.label ||
+    statusDef?.options[0]?.label ||
+    null;
+  if (requestedStatus && statusDef && !statusDef.options.some((o) => o.label === requestedStatus)) {
+    res.status(400).json({ error: "status is not a valid option", allowed: statusDef.options.map((o) => o.label) });
+    return;
+  }
+
+  let profile: { monday_item_id: string | null; name: string; batch_id: number } | null = null;
+  if (profileLocalId) {
+    profile = db.prepare("SELECT monday_item_id, name, batch_id FROM profiles WHERE local_id = ?").get(profileLocalId) as
+      | { monday_item_id: string | null; name: string; batch_id: number }
+      | null;
+    if (!profile) {
+      res.status(404).json({ error: "Linked profile not found" });
+      return;
+    }
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const nowTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+
+  // Column values for Monday's create_item mutation — keyed by real column id.
+  const columnValues: Record<string, unknown> = {};
+  if (phoneCol && phone) columnValues[phoneCol.columnId] = phone;
+  if (statusCol && status) columnValues[statusCol.columnId] = { label: status };
+  if (dateCol) columnValues[dateCol.columnId] = today;
+  if (languageCol && language) columnValues[languageCol.columnId] = { label: language };
+  if (takenByCol && takenByUserId) columnValues[takenByCol.columnId] = { personsAndTeams: [{ id: takenByUserId, kind: "person" }] };
+  if (highlightedForCol && highlightedForUserId) {
+    columnValues[highlightedForCol.columnId] = { personsAndTeams: [{ id: highlightedForUserId, kind: "person" }] };
+  }
+  if (profileCol && profile?.monday_item_id) columnValues[profileCol.columnId] = { item_ids: [Number(profile.monday_item_id)] };
+
+  // Mirrors scripts/sync/mapper.ts's shapeColumnValue() output — keyed by the
+  // logical config keys in config/boards.yaml, not Monday's real column ids —
+  // so this row reads back exactly like one the next sync would have written.
+  const mirroredColumnValues: Record<string, unknown> = {
+    ...(phone ? { phone } : {}),
+    ...(status ? { status: { label: status } } : {}),
+    date: { date: today },
+    hour: nowTime,
+    ...(language ? { language: { label: language } } : {}),
+    last_updated: new Date().toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC"),
+  };
+
+  // "topics" is the Monday group id (title "Call Log") the front desk actively
+  // logs into — the board's other groups ("Pending Calls", "Voicemail
+  // Archive"/"Voicemails") are a different, unrelated flow. Without an explicit
+  // group_id, create_item falls back to the board's default group, which is
+  // not guaranteed to be this one.
+  const CALL_LOG_GROUP_ID = "topics";
+  const CALL_LOG_GROUP_TITLE = "Call Log";
+
+  // Custom activity type created one-time via create_custom_activity — see
+  // docs/decisions.md. Monday's built-in "Call summary" Essentials preset has
+  // no API-visible id, so this is a separate (but identically-labeled) type.
+  const CALL_SUMMARY_ACTIVITY_ID = "eac83484-1fd4-432c-b9eb-755abb48efe7";
+
+  const localId = randomUUID();
+  const insertLocal = (mondayItemId: string | null, syncStatus: "synced" | "pending") =>
+    db
+      .prepare(`
+        INSERT INTO board_items
+          (batch_id, local_id, monday_item_id, board_key, group_title, name, status,
+           next_date, next_time, attorney, paralegals, profile_local_id, column_values,
+           sync_status, created_at, synced_at, last_seen_at)
+        VALUES (NULL, ?, ?, 'call_log', ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, datetime('now'), ?, datetime('now'))
+      `)
+      .run(
+        localId, mondayItemId, CALL_LOG_GROUP_TITLE, name, status, profileLocalId ?? "", JSON.stringify(mirroredColumnValues),
+        syncStatus, syncStatus === "synced" ? new Date().toISOString() : null,
+      );
+
+  // The note becomes THREE separate Monday artifacts when there's a linked
+  // profile, each posted independently and each best-effort (the call itself
+  // is already logged by this point, so none of these failing should fail the
+  // whole request — they queue and retry instead):
+  //   1. A comment on the call log entry itself (postCallLogNote).
+  //   2. A comment directly on the CLIENT'S OWN profile item (postProfileNote)
+  //      — this is the one mirrored into client_updates, since that table
+  //      represents the profile's real Monday-side update thread; mirroring
+  //      the call-log-item comment there would have been misleading (it
+  //      never actually existed on the profile in Monday, only locally).
+  //   3. A "Call Summary" Activities entry on the profile (postActivityLog).
+  const authorName = req.user?.name ?? req.user?.preferred_username ?? "Staff";
+  const authorEmail = req.user?.email ?? req.user?.preferred_username ?? null;
+
+  const postCallLogNote = async (mondayItemId: string) => {
+    if (!note) return;
+    try {
+      await withTokenFallback((token) => dataSource.postUpdate(mondayItemId, note, token), writeTokenOptions(req));
+    } catch (err) {
+      console.error("[write-back] call log postUpdate (on call entry) failed; queueing for retry:", err);
+      enqueueWrite(db, {
+        opType: "create_update", targetTable: "board_items", targetLocalId: localId,
+        mondayItemId, authorOid: req.user?.oid ?? null,
+        payload: { body: note },
+      });
+    }
+  };
+
+  const postProfileNote = async () => {
+    if (!note || !profile?.monday_item_id) return;
+    const profileMondayItemId = profile.monday_item_id;
+    const noteLocalId = randomUUID();
+    const now = new Date().toISOString();
+    try {
+      const outcome = await withTokenFallback(
+        (token) => dataSource.postUpdate(profileMondayItemId, note, token),
+        writeTokenOptions(req),
+      );
+      db.prepare(`
+        INSERT INTO client_updates
+          (batch_id, local_id, monday_update_id, profile_local_id, board_item_local_id,
+           board_key, author_name, author_email, text_body, body_html, source_type,
+           reply_to_update_id, created_at_source, sync_status)
+        VALUES (?, ?, ?, ?, ?, 'call_log', ?, ?, ?, NULL, 'update', NULL, ?, 'synced')
+      `).run(profile.batch_id, noteLocalId, outcome.result, profileLocalId, localId, authorName, authorEmail, note, now);
+    } catch (err) {
+      console.error("[write-back] call log postUpdate (on profile) failed; queueing for retry:", err);
+      db.prepare(`
+        INSERT INTO client_updates
+          (batch_id, local_id, monday_update_id, profile_local_id, board_item_local_id,
+           board_key, author_name, author_email, text_body, body_html, source_type,
+           reply_to_update_id, created_at_source, sync_status)
+        VALUES (?, ?, NULL, ?, ?, 'call_log', ?, ?, ?, NULL, 'update', NULL, ?, 'pending')
+      `).run(profile.batch_id, noteLocalId, profileLocalId, localId, authorName, authorEmail, note, now);
+      enqueueWrite(db, {
+        opType: "create_update", targetTable: "profiles", targetLocalId: profileLocalId,
+        mondayItemId: profileMondayItemId, authorOid: req.user?.oid ?? null,
+        payload: { body: note },
+      });
+    }
+  };
+
+  // A "Call Summary" activity on the linked profile, on top of the comment
+  // above — see docs/decisions.md, 2026-08-25. Only meaningful when there's
+  // both a note and a linked profile with a real Monday item id.
+  const activityLogInput: CreateTimelineItemInput | null =
+    profile?.monday_item_id && note
+      ? {
+          itemId: profile.monday_item_id,
+          title: `Call: ${name}`,
+          customActivityId: CALL_SUMMARY_ACTIVITY_ID,
+          content: note,
+          phone: phone || undefined,
+          userId: takenByUserId ?? undefined,
+        }
+      : null;
+  const postActivityLog = async () => {
+    if (!activityLogInput) return;
+    try {
+      await withTokenFallback(
+        (token) => dataSource.createTimelineItem(activityLogInput, token),
+        writeTokenOptions(req),
+      );
+    } catch (err) {
+      console.error("[write-back] call log createTimelineItem failed; queueing for retry:", err);
+      enqueueWrite(db, {
+        opType: "create_timeline_item", targetTable: "board_items", targetLocalId: localId,
+        mondayItemId: activityLogInput.itemId, authorOid: req.user?.oid ?? null,
+        payload: { ...activityLogInput },
+      });
+    }
+  };
+
+  try {
+    const outcome = await withTokenFallback(
+      (token) => dataSource.createItem(schema.mondayBoardId, name, columnValues, token, CALL_LOG_GROUP_ID),
+      writeTokenOptions(req),
+    );
+    insertLocal(outcome.result, "synced");
+    await postCallLogNote(outcome.result);
+    await postProfileNote();
+    await postActivityLog();
+    auditFromReq(req, "monday.call_logged", {
+      targetType: "board_item", targetId: localId, targetMondayId: outcome.result,
+      metadata: {
+        mondayItemId: outcome.result, profileLocalId, status, name, hasNote: !!note,
+        usedPersonalToken: outcome.usedPersonalToken, fellBackToSharedToken: outcome.fellBackToSharedToken,
+      },
+    });
+    res.json({ data: { localId, mondayItemId: outcome.result, name, status, profileLocalId, pending: false } });
+  } catch (err) {
+    console.error("[write-back] call log createItem failed; queueing for retry:", err);
+    insertLocal(null, "pending");
+    // The note can't be posted until the item exists — carried in the queued
+    // payload so the write-queue processor posts it right after the retried
+    // create_item succeeds (see write-queue/processor.ts's "create_item" case).
+    enqueueWrite(db, {
+      opType: "create_item", targetTable: "board_items", targetLocalId: localId,
+      mondayItemId: null, authorOid: req.user?.oid ?? null,
+      payload: { boardId: schema.mondayBoardId, itemName: name, columnValues, groupId: CALL_LOG_GROUP_ID, note: note || undefined },
+    });
+    // Unlike the call-log-entry comment, the profile note and activity log
+    // only need the linked profile's (already-known) item id — neither
+    // depends on the new call item existing, so neither is tied to the
+    // create_item retry above.
+    await postProfileNote();
+    await postActivityLog();
+    auditFromReq(req, "monday.call_logged", {
+      targetType: "board_item", targetId: localId, targetMondayId: null,
+      metadata: { profileLocalId, status, name, hasNote: !!note, queued: true },
+    });
+    res.status(202).json({ data: { localId, mondayItemId: null, name, status, profileLocalId, pending: true } });
   }
 });
 

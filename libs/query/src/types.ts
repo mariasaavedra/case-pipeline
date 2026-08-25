@@ -447,8 +447,43 @@ export interface AlertsResult {
   attorneys: string[];
 }
 
+export interface CallLogEntry {
+  localId: string;
+  mondayItemId: string | null;
+  /** The quick note — stored as the Monday item's name, per the board's existing convention. */
+  name: string;
+  status: string | null;
+  phone: string | null;
+  takenBy: string | null;
+  highlightedFor: string | null;
+  language: string | null;
+  /** YYYY-MM-DD */
+  date: string | null;
+  /** Free-form time text as Monday's Hour column renders it, e.g. "02:25 PM" */
+  time: string | null;
+  profileLocalId: string | null;
+  profileName: string | null;
+  lastUpdatedAtSource: string | null;
+}
+
+export interface CallLogFilters {
+  status?: string;
+  takenBy?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  unlinkedOnly?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface CallLogListResult {
+  entries: CallLogEntry[];
+  total: number;
+}
+
 // Board display names for readable output
 export const BOARD_DISPLAY_NAMES: Record<string, string> = {
+  call_log: "Call Log",
   court_cases: "Court Cases",
   _cd_open_forms: "Open Forms",
   motions: "Motions",
