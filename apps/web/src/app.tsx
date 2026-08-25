@@ -5,8 +5,8 @@ import { Sidebar } from "./components/Sidebar";
 import { LoginPage } from "./pages/LoginPage";
 
 // Route-level code splitting. These used to be static imports, which meant one
-// ~700 KB chunk where opening the dashboard also paid for Settings (1082
-// lines) and Appointments (1243). Sidebar and LoginPage stay eager:
+// ~700 KB chunk where opening the dashboard also paid for Settings (1082 lines),
+// Appointments (1243) and Calendar (721). Sidebar and LoginPage stay eager:
 // Sidebar renders on every screen, and LoginPage is the first paint for a
 // signed-out user, so deferring either would only add a round trip.
 const ClientView = lazy(() => import("./components/ClientView").then((m) => ({ default: m.ClientView })));
@@ -16,6 +16,7 @@ const ClientsPage = lazy(() => import("./components/ClientsPage").then((m) => ({
 const AlertsPage = lazy(() => import("./components/AlertsPage").then((m) => ({ default: m.AlertsPage })));
 const ActiveCasesPage = lazy(() => import("./components/ActiveCasesPage").then((m) => ({ default: m.ActiveCasesPage })));
 const MyCasesPage = lazy(() => import("./components/MyCasesPage").then((m) => ({ default: m.MyCasesPage })));
+const CalendarPage = lazy(() => import("./components/CalendarPage").then((m) => ({ default: m.CalendarPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 import type { TabId } from "./components/ClientTabs";
 import { matchRoute, navigate } from "./router";
@@ -261,6 +262,7 @@ function App() {
             {route.page === "appointments" && !loading && <AppointmentsPage />}
             {route.page === "active-cases" && !loading && <ActiveCasesPage />}
             {route.page === "my-cases" && !loading && <MyCasesPage />}
+            {route.page === "calendar" && !loading && <CalendarPage />}
 
             {/* Alerts page */}
             {route.page === "alerts" && !loading && <AlertsPage />}

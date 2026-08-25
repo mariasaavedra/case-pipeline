@@ -28,8 +28,8 @@ import {
   handleClientRelationships,
   handleAlerts,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor, getBoardColumns, getBoardColumnsFor, getSyncHealth, getArchivedRows } from "@case-pipeline/query";
-import type { Urgency } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getBoardStatusOptions, getBoardStatusOptionsFor, getBoardColumns, getBoardColumnsFor, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
+import type { Urgency, CalendarCategory } from "@case-pipeline/query";
 import { setApiToken, fetchBoardStructure, fetchItem, resolveAllColumns } from "@case-pipeline/monday";
 import { dataSource } from "./data-source/index.js";
 import { loadConfig } from "@case-pipeline/config";
@@ -427,6 +427,33 @@ app.get("/api/active-cases", (req, res) => {
     }),
   });
 });
+// Calendar — hearings, court/USCIS deadlines, interviews, and appointments
+// unified across boards. See libs/query/src/calendar.ts.
+const VALID_CALENDAR_CATEGORIES = new Set<CalendarCategory>([
+  "hearing",
+  "court_deadline",
+  "uscis_deadline",
+  "interview",
+  "appointment",
+]);
+app.get("/api/calendar", (req, res) => {
+  const url = new URL(`http://localhost${req.originalUrl}`);
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  if (!from || !to) {
+    res.status(400).json({ error: "Query params 'from' and 'to' (YYYY-MM-DD) are required" });
+    return;
+  }
+  const categoriesParam = url.searchParams.get("categories");
+  const categories = categoriesParam
+    ? (categoriesParam.split(",").filter((c): c is CalendarCategory =>
+        VALID_CALENDAR_CATEGORIES.has(c as CalendarCategory),
+      ))
+    : undefined;
+  const attorney = url.searchParams.get("attorney") ?? undefined;
+  res.json({ data: getCalendarEvents(db, { from, to, categories, attorney }) });
+});
+
 app.get("/api/alerts", adapt(handleAlerts));
 app.get("/api/search", adapt(handleTypedSearch));
 app.get("/api/filter-options", adapt(handleFilterOptions));
