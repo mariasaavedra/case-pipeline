@@ -10,6 +10,7 @@ import { useState } from "react";
 import { createContract } from "../api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Button } from "./ui/button";
 import { useBoardColumns } from "../BoardColumnsProvider";
 
 interface Props {
@@ -107,10 +108,10 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
                 {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
 
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-                  <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm" style={{ background: "transparent", color: "var(--color-ink-muted)", border: "1px solid var(--color-border-light)", cursor: "pointer" }}>Cancel</button>
-                  <button type="button" onClick={submit} disabled={saving || options.length === 0} className="rounded-md px-3 py-1.5 text-sm" style={{ background: "var(--color-amber)", color: "#fff", border: "none", cursor: saving ? "wait" : "pointer", opacity: saving || options.length === 0 ? 0.6 : 1 }}>
+                  <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+                  <Button type="button" onClick={submit} disabled={saving || options.length === 0}>
                     {saving ? "Creating…" : "Create contract"}
-                  </button>
+                  </Button>
                 </div>
               </>
             )}

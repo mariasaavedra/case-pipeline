@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ContractsSection } from "./ContractsSection";
 import { NewContractModal } from "./NewContractModal";
 import type { ClientContracts } from "../api";
+import { Button } from "./ui/button";
 
 interface Props {
   contracts: ClientContracts;
@@ -17,14 +18,9 @@ export function ContractsTab({ contracts, profileLocalId, clientName }: Props) {
   return (
     <div className="animate-in">
       <div className="flex items-center justify-end mb-3">
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="rounded-md px-3 py-1.5 text-sm font-medium"
-          style={{ background: "var(--color-amber)", color: "#fff", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}
-        >
+        <Button type="button" onClick={() => setCreating(true)}>
           + New contract
-        </button>
+        </Button>
       </div>
 
       {empty ? (

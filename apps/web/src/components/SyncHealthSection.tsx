@@ -9,6 +9,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchSyncHealth, fetchArchivedRows, restoreArchivedRow, clearFailedWrites } from "../api";
 import type { SyncHealth, ArchivedRow } from "@case-pipeline/query";
+import { Button } from "./ui/button";
 
 function ago(iso: string | null): string {
   if (!iso) return "—";
@@ -165,7 +166,7 @@ export function SyncHealthSection() {
                 archived.map((r, i) => (
                   <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderTop: i === 0 ? "none" : "1px solid var(--color-border-light)", fontSize: 12 }}>
                     <span style={{ flex: 1, minWidth: 0 }} className="truncate">{r.name ?? r.mondayItemId ?? r.localId} <span style={{ color: "var(--color-ink-faint)" }}>· {r.boardKey ?? r.sourceTable} · {ago(r.archivedAt)}</span></span>
-                    <button type="button" onClick={() => restore(r.id)} style={{ fontSize: 11, color: "var(--color-status-blue)", background: "none", border: "1px solid var(--color-border-light)", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>Restore</button>
+                    <Button type="button" size="xs" variant="outline" className="border-border-light text-[11px] text-status-blue" onClick={() => restore(r.id)}>Restore</Button>
                   </div>
                 ))}
             </div>

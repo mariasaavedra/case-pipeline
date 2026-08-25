@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import type { ClientUpdate } from "../api";
 import { postProfileUpdate, fetchMondayStatus } from "../api";
 import { Link } from "./Link";
+import { Button } from "./ui/button";
 
 interface Props {
   profileLocalId: string;
@@ -114,21 +115,14 @@ export function NoteComposer({ profileLocalId, onPosted, compact = false }: Prop
             Posts to Monday.com and appears in the timeline
           </span>
         )}
-        <button
+        <Button
+          size="sm"
+          className="font-semibold"
           onClick={() => void handleSubmit()}
           disabled={!text.trim() || status === "loading"}
-          className="text-xs font-semibold px-4 py-1.5 rounded-lg transition-opacity"
-          style={{
-            backgroundColor: "var(--color-amber)",
-            color: "#fff",
-            border: "none",
-            cursor: !text.trim() || status === "loading" ? "not-allowed" : "pointer",
-            opacity: !text.trim() || status === "loading" ? 0.5 : 1,
-            fontFamily: "var(--font-body)",
-          }}
         >
           {status === "loading" ? "Posting…" : "Post Note"}
-        </button>
+        </Button>
       </div>
     </div>
   );

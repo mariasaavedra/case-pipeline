@@ -3,6 +3,7 @@ import { getMyCases } from "../api";
 import type { MyCasesResult } from "../api";
 import type { ActiveCase, Urgency } from "../api";
 import { navigate, clientPath } from "../router";
+import { Button } from "./ui/button";
 
 const URGENCY_META: Record<Urgency, { label: string; color: string; bg: string }> = {
   overdue: { label: "Overdue", color: "var(--color-status-red)", bg: "var(--color-status-red-bg)" },
@@ -118,22 +119,9 @@ export function MyCasesPage() {
             We match cases by the paralegal/attorney name used on the Monday.com boards.
             Choose yours in Settings and your cases will show up here.
           </p>
-          <button
-            onClick={() => navigate("/settings")}
-            style={{
-              padding: "8px 18px",
-              borderRadius: "8px",
-              border: "none",
-              background: "var(--color-amber)",
-              color: "#fff",
-              fontFamily: "var(--font-body)",
-              fontSize: "13px",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
+          <Button size="lg" className="px-4.5 font-semibold" onClick={() => navigate("/settings")}>
             Go to Settings
-          </button>
+          </Button>
         </div>
       )}
 

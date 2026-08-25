@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchUrgencySettings, updateUrgencySettings, type UrgencySettings } from "../api";
+import { Button } from "./ui/button";
 
 export function UrgencySettingsSection() {
   const [settings, setSettings] = useState<UrgencySettings | null>(null);
@@ -101,14 +102,9 @@ export function UrgencySettingsSection() {
           </label>
 
           <div>
-            <button
-              onClick={save}
-              disabled={saving}
-              className="text-sm px-3 py-1.5 rounded-lg font-medium"
-              style={{ backgroundColor: "var(--color-amber)", color: "#fff", border: "none", cursor: saving ? "wait" : "pointer", fontFamily: "var(--font-body)" }}
-            >
+            <Button onClick={save} disabled={saving}>
               {saving ? "Saving…" : savedAt ? "Saved ✓" : "Save"}
-            </button>
+            </Button>
           </div>
         </div>
       )}

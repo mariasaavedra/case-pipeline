@@ -18,6 +18,7 @@
 
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Button } from "./ui/button";
 import { rangeLabel, type DateRange, type TimelinePeriod } from "../utils/timeline-range";
 
 export type { DateRange, TimelinePeriod };
@@ -138,12 +139,8 @@ export function TimelineFilters({
               />
             </label>
             <div className="flex items-center gap-2" style={{ marginTop: 12 }}>
-              <button onClick={apply} style={primaryBtn}>
-                Apply
-              </button>
-              <button onClick={clear} style={ghostBtn}>
-                Clear
-              </button>
+              <Button size="sm" onClick={apply}>Apply</Button>
+              <Button size="sm" variant="outline" onClick={clear}>Clear</Button>
             </div>
           </PopoverContent>
         </Popover>
@@ -176,25 +173,3 @@ const inputStyle: React.CSSProperties = {
   letterSpacing: "normal",
 };
 
-const primaryBtn: React.CSSProperties = {
-  padding: "6px 14px",
-  borderRadius: 8,
-  border: "none",
-  backgroundColor: "var(--color-amber)",
-  color: "#fff",
-  fontFamily: "var(--font-body)",
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-};
-
-const ghostBtn: React.CSSProperties = {
-  padding: "6px 12px",
-  borderRadius: 8,
-  border: "1px solid var(--color-border-light)",
-  backgroundColor: "transparent",
-  color: "var(--color-ink-muted)",
-  fontFamily: "var(--font-body)",
-  fontSize: 13,
-  cursor: "pointer",
-};

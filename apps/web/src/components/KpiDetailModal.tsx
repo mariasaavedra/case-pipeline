@@ -16,6 +16,7 @@ import { clientPath } from "../router";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { StatusBadge } from "./StatusBadge";
+import { Button } from "./ui/button";
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
@@ -184,41 +185,31 @@ export function KpiDetailModal({
           )}
 
           {isPersonalChoice && (
-            <button
+            <Button
+              size="xs"
+              variant="outline"
+              className="border-border-light text-muted-foreground"
               onClick={() => {
                 setGlobalSaved(false);
                 onSelectColumn(null);
               }}
-              className="text-xs px-2.5 py-1.5 rounded-lg"
-              style={{
-                background: "none",
-                border: "1px solid var(--color-border-light)",
-                color: "var(--color-ink-faint)",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
-              }}
               title="Drop your personal choice and follow the firm-wide default"
             >
               Reset to default
-            </button>
+            </Button>
           )}
 
           {isAdmin && columnId && (
-            <button
+            <Button
+              size="xs"
+              variant="secondary"
+              className="bg-accent text-primary hover:bg-accent/70"
               onClick={handleSetGlobal}
               disabled={savingGlobal}
-              className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
-              style={{
-                backgroundColor: "var(--color-amber-light)",
-                border: "none",
-                color: "var(--color-amber)",
-                cursor: savingGlobal ? "wait" : "pointer",
-                fontFamily: "var(--font-body)",
-              }}
               title="Make this the default column for everyone who hasn't picked their own"
             >
               {globalSaved ? "Saved as default ✓" : savingGlobal ? "Saving…" : "Set as default for everyone"}
-            </button>
+            </Button>
           )}
         </div>
 

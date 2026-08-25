@@ -7,6 +7,7 @@ import { fetchFilterOptions } from "../api";
 import type { FilterOptions } from "../api";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Button } from "./ui/button";
 
 interface FilterValues {
   status: string;
@@ -206,22 +207,9 @@ export function FilterBar({ filters, onFilterChange, onClear, hasActiveFilters, 
       )}
 
       {hasActiveFilters && (
-        <button
-          onClick={onClear}
-          className="px-3 py-1 text-xs rounded-md font-medium transition-all"
-          style={{
-            fontFamily: "var(--font-body)",
-            backgroundColor: "transparent",
-            color: "var(--color-status-red)",
-            border: "1px solid var(--color-status-red)",
-            cursor: "pointer",
-            opacity: 0.8,
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.8")}
-        >
+        <Button size="xs" variant="destructive" onClick={onClear}>
           Clear Filters
-        </button>
+        </Button>
       )}
     </div>
   );
