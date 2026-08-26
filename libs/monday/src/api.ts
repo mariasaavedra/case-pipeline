@@ -193,7 +193,8 @@ export function getApiToken(): string {
 async function executeRequest(
   token: string,
   query: string,
-  variables?: Record<string, unknown>
+  variables?: Record<string, unknown>,
+  apiVersionOverride?: string
 ): Promise<Response> {
   return fetchWithTimeout(
     "https://api.monday.com/v2",
@@ -202,7 +203,7 @@ async function executeRequest(
       headers: {
         "Content-Type": "application/json",
         Authorization: token,
-        "API-Version": apiConfig.apiVersion,
+        "API-Version": apiVersionOverride ?? apiConfig.apiVersion,
       },
       body: JSON.stringify({ query, variables }),
     },
@@ -213,14 +214,15 @@ async function executeRequest(
 export async function mondayRequest<T>(
   query: string,
   variables?: Record<string, unknown>,
-  tokenOverride?: string
+  tokenOverride?: string,
+  apiVersionOverride?: string
 ): Promise<T> {
   const token = tokenOverride ?? getApiToken();
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= apiConfig.maxRetries; attempt++) {
     try {
-      const response = await executeRequest(token, query, variables);
+      const response = await executeRequest(token, query, variables, apiVersionOverride);
 
       // Handle non-OK responses
       if (!response.ok) {
@@ -792,6 +794,17 @@ export interface UpdateMention {
  * drives the rendering and notification.
  * Returns the Monday.com update ID of the newly created update/reply.
  */
+// `mentions_list` on create_update requires Monday API version 2025-07+ (this
+// app is pinned to 2024-10 everywhere else — confirmed via a live version
+// probe after mentions_list broke EVERY create_update call in production,
+// including plain notes with no mentions at all, because it was baked
+// unconditionally into the mutation string and 2024-10 rejects it outright
+// as an unknown argument). Branching the mutation keeps the no-mentions path
+// — the overwhelming majority of calls, and every pre-existing caller —
+// completely untouched; only a call that actually has mentions pays for the
+// newer, less-battle-tested API version, via a per-request override.
+const MENTIONS_API_VERSION = "2025-07";
+
 export async function createUpdate(
   itemId: string,
   body: string,
@@ -799,12 +812,21 @@ export async function createUpdate(
   parentId?: string,
   mentions?: UpdateMention[],
 ): Promise<string> {
+  const hasMentions = !!mentions?.length;
+  const query = hasMentions
+    ? `mutation CreateUpdate($itemId: ID!, $body: String!, $parentId: ID, $mentionsList: [UpdateMention]) {
+         create_update(item_id: $itemId, body: $body, parent_id: $parentId, mentions_list: $mentionsList) { id }
+       }`
+    : `mutation CreateUpdate($itemId: ID!, $body: String!, $parentId: ID) {
+         create_update(item_id: $itemId, body: $body, parent_id: $parentId) { id }
+       }`;
+  const variables: Record<string, unknown> = { itemId, body, parentId: parentId ?? null };
+  if (hasMentions) variables.mentionsList = mentions;
   const result = await mondayRequest<{ data: { create_update: { id: string } } }>(
-    `mutation CreateUpdate($itemId: ID!, $body: String!, $parentId: ID, $mentionsList: [UpdateMention]) {
-       create_update(item_id: $itemId, body: $body, parent_id: $parentId, mentions_list: $mentionsList) { id }
-     }`,
-    { itemId, body, parentId: parentId ?? null, mentionsList: mentions?.length ? mentions : null },
-    tokenOverride
+    query,
+    variables,
+    tokenOverride,
+    hasMentions ? MENTIONS_API_VERSION : undefined,
   );
   return result.data.create_update.id;
 }

@@ -2,7 +2,7 @@
 // Tests for Monday.com API utilities
 // =============================================================================
 
-import { test, expect, describe } from "vitest";
+import { test, expect, describe, vi, afterEach } from "vitest";
 import {
   getLinkedItemIds,
   findColumnByType,
@@ -10,6 +10,7 @@ import {
   parseColumnLabels,
   getExistingLabelNames,
   parseStatusOptions,
+  createUpdate,
 } from "./api";
 import type { MondayItem, MondayColumn } from "./types";
 
@@ -278,6 +279,54 @@ describe("getExistingLabelNames", () => {
     const result = getExistingLabelNames(column);
 
     expect(result).toEqual([]);
+  });
+});
+
+// =============================================================================
+// createUpdate — mentions_list must never reach the default API version
+// =============================================================================
+// Regression: mentions_list was briefly baked unconditionally into every
+// create_update call, including ones with no mentions at all — the app's
+// default pinned API version (2024-10) doesn't support that argument, so
+// EVERY note (not just mentioned ones) started failing with "Unknown
+// argument mentions_list" in production. Asserts the wire shape directly
+// (mocking fetch) since a function-level mock — what the write-queue tests
+// use — can't see whether the actual GraphQL string/headers are wrong.
+
+describe("createUpdate", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockFetchOnce(id = "update-1") {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { create_update: { id } } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  test("a plain note (no mentions) never sends mentions_list, on the default API version", async () => {
+    const fetchMock = mockFetchOnce();
+    await createUpdate("123", "hi", "tok");
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(init.body as string) as { query: string; variables: Record<string, unknown> };
+    expect(body.query).not.toContain("mentions_list");
+    expect(body.variables).not.toHaveProperty("mentionsList");
+    expect((init.headers as Record<string, string>)["API-Version"]).toBe("2024-10");
+  });
+
+  test("a note with mentions sends mentions_list on the newer API version", async () => {
+    const fetchMock = mockFetchOnce();
+    await createUpdate("123", "hi", "tok", undefined, [{ id: "42", type: "User" }]);
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(init.body as string) as { query: string; variables: Record<string, unknown> };
+    expect(body.query).toContain("mentions_list");
+    expect(body.variables.mentionsList).toEqual([{ id: "42", type: "User" }]);
+    expect((init.headers as Record<string, string>)["API-Version"]).toBe("2025-07");
   });
 });
 
