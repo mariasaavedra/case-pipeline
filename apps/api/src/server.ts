@@ -878,6 +878,14 @@ app.post("/api/profiles/:localId/contracts", requireAuth, async (req, res) => {
 let staffDirectoryCache: { users: MondayWorkspaceUser[]; fetchedAt: number } | null = null;
 const STAFF_DIRECTORY_TTL_MS = 5 * 60 * 1000;
 
+// The firm operates in Central Time; the API container's own system clock
+// does not (Docker defaults to UTC, and nothing here sets TZ). A call logged
+// at 2:11pm Central was landing on the Date/Hour columns as 7:11pm — computed
+// via unzoned `new Date()` calls that silently used the container's UTC
+// clock instead. Every "now" stamped onto a call must go through this zone
+// explicitly rather than relying on the process's local time.
+const FIRM_TIMEZONE = "America/Chicago";
+
 /**
  * Resolve a Monday numeric user id to their name via the same cache
  * `/api/call-log/staff-directory` populates (refreshed here if stale/empty).
@@ -994,8 +1002,8 @@ app.post("/api/call-log", requireAuth, async (req, res) => {
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-  const nowTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TIMEZONE }); // en-CA => YYYY-MM-DD
+  const nowTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: FIRM_TIMEZONE });
 
   // Column values for Monday's create_item mutation — keyed by real column id.
   const columnValues: Record<string, unknown> = {};
