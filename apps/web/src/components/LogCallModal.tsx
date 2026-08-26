@@ -1,5 +1,5 @@
 // =============================================================================
-// LogCallModal — quick "someone's on the phone" popup
+// LogCallModal — quick "someone's on the phone" popup (+ edit mode)
 // =============================================================================
 // Replaces the old flow (open Monday, create a Call Log item, remember to
 // search + link the profile) with one popup: type the caller's phone number,
@@ -9,23 +9,36 @@
 // entry instead, mirrored into the client's timeline when linked. Writes
 // straight to the real Call Log board in Monday (POST /api/call-log) — same
 // personal-token/queue-fallback rails as every other write-back in this app.
+//
+// Passing `entry` switches this into edit mode: name/phone/linked-client only
+// (reusing the same phone-lookup-and-relink UX), submitting through
+// PATCH /api/call-log/:localId instead. Note/status/language/taken-by aren't
+// editable here — this is a correction tool for the three identity fields,
+// not a re-log.
 // =============================================================================
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { searchClients, createCallLogEntry, fetchCallLogStaffDirectory } from "../api";
-import type { SearchResult, MondayStaffUser } from "../api";
+import { searchClients, createCallLogEntry, updateCallLogEntry, fetchCallLogStaffDirectory, stripMentionMarkers } from "../api";
+import type { SearchResult, MondayStaffUser, CallLogEntry, MentionedUser } from "../api";
 import { useBoardStatusOptions } from "../StatusOptionsProvider";
 import { useAuth } from "../auth/useAuth";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
+import { MentionTextarea } from "./MentionTextarea";
 
 interface Props {
   onClose: () => void;
-  /** Called after a call is successfully logged (or queued), so a list view can refresh. */
+  /** Called after a call is successfully logged/edited (or queued), so a list view can refresh. */
   onLogged?: () => void;
+  /** Present → edit mode: prefills name/phone/linked-client from this entry and PATCHes it instead of creating a new call. */
+  entry?: CallLogEntry;
 }
 
+// "Portugese" (no "u") is not a typo — it's Monday's actual live status label
+// on the Language column (confirmed via a direct board-schema read); spelling
+// it "Portuguese" here would fail server.ts's languageCol.options validation
+// against the real synced label and reject every submission with that choice.
 const LANGUAGE_OPTIONS = ["English", "Spanish", "Portugese"];
 
 function fieldLabel(text: string) {
@@ -43,18 +56,22 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "var(--font-body)",
 };
 
-export function LogCallModal({ onClose, onLogged }: Props) {
+export function LogCallModal({ onClose, onLogged, entry }: Props) {
+  const isEdit = !!entry;
   const statusDef = useBoardStatusOptions("call_log");
   const { user } = useAuth();
 
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(entry?.phone ?? "");
   const [matches, setMatches] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [selectedProfile, setSelectedProfile] = useState<SearchResult | null>(null);
+  const [selectedProfile, setSelectedProfile] = useState<SearchResult | null>(
+    entry?.profileLocalId ? { localId: entry.profileLocalId, name: entry.profileName ?? "", email: null, phone: null, address: null } : null,
+  );
 
-  const [name, setName] = useState("");
+  const [name, setName] = useState(entry?.name ?? "");
   const [note, setNote] = useState("");
+  const [noteMentions, setNoteMentions] = useState<MentionedUser[]>([]);
   const [status, setStatus] = useState("");
   const [showMore, setShowMore] = useState(false);
   const [language, setLanguage] = useState("");
@@ -70,15 +87,18 @@ export function LogCallModal({ onClose, onLogged }: Props) {
   const controllerRef = useRef<AbortController | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // Default status once the board's real options load.
+  // Default status once the board's real options load. Not shown in edit mode.
   useEffect(() => {
+    if (isEdit) return;
     if (!status && statusDef?.options.length) {
       setStatus(statusDef.options.find((o) => o.label.toLowerCase() === "pending")?.label ?? statusDef.options[0]!.label);
     }
-  }, [statusDef, status]);
+  }, [isEdit, statusDef, status]);
 
   // Load the staff directory once, and auto-pick "Taken by" = the signed-in user.
+  // Not shown in edit mode.
   useEffect(() => {
+    if (isEdit) return;
     fetchCallLogStaffDirectory()
       .then((users) => {
         setStaff(users);
@@ -90,7 +110,7 @@ export function LogCallModal({ onClose, onLogged }: Props) {
         }
       })
       .catch(() => setStaff([])); // Non-fatal — "Taken by" just stays a manual pick.
-  }, [user]);
+  }, [isEdit, user]);
 
   const runSearch = useCallback((value: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -118,6 +138,16 @@ export function LogCallModal({ onClose, onLogged }: Props) {
         setSearching(false);
       }
     }, 300);
+  }, []);
+
+  // Edit mode opens prefilled with the phone already on file — without this,
+  // an unlinked call whose phone matches a real client would show no match
+  // list at all until staff manually retyped the number (runSearch only fires
+  // from the input's onChange otherwise).
+  useEffect(() => {
+    if (isEdit && phone && !selectedProfile) runSearch(phone);
+    // Deliberately mount-only — re-running on every phone/selectedProfile
+    // change would just duplicate what onPhoneChange already does.
   }, []);
 
   const onPhoneChange = (value: string) => {
@@ -148,20 +178,32 @@ export function LogCallModal({ onClose, onLogged }: Props) {
     setSaving(true);
     setError(null);
     try {
+      if (isEdit && entry) {
+        await updateCallLogEntry(entry.localId, {
+          name: name.trim(),
+          phone: phone.trim(),
+          profileLocalId: selectedProfile?.localId ?? null,
+        });
+        onLogged?.();
+        onClose();
+        return;
+      }
+      const trimmedNote = note.trim();
       const res = await createCallLogEntry({
         name: name.trim(),
-        note: note.trim() || undefined,
+        note: trimmedNote ? stripMentionMarkers(trimmedNote, noteMentions) : undefined,
         phone: phone.trim() || undefined,
         status: status || undefined,
         language: language || undefined,
         profileLocalId: selectedProfile?.localId ?? null,
         takenByUserId: takenById || null,
         highlightedForUserId: highlightedForId || null,
+        mentionedUserIds: noteMentions.length ? noteMentions.map((m) => m.id) : undefined,
       });
       setDone({ name: res.name, pending: res.pending });
       onLogged?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to log the call");
+      setError(e instanceof Error ? e.message : `Failed to ${isEdit ? "save the call" : "log the call"}`);
     } finally {
       setSaving(false);
     }
@@ -174,6 +216,7 @@ export function LogCallModal({ onClose, onLogged }: Props) {
     setSelectedProfile(null);
     setName("");
     setNote("");
+    setNoteMentions([]);
     setLanguage("");
     setHighlightedForId("");
     setDone(null);
@@ -186,8 +229,10 @@ export function LogCallModal({ onClose, onLogged }: Props) {
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="gap-0 p-0 sm:max-w-[480px]">
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
-          <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Log a call</DialogTitle>
-          <DialogDescription>Creates the entry on the Call Log board in Monday.com</DialogDescription>
+          <DialogTitle style={{ fontFamily: "var(--font-display)" }}>{isEdit ? "Edit call" : "Log a call"}</DialogTitle>
+          <DialogDescription>
+            {isEdit ? "Updates the entry on the Call Log board in Monday.com" : "Creates the entry on the Call Log board in Monday.com"}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="px-5 py-4">
@@ -230,7 +275,12 @@ export function LogCallModal({ onClose, onLogged }: Props) {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setSelectedProfile(null)}
+                    onClick={() => {
+                      setSelectedProfile(null);
+                      // Re-open the match list immediately so staff can pick a
+                      // different client without having to retype the phone.
+                      runSearch(phone);
+                    }}
                     style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--color-ink-faint)" }}
                   >
                     Unlink
@@ -259,7 +309,9 @@ export function LogCallModal({ onClose, onLogged }: Props) {
                 <p style={{ fontSize: 12, color: "var(--color-ink-faint)", marginBottom: 12 }}>Searching…</p>
               ) : searched ? (
                 <p style={{ fontSize: 12, color: "var(--color-ink-faint)", marginBottom: 12 }}>
-                  No matching profile — the call will still be logged, just not linked to a client.
+                  {isEdit
+                    ? "No matching profile — the call will stay unlinked."
+                    : "No matching profile — the call will still be logged, just not linked to a client."}
                 </p>
               ) : null}
 
@@ -276,79 +328,83 @@ export function LogCallModal({ onClose, onLogged }: Props) {
                 />
               </label>
 
-              <label style={{ display: "block", marginBottom: 12 }}>
-                {fieldLabel("Note (optional)")}
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="What did they need? Posted as a comment on the entry."
-                  rows={3}
-                  className="w-full rounded-md px-2 py-1.5 text-sm"
-                  style={{ ...inputStyle, resize: "vertical" }}
-                />
-              </label>
-
-              <label style={{ display: "block", marginBottom: 12 }}>
-                {fieldLabel("Status")}
-                {statusDef && statusDef.options.length > 0 ? (
-                  <Select items={statusDef.options.map((o) => ({ value: o.label, label: o.label }))} value={status} onValueChange={(v) => setStatus(v ?? "")}>
-                    <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="w-[var(--anchor-width)]">
-                      {statusDef.options.map((o) => <SelectItem key={o.index} value={o.label}>{o.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <span style={{ fontSize: 12, color: "var(--color-status-red)" }}>Call Log status options not synced yet.</span>
-                )}
-              </label>
-
-              <button
-                type="button"
-                onClick={() => setShowMore((s) => !s)}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: showMore ? 12 : 4, fontSize: 12, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-              >
-                {showMore ? "▾ Fewer options" : "▸ More options (language, taken by, highlight for)"}
-              </button>
-
-              {showMore && (
-                <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-                  <label style={{ flex: 1, display: "block" }}>
-                    {fieldLabel("Language")}
-                    <Select items={[{ value: "", label: "—" }, ...LANGUAGE_OPTIONS.map((l) => ({ value: l, label: l }))]} value={language} onValueChange={(v) => setLanguage(v ?? "")}>
-                      <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="w-[var(--anchor-width)]">
-                        <SelectItem value="">—</SelectItem>
-                        {LANGUAGE_OPTIONS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+              {!isEdit && (
+                <>
+                  <label style={{ display: "block", marginBottom: 12 }}>
+                    {fieldLabel("Note (optional)")}
+                    <MentionTextarea
+                      value={note}
+                      onChange={setNote}
+                      mentions={noteMentions}
+                      onMentionsChange={setNoteMentions}
+                      placeholder="What did they need? Posted as a comment on the entry. Type @ to tag someone."
+                      rows={3}
+                    />
                   </label>
-                  <label style={{ flex: 1, display: "block" }}>
-                    {fieldLabel("Taken by")}
-                    <Select items={staffItems} value={takenById} onValueChange={(v) => setTakenById(v ?? "")}>
-                      <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="w-[var(--anchor-width)]">
-                        {staffItems.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+
+                  <label style={{ display: "block", marginBottom: 12 }}>
+                    {fieldLabel("Status")}
+                    {statusDef && statusDef.options.length > 0 ? (
+                      <Select items={statusDef.options.map((o) => ({ value: o.label, label: o.label }))} value={status} onValueChange={(v) => setStatus(v ?? "")}>
+                        <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="w-[var(--anchor-width)]">
+                          {statusDef.options.map((o) => <SelectItem key={o.index} value={o.label}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "var(--color-status-red)" }}>Call Log status options not synced yet.</span>
+                    )}
                   </label>
-                  <label style={{ flex: 1, display: "block" }}>
-                    {fieldLabel("Highlight for")}
-                    <Select items={staffItems} value={highlightedForId} onValueChange={(v) => setHighlightedForId(v ?? "")}>
-                      <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="w-[var(--anchor-width)]">
-                        {staffItems.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowMore((s) => !s)}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: showMore ? 12 : 4, fontSize: 12, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+                  >
+                    {showMore ? "▾ Fewer options" : "▸ More options (language, taken by, highlight for)"}
+                  </button>
+
+                  {showMore && (
+                    <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                      <label style={{ flex: 1, display: "block" }}>
+                        {fieldLabel("Language")}
+                        <Select items={[{ value: "", label: "—" }, ...LANGUAGE_OPTIONS.map((l) => ({ value: l, label: l }))]} value={language} onValueChange={(v) => setLanguage(v ?? "")}>
+                          <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="w-[var(--anchor-width)]">
+                            <SelectItem value="">—</SelectItem>
+                            {LANGUAGE_OPTIONS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <label style={{ flex: 1, display: "block" }}>
+                        {fieldLabel("Taken by")}
+                        <Select items={staffItems} value={takenById} onValueChange={(v) => setTakenById(v ?? "")}>
+                          <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="w-[var(--anchor-width)]">
+                            {staffItems.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <label style={{ flex: 1, display: "block" }}>
+                        {fieldLabel("Highlight for")}
+                        <Select items={staffItems} value={highlightedForId} onValueChange={(v) => setHighlightedForId(v ?? "")}>
+                          <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="w-[var(--anchor-width)]">
+                            {staffItems.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                    </div>
+                  )}
+                </>
               )}
 
               {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
@@ -356,7 +412,7 @@ export function LogCallModal({ onClose, onLogged }: Props) {
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
                 <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
                 <Button type="button" onClick={submit} disabled={saving || !name.trim()}>
-                  {saving ? "Logging…" : "Log call"}
+                  {isEdit ? (saving ? "Saving…" : "Save") : (saving ? "Logging…" : "Log call")}
                 </Button>
               </div>
             </>

@@ -254,6 +254,24 @@ export async function fetchCallLogStaffDirectory(): Promise<MondayStaffUser[]> {
   return apiFetch<MondayStaffUser[]>("/api/call-log/staff-directory");
 }
 
+/** A staff member @mentioned in a note — tagged in the compose box, notified
+ * on the real Monday.com comment via mentions_list. */
+export interface MentionedUser {
+  id: string;
+  name: string;
+}
+
+/** Removes the "@" prefix `MentionTextarea` shows while composing before the
+ * note is sent to Monday — per Monday's own docs, the body should carry no
+ * literal "@" mention syntax; mentions_list alone drives rendering/notifying. */
+export function stripMentionMarkers(text: string, mentions: MentionedUser[]): string {
+  let result = text;
+  for (const m of mentions) {
+    result = result.replace(`@${m.name}`, m.name);
+  }
+  return result;
+}
+
 export interface CreateCallLogInput {
   /** The caller's name — becomes the Monday item's name. */
   name: string;
@@ -265,6 +283,8 @@ export interface CreateCallLogInput {
   profileLocalId?: string | null;
   takenByUserId?: string | null;
   highlightedForUserId?: string | null;
+  /** Monday user ids @mentioned in `note` — notified on the posted comment. */
+  mentionedUserIds?: string[];
 }
 
 export interface CreateCallLogResult {
@@ -281,6 +301,53 @@ export async function createCallLogEntry(input: CreateCallLogInput): Promise<Cre
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+  });
+}
+
+export interface UpdateCallLogInput {
+  name?: string;
+  phone?: string;
+  profileLocalId?: string | null;
+  highlightedForUserId?: string | null;
+}
+
+/** Partial-update an existing call. Only the fields present in `input` are
+ * touched (send `null` to clear profileLocalId/highlightedForUserId). */
+export async function updateCallLogEntry(
+  localId: string,
+  input: UpdateCallLogInput,
+): Promise<{ localId: string; pending: boolean }> {
+  return apiFetch(`/api/call-log/${encodeURIComponent(localId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export interface NoteThreadEntry {
+  id: string;
+  body: string;
+  createdAt: string;
+  authorName: string | null;
+  replies: NoteThreadEntry[];
+}
+
+/** A call's note thread — Monday's own comment thread on the item, fetched live. */
+export async function fetchCallLogNotes(localId: string): Promise<{ updates: NoteThreadEntry[] }> {
+  return apiFetch(`/api/call-log/${encodeURIComponent(localId)}/notes`);
+}
+
+/** Posts a threaded reply into the call's note thread (or a fresh top-level
+ * update if it has none yet). pending=queued (Monday was unreachable). */
+export async function addCallLogNote(
+  localId: string,
+  note: string,
+  mentionedUserIds?: string[],
+): Promise<{ pending: boolean }> {
+  return apiFetch(`/api/call-log/${encodeURIComponent(localId)}/notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note, mentionedUserIds }),
   });
 }
 

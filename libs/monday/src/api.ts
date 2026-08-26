@@ -775,16 +775,35 @@ export async function fetchItemUpdatesBatch(
   return map;
 }
 
+/** A Monday.com update mention target — confirmed via live schema
+ * introspection: `UpdateMention = { id: ID!, type: MentionType! }`. Only
+ * `User` is used here (the enum also has Team/Project/Board/Agent). */
+export interface UpdateMention {
+  id: string;
+  type: "User";
+}
+
 /**
- * Post a new update (comment) to a Monday.com item.
- * Returns the Monday.com update ID of the newly created update.
+ * Post a new update (comment) to a Monday.com item, or a threaded reply when
+ * `parentId` is given (an existing update's id) — confirmed via a live schema
+ * introspection that `create_update` genuinely accepts `parent_id`. `mentions`
+ * notifies + links those users on the update — per Monday's own docs, the
+ * body should NOT contain literal "@" mention syntax; mentions_list alone
+ * drives the rendering and notification.
+ * Returns the Monday.com update ID of the newly created update/reply.
  */
-export async function createUpdate(itemId: string, body: string, tokenOverride?: string): Promise<string> {
+export async function createUpdate(
+  itemId: string,
+  body: string,
+  tokenOverride?: string,
+  parentId?: string,
+  mentions?: UpdateMention[],
+): Promise<string> {
   const result = await mondayRequest<{ data: { create_update: { id: string } } }>(
-    `mutation CreateUpdate($itemId: ID!, $body: String!) {
-       create_update(item_id: $itemId, body: $body) { id }
+    `mutation CreateUpdate($itemId: ID!, $body: String!, $parentId: ID, $mentionsList: [UpdateMention]) {
+       create_update(item_id: $itemId, body: $body, parent_id: $parentId, mentions_list: $mentionsList) { id }
      }`,
-    { itemId, body },
+    { itemId, body, parentId: parentId ?? null, mentionsList: mentions?.length ? mentions : null },
     tokenOverride
   );
   return result.data.create_update.id;
@@ -810,6 +829,30 @@ export async function changeSimpleColumnValue(
     tokenOverride
   );
   return result.data.change_simple_column_value.id;
+}
+
+/**
+ * Set a JSON-valued column on an existing item (people, board_relation, dropdown
+ * multi-select, …) — the ones `changeSimpleColumnValue`'s plain string can't
+ * express. `value` is the same per-column shape `createItem`'s `columnValues`
+ * already uses (e.g. `{ item_ids: [123] }` for board_relation,
+ * `{ personsAndTeams: [{ id, kind: "person" }] }` for people). Returns the item id.
+ */
+export async function changeColumnValue(
+  boardId: string,
+  itemId: string,
+  columnId: string,
+  value: Record<string, unknown>,
+  tokenOverride?: string
+): Promise<string> {
+  const result = await mondayRequest<{ data: { change_column_value: { id: string } } }>(
+    `mutation ChangeColumnValue($boardId: ID!, $itemId: ID!, $columnId: String!, $value: JSON!) {
+       change_column_value(board_id: $boardId, item_id: $itemId, column_id: $columnId, value: $value) { id }
+     }`,
+    { boardId, itemId, columnId, value: JSON.stringify(value) },
+    tokenOverride
+  );
+  return result.data.change_column_value.id;
 }
 
 /**

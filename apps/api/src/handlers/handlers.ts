@@ -246,8 +246,12 @@ export function handleCallLog(req: Request, db: Database): Response {
   const dateFrom = url.searchParams.get("dateFrom") ?? undefined;
   const dateTo = url.searchParams.get("dateTo") ?? undefined;
   const unlinkedOnly = url.searchParams.get("unlinkedOnly") === "1";
-  const limit = Number(url.searchParams.get("limit") ?? "50") || 50;
-  const offset = Number(url.searchParams.get("offset") ?? "0") || 0;
+  // `?? "50"` then `|| 50` treats an explicit limit=0 as unset (0 is falsy) —
+  // check presence explicitly so limit=0 means "zero rows", not "default".
+  const limitParam = url.searchParams.get("limit");
+  const offsetParam = url.searchParams.get("offset");
+  const limit = limitParam !== null ? Math.max(0, Math.min(parseInt(limitParam, 10) || 0, 200)) : 50;
+  const offset = offsetParam !== null ? Math.max(0, parseInt(offsetParam, 10) || 0) : 0;
 
   const result = getCallLogEntries(db, { status, takenBy, dateFrom, dateTo, unlinkedOnly, limit, offset });
   const staffOptions = getCallLogStaffOptions(db);

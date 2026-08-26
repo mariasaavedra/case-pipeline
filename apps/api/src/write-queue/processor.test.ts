@@ -6,18 +6,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 
-const { createUpdateMock, changeSimpleColumnValueMock, createItemMock } = vi.hoisted(() => ({
+const { createUpdateMock, changeSimpleColumnValueMock, changeColumnValueMock, createItemMock } = vi.hoisted(() => ({
   createUpdateMock: vi.fn(),
   changeSimpleColumnValueMock: vi.fn(),
+  changeColumnValueMock: vi.fn(),
   createItemMock: vi.fn(),
 }));
-// Only the three mutations are stubbed; the error classes stay real, because
+// Only the mutations are stubbed; the error classes stay real, because
 // the token-fallback logic keys off `instanceof` to tell a permission refusal
 // apart from a transient outage.
 vi.mock("@case-pipeline/monday", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@case-pipeline/monday")>()),
   createUpdate: createUpdateMock,
   changeSimpleColumnValue: changeSimpleColumnValueMock,
+  changeColumnValue: changeColumnValueMock,
   createItem: createItemMock,
 }));
 
@@ -45,6 +47,7 @@ describe("write-queue processor", () => {
   beforeEach(() => {
     createUpdateMock.mockReset();
     changeSimpleColumnValueMock.mockReset();
+    changeColumnValueMock.mockReset();
     createItemMock.mockReset();
   });
 
@@ -56,7 +59,41 @@ describe("write-queue processor", () => {
     const synced = await drainWriteQueue(db, { token: "tok" });
 
     expect(synced).toBe(1);
-    expect(createUpdateMock).toHaveBeenCalledWith("123", "hi", "tok");
+    expect(createUpdateMock).toHaveBeenCalledWith("123", "hi", "tok", undefined, undefined);
+    expect(queueRow(db).status).toBe("synced");
+    db.close();
+  });
+
+  it("syncs a create_update op as a threaded reply when parentId is queued", async () => {
+    const db = freshDb();
+    createUpdateMock.mockResolvedValue("reply-1");
+
+    enqueueWrite(db, {
+      opType: "create_update",
+      mondayItemId: "123",
+      payload: { body: "hi", parentId: "update-999" },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    expect(createUpdateMock).toHaveBeenCalledWith("123", "hi", "tok", "update-999", undefined);
+    expect(queueRow(db).status).toBe("synced");
+    db.close();
+  });
+
+  it("syncs a create_update op with mentions_list when mentions are queued", async () => {
+    const db = freshDb();
+    createUpdateMock.mockResolvedValue("update-with-mention-1");
+
+    enqueueWrite(db, {
+      opType: "create_update",
+      mondayItemId: "123",
+      payload: { body: "cc @Jane", mentions: [{ id: "42", type: "User" }] },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    expect(createUpdateMock).toHaveBeenCalledWith("123", "cc @Jane", "tok", undefined, [{ id: "42", type: "User" }]);
     expect(queueRow(db).status).toBe("synced");
     db.close();
   });
@@ -152,6 +189,25 @@ describe("write-queue processor", () => {
     db.close();
   });
 
+  it("syncs a change_column_json op via change_column_value", async () => {
+    const db = freshDb();
+    changeColumnValueMock.mockResolvedValue("123");
+
+    enqueueWrite(db, {
+      opType: "change_column_json",
+      mondayItemId: "123",
+      payload: { boardId: "board-9", columnId: "people__1", value: { personsAndTeams: [{ id: 42, kind: "person" }] } },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    expect(changeColumnValueMock).toHaveBeenCalledWith(
+      "board-9", "123", "people__1", { personsAndTeams: [{ id: 42, kind: "person" }] }, "tok",
+    );
+    expect(queueRow(db).status).toBe("synced");
+    db.close();
+  });
+
   it("dead-letters a change_column op missing board/column ids", async () => {
     const db = freshDb();
 
@@ -217,6 +273,66 @@ describe("write-queue processor", () => {
     const row = queueRow(db);
     expect(row.status).toBe("pending");
     expect(row.attempts).toBe(1);
+    db.close();
+  });
+
+  // ---------------------------------------------------------------------------
+  // create_item reconciliation
+  // ---------------------------------------------------------------------------
+  // The regression this guards: target_table/target_local_id are set on EVERY
+  // create_item op, not just placeholder rows created while Monday was down
+  // (e.g. Fee K creation targets the already-linked profile purely for audit
+  // context). Reconciliation must only attach the new item id to a row that's
+  // actually still awaiting one.
+
+  it("attaches the new item id to a placeholder row with no monday_item_id yet", async () => {
+    const db = freshDb();
+    createItemMock.mockResolvedValue("new-call-1");
+    db.prepare(
+      `INSERT INTO board_items (local_id, monday_item_id, board_key, name, column_values, sync_status)
+       VALUES ('call-local-1', NULL, 'call_log', 'Jane Doe', '{}', 'pending')`,
+    ).run();
+
+    enqueueWrite(db, {
+      opType: "create_item",
+      targetTable: "board_items",
+      targetLocalId: "call-local-1",
+      payload: { boardId: "board-9", itemName: "Jane Doe" },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    const row = db.prepare("SELECT monday_item_id, sync_status FROM board_items WHERE local_id = 'call-local-1'").get() as {
+      monday_item_id: string | null;
+      sync_status: string;
+    };
+    expect(row.monday_item_id).toBe("new-call-1");
+    expect(row.sync_status).toBe("synced");
+    db.close();
+  });
+
+  it("does not overwrite an existing row's monday_item_id when create_item targets it only for audit context", async () => {
+    const db = freshDb();
+    createItemMock.mockResolvedValue("new-fee-k-1");
+    db.prepare(
+      `INSERT INTO profiles (local_id, monday_item_id, name) VALUES ('profile-local-1', 'existing-profile-item', 'Jane Doe')`,
+    ).run();
+
+    // Mirrors the Fee K creation flow: targetLocalId is the profile's OWN id,
+    // used for audit context — not a placeholder awaiting the new Fee K's id.
+    enqueueWrite(db, {
+      opType: "create_item",
+      targetTable: "profiles",
+      targetLocalId: "profile-local-1",
+      payload: { boardId: "board-9", itemName: "Jane Doe — U-Visa" },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    const row = db.prepare("SELECT monday_item_id FROM profiles WHERE local_id = 'profile-local-1'").get() as {
+      monday_item_id: string | null;
+    };
+    expect(row.monday_item_id).toBe("existing-profile-item");
     db.close();
   });
 

@@ -14,7 +14,8 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import cron from "node-cron";
-import { createUpdate, changeSimpleColumnValue, createItem, createTimelineItem } from "@case-pipeline/monday";
+import { createUpdate, changeSimpleColumnValue, changeColumnValue, createItem, createTimelineItem } from "@case-pipeline/monday";
+import type { UpdateMention } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { acquireSyncLock, releaseSyncLock } from "@case-pipeline/seed/db/sync-lock";
 import { withTokenFallback } from "../write-auth.js";
@@ -22,7 +23,13 @@ import { withTokenFallback } from "../write-auth.js";
 const LOCK_HOLDER = "write-queue";
 const BATCH_SIZE = 20;
 
-export type WriteOpType = "create_update" | "change_column" | "create_item" | "create_timeline_item" | "reschedule";
+export type WriteOpType =
+  | "create_update"
+  | "change_column"
+  | "change_column_json"
+  | "create_item"
+  | "create_timeline_item"
+  | "reschedule";
 
 export interface EnqueueInput {
   opType: WriteOpType;
@@ -112,7 +119,9 @@ async function dispatch(row: QueueRow, token?: string): Promise<string | undefin
       if (!row.monday_item_id) throw new Error("create_update requires monday_item_id");
       const body = String(payload.body ?? payload.text ?? "");
       if (!body) throw new Error("create_update requires a non-empty body");
-      await createUpdate(row.monday_item_id, body, token);
+      const parentId = payload.parentId ? String(payload.parentId) : undefined;
+      const mentions = Array.isArray(payload.mentions) ? (payload.mentions as UpdateMention[]) : undefined;
+      await createUpdate(row.monday_item_id, body, token, parentId, mentions);
       return undefined;
     }
     case "change_column": {
@@ -122,6 +131,15 @@ async function dispatch(row: QueueRow, token?: string): Promise<string | undefin
       const value = String(payload.value ?? "");
       if (!boardId || !columnId) throw new Error("change_column requires boardId and columnId");
       await changeSimpleColumnValue(boardId, row.monday_item_id, columnId, value, token);
+      return undefined;
+    }
+    case "change_column_json": {
+      if (!row.monday_item_id) throw new Error("change_column_json requires monday_item_id");
+      const boardId = String(payload.boardId ?? "");
+      const columnId = String(payload.columnId ?? "");
+      const value = (payload.value ?? {}) as Record<string, unknown>;
+      if (!boardId || !columnId) throw new Error("change_column_json requires boardId and columnId");
+      await changeColumnValue(boardId, row.monday_item_id, columnId, value, token);
       return undefined;
     }
     case "create_item": {
@@ -222,12 +240,19 @@ export async function drainWriteQueue(
         // A queued create_item placeholder row has no monday_item_id yet (Monday
         // was down when it was created) — attach the real one now, or the next
         // full sync sees an untracked item upstream and inserts it a second time.
+        // The `monday_item_id IS NULL` guard is load-bearing: target_table/
+        // target_local_id are also set on create_item ops (e.g. Fee K creation)
+        // where they identify an unrelated *existing* row kept only for audit
+        // context, not a placeholder awaiting this new item's id — reconciling
+        // unconditionally would stomp that row's own monday_item_id.
         if (row.op_type === "create_item" && outcome.result && row.target_table && row.target_local_id) {
           if (RECONCILABLE_TABLES.has(row.target_table)) {
-            db.prepare(`UPDATE ${row.target_table} SET monday_item_id = ?, sync_status = 'synced' WHERE local_id = ?`).run(
-              outcome.result,
-              row.target_local_id,
-            );
+            const res = db
+              .prepare(`UPDATE ${row.target_table} SET monday_item_id = ?, sync_status = 'synced' WHERE local_id = ? AND monday_item_id IS NULL`)
+              .run(outcome.result, row.target_local_id);
+            if (res.changes === 0) {
+              console.warn(`[write-queue] op ${row.id}: target row already has a monday_item_id, skipped reconciliation`);
+            }
           } else {
             console.warn(`[write-queue] op ${row.id}: unrecognized target_table "${row.target_table}", skipped reconciliation`);
           }
