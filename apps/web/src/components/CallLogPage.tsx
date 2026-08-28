@@ -423,6 +423,12 @@ export function CallLogPage() {
       )}
       {editingEntry && (
         <LogCallModal
+          // Remount per entry: LogCallModal prefills and runs its phone lookup
+          // in a mount-only effect, so reusing the instance for a different
+          // call would show the previous one's match list. Today the modal
+          // backdrop makes switching entries directly impossible, but that is
+          // an invariant of ui/dialog.tsx, not of this component.
+          key={editingEntry.localId}
           entry={editingEntry}
           onClose={() => setEditingEntry(null)}
           onLogged={() => load(0, true)}

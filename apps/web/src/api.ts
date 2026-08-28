@@ -482,11 +482,15 @@ export async function getAzureToken(): Promise<string | null> {
 // Profile Write-Back
 // =============================================================================
 
-export async function postProfileUpdate(profileLocalId: string, text: string): Promise<ClientUpdate> {
+export async function postProfileUpdate(
+  profileLocalId: string,
+  text: string,
+  mentionedUserIds?: string[],
+): Promise<ClientUpdate> {
   return apiFetch<ClientUpdate>(`/api/profiles/${encodeURIComponent(profileLocalId)}/updates`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, mentionedUserIds }),
   });
 }
 

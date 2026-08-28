@@ -28,6 +28,14 @@ interface Props {
   onMentionsChange: (mentions: MentionedUser[]) => void;
   placeholder?: string;
   rows?: number;
+  disabled?: boolean;
+  /** Forwarded after the mention dropdown's own key handling (arrows/Enter/Escape
+   * when open) — lets a caller add its own shortcuts, e.g. Cmd/Ctrl+Enter to submit. */
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  /** Override the textarea's default bordered-box look (e.g. to embed borderless
+   * inside a caller's own bordered container, as NoteComposer does). */
+  className?: string;
+  style?: React.CSSProperties;
 }
 
 interface Candidate {
@@ -53,7 +61,9 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "var(--font-body)",
 };
 
-export function MentionTextarea({ value, onChange, mentions, onMentionsChange, placeholder, rows = 3 }: Props) {
+export function MentionTextarea({
+  value, onChange, mentions, onMentionsChange, placeholder, rows = 3, disabled, onKeyDown, className, style,
+}: Props) {
   const [staff, setStaff] = useState<Candidate[]>([]);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -113,20 +123,26 @@ export function MentionTextarea({ value, onChange, mentions, onMentionsChange, p
     });
   };
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!open || matches.length === 0) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlighted((h) => (h + 1) % matches.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlighted((h) => (h - 1 + matches.length) % matches.length);
-    } else if (e.key === "Enter" || e.key === "Tab") {
-      e.preventDefault();
-      select(matches[highlighted]!);
-    } else if (e.key === "Escape") {
-      setOpen(false);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (open && matches.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setHighlighted((h) => (h + 1) % matches.length);
+        return;
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setHighlighted((h) => (h - 1 + matches.length) % matches.length);
+        return;
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        select(matches[highlighted]!);
+        return;
+      } else if (e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
     }
+    onKeyDown?.(e);
   };
 
   return (
@@ -135,12 +151,13 @@ export function MentionTextarea({ value, onChange, mentions, onMentionsChange, p
         ref={textareaRef}
         value={value}
         onChange={handleChange}
-        onKeyDown={onKeyDown}
+        onKeyDown={handleKeyDown}
         onBlur={() => setTimeout(() => setOpen(false), 150)} // let a click on a suggestion land first
         placeholder={placeholder}
         rows={rows}
-        className="w-full rounded-md px-2 py-1.5 text-sm"
-        style={{ ...inputStyle, resize: "vertical" }}
+        disabled={disabled}
+        className={className ?? "w-full rounded-md px-2 py-1.5 text-sm"}
+        style={style ?? { ...inputStyle, resize: "vertical" }}
       />
       {open && matches.length > 0 && (
         <div

@@ -100,6 +100,11 @@ export function reconcileInFlightWrites(db: Database): number {
   return res.changes;
 }
 
+/** Queued mention lists are JSON round-tripped, so re-narrow before use. */
+function readMentions(value: unknown): UpdateMention[] | undefined {
+  return Array.isArray(value) && value.length > 0 ? (value as UpdateMention[]) : undefined;
+}
+
 /**
  * Perform the actual Monday.com mutation for a queued op. This is the plug-in
  * point as write-back grows: add a case per op_type. Currently `create_update`
@@ -120,8 +125,7 @@ async function dispatch(row: QueueRow, token?: string): Promise<string | undefin
       const body = String(payload.body ?? payload.text ?? "");
       if (!body) throw new Error("create_update requires a non-empty body");
       const parentId = payload.parentId ? String(payload.parentId) : undefined;
-      const mentions = Array.isArray(payload.mentions) ? (payload.mentions as UpdateMention[]) : undefined;
-      await createUpdate(row.monday_item_id, body, token, parentId, mentions);
+      await createUpdate(row.monday_item_id, body, token, parentId, readMentions(payload.mentions));
       return undefined;
     }
     case "change_column": {
@@ -158,7 +162,11 @@ async function dispatch(row: QueueRow, token?: string): Promise<string | undefin
       const note = payload.note ? String(payload.note) : "";
       if (note) {
         try {
-          await createUpdate(newItemId, note, token);
+          // `noteMentions` rides alongside `note` so a note queued during a
+          // Monday outage still @-mentions the same people the direct path
+          // would have (server.ts's postCallLogNote) — otherwise the mention
+          // notification is silently lost on the fallback path only.
+          await createUpdate(newItemId, note, token, undefined, readMentions(payload.noteMentions));
         } catch (err) {
           console.error(`[write-queue] post-create note failed for new item ${newItemId}:`, err);
         }

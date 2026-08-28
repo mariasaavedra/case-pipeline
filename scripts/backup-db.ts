@@ -112,7 +112,7 @@ export async function backupDatabase(opts: BackupOptions = {}): Promise<string |
   // The `.enc` suffix is NOT optional decoration — omitting it is what filled a
   // 48 GB disk on 2026-08-17. Backups are encrypted by the caller AFTER this
   // function returns, so on a server with BACKUP_ENCRYPTION_KEY set every file
-  // already on disk is `…​.db.enc` and matched nothing. The prune ran daily,
+  // already on disk is `….db.enc` and matched nothing. The prune ran daily,
   // found zero candidates, and reported success while thirteen 1.5 GB backups
   // accumulated. Retention had been a no-op in production for weeks.
   const re = new RegExp(`^${label}-\\d.*\\.db(\\.enc)?$`);

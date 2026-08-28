@@ -27,5 +27,18 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Ratchet, not a cleanup gate: `lint` passes today over the existing
+      # ~50k LOC and fails on new ESLint *errors*. The 55 pre-existing warnings
+      # are tracked but not blocking — `npm run lint:strict` is the stricter
+      # gate to switch to once that count reaches zero.
+      - name: Lint
+        run: npm run lint
+
       - name: Test
         run: npm run test
+
+      # Typecheck alone does not catch a broken Vite/tsc build, and the build is
+      # where the web app actually breaks. Without this the first sign of a bad
+      # build is the image build in build-push.yml — after merge to main.
+      - name: Build
+        run: npm run build

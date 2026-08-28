@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from "react";
-import type { ClientUpdate } from "../api";
-import { postProfileUpdate, fetchMondayStatus } from "../api";
+import { useState, useEffect } from "react";
+import type { ClientUpdate, MentionedUser } from "../api";
+import { postProfileUpdate, fetchMondayStatus, stripMentionMarkers } from "../api";
 import { Link } from "./Link";
 import { Button } from "./ui/button";
+import { MentionTextarea } from "./MentionTextarea";
 
 interface Props {
   profileLocalId: string;
@@ -12,9 +13,9 @@ interface Props {
 
 export function NoteComposer({ profileLocalId, onPosted, compact = false }: Props) {
   const [text, setText] = useState("");
+  const [mentions, setMentions] = useState<MentionedUser[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [mondayConnected, setMondayConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -30,9 +31,14 @@ export function NoteComposer({ profileLocalId, onPosted, compact = false }: Prop
     setStatus("loading");
     setErrorMsg("");
     try {
-      const newUpdate = await postProfileUpdate(profileLocalId, trimmed);
+      const newUpdate = await postProfileUpdate(
+        profileLocalId,
+        stripMentionMarkers(trimmed, mentions),
+        mentions.length ? mentions.map((m) => m.id) : undefined,
+      );
       onPosted(newUpdate);
       setText("");
+      setMentions([]);
       setStatus("idle");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to post update");
@@ -82,14 +88,16 @@ export function NoteComposer({ profileLocalId, onPosted, compact = false }: Prop
           </span>
         </div>
       )}
-      <textarea
-        ref={textareaRef}
+      <MentionTextarea
         value={text}
-        onChange={(e) => { setText(e.target.value); setStatus("idle"); setErrorMsg(""); }}
+        onChange={(v) => { setText(v); setStatus("idle"); setErrorMsg(""); }}
+        mentions={mentions}
+        onMentionsChange={setMentions}
         onKeyDown={handleKeyDown}
-        placeholder="Add a note to this profile… (⌘↵ to post)"
+        placeholder="Add a note to this profile… (⌘↵ to post, @ to tag someone)"
         rows={compact ? 2 : 3}
         disabled={status === "loading"}
+        className=""
         style={{
           width: "100%",
           resize: "vertical",

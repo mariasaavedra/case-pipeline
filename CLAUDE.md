@@ -20,7 +20,8 @@ npm run test           # Run all workspace tests
 npx vitest run apps/api/src/some.test.ts
 
 # Linting
-npm run lint           # NO-OP today: no workspace defines a lint script and there is no ESLint config yet
+npm run lint           # ESLint (flat config at eslint.config.js). Passes today; fails on new errors
+npm run lint:strict    # Same, but --max-warnings=0 — the gate to adopt once the warning count hits 0
 
 # Other
 npm run preflight      # Pre-flight environment checks (Node version, npm, data dir writable)

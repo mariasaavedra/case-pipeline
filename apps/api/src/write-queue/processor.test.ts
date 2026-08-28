@@ -189,6 +189,50 @@ describe("write-queue processor", () => {
     db.close();
   });
 
+  // A call logged while Monday was down carries its note in the create_item
+  // payload. The direct path (server.ts's postCallLogNote) posts that note WITH
+  // its @-mentions, so the replay must too — otherwise whoever was tagged is
+  // never notified, and only on the outage path, which is invisible in testing.
+  it("posts a queued create_item's note with its @-mentions", async () => {
+    const db = freshDb();
+    createItemMock.mockResolvedValue("new-item-2");
+    createUpdateMock.mockResolvedValue("note-1");
+
+    enqueueWrite(db, {
+      opType: "create_item",
+      payload: {
+        boardId: "board-9",
+        itemName: "Called re: hearing",
+        columnValues: {},
+        note: "Client called back",
+        noteMentions: [{ id: "77", type: "User" }],
+      },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    expect(createUpdateMock).toHaveBeenCalledWith("new-item-2", "Client called back", "tok", undefined, [
+      { id: "77", type: "User" },
+    ]);
+    db.close();
+  });
+
+  it("posts a queued create_item's note with no mentions when none were tagged", async () => {
+    const db = freshDb();
+    createItemMock.mockResolvedValue("new-item-3");
+    createUpdateMock.mockResolvedValue("note-2");
+
+    enqueueWrite(db, {
+      opType: "create_item",
+      payload: { boardId: "board-9", itemName: "Called re: filing", columnValues: {}, note: "No callback needed" },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    expect(createUpdateMock).toHaveBeenCalledWith("new-item-3", "No callback needed", "tok", undefined, undefined);
+    db.close();
+  });
+
   it("syncs a change_column_json op via change_column_value", async () => {
     const db = freshDb();
     changeColumnValueMock.mockResolvedValue("123");
