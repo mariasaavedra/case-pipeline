@@ -375,13 +375,17 @@ function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+// `YYYY-MM-DD` strings parse as UTC midnight and formatDate reads back in UTC,
+// so all arithmetic below stays in UTC. Using local getters/setters here would
+// shift the result by a day wherever the server's offset is not zero.
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return formatDate(d);
 }
 
 function endOfMonth(dateStr: string): string {
-  const d = new Date(dateStr);
-  return formatDate(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  const [year, month] = dateStr.split("-").map(Number) as [number, number];
+  // Day 0 of the following month is the last day of this one.
+  return formatDate(new Date(Date.UTC(year, month, 0)));
 }

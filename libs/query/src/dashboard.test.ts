@@ -2,7 +2,7 @@
 // Dashboard KPI Query Tests
 // =============================================================================
 
-import { test, expect, describe } from "vitest";
+import { test, expect, describe, vi } from "vitest";
 import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 
@@ -306,27 +306,40 @@ describe("getDashboardKpis", () => {
     db.close();
   });
 
+  // The clock is pinned to the 1st of a month: that is the day the range end
+  // used to land in the *previous* month (endOfMonth mixed a UTC-parsed date
+  // with local getters), collapsing the window and zeroing the card.
   test("Upcoming Hearings — month range includes entire month", () => {
-    const db = freshDb();
-    insertProfile(db, { localId: "p1", name: "Maria Garcia" });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T12:00:00Z"));
+    try {
+      const db = freshDb();
+      insertProfile(db, { localId: "p1", name: "Maria Garcia" });
 
-    const today = new Date();
-    // End of current month
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    const dateStr = endOfMonth.toISOString().slice(0, 10);
+      insertBoardItem(db, {
+        localId: "bi1",
+        boardKey: "court_cases",
+        name: "End of Month Hearing",
+        nextDate: "2026-09-30",
+        profileLocalId: "p1",
+      });
+      // First of the next month — outside the window
+      insertBoardItem(db, {
+        localId: "bi2",
+        boardKey: "court_cases",
+        name: "Next Month Hearing",
+        nextDate: "2026-10-01",
+        profileLocalId: "p1",
+      });
 
-    insertBoardItem(db, {
-      localId: "bi1",
-      boardKey: "court_cases",
-      name: "End of Month Hearing",
-      nextDate: dateStr,
-      profileLocalId: "p1",
-    });
-
-    const cards = getDashboardKpis(db, { range: "month" });
-    const hearings = cards.find((c) => c.key === "upcoming_hearings")!;
-    expect(hearings.count).toBeGreaterThanOrEqual(1);
-    db.close();
+      const cards = getDashboardKpis(db, { range: "month" });
+      const hearings = cards.find((c) => c.key === "upcoming_hearings")!;
+      expect(hearings.count).toBe(1);
+      expect(hearings.items[0]!.name).toBe("End of Month Hearing");
+      db.close();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("items are limited to 5", () => {
