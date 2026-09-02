@@ -125,9 +125,56 @@ export function validateCallLogLanguage(
   };
 }
 
+/**
+ * The name the Monday item gets. The front desk often picks up a call before
+ * the caller gives a name — and an unnamed call still has to be logged — so a
+ * blank name falls back to the number that called. Only a call with neither is
+ * genuinely unidentifiable, and that is what validateCallLogBody refuses.
+ */
+export function resolveCallerName(name: string, phone: string): string {
+  return name || phone;
+}
+
+/**
+ * The same fallback for an EDIT, where the phone may be changing in the very
+ * same request. Precedence is deliberate: the number being saved now wins over
+ * the one already on the entry, so clearing the name and correcting the number
+ * together renames the call to the corrected number, not the stale one.
+ *
+ * Returns a rejection rather than an empty name because Monday requires items
+ * to have one — a rename to "" would fail the mutation.
+ */
+export function resolveEditedCallerName(args: {
+  name: string;
+  /** The phone in this request, or undefined when the request doesn't touch it. */
+  newPhone: string | undefined;
+  /** The phone already stored on the entry. */
+  storedPhone: string;
+}): { name: string } | { rejection: CallLogRejection } {
+  const resolved = resolveCallerName(args.name, args.newPhone ?? args.storedPhone);
+  if (!resolved) {
+    return {
+      rejection: { status: 400, error: "name cannot be empty without a phone number to fall back on" },
+    };
+  }
+  return { name: resolved };
+}
+
+/** The phone stored on a call, out of its mirrored column values. */
+export function readMirroredPhone(columnValues: string): string {
+  try {
+    const cv = JSON.parse(columnValues) as { phone?: unknown };
+    return typeof cv.phone === "string" ? cv.phone.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
 /** Validate what can be judged without the board schema. */
 export function validateCallLogBody(parsed: ParsedCallLogBody): CallLogRejection | null {
-  if (!parsed.name) return { status: 400, error: "name is required" };
+  if (!resolveCallerName(parsed.name, parsed.phone)) {
+    return { status: 400, error: "a caller name or phone number is required" };
+  }
   return null;
 }
 

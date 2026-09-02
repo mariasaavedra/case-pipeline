@@ -16,6 +16,9 @@ import {
   columnByTitle,
   buildCallLogColumnValues,
   buildMirroredColumnValues,
+  resolveCallerName,
+  resolveEditedCallerName,
+  readMirroredPhone,
 } from "./call-log-write";
 
 // --- Fixtures ---------------------------------------------------------------
@@ -94,19 +97,90 @@ describe("parseCallLogBody", () => {
   });
 });
 
+// --- resolveCallerName ------------------------------------------------------
+
+describe("resolveCallerName", () => {
+  it("keeps the name staff typed", () => {
+    expect(resolveCallerName("Ana", "816-555-0000")).toBe("Ana");
+  });
+
+  // The front desk regularly picks up before the caller gives a name; the call
+  // still has to be logged, under the only identifier there is.
+  it("falls back to the phone number when no name was given", () => {
+    expect(resolveCallerName("", "816-555-0000")).toBe("816-555-0000");
+  });
+
+  it("is empty only when neither was given", () => {
+    expect(resolveCallerName("", "")).toBe("");
+  });
+});
+
+// --- resolveEditedCallerName ------------------------------------------------
+
+describe("resolveEditedCallerName", () => {
+  it("keeps a name the editor typed", () => {
+    expect(resolveEditedCallerName({ name: "Ana", newPhone: "816-555-0000", storedPhone: "913-555-1111" }))
+      .toEqual({ name: "Ana" });
+  });
+
+  it("falls back to the phone already on the entry", () => {
+    expect(resolveEditedCallerName({ name: "", newPhone: undefined, storedPhone: "913-555-1111" }))
+      .toEqual({ name: "913-555-1111" });
+  });
+
+  // Clearing the name and fixing the number in one save must rename the call to
+  // the CORRECTED number, not the wrong one it is replacing.
+  it("prefers the phone being saved over the stored one", () => {
+    expect(resolveEditedCallerName({ name: "", newPhone: "816-555-0000", storedPhone: "913-555-1111" }))
+      .toEqual({ name: "816-555-0000" });
+  });
+
+  // Clearing BOTH in one save would leave a nameless item, which Monday refuses.
+  it("refuses when clearing the name leaves nothing to fall back on", () => {
+    const result = resolveEditedCallerName({ name: "", newPhone: "", storedPhone: "913-555-1111" });
+    expect(result).toHaveProperty("rejection");
+    expect("rejection" in result && result.rejection.status).toBe(400);
+  });
+});
+
+// --- readMirroredPhone ------------------------------------------------------
+
+describe("readMirroredPhone", () => {
+  it("reads the phone out of mirrored column values", () => {
+    expect(readMirroredPhone(JSON.stringify({ phone: " 816-555-0000 ", hour: "2:11 PM" }))).toBe("816-555-0000");
+  });
+
+  it("is empty for a call with no phone", () => {
+    expect(readMirroredPhone(JSON.stringify({ hour: "2:11 PM" }))).toBe("");
+  });
+
+  // A malformed mirror must not take down an edit that never touched the name.
+  it("is empty rather than throwing on unparseable JSON", () => {
+    expect(readMirroredPhone("not json")).toBe("");
+  });
+});
+
 // --- validateCallLogBody ----------------------------------------------------
 
 describe("validateCallLogBody", () => {
-  it("requires a name", () => {
-    expect(validateCallLogBody(parse({}))).toEqual({ status: 400, error: "name is required" });
+  it("refuses a call with neither a name nor a number", () => {
+    expect(validateCallLogBody(parse({}))).toEqual({
+      status: 400,
+      error: "a caller name or phone number is required",
+    });
   });
 
-  it("rejects a whitespace-only name", () => {
+  it("refuses a whitespace-only name with no phone to fall back on", () => {
     expect(validateCallLogBody(parse({ name: "   " }))?.status).toBe(400);
   });
 
   it("accepts a real name", () => {
     expect(validateCallLogBody(parse({ name: "Ana" }))).toBeNull();
+  });
+
+  // The name is optional as long as the number identifies the call.
+  it("accepts a nameless call that has a phone number", () => {
+    expect(validateCallLogBody(parse({ name: "", phone: "816-555-0000" }))).toBeNull();
   });
 });
 

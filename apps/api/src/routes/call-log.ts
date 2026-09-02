@@ -32,6 +32,9 @@ import {
   columnByTitle,
   buildCallLogColumnValues,
   buildMirroredColumnValues,
+  resolveCallerName,
+  resolveEditedCallerName,
+  readMirroredPhone,
 } from "./call-log-write.js";
 import { parseNoteBody } from "./note-write.js";
 
@@ -117,7 +120,9 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
     // local mirror, audit) and delegates every decision, so the decisions are
     // unit-testable without standing up Express or a database.
     const parsed = parseCallLogBody(req.body);
-    const { name, note, phone, language, profileLocalId, takenByUserId, highlightedForUserId, noteMentions } = parsed;
+    const { note, phone, language, profileLocalId, takenByUserId, highlightedForUserId, noteMentions } = parsed;
+    // Blank name → the number that called. See resolveCallerName.
+    const name = resolveCallerName(parsed.name, parsed.phone);
 
     const bodyRejection = validateCallLogBody(parsed);
     if (bodyRejection) {
@@ -355,14 +360,18 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
   });
 
   // =============================================================================
-  // Call Log — edit an existing entry (name, phone, linked client, highlighted for)
+  // Call Log — edit an existing entry
   // =============================================================================
   // Partial update: only fields present in the body are touched. Bespoke (not the
   // generic /api/board-items/:localId/columns PATCH) because the item's name isn't
-  // a synced column and the profile-link/highlighted-for writes need Monday's
+  // a synced column and the profile-link/people/status writes need Monday's
   // JSON-valued change_column_value, not the generic endpoint's string-only path.
   // Same rails as every other write-back here: personal token → shared token
   // fallback → durable queue, applied optimistically to the local mirror either way.
+  //
+  // Covers every field the create popup collects except the note (which is its
+  // own thread, via the /notes routes below) so the edit view can offer the same
+  // form as the log view rather than a reduced "fix the name" subset.
 
   app.patch("/api/call-log/:localId", requireAuth, async (req, res) => {
     if (!MONDAY_API_TOKEN) {
@@ -372,8 +381,10 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
 
     const localId = String(req.params.localId);
     const item = db
-      .prepare("SELECT monday_item_id, name, profile_local_id, column_values FROM board_items WHERE local_id = ? AND board_key = 'call_log'")
-      .get(localId) as { monday_item_id: string | null; name: string; profile_local_id: string | null; column_values: string } | null;
+      .prepare("SELECT monday_item_id, name, status, profile_local_id, column_values FROM board_items WHERE local_id = ? AND board_key = 'call_log'")
+      .get(localId) as
+      | { monday_item_id: string | null; name: string; status: string | null; profile_local_id: string | null; column_values: string }
+      | null;
     if (!item) {
       res.status(404).json({ error: "Call not found" });
       return;
@@ -384,26 +395,49 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
     }
     const mondayItemId = item.monday_item_id; // narrowed; the write closures below can't re-narrow a field
 
-    const body = req.body as { name?: unknown; phone?: unknown; profileLocalId?: unknown; highlightedForUserId?: unknown };
+    const body = req.body as {
+      name?: unknown; phone?: unknown; profileLocalId?: unknown;
+      highlightedForUserId?: unknown; takenByUserId?: unknown; status?: unknown; language?: unknown;
+    };
     const hasName = "name" in body;
     const hasPhone = "phone" in body;
     const hasProfile = "profileLocalId" in body;
     const hasHighlightedFor = "highlightedForUserId" in body;
-    if (!hasName && !hasPhone && !hasProfile && !hasHighlightedFor) {
+    const hasTakenBy = "takenByUserId" in body;
+    const hasStatus = "status" in body;
+    const hasLanguage = "language" in body;
+    if (!hasName && !hasPhone && !hasProfile && !hasHighlightedFor && !hasTakenBy && !hasStatus && !hasLanguage) {
       res.status(400).json({ error: "No editable fields provided" });
       return;
     }
 
-    const name = hasName ? (body.name ?? "").toString().trim() : undefined;
-    if (hasName && !name) {
-      res.status(400).json({ error: "name cannot be empty" });
-      return;
-    }
     const phone = hasPhone ? (body.phone ?? "").toString().trim() : undefined;
+    // Same fallback as logging a call: a cleared name becomes the number on the
+    // entry (the one being saved now, or the one already stored).
+    let name: string | undefined;
+    if (hasName) {
+      const resolved = resolveEditedCallerName({
+        name: (body.name ?? "").toString().trim(),
+        newPhone: phone,
+        storedPhone: readMirroredPhone(item.column_values),
+      });
+      if ("rejection" in resolved) {
+        const { status: code, ...rest } = resolved.rejection;
+        res.status(code).json(rest);
+        return;
+      }
+      name = resolved.name;
+    }
     const profileLocalId = hasProfile ? (body.profileLocalId ? String(body.profileLocalId) : null) : undefined;
-    const highlightedForUserId = hasHighlightedFor
-      ? (body.highlightedForUserId == null || body.highlightedForUserId === "" ? null : Number(body.highlightedForUserId))
-      : undefined;
+    const toUserId = (v: unknown): number | null => {
+      if (v == null || v === "") return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const highlightedForUserId = hasHighlightedFor ? toUserId(body.highlightedForUserId) : undefined;
+    const takenByUserId = hasTakenBy ? toUserId(body.takenByUserId) : undefined;
+    const status = hasStatus ? (body.status ?? "").toString().trim() : undefined;
+    const language = hasLanguage ? (body.language ?? "").toString().trim() : undefined;
 
     const schema = getBoardColumnsFor(db, "call_log");
     if (!schema) {
@@ -414,6 +448,30 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
     const phoneCol = byTitle("Phone");
     const profileCol = byTitle("link to Profiles");
     const highlightedForCol = byTitle("Highlighted For");
+    const takenByCol = byTitle("Taken by");
+    const statusCol = byTitle("Status");
+    const languageCol = byTitle("Language");
+
+    // Both label columns are validated against the board's own synced options —
+    // Monday is called with create_labels_if_missing:false, so an unknown label
+    // fails permanently rather than degrading. Same rule the create route uses.
+    if (hasStatus && status) {
+      const statusDef = getBoardStatusOptionsFor(db, "call_log");
+      const statusRejection = resolveCallLogStatus(status, statusDef);
+      if ("rejection" in statusRejection) {
+        const { status: code, ...rest } = statusRejection.rejection;
+        res.status(code).json(rest);
+        return;
+      }
+    }
+    if (hasLanguage) {
+      const languageRejection = validateCallLogLanguage(language!, languageCol);
+      if (languageRejection) {
+        const { status: code, ...rest } = languageRejection;
+        res.status(code).json(rest);
+        return;
+      }
+    }
 
     let newProfile: { monday_item_id: string | null; name: string } | null = null;
     if (hasProfile && profileLocalId) {
@@ -499,7 +557,54 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
       }
     };
 
-    await Promise.all([writeName(), writePhone(), writeProfile(), writeHighlightedFor()]);
+    const writeTakenBy = async () => {
+      if (!hasTakenBy || !takenByCol) return;
+      const value = { personsAndTeams: takenByUserId ? [{ id: takenByUserId, kind: "person" }] : [] };
+      try {
+        await withTokenFallback(
+          (token) => dataSource.setColumnValueJson(schema.mondayBoardId, mondayItemId, takenByCol.columnId, value, token),
+          writeTokenOptions(req),
+        );
+      } catch (err) {
+        console.error("[write-back] call log taken-by update failed; queueing for retry:", err);
+        anyQueued = true;
+        enqueueWrite(db, {
+          opType: "change_column_json", targetTable: "board_items", targetLocalId: localId,
+          mondayItemId, authorOid, payload: { boardId: schema.mondayBoardId, columnId: takenByCol.columnId, value },
+        });
+      }
+    };
+
+    // Status and Language are both label columns; an empty string clears them
+    // (Monday reads `{}` as "no label"), which is what the modal's "—" sends.
+    const writeLabelColumn = async (
+      enabled: boolean,
+      column: typeof statusCol,
+      label: string | undefined,
+      what: string,
+    ) => {
+      if (!enabled || !column) return;
+      const value = label ? { label } : {};
+      try {
+        await withTokenFallback(
+          (token) => dataSource.setColumnValueJson(schema.mondayBoardId, mondayItemId, column.columnId, value, token),
+          writeTokenOptions(req),
+        );
+      } catch (err) {
+        console.error(`[write-back] call log ${what} update failed; queueing for retry:`, err);
+        anyQueued = true;
+        enqueueWrite(db, {
+          opType: "change_column_json", targetTable: "board_items", targetLocalId: localId,
+          mondayItemId, authorOid, payload: { boardId: schema.mondayBoardId, columnId: column.columnId, value },
+        });
+      }
+    };
+
+    await Promise.all([
+      writeName(), writePhone(), writeProfile(), writeHighlightedFor(), writeTakenBy(),
+      writeLabelColumn(hasStatus, statusCol, status, "status"),
+      writeLabelColumn(hasLanguage, languageCol, language, "language"),
+    ]);
 
     // Apply locally regardless of whether each Monday write above succeeded or
     // was queued — same optimistic-update pattern as every other write-back
@@ -512,16 +617,34 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
       // leave cv empty
     }
     if (hasPhone) cv.phone = phone || undefined;
+    if (hasStatus) {
+      if (status) cv.status = { label: status };
+      else delete cv.status;
+    }
+    if (hasLanguage) {
+      if (language) cv.language = { label: language };
+      else delete cv.language;
+    }
     let highlightedForName: string | null = null;
     if (hasHighlightedFor) {
       highlightedForName = await resolveStaffName(highlightedForUserId ?? null);
       if (highlightedForName) cv.highlighted_for = { label: highlightedForName };
       else delete cv.highlighted_for;
     }
+    let takenByName: string | null = null;
+    if (hasTakenBy) {
+      takenByName = await resolveStaffName(takenByUserId ?? null);
+      if (takenByName) cv.taken_by = { label: takenByName };
+      else delete cv.taken_by;
+    }
 
-    db.prepare(`UPDATE board_items SET name = ?, profile_local_id = ?, column_values = ? WHERE local_id = ?`).run(
+    // `status` is a first-class board_items column as well as a mirrored column
+    // value, so it has to be written in both places or the list view (which
+    // reads the column) and the edit modal (which reads the mirror) disagree.
+    db.prepare(`UPDATE board_items SET name = ?, profile_local_id = ?, status = ?, column_values = ? WHERE local_id = ?`).run(
       hasName ? name : item.name,
       hasProfile ? (profileLocalId ?? "") : item.profile_local_id,
+      hasStatus ? (status || null) : item.status,
       JSON.stringify(cv),
       localId,
     );
@@ -530,7 +653,11 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
       targetType: "board_item", targetId: localId, targetMondayId: mondayItemId,
       metadata: {
         mondayItemId,
-        fieldsChanged: { name: hasName, phone: hasPhone, profileLocalId: hasProfile, highlightedForUserId: hasHighlightedFor },
+        fieldsChanged: {
+          name: hasName, phone: hasPhone, profileLocalId: hasProfile,
+          highlightedForUserId: hasHighlightedFor, takenByUserId: hasTakenBy,
+          status: hasStatus, language: hasLanguage,
+        },
         queued: anyQueued,
       },
     });
@@ -543,6 +670,9 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
         profileLocalId: hasProfile ? (profileLocalId ?? null) : undefined,
         profileName: hasProfile ? (newProfile?.name ?? null) : undefined,
         highlightedFor: hasHighlightedFor ? highlightedForName : undefined,
+        takenBy: hasTakenBy ? takenByName : undefined,
+        status: hasStatus ? (status || null) : undefined,
+        language: hasLanguage ? (language || null) : undefined,
         pending: anyQueued,
       },
     });

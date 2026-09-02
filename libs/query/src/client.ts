@@ -22,39 +22,67 @@ function isPhoneLike(input: string): boolean {
 }
 
 /**
+ * SQL that strips the punctuation real phone numbers are written with, so a
+ * caller ID's bare digits match a number stored as "+1 (816) 605-2200".
+ *
+ * Letters are deliberately left in — SQLite has no regex, and the numbers on
+ * this board routinely carry a name ("Mac (817) 470-7700"). Leaving them alone
+ * is harmless: the digits stay contiguous, so a digits-only LIKE still hits.
+ */
+function normalizedPhoneSql(expr: string): string {
+  return `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${expr}, '-', ''), ' ', ''), '(', ''), ')', ''), '+', ''), '.', '')`;
+}
+
+/**
+ * The profile's second number. It has no column of its own — the sync writes
+ * every Monday column into raw_column_values keyed by its config key, and
+ * "Phone 2" on the Profiles board is `phone_2` there.
+ */
+const PHONE_2_SQL = "json_extract(p.raw_column_values, '$.phone_2')";
+
+/** The SELECT list every strategy returns, so all three shapes match SearchResult. */
+const SELECT_COLS = `p.local_id AS localId, p.name, p.email, p.phone, ${PHONE_2_SQL} AS phone2, p.address`;
+
+/**
  * Search clients by name, email, phone, or address.
  *
  * Uses three strategies:
- * 1. Phone-like input (≥4 digits) → LIKE on normalized phone column
+ * 1. Phone-like input (≥4 digits) → LIKE on the normalized phone AND phone 2
  * 2. Email-like input (contains @) → LIKE on email column
  * 3. General text → FTS5 prefix match on name, email, phone, address
+ *
+ * Strategy 1 covers BOTH numbers on purpose: a client calling from their second
+ * number is still that client, and linking a call must not be limited to
+ * whichever number happens to sit in the primary column.
  */
 export function searchClients(db: Database, query: string): SearchResult[] {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  // Strategy 1: Phone-like query — partial match on digits
+  // Strategy 1: Phone-like query — partial match on digits, either number
   if (isPhoneLike(trimmed)) {
     const digitsOnly = trimmed.replace(/\D/g, "");
+    const like = `%${digitsOnly}%`;
     return db
       .prepare(`
-        SELECT local_id AS localId, name, email, phone, address
-        FROM profiles
-        WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, '-', ''), ' ', ''), '(', ''), ')', '') LIKE ?
-        ORDER BY name
+        SELECT ${SELECT_COLS}
+        FROM profiles p
+        WHERE ${normalizedPhoneSql("p.phone")} LIKE ?
+           OR ${normalizedPhoneSql(PHONE_2_SQL)} LIKE ?
+        ORDER BY p.name
         LIMIT 25
       `)
-      .all(`%${digitsOnly}%`) as SearchResult[];
+      .all(like, like) as SearchResult[];
   }
 
   // Strategy 2: Email-like query — partial match on email
   if (trimmed.includes("@")) {
     return db
       .prepare(`
-        SELECT local_id AS localId, name, email, phone, address
-        FROM profiles
-        WHERE email LIKE ?
-        ORDER BY name
+        SELECT ${SELECT_COLS}
+        FROM profiles p
+        WHERE p.email LIKE ?
+        ORDER BY p.name
         LIMIT 25
       `)
       .all(`%${trimmed}%`) as SearchResult[];
@@ -73,7 +101,7 @@ export function searchClients(db: Database, query: string): SearchResult[] {
 
   return db
     .prepare(`
-      SELECT p.local_id AS localId, p.name, p.email, p.phone, p.address
+      SELECT ${SELECT_COLS}
       FROM profiles_fts fts
       JOIN profiles p ON p.id = fts.rowid
       WHERE profiles_fts MATCH ?
@@ -146,7 +174,8 @@ function asNonEmptyString(value: unknown): string | null {
 export function listProfiles(db: Database, limit = 50, offset = 0): SearchResult[] {
   return db
     .prepare(`
-      SELECT local_id AS localId, name, email, phone, address
+      SELECT local_id AS localId, name, email, phone,
+             json_extract(raw_column_values, '$.phone_2') AS phone2, address
       FROM profiles
       ORDER BY name
       LIMIT ? OFFSET ?
@@ -299,7 +328,7 @@ export function listProfilesFiltered(
 
   const profiles = db
     .prepare(`
-      SELECT p.local_id AS localId, p.name, p.email, p.phone, p.address
+      SELECT ${SELECT_COLS}
       FROM profiles p
       ${whereClause}
       ORDER BY p.name

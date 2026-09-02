@@ -190,6 +190,12 @@ export interface SearchResult {
   name: string;
   email: string | null;
   phone: string | null;
+  /**
+   * The profile's second number ("Phone 2" on the Profiles board), read out of
+   * raw_column_values rather than a real column. Clients call in from either
+   * number, so both are searched and both are shown — see searchClients.
+   */
+  phone2: string | null;
   address: string | null;
 }
 

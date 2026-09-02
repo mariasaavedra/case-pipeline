@@ -309,10 +309,16 @@ export interface UpdateCallLogInput {
   phone?: string;
   profileLocalId?: string | null;
   highlightedForUserId?: string | null;
+  takenByUserId?: string | null;
+  /** Empty string clears the label. */
+  status?: string;
+  /** Empty string clears the label. */
+  language?: string;
 }
 
 /** Partial-update an existing call. Only the fields present in `input` are
- * touched (send `null` to clear profileLocalId/highlightedForUserId). */
+ * touched (send `null` to clear profileLocalId/highlightedForUserId/
+ * takenByUserId, or "" to clear status/language). */
 export async function updateCallLogEntry(
   localId: string,
   input: UpdateCallLogInput,

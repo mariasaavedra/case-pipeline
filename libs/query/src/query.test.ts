@@ -46,14 +46,22 @@ function insertProfile(
     name: string;
     email?: string;
     phone?: string;
+    /** The Profiles board's second number. It has no column — the sync writes it
+     * into raw_column_values under its config key, which is what searchClients
+     * reads. */
+    phone2?: string;
     priority?: string;
     address?: string;
   }
 ) {
   run(db, 
-    `INSERT INTO profiles (batch_id, local_id, name, email, phone, priority, address)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [batchId, opts.localId, opts.name, opts.email ?? null, opts.phone ?? null, opts.priority ?? null, opts.address ?? null]
+    `INSERT INTO profiles (batch_id, local_id, name, email, phone, priority, address, raw_column_values)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      batchId, opts.localId, opts.name, opts.email ?? null, opts.phone ?? null,
+      opts.priority ?? null, opts.address ?? null,
+      JSON.stringify(opts.phone2 ? { phone_2: opts.phone2 } : {}),
+    ]
   );
 }
 
@@ -189,6 +197,53 @@ describe("searchClients", () => {
 
     expect(searchClients(db, "")).toEqual([]);
     expect(searchClients(db, "   ")).toEqual([]);
+    db.close();
+  });
+
+  // Clients call from whichever number they have to hand, so linking a call
+  // must not be limited to the primary one on file.
+  test("finds a profile by its second phone number", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+    insertProfile(db, batchId, { localId: "p1", name: "Maria Garcia", phone: "(816) 605-2200", phone2: "913-980-0429" });
+    insertProfile(db, batchId, { localId: "p2", name: "Tracy Miller", phone: "555-1234" });
+
+    const results = searchClients(db, "913-980-0429");
+    expect(results.map((r) => r.localId)).toEqual(["p1"]);
+    expect(results[0]!.phone2).toBe("913-980-0429");
+    db.close();
+  });
+
+  test("still finds a profile by its primary phone number", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+    insertProfile(db, batchId, { localId: "p1", name: "Maria Garcia", phone: "(816) 605-2200", phone2: "913-980-0429" });
+
+    expect(searchClients(db, "8166052200").map((r) => r.localId)).toEqual(["p1"]);
+    db.close();
+  });
+
+  // Real numbers on this board are written every which way, including with a
+  // leading +1 and with the person's name typed in front of them.
+  test("matches digits through punctuation and stray labels", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+    insertProfile(db, batchId, { localId: "p1", name: "Milton Ventura", phone: "+1 972-821-6250" });
+    insertProfile(db, batchId, { localId: "p2", name: "Karen Munevar", phone: "Mac (817) 470-7700" });
+
+    expect(searchClients(db, "9728216250").map((r) => r.localId)).toEqual(["p1"]);
+    expect(searchClients(db, "(817) 470-7700").map((r) => r.localId)).toEqual(["p2"]);
+    db.close();
+  });
+
+  test("a profile with no second number still searches cleanly", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+    insertProfile(db, batchId, { localId: "p1", name: "Tracy Miller", phone: "555-1234" });
+
+    const results = searchClients(db, "5551234");
+    expect(results.map((r) => r.localId)).toEqual(["p1"]);
+    expect(results[0]!.phone2).toBeNull();
     db.close();
   });
 
