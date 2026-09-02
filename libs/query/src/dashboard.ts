@@ -375,13 +375,30 @@ function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+// A "YYYY-MM-DD" string parses as UTC midnight, and formatDate reads back out
+// through toISOString — so every date helper below must stay in UTC too. Mixing
+// in a LOCAL getter shifts the value a day backwards in any timezone behind UTC,
+// which is what broke endOfMonth (see its comment).
+
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return formatDate(d);
 }
 
+/**
+ * Last day of the month `dateStr` falls in.
+ *
+ * This used to read a UTC-parsed date with local getters, which in any timezone
+ * behind UTC resolved to the previous day — so on the FIRST of a month it
+ * returned the previous month's end. That made the "month" hearings range
+ * `today .. yesterday`: inverted, and empty for the whole day. It only stayed
+ * invisible in production because the API container runs on UTC.
+ */
 function endOfMonth(dateStr: string): string {
-  const d = new Date(dateStr);
-  return formatDate(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  const [year, month] = dateStr.split("-").map(Number);
+  // Day 0 of the NEXT month is the last day of this one. `month` is 1-based as
+  // written in the string, which is already the 0-based index of the next month
+  // — and Date.UTC rolls December over into the next year on its own.
+  return formatDate(new Date(Date.UTC(year!, month!, 0)));
 }

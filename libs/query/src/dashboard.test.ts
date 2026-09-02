@@ -2,7 +2,7 @@
 // Dashboard KPI Query Tests
 // =============================================================================
 
-import { test, expect, describe } from "vitest";
+import { test, expect, describe, beforeAll, afterAll, vi } from "vitest";
 import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 
@@ -11,6 +11,36 @@ function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
 }
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { getDashboardKpis, getKpiCardDetail } from "./dashboard";
+
+// =============================================================================
+// Deterministic clock + timezone
+// =============================================================================
+// Every range in these tests is relative to "today", so an unpinned clock made
+// the suite pass or fail depending on the day it happened to run.
+//
+// The zone is pinned too, and deliberately to one BEHIND UTC. dashboard.ts's
+// date helpers work entirely in UTC; a local getter slipped in among them reads
+// a day earlier west of Greenwich, which is exactly the bug that made
+// endOfMonth return the PREVIOUS month's end on the 1st. On a UTC runner that
+// bug is invisible, so without this pin the regression test below would go
+// green against broken code.
+//
+// Noon UTC is the pinned instant on purpose: it is the same calendar day in
+// both zones, so the local-arithmetic helpers in these tests (setDate/getDate)
+// still line up with the UTC dates the queries compare against.
+const ORIGINAL_TZ = process.env.TZ;
+const PINNED_NOW = new Date("2026-09-01T12:00:00Z"); // the 1st — the broken case
+
+beforeAll(() => {
+  process.env.TZ = "America/Chicago";
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(PINNED_NOW);
+});
+
+afterAll(() => {
+  vi.useRealTimers();
+  process.env.TZ = ORIGINAL_TZ;
+});
 
 // =============================================================================
 // Helpers
@@ -306,26 +336,50 @@ describe("getDashboardKpis", () => {
     db.close();
   });
 
-  test("Upcoming Hearings — month range includes entire month", () => {
+  // Regression: with the clock on the 1st, endOfMonth used to resolve to the
+  // PREVIOUS month's last day, making the range `2026-09-01 .. 2026-08-31` —
+  // inverted, so this card read zero for the whole of the 1st of every month.
+  test("Upcoming Hearings — month range covers to the last day of the month", () => {
     const db = freshDb();
     insertProfile(db, { localId: "p1", name: "Maria Garcia" });
-
-    const today = new Date();
-    // End of current month
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    const dateStr = endOfMonth.toISOString().slice(0, 10);
 
     insertBoardItem(db, {
       localId: "bi1",
       boardKey: "court_cases",
       name: "End of Month Hearing",
-      nextDate: dateStr,
+      nextDate: "2026-09-30", // last day of the pinned month
+      profileLocalId: "p1",
+    });
+    insertBoardItem(db, {
+      localId: "bi2",
+      boardKey: "court_cases",
+      name: "Today Hearing",
+      nextDate: "2026-09-01", // the pinned today — the range's lower bound
       profileLocalId: "p1",
     });
 
     const cards = getDashboardKpis(db, { range: "month" });
     const hearings = cards.find((c) => c.key === "upcoming_hearings")!;
-    expect(hearings.count).toBeGreaterThanOrEqual(1);
+    expect(hearings.count).toBe(2);
+    expect(hearings.items.map((i) => i.name)).toEqual(["Today Hearing", "End of Month Hearing"]);
+    db.close();
+  });
+
+  test("Upcoming Hearings — month range stops at the month boundary", () => {
+    const db = freshDb();
+    insertProfile(db, { localId: "p1", name: "Maria Garcia" });
+
+    insertBoardItem(db, {
+      localId: "bi1",
+      boardKey: "court_cases",
+      name: "Next Month Hearing",
+      nextDate: "2026-10-01", // one day past the end of the pinned month
+      profileLocalId: "p1",
+    });
+
+    const cards = getDashboardKpis(db, { range: "month" });
+    const hearings = cards.find((c) => c.key === "upcoming_hearings")!;
+    expect(hearings.count).toBe(0);
     db.close();
   });
 
