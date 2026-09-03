@@ -17,7 +17,12 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import { setApiToken, mondayRequest } from "@case-pipeline/monday";
 import { graphAuthFromEnv } from "./sharepoint/auth.js";
-import { decide, perform, type SweepCandidate } from "./sharepoint/sweep.js";
+import { decide, perform, ensureConsultDoc, type SweepCandidate } from "./sharepoint/sweep.js";
+import { consultOutcome } from "./sharepoint/consult-status.js";
+import { consultFolderName, consultFolderPath } from "./sharepoint/consult-naming.js";
+import { cachedAccount } from "./sharepoint/auth.js";
+import { renderDocxTemplate } from "@case-pipeline/template";
+import type { TimelineNote } from "./sharepoint/consult-note.js";
 
 const APPOINTMENT_BOARDS = ["appointments_r", "appointments_lb", "appointments_m"];
 const PROFILES_BOARD_ID = "8025265377";
@@ -38,6 +43,8 @@ function loadCandidates(db: Database.Database, days: number): SweepCandidate[] {
         json_extract(p.raw_column_values, '$.last_name')      AS lastName,
         json_extract(bi.column_values, '$.consult_date.date') AS consultDate,
         bi.status                                             AS apptStatus,
+        p.raw_column_values                                   AS profileJson,
+        bi.column_values                                      AS apptJson,
         COALESCE(
           NULLIF(TRIM(COALESCE(json_extract(bi.column_values, '$.consult_sharepoint'), '')), ''),
           NULLIF(TRIM(COALESCE(json_extract(p.raw_column_values, '$.consult_file'), '')), ''),
@@ -70,6 +77,102 @@ async function currentValue(itemId: string, columnId: string): Promise<string> {
   return res.data.items[0]?.column_values[0]?.text?.trim() ?? "";
 }
 
+
+
+/** Activity types that can hold a consult note. See sharepoint/consult-note.ts. */
+const NOTE_ACTIVITY_TYPES = ["Consult note", "Casenote"];
+
+/**
+ * Timeline notes for the candidates, in ONE query.
+ *
+ * Batch-loaded rather than per-candidate: 124k rows in client_updates, and the
+ * repo's own pattern for multi-profile reads is IN (...) plus a group, not a
+ * sub-query per row (see libs/query/src/appointments.ts).
+ */
+function loadTimelineNotes(
+  db: Database.Database,
+  profileIds: string[],
+): Map<string, TimelineNote[]> {
+  const byProfile = new Map<string, TimelineNote[]>();
+  if (!profileIds.length) return byProfile;
+
+  const ids = profileIds.map(() => "?").join(",");
+  const types = NOTE_ACTIVITY_TYPES.map(() => "?").join(",");
+  const rows = db
+    .prepare(`
+      SELECT profile_local_id AS pid, activity_type_name AS activityType,
+             text_body AS text, author_name AS author,
+             substr(created_at_source, 1, 10) AS date
+      FROM client_updates
+      WHERE profile_local_id IN (${ids})
+        AND activity_type_name IN (${types})
+        AND TRIM(COALESCE(text_body, '')) <> ''
+    `)
+    .all(...profileIds, ...NOTE_ACTIVITY_TYPES) as Array<TimelineNote & { pid: string }>;
+
+  for (const { pid, ...note } of rows) {
+    const list = byProfile.get(pid) ?? [];
+    list.push(note);
+    byProfile.set(pid, list);
+  }
+  return byProfile;
+}
+
+/** Cached so the template is read from disk once per run, not once per client. */
+let templateBuffer: Buffer | null = null;
+function consultTemplate(): Buffer {
+  templateBuffer ??= fs.readFileSync("templates/consult-summary.docx");
+  return templateBuffer;
+}
+
+/**
+ * Ensure the CONSULT subfolder, and write the summary once the consult has
+ * actually happened.
+ *
+ * Only for folders in SCAL Consults. A client whose folder has already moved to
+ * E-Files or Closed has hired or finished, and putting a consult summary into
+ * their case file is not this automation's business.
+ */
+async function maybeWriteConsultDoc(
+  auth: ReturnType<typeof graphAuthFromEnv>,
+  c: SweepCandidate,
+  consultPath: string,
+  actionKind: "create" | "link",
+  timeline: TimelineNote[],
+) {
+  if (actionKind === "link" && !consultPath.includes(" Consults/")) return null;
+
+  const named = consultFolderName({ firstName: c.firstName, lastName: c.lastName });
+  if (!named.ok || !c.consultDate) return null;
+  const pathInSite = consultFolderPath(Number(c.consultDate.slice(0, 4)), named.name);
+
+  const parse = (raw: string | null | undefined): Record<string, unknown> => {
+    if (!raw) return {};
+    try {
+      const v = JSON.parse(raw) as unknown;
+      return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  return ensureConsultDoc(
+    auth,
+    pathInSite,
+    {
+      profileName: c.profileName,
+      profile: parse(c.profileJson),
+      appointment: parse(c.apptJson),
+      timeline,
+      apptStatus: c.apptStatus,
+      consultDate: c.consultDate,
+    },
+    (vars) => renderDocxTemplate(consultTemplate(), vars),
+    // The document waits for the consultation to have taken place.
+    { writeDocument: consultOutcome(c.apptStatus) === "proceeded", account: cachedAccount() },
+  );
+}
+
 async function main() {
   const days = Number(arg("days") ?? 45);
   const apply = flag("apply");
@@ -77,6 +180,7 @@ async function main() {
 
   const db = new Database(dbPath, { readonly: true });
   const candidates = loadCandidates(db, days);
+  const notesByProfile = loadTimelineNotes(db, [...new Set(candidates.map((c) => c.profileLocalId))]);
 
   const token = process.env.MONDAY_API_TOKEN?.trim();
   if (apply) {
@@ -91,7 +195,7 @@ async function main() {
   console.log(`[sweep] ${candidates.length} Calendly consults in the last ${days} days`);
   console.log(`[sweep] ${apply ? "APPLY" : "dry run"} — ${auth.describe()}`);
 
-  const tally = { linked: 0, created: 0, skipped: 0, failed: 0 };
+  const tally = { linked: 0, created: 0, skipped: 0, failed: 0, docs: 0 };
   const receipt: string[] = ["action,profile,monday_item_id,path,url,detail"];
 
   for (const c of candidates) {
@@ -136,6 +240,17 @@ async function main() {
       else if (result.outcome === "created") tally.created++;
       console.log(`  ${result.outcome}  ${path}   [${c.profileName}]`);
       receipt.push(row([result.outcome, c.profileName, c.profileMondayId, path, result.url ?? "", target.label]));
+
+      // The CONSULT subfolder and its summary. Only for a folder in Consults —
+      // a client whose folder has moved to E-Files or Closed is past this stage.
+      if (kind === "create" || kind === "link") {
+        const doc = await maybeWriteConsultDoc(auth, c, path, kind, notesByProfile.get(c.profileLocalId) ?? []);
+        if (doc) {
+          tally.docs++;
+          console.log(`      CONSULT/${doc.kind === "left-alone" ? `${doc.name} — left alone (${doc.reason})` : doc.name}`);
+          receipt.push(row([`doc-${doc.kind}`, c.profileName, c.profileMondayId, path, "", "name" in doc ? doc.name : ""]));
+        }
+      }
     } catch (err) {
       tally.failed++;
       const message = err instanceof Error ? err.message : String(err);
@@ -145,7 +260,8 @@ async function main() {
   }
 
   console.log(
-    `[sweep] created ${tally.created}  linked ${tally.linked}  skipped ${tally.skipped}  failed ${tally.failed}`,
+    `[sweep] created ${tally.created}  linked ${tally.linked}  docs ${tally.docs}  ` +
+      `skipped ${tally.skipped}  failed ${tally.failed}`,
   );
 
   if (apply && (tally.created || tally.linked || tally.failed)) {
