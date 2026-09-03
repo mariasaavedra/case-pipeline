@@ -141,8 +141,8 @@ function encodePath(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
 }
 
-function toResolved(item: DriveItem): ResolvedItem {
-  const driveId = item.parentReference?.driveId;
+function toResolved(item: DriveItem, knownDriveId?: string): ResolvedItem {
+  const driveId = item.parentReference?.driveId ?? knownDriveId;
   if (!driveId) throw new GraphError(500, "Graph returned an item without a driveId");
   return {
     driveId,
@@ -153,17 +153,56 @@ function toResolved(item: DriveItem): ResolvedItem {
   };
 }
 
+/**
+ * Address a site by its server-relative path: /sites/{host}:{/sites/name}
+ *
+ * One colon-addressed segment, and it must be the last thing in the URL.
+ */
+export function siteRequestPath(host: string, sitePath: string): string {
+  return `/sites/${host}:${sitePath}`;
+}
+
+/**
+ * Address an item by its path within a known drive: /drives/{id}/root:/{path}
+ *
+ * Separate from siteRequestPath on purpose. Graph cannot chain two path-based
+ * addressings in one URL — /sites/{host}:{path}:/drive/root:/{itemPath} returns
+ *
+ *   400  Resource not found for the segment 'root:'
+ *
+ * so the site has to be resolved to an id first. This bug was latent while only
+ * ?id= web-UI links produced a "path" folder; it became the common case once
+ * plain library paths started parsing too.
+ */
+export function driveItemRequestPath(driveId: string, relPath: string): string {
+  return relPath ? `/drives/${driveId}/root:/${encodePath(relPath)}` : `/drives/${driveId}/root`;
+}
+
+/** Site path → drive id. Cached: a client's folders often share a site. */
+const driveIdCache = new Map<string, string>();
+
+async function driveIdFor(host: string, sitePath: string): Promise<string> {
+  const key = `${host}${sitePath}`;
+  const cached = driveIdCache.get(key);
+  if (cached) return cached;
+
+  const site = await graphFetch<{ id: string }>(siteRequestPath(host, sitePath));
+  const drive = await graphFetch<{ id: string }>(`/sites/${site.id}/drive`);
+  driveIdCache.set(key, drive.id);
+  return drive.id;
+}
+
 /** Resolve either link shape into a concrete drive item we can browse. */
 export async function resolveFolder(folder: SharePointFolder): Promise<ResolvedItem> {
   if (folder.kind === "sharing") {
     const item = await graphFetch<DriveItem>(`/shares/${encodeSharingUrl(folder.url)}/driveItem`);
     return toResolved(item);
   }
-  // Path form: /sites/{host}:{sitePath}:/drive/root[:/{relPath}]
-  const base = `/sites/${folder.host}:${folder.sitePath}:/drive/root`;
-  const suffix = folder.relPath ? `:/${encodePath(folder.relPath)}` : "";
-  const item = await graphFetch<DriveItem>(`${base}${suffix}`);
-  return toResolved(item);
+  const driveId = await driveIdFor(folder.host, folder.sitePath);
+  const item = await graphFetch<DriveItem>(driveItemRequestPath(driveId, folder.relPath));
+  // A drive's own root has no parentReference.driveId, so toResolved would
+  // reject it — supply the id we already looked up.
+  return toResolved(item, driveId);
 }
 
 // ---- Browsing ---------------------------------------------------------------

@@ -151,6 +151,30 @@ describe("normalizeSharePointUrl", () => {
     );
   });
 
+  it("keeps only the first URL when the value holds it twice", () => {
+    // Real value from the Consult File column — pasted twice, separated by " - ".
+    const doubled =
+      "sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/2025%20Consults/S/SANTANA%2C%20Pedro" +
+      " - https://sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/2025%20Consults/S/SANTANA%2C%20Pedro";
+    expect(normalizeSharePointUrl(doubled)).toBe(
+      "https://sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/2025%20Consults/S/SANTANA%2C%20Pedro",
+    );
+    // …and it still parses to the right folder.
+    expect(parseSharePointLink(doubled)).toMatchObject({
+      kind: "path",
+      relPath: "2025 Consults/S/SANTANA, Pedro",
+    });
+  });
+
+  it("drops a trailing note separator", () => {
+    expect(normalizeSharePointUrl("https://a.sharepoint.com/sites/x —")).toBe("https://a.sharepoint.com/sites/x");
+  });
+
+  it("leaves a single URL untouched", () => {
+    const one = "https://sharmacrawford.sharepoint.com/:f:/s/scalefiles/EtAAA1?e=a";
+    expect(normalizeSharePointUrl(one)).toBe(one);
+  });
+
   it("refuses free text, so a note in the column never becomes a link", () => {
     expect(normalizeSharePointUrl("see consult notes")).toBeNull();
     expect(normalizeSharePointUrl("N/A")).toBeNull();
