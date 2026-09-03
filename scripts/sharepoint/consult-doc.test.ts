@@ -62,7 +62,11 @@ describe("buildConsultDocVars", () => {
   });
 
   it("records WHERE the note came from", () => {
-    expect(buildConsultDocVars(sources()).note_source).toBe("Consultation Notes column on the profile");
+    // The profile column is undated, and the label says so — for a client who
+    // has consulted twice it may describe the other visit.
+    expect(buildConsultDocVars(sources()).note_source).toBe(
+      "Consultation Notes column on the profile (not dated to a specific consultation)",
+    );
   });
 
   it("uses a timeline Consult note when no column holds one, and says so", () => {
