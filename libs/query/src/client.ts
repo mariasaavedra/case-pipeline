@@ -151,7 +151,12 @@ export function readSharePointLinks(rawColumnValues: string | null | undefined):
   consultFile: string | null;
 } {
   const cvs = safeParseJson(rawColumnValues);
-  return { eFile: asNonEmptyString(cvs.e_file), consultFile: asNonEmptyString(cvs.consult) };
+  // consult_file, not consult: on the Profiles board the SharePoint consult
+  // link lives in the "Consult File" TEXT column (text_mkxphk77). There is no
+  // `consult` key on a profile at all — that one is the mirror column name used
+  // on the case boards, and reading it here silently returned null for every
+  // client that had only ever been a consult.
+  return { eFile: asNonEmptyString(cvs.e_file), consultFile: asNonEmptyString(cvs.consult_file) };
 }
 
 function safeParseJson(value: string | null | undefined): Record<string, unknown> {
