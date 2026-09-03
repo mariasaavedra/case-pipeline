@@ -22,7 +22,10 @@ export default defineConfig({
     proxy: {
       // Match the API's IPv4 loopback bind (127.0.0.1). Using "localhost" here
       // can resolve to IPv6 ::1 and fail to connect.
-      "/api": "http://127.0.0.1:3000",
+      //
+      // Overridable so the API can be run on another port when 3000 is taken by
+      // something else on the machine. Default is unchanged.
+      "/api": process.env.API_PROXY_TARGET ?? "http://127.0.0.1:3000",
     },
   },
   build: {
