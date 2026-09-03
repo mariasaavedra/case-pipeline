@@ -511,6 +511,7 @@ const server = app.listen(PORT, HOST, () => {
 
   if (DB_SOURCE === "live") {
     scheduleNightlySync();
+    scheduleConsultSweep();
     scheduleWalCheckpoint();
     scheduleBackups();
     if (MONDAY_API_TOKEN) {
@@ -673,6 +674,75 @@ function scheduleNightlySync() {
     `[sync] Scheduled: full "${fullCron}" (deletions + emails/activities), ` +
       `incremental "${incrementalCron}" (columns only). Overlapping runs are skipped.`,
   );
+}
+
+/**
+ * Consult folder sweep — the replacement for the Calendly→Zapier automation.
+ *
+ * For every Calendly consultation that has TAKEN PLACE and has no folder
+ * recorded, records the folder that already exists or creates one in SCAL
+ * Consults and records it. See docs/sharepoint-folders.md.
+ *
+ * Scheduled AFTER the incremental sync rather than on its own rhythm: it reads
+ * candidates out of live.db, so running it on stale data just means it finds
+ * nothing to do. (It cannot act on stale data wrongly — it re-reads the column
+ * from Monday before writing — but there is no point burning API calls.)
+ *
+ * Off unless CONSULT_FOLDERS=on. Needs a signed-in Graph token on the host:
+ *   npm run sharepoint:folders -- --login
+ * Without one it exits non-zero with an instruction, which surfaces here rather
+ * than failing silently.
+ */
+function scheduleConsultSweep() {
+  if (process.env.CONSULT_FOLDERS !== "on") {
+    console.log(
+      "[consult] Folder sweep DISABLED (set CONSULT_FOLDERS=on to enable). " +
+        "Run manually: npm run consult:sweep -- --apply",
+    );
+    return;
+  }
+
+  const sweepCron = process.env.CONSULT_SWEEP_CRON ?? "30 7-19/2 * * *";
+  const days = process.env.CONSULT_SWEEP_DAYS ?? "45";
+
+  cron.schedule(sweepCron, () => {
+    if (syncInFlight) {
+      console.log("[consult] Sweep skipped — a sync is running.");
+      return;
+    }
+    runConsultSweep(days).catch((err) => console.error("[consult] Error:", err));
+  });
+
+  console.log(`[consult] Folder sweep scheduled — cron "${sweepCron}", window ${days} days.`);
+}
+
+/** Guards against overlapping sweeps, the way syncInFlight does for syncs. */
+let sweepInFlight = false;
+
+function runConsultSweep(days: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (sweepInFlight) {
+      console.log("[consult] Sweep skipped — one is still running.");
+      resolve();
+      return;
+    }
+    sweepInFlight = true;
+    const child = spawn("npm", ["run", "consult:sweep", "--", `--days=${days}`, "--apply"], {
+      cwd: REPO_ROOT,
+      stdio: "inherit",
+      env: process.env,
+      shell: true,
+    });
+    child.on("close", (code) => {
+      sweepInFlight = false;
+      if (code === 0) resolve();
+      else reject(new Error(`consult sweep exited with code ${code}`));
+    });
+    child.on("error", (err) => {
+      sweepInFlight = false;
+      reject(err);
+    });
+  });
 }
 
 function scheduleWalCheckpoint() {
