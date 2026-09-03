@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeForMatch, buildFolderIndex, findMatch, type FolderRef } from "./match.js";
+import { normalizeForMatch, buildFolderIndex, findMatch, looseCandidates, type FolderRef } from "./match.js";
 
 const ref = (name: string, site = "SCALClosed"): FolderRef => ({ name, site, path: name });
 
@@ -87,5 +87,45 @@ describe("findMatch", () => {
     const { match, ambiguous } = findMatch(collision, "GARCIA, Jose");
     expect(match).toBeNull();
     expect(ambiguous).toHaveLength(2);
+  });
+});
+
+describe("looseCandidates — truncated given names", () => {
+  // Monday's First Name column is often the short form of what is on the folder.
+  // Missing these created 22 duplicate folders on 2026-09-03, several sitting
+  // directly beside the real one in the same initial folder.
+  const index = buildFolderIndex([
+    { name: "AGUILERA AGUILERA, Sindy Sarahi", site: "scalconsults", path: "2025 Consults/A/AGUILERA AGUILERA, Sindy Sarahi" },
+    { name: "SARABIA, Jose Juan", site: "SCALClosed", path: "SARABIA, Jose Juan" },
+    { name: "GARCIA, Josefa", site: "SCALClosed", path: "GARCIA, Josefa" },
+    { name: "SOLIS, Gloria for Alva CASTRO", site: "scalconsults", path: "2020 Consults/S/SOLIS, Gloria for Alva CASTRO" },
+  ]);
+
+  it("catches the short form of a given name", () => {
+    expect(looseCandidates(index, "AGUILERA AGUILERA, Sindy").map((f) => f.name)).toEqual([
+      "AGUILERA AGUILERA, Sindy Sarahi",
+    ]);
+  });
+
+  it("catches it across sites", () => {
+    expect(looseCandidates(index, "SARABIA, Jose").map((f) => f.site)).toEqual(["SCALClosed"]);
+  });
+
+  it("does NOT treat a different name as a truncation", () => {
+    // "Jose" must not match "Josefa" — different people, and the surname is shared.
+    expect(looseCandidates(index, "GARCIA, Jose")).toEqual([]);
+  });
+
+  it("requires the surname to match exactly", () => {
+    expect(looseCandidates(index, "AGUILERA, Sindy")).toEqual([]);
+  });
+
+  it("finds a folder whose name carries a trailing annotation", () => {
+    expect(looseCandidates(index, "SOLIS, Gloria")).toHaveLength(1);
+  });
+
+  it("returns nothing when the exact folder is already there", () => {
+    // An exact hit is findMatch's job; loose must not double-report it.
+    expect(looseCandidates(index, "SARABIA, Jose Juan")).toEqual([]);
   });
 });

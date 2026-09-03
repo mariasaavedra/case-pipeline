@@ -27,7 +27,7 @@ import fs from "node:fs";
 import { consultFolderName, consultFolderPath, type NameRefusal } from "./sharepoint/consult-naming.js";
 import { graphAuthFromEnv } from "./sharepoint/auth.js";
 import { resolveSiteDrive, listChildren, getItemByPath, ensureFolderPath } from "./sharepoint/folders.js";
-import { buildFolderIndex, findMatch, type FolderRef } from "./sharepoint/match.js";
+import { buildFolderIndex, findMatch, looseCandidates, type FolderRef } from "./sharepoint/match.js";
 import { GraphError, type GraphAuth } from "./sharepoint/graph-client.js";
 import { linkTargetForSite, CONSULT_FILE, type LinkTarget } from "./sharepoint/link-target.js";
 import { consultOutcome, type ConsultOutcome } from "./sharepoint/consult-status.js";
@@ -129,9 +129,22 @@ async function scanSite(
     return found;
   }
 
-  const parents = site === CONSULTS_SITE
-    ? years.flatMap((y) => INITIALS.map((i) => `${y} Consults/${i}`))
-    : INITIALS.map((i) => i);
+  // Every year folder that EXISTS, not the ones the plan happens to mention.
+  // The site has 24 of them going back to 2003; indexing only the planned years
+  // (2024-2026) made repeat consults look new and created 5 duplicate folders
+  // on 2026-09-03. `years` is kept only to bound the work when a caller asks.
+  let parents: string[];
+  if (site === CONSULTS_SITE) {
+    const root = await getItemByPath(auth, drive.driveId, "");
+    const yearDirs = root
+      ? (await listChildren(auth, drive.driveId, root.id))
+          .filter((c) => c.folder && /consults$/i.test(c.name))
+          .map((c) => c.name)
+      : years.map((y) => `${y} Consults`);
+    parents = yearDirs.flatMap((y) => INITIALS.map((i) => `${y}/${i}`));
+  } else {
+    parents = INITIALS.map((i) => i);
+  }
 
   for (const parentPath of parents) {
     try {
@@ -451,9 +464,21 @@ async function main() {
       if (match) {
         const also = match.alsoIn.length ? ` (+${match.alsoIn.length} more)` : "";
         matched.push({ ...row, where: match.folder.site, how: `${match.confidence}${also}`, webUrl: match.folder.webUrl });
+        continue;
       }
-      else if (ambiguous.length) ambiguousRows.push({ ...row, candidates: ambiguous.map((a) => `${a.site}:${a.name}`).join(" | ") });
-      else stillMissing.push(row);
+      if (ambiguous.length) {
+        ambiguousRows.push({ ...row, candidates: ambiguous.map((a) => `${a.site}:${a.name}`).join(" | ") });
+        continue;
+      }
+      // Same surname, and one given name is a truncation of the other. Might be
+      // the same person under a fuller name; might be a father and son. Either
+      // way it must not become a new folder without someone looking.
+      const loose = looseCandidates(index, folderName);
+      if (loose.length) {
+        ambiguousRows.push({ ...row, candidates: `POSSIBLE: ${loose.map((a) => `${a.site}:${a.name}`).join(" | ")}` });
+        continue;
+      }
+      stillMissing.push(row);
     }
     missing = stillMissing;
 
@@ -462,7 +487,8 @@ async function main() {
 
     console.log(`\n  ALREADY EXISTS            ${matched.length}`);
     for (const [where, n] of byWhere) console.log(`      on ${where.padEnd(14)} ${n}`);
-    console.log(`  ambiguous (two folders)   ${ambiguousRows.length}`);
+    console.log(`  needs a human (ambiguous  ${ambiguousRows.length}`);
+    console.log(`    or a possible match)`);
     console.log(`  GENUINELY MISSING         ${missing.length}`);
   }
 

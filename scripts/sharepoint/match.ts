@@ -82,6 +82,47 @@ export function buildFolderIndex(folders: FolderRef[]): Map<string, FolderRef[]>
 }
 
 /**
+ * A folder that MIGHT be the same person — same surname, and one given name is
+ * a truncation of the other ("Sindy" vs "Sindy Sarahi"). Monday's First Name
+ * column is frequently the short form, so these are common and were the cause
+ * of 22 duplicate folders on 2026-09-03.
+ *
+ * Never auto-matched. Two real people can be "GARCIA, Jose" and "GARCIA, Jose
+ * Luis" — a father and son. So a loose hit BLOCKS creation (the safe direction)
+ * and goes to a human, rather than being recorded automatically.
+ */
+export function looseCandidates(index: Map<string, FolderRef[]>, folderName: string): FolderRef[] {
+  const me = splitName(folderName);
+  if (!me.surname || !me.given) return [];
+
+  const out: FolderRef[] = [];
+  for (const bucket of index.values()) {
+    for (const ref of bucket) {
+      const other = splitName(ref.name);
+      if (other.surname !== me.surname) continue;
+      if (other.key === me.key) continue; // that is an exact/normalised hit, not a loose one
+      if (isTruncationOf(me.given, other.given) || isTruncationOf(other.given, me.given)) out.push(ref);
+    }
+  }
+  return out;
+}
+
+/** "JOSE" is a truncation of "JOSE JUAN"; "JOSE" is NOT one of "JOSEFA". */
+function isTruncationOf(shorter: string, longer: string): boolean {
+  if (!shorter || !longer || shorter === longer) return false;
+  return longer.startsWith(`${shorter} `);
+}
+
+function splitName(name: string): { key: string; surname: string; given: string } {
+  const parts = name.includes(",") ? name.split(",") : [name, ""];
+  return {
+    key: normalizeForMatch(name),
+    surname: normalizeForMatch(parts[0] ?? ""),
+    given: normalizeForMatch(parts.slice(1).join(" ")),
+  };
+}
+
+/**
  * Find the existing folder for a client, if there is one.
  *
  * Several hits usually mean progression, not ambiguity: the same person in
