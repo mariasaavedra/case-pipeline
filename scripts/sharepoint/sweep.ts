@@ -22,9 +22,11 @@
 
 import { consultFolderName, consultFolderPath } from "./consult-naming.js";
 import { consultOutcome } from "./consult-status.js";
-import { resolveSiteDrive, getItemByPath, ensureFolderPath } from "./folders.js";
+import { resolveSiteDrive, getItemByPath, ensureFolderPath, listChildren, searchFolders } from "./folders.js";
+import { buildFolderIndex, looseCandidates } from "./match.js";
 import { linkTargetForSite, CONSULT_FILE, type LinkTarget } from "./link-target.js";
 import { type GraphAuth } from "./graph-client.js";
+import { type FolderRef } from "./match.js";
 
 const HOST = "sharmacrawford.sharepoint.com";
 const CONSULTS = "scalconsults";
@@ -95,7 +97,54 @@ export async function decide(auth: GraphAuth, c: SweepCandidate): Promise<SweepD
     }
   }
 
+  // Nothing at the exact paths. Before creating, check for the SAME person under
+  // a fuller given name — Monday's First Name is often the short form, and
+  // missing that created 22 duplicate folders on 2026-09-03, several of them
+  // sitting directly beside the real folder in the same initial folder.
+  //
+  // Deliberately does not decide: "GARCIA, Jose" and "GARCIA, Jose Luis" can be
+  // a father and son. A possible match means a person looks, not that the sweep
+  // guesses.
+  const near = await nearbyFolders(auth, year, named.name.initial, named.name.surname);
+  const loose = looseCandidates(buildFolderIndex(near), folder);
+  if (loose.length) {
+    return skip(`possible existing folder — ${loose.map((l) => `${l.site}: ${l.name}`).join(" | ")}`);
+  }
+
   return { candidate: c, action: { kind: "create", path: consultPath, target: CONSULT_FILE } };
+}
+
+/**
+ * Folders that could plausibly belong to this person, cheaply.
+ *
+ * The two initial folders are small enough to list outright. SCAL Closed is
+ * flat with 5,200+ entries, so it is searched by surname instead.
+ */
+async function nearbyFolders(
+  auth: GraphAuth,
+  year: number,
+  initial: string,
+  surname: string,
+): Promise<FolderRef[]> {
+  const out: FolderRef[] = [];
+
+  const add = (items: Array<{ name: string; folder?: unknown }>, site: string) => {
+    for (const item of items) if (item.folder) out.push({ name: item.name, site, path: item.name });
+  };
+
+  for (const [site, path] of [
+    [CONSULTS, `${year} Consults/${initial}`],
+    [EFILES, initial],
+  ] as const) {
+    const drive = await resolveSiteDrive(auth, HOST, site);
+    const parent = await getItemByPath(auth, drive.driveId, path);
+    if (parent?.folder) add(await listChildren(auth, drive.driveId, parent.id), site);
+  }
+
+  const closed = await resolveSiteDrive(auth, HOST, CLOSED);
+  add(await searchFolders(auth, closed.driveId, surname), CLOSED);
+
+  return out;
 }
 
 /**

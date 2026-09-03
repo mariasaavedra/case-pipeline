@@ -17,6 +17,8 @@ export interface DriveItem {
   name: string;
   webUrl: string;
   folder?: { childCount?: number };
+  /** Used by delete-empty.ts to refuse anything the automation did not just make. */
+  createdDateTime?: string;
 }
 
 export interface SiteDrive {
@@ -220,4 +222,25 @@ export async function listChildren(
     next = page["@odata.nextLink"] ?? null;
   }
   return items.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Search a drive for folders matching a term. Used to check a flat library —
+ * SCAL Closed holds 5,200+ folders at its root, so listing it on every sweep
+ * would be wasteful where one search answers the question.
+ *
+ * Search is best-effort by nature (indexing lags, matching is fuzzy), so it is
+ * only ever used to WIDEN a check, never as the sole evidence a folder exists.
+ */
+export async function searchFolders(
+  auth: GraphAuth,
+  driveId: string,
+  term: string,
+): Promise<DriveItem[]> {
+  const q = encodeURIComponent(term.replace(/'/g, "''"));
+  const page = await graphFetch<{ value: DriveItem[] }>(
+    auth,
+    `/drives/${driveId}/root/search(q='${q}')?$top=200`,
+  );
+  return (page.value ?? []).filter((item) => item.folder);
 }
