@@ -54,8 +54,18 @@ export type SharePointFolder =
  */
 export function normalizeSharePointUrl(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
-  const trimmed = raw.trim();
+  let trimmed = raw.trim();
   if (!trimmed) return null;
+
+  // Some values hold the link twice ("<url> - <url>"), or a link followed by a
+  // note. A second scheme anywhere but the start means the URL ended before it;
+  // keeping the whole string gives Graph a nonsense path and a bare
+  // "Invalid request" that tells the user nothing.
+  const second = trimmed.slice(1).search(/https?:\/\//i);
+  if (second !== -1) trimmed = trimmed.slice(0, second + 1);
+  trimmed = trimmed.replace(/[\s\-–—|,;]+$/, "");
+  if (!trimmed) return null;
+
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   // Only add a scheme to something that actually looks like a SharePoint host,
   // so unrelated free text in the column stays unparseable rather than becoming
