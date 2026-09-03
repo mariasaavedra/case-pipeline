@@ -5,6 +5,10 @@ node_modules
 out
 dist
 *.tgz
+# Rendered documents and automation receipts — real client names. The header
+# above has said "output" since the first commit, but the directory itself was
+# never actually listed.
+output/
 
 # code coverage
 coverage

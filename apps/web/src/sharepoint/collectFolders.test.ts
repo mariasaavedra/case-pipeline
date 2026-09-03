@@ -81,3 +81,56 @@ describe("collectClientFolders", () => {
     expect(out).toEqual([]);
   });
 });
+
+describe("collectClientFolders — consult files", () => {
+  // The real shape of the Consult File column: no scheme, no ?id=.
+  const RAW_CONSULT =
+    "sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/2026%20Consults/V/VENTURA%2C%20Milton";
+
+  it("shows a consult-only profile's folder, and makes it browsable", () => {
+    const out = collectClientFolders({ profile: { consultFile: RAW_CONSULT }, boardItems: {} });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ label: "Consult", site: "scalconsults" });
+    // Absolute, so "Open in SharePoint" is a link and not a relative path.
+    expect(out[0]!.url).toBe(`https://${RAW_CONSULT}`);
+    // Parsed, so the tab browses it in place rather than bouncing to SharePoint.
+    expect(out[0]!.parsed).toMatchObject({ kind: "path", relPath: "2026 Consults/V/VENTURA, Milton" });
+  });
+
+  it("shows both when a consult has since hired and been given an e-file", () => {
+    const out = collectClientFolders({
+      profile: { eFile: EFILE, consultFile: RAW_CONSULT },
+      boardItems: {},
+    });
+    expect(out.map((f) => f.label)).toEqual(["e-file", "Consult"]);
+  });
+
+  it("ignores free text typed into the Consult File column", () => {
+    expect(collectClientFolders({ profile: { consultFile: "none yet" }, boardItems: {} })).toEqual([]);
+  });
+});
+
+describe("collectClientFolders — appointment boards", () => {
+  const APPT_CONSULT =
+    "sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/2025%20Consults/M/MARCKS%2C%20Antonella";
+
+  it("reads the Consult SharePoint column off an appointment", () => {
+    const out = collectClientFolders({
+      profile: {},
+      boardItems: {},
+      appointments: [{ columnValues: { consult_sharepoint: APPT_CONSULT } }],
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ label: "Consult", site: "scalconsults" });
+    expect(out[0]!.parsed).toMatchObject({ relPath: "2025 Consults/M/MARCKS, Antonella" });
+  });
+
+  it("does not duplicate a folder the profile already points at", () => {
+    const out = collectClientFolders({
+      profile: { consultFile: APPT_CONSULT },
+      boardItems: {},
+      appointments: [{ columnValues: { consult_sharepoint: APPT_CONSULT } }],
+    });
+    expect(out).toHaveLength(1);
+  });
+});

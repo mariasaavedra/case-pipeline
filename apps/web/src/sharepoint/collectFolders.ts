@@ -2,14 +2,20 @@
 // Collect a client's SharePoint folders
 // =============================================================================
 // A client's folder links are scattered: the profile carries its own e_file
-// (only ~44% of profiles have one), and every board item mirrors e_file /
-// consult — often the same folder repeated, sometimes extra ones on other sites
-// (scalconsults, SCALClosed…). We gather them all, de-duplicate, and label.
+// (~44% of profiles) AND its own consult_file (~20%), and every board item
+// mirrors e_file / consult — often the same folder repeated, sometimes extra
+// ones on other sites (scalconsults, SCALClosed…). We gather them all,
+// de-duplicate, and label.
+//
+// A client can legitimately show BOTH: when a consult hires the firm, their
+// folder is moved from SCAL Consults to SCAL E-Files by hand, and the stale
+// Consult File value is usually left behind on the profile. Showing both is
+// correct — the e-file is the live one, and the consult link is history.
 //
 // Pure function — no Graph, no network. Tested in collectFolders.test.ts.
 // =============================================================================
 
-import { parseSharePointLink, type SharePointFolder } from "./parseLink";
+import { parseSharePointLink, normalizeSharePointUrl, type SharePointFolder } from "./parseLink";
 
 export interface ClientFolder {
   /** Human label, e.g. "e-file", "Consult", "Archived". */
@@ -41,19 +47,38 @@ function labelFor(site: string | null, column: string): string {
   return bySite ?? COLUMN_LABELS[column] ?? "Files";
 }
 
+interface ItemLike {
+  columnValues?: Record<string, unknown>;
+}
+
 /** Structural input — a ClientCaseSummary satisfies this. */
 export interface FolderSource {
   profile?: { eFile?: string | null; consultFile?: string | null } | null;
-  boardItems?: Record<string, Array<{ columnValues?: Record<string, unknown> }>> | null;
+  boardItems?: Record<string, ItemLike[]> | null;
+  /**
+   * Appointments are a SEPARATE field on ClientCaseSummary, not part of
+   * boardItems — and they are where the consult folder actually lands for a
+   * Calendly consult (the "Consult SharePoint" text column). Leaving them out
+   * hid the only link 170 clients had.
+   */
+  appointments?: ItemLike[] | null;
 }
+
+/** Column keys on a board item that can hold a SharePoint folder link. */
+const ITEM_LINK_COLUMNS: Array<[key: string, label: string]> = [
+  ["e_file", "e_file"],
+  ["consult", "consult"],
+  ["consult_sharepoint", "consult"],
+];
 
 export function collectClientFolders(data: FolderSource): ClientFolder[] {
   const out: ClientFolder[] = [];
   const seen = new Set<string>();
 
   const add = (raw: unknown, column: string) => {
-    if (typeof raw !== "string") return;
-    const url = raw.trim();
+    // Normalise first: most Consult File values are stored scheme-less, and an
+    // "Open in SharePoint" link without a scheme is a relative path, not a link.
+    const url = normalizeSharePointUrl(raw);
     if (!url || seen.has(url)) return;
     seen.add(url);
     const parsed = parseSharePointLink(url);
@@ -66,11 +91,13 @@ export function collectClientFolders(data: FolderSource): ClientFolder[] {
   add(data.profile?.eFile, "e_file");
   add(data.profile?.consultFile, "consult");
 
-  // Then anything mirrored onto the client's board items.
-  for (const items of Object.values(data.boardItems ?? {})) {
+  // Then anything mirrored onto the client's board items and appointments.
+  const itemGroups = [...Object.values(data.boardItems ?? {}), data.appointments ?? []];
+  for (const items of itemGroups) {
     for (const item of items ?? []) {
-      add(item.columnValues?.e_file, "e_file");
-      add(item.columnValues?.consult, "consult");
+      for (const [key, column] of ITEM_LINK_COLUMNS) {
+        add(item.columnValues?.[key], column);
+      }
     }
   }
 

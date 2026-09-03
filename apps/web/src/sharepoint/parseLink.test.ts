@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseSharePointLink } from "./parseLink";
+import { parseSharePointLink, normalizeSharePointUrl } from "./parseLink";
 
 // All URLs below are real shapes taken from live.db (names are real client
 // folders, so keep them here only — they are already in the synced data).
@@ -96,5 +96,65 @@ describe("parseSharePointLink — rejects what it cannot browse", () => {
     const url =
       "https://sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/Forms/AllItems.aspx?FolderCTID=0x012000D36DCF2B75DCFE458B3D9F4E2E8D6709&view=7&q=mora%20calvo&viewid=746f015b";
     expect(parseSharePointLink(url)).toBeNull();
+  });
+});
+
+describe("parseSharePointLink — plain library paths (the consult automation's shape)", () => {
+  it("parses a scheme-less consult folder path", () => {
+    // Verbatim shape from the Consult File column — no scheme, no ?id=.
+    const raw =
+      "sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/2026%20Consults/V/VENTURA%2C%20Milton";
+    expect(parseSharePointLink(raw)).toEqual({
+      kind: "path",
+      host: "sharmacrawford.sharepoint.com",
+      sitePath: "/sites/scalconsults",
+      relPath: "2026 Consults/V/VENTURA, Milton",
+      site: "scalconsults",
+    });
+  });
+
+  it("parses the same path with a scheme and unencoded spaces", () => {
+    const raw =
+      "https://sharmacrawford.sharepoint.com/sites/scalconsults/Shared Documents/2025 Consults/D/DELGADILLO, Sulei";
+    expect(parseSharePointLink(raw)).toMatchObject({
+      kind: "path",
+      relPath: "2025 Consults/D/DELGADILLO, Sulei",
+      site: "scalconsults",
+    });
+  });
+
+  it("resolves the library root when there is no folder below it", () => {
+    expect(
+      parseSharePointLink("sharmacrawford.sharepoint.com/sites/scalefiles/Shared%20Documents"),
+    ).toMatchObject({ kind: "path", relPath: "", site: "scalefiles" });
+  });
+
+  it("still refuses a saved search — an .aspx view with no ?id= is not a folder", () => {
+    expect(
+      parseSharePointLink(
+        "https://sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/Forms/AllItems.aspx?q=mora",
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("normalizeSharePointUrl", () => {
+  it("adds the missing scheme", () => {
+    expect(normalizeSharePointUrl("sharmacrawford.sharepoint.com/sites/x/y")).toBe(
+      "https://sharmacrawford.sharepoint.com/sites/x/y",
+    );
+  });
+
+  it("leaves an absolute URL alone and trims", () => {
+    expect(normalizeSharePointUrl("  https://a.sharepoint.com/sites/x  ")).toBe(
+      "https://a.sharepoint.com/sites/x",
+    );
+  });
+
+  it("refuses free text, so a note in the column never becomes a link", () => {
+    expect(normalizeSharePointUrl("see consult notes")).toBeNull();
+    expect(normalizeSharePointUrl("N/A")).toBeNull();
+    expect(normalizeSharePointUrl("")).toBeNull();
+    expect(normalizeSharePointUrl(null)).toBeNull();
   });
 });
