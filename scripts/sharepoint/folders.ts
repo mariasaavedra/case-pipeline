@@ -17,8 +17,13 @@ export interface DriveItem {
   name: string;
   webUrl: string;
   folder?: { childCount?: number };
+  file?: { mimeType?: string };
+  size?: number;
   /** Used by delete-empty.ts to refuse anything the automation did not just make. */
   createdDateTime?: string;
+  lastModifiedDateTime?: string;
+  /** Who touched it last — used to avoid overwriting a person's edits. */
+  lastModifiedBy?: { user?: { displayName?: string; email?: string } };
 }
 
 export interface SiteDrive {
@@ -243,4 +248,64 @@ export async function searchFolders(
     `/drives/${driveId}/root/search(q='${q}')?$top=200`,
   );
   return (page.value ?? []).filter((item) => item.folder);
+}
+
+/** Graph's cutoff for a simple content PUT. Generated documents are far below it. */
+const SIMPLE_UPLOAD_MAX = 4 * 1024 * 1024;
+
+/**
+ * Upload a small generated file into a folder.
+ *
+ * `conflictBehavior` is the caller's decision and deliberately has no default:
+ * "fail" for something that must not overwrite, "replace" only where the caller
+ * has established the existing file is one it wrote itself.
+ */
+export async function uploadSmallFile(
+  auth: GraphAuth,
+  driveId: string,
+  parentItemId: string,
+  name: string,
+  content: Buffer,
+  conflictBehavior: "fail" | "replace" | "rename",
+): Promise<DriveItem> {
+  if (content.length >= SIMPLE_UPLOAD_MAX) {
+    throw new Error(`${name} is ${content.length} bytes — too large for a simple upload`);
+  }
+  const token = await auth.getToken();
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${parentItemId}:/${encodeURIComponent(name)}:/content` +
+      `?@microsoft.graph.conflictBehavior=${conflictBehavior}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      },
+      body: new Uint8Array(content),
+    },
+  );
+  if (!res.ok) {
+    let message = `Graph ${res.status}`;
+    try {
+      message = ((await res.json()) as { error?: { message?: string } }).error?.message ?? message;
+    } catch { /* body was not JSON */ }
+    throw new GraphError(res.status, message);
+  }
+  return (await res.json()) as DriveItem;
+}
+
+/**
+ * Whether a file still looks untouched by a person since the automation wrote
+ * it. Regenerating a document is fine; overwriting something an attorney edited
+ * in SharePoint is not, and there is no undo for that.
+ *
+ * Errs towards NOT overwriting: an unknown or unreadable editor counts as a
+ * person.
+ */
+export function isUnmodifiedBy(item: DriveItem, account: string | null): boolean {
+  if (!account) return false;
+  const by = item.lastModifiedBy?.user;
+  const who = (by?.email ?? by?.displayName ?? "").trim().toLowerCase();
+  if (!who) return false;
+  return who === account.trim().toLowerCase();
 }

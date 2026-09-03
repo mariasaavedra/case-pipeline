@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { validateFolderName, ensureFolderPath, ensureFolder } from "./folders.js";
+import { validateFolderName, ensureFolderPath, ensureFolder, isUnmodifiedBy } from "./folders.js";
 import { staticAuth } from "./graph-client.js";
 
 const config = staticAuth("test-token");
@@ -99,5 +99,31 @@ describe("ensureFolderPath (dry run)", () => {
 
     const results = await ensureFolderPath(config, "drive1", "Motions/2026/Motions", false);
     expect(results.map((r) => r.path)).toEqual(["Motions", "Motions/2026", "Motions/2026/Motions"]);
+  });
+});
+
+describe("isUnmodifiedBy", () => {
+  const item = (email?: string, displayName?: string) =>
+    ({ id: "1", name: "d.docx", webUrl: "w", lastModifiedBy: { user: { email, displayName } } });
+
+  it("recognises the automation's own account", () => {
+    expect(isUnmodifiedBy(item("importantdocuments@sharma-crawford.com"), "importantdocuments@sharma-crawford.com")).toBe(true);
+    expect(isUnmodifiedBy(item(undefined, "Important Documents"), "Important Documents")).toBe(true);
+  });
+
+  it("treats anyone else as a person who edited it", () => {
+    expect(isUnmodifiedBy(item("attorney@sharma-crawford.com"), "importantdocuments@sharma-crawford.com")).toBe(false);
+  });
+
+  it("errs towards NOT overwriting when the editor is unknown", () => {
+    // No undo exists for clobbering an attorney's edits, so anything unclear
+    // must resolve to "leave it alone".
+    expect(isUnmodifiedBy(item(), "svc@x.com")).toBe(false);
+    expect(isUnmodifiedBy({ id: "1", name: "d", webUrl: "w" }, "svc@x.com")).toBe(false);
+    expect(isUnmodifiedBy(item("svc@x.com"), null)).toBe(false);
+  });
+
+  it("ignores case and stray whitespace", () => {
+    expect(isUnmodifiedBy(item("  SVC@X.com "), "svc@x.com")).toBe(true);
   });
 });
