@@ -21,6 +21,7 @@ import { withTokenFallback } from "../write-auth.js";
 import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
+import { FIRM_TIMEZONE } from "../firm.js";
 import { getBoardColumnsFor, getBoardStatusOptionsFor } from "@case-pipeline/query";
 import { fetchWorkspaceUsers, fetchItemUpdatesBatch } from "@case-pipeline/monday";
 import type { MondayWorkspaceUser, CreateTimelineItemInput } from "@case-pipeline/monday";
@@ -61,13 +62,10 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
   let staffDirectoryCache: { users: MondayWorkspaceUser[]; fetchedAt: number } | null = null;
   const STAFF_DIRECTORY_TTL_MS = 5 * 60 * 1000;
 
-  // The firm operates in Central Time; the API container's own system clock
-  // does not (Docker defaults to UTC, and nothing here sets TZ). A call logged
-  // at 2:11pm Central was landing on the Date/Hour columns as 7:11pm — computed
-  // via unzoned `new Date()` calls that silently used the container's UTC
-  // clock instead. Every "now" stamped onto a call must go through this zone
-  // explicitly rather than relying on the process's local time.
-  const FIRM_TIMEZONE = "America/Chicago";
+  // Every "now" stamped onto a call goes through FIRM_TIMEZONE explicitly
+  // rather than the process's local time: a call logged at 2:11pm Central was
+  // landing on the Date/Hour columns as 7:11pm, via unzoned `new Date()` calls
+  // that silently used the container's UTC clock. See firm.ts for the why.
 
   /**
    * Resolve a Monday numeric user id to their name via the same cache
