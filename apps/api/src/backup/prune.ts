@@ -84,3 +84,51 @@ export function premigratePattern(source: string): RegExp {
 
 /** How many pre-migration snapshots to retain. Each is a full copy of the DB. */
 export const PREMIGRATE_KEEP = Number(process.env.PREMIGRATE_KEEP) || 2;
+
+/** SQLite's companion files, written beside a database it is mid-write on. */
+const SIDECAR_RE = /^(.*\.db(?:\.enc)?)(-journal|-wal|-shm)$/;
+
+/**
+ * Delete `X.db-journal` / `-wal` / `-shm` files whose `X.db` (or `X.db.enc`) is
+ * no longer there.
+ *
+ * Every retention pattern in this codebase ends at `\.db(\.enc)?$`, which is
+ * correct for choosing what to keep but means a sidecar has never matched
+ * anything. So each pruned backup left its journal behind forever: by
+ * 2026-09-04 the production server held 550 orphaned `-journal` files, the
+ * oldest from July.
+ *
+ * They are tiny — 563 KB for all 550 — so this is tidiness, not a disk fix. It
+ * matters because `data/backups/` is where someone looks during an incident,
+ * and five hundred files that mean nothing are five hundred files between them
+ * and the one that does.
+ *
+ * Orphans only: a sidecar sitting next to its database belongs to a backup that
+ * is still retained, or to a write in progress. Never throws.
+ */
+export function pruneOrphanedSidecars(backupDir: string): string[] {
+  const removed: string[] = [];
+  try {
+    const files = fs.readdirSync(backupDir);
+    const present = new Set(files);
+    for (const f of files) {
+      const base = SIDECAR_RE.exec(f)?.[1];
+      if (!base) continue;
+      // `.db-journal` can belong to either `.db` or the encrypted `.db.enc`.
+      if (present.has(base) || present.has(`${base}.enc`)) continue;
+      try {
+        fs.unlinkSync(path.join(backupDir, f));
+        removed.push(f);
+      } catch (err) {
+        console.warn(`[backup] could not remove orphaned ${f}:`, err);
+      }
+    }
+  } catch (err) {
+    console.warn("[backup] sidecar sweep skipped:", err);
+    return removed;
+  }
+  if (removed.length > 0) {
+    console.log(`[backup] Removed ${removed.length} orphaned SQLite sidecar file(s).`);
+  }
+  return removed;
+}
