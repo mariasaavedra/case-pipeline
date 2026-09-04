@@ -175,6 +175,19 @@ describe("other silent faults", () => {
     expect(errorsFor(issues, "SYNC_FULL_CRON")).toEqual([]);
   });
 
+  // The consult sweep is the Zapier replacement — a typo here means consult
+  // folders silently stop being created, with nothing to notice it but a
+  // client's missing e-file.
+  test("an invalid CONSULT_SWEEP_CRON is an error", () => {
+    const issues = checkEnvironment({ env: { ...DEPLOYED, CONSULT_SWEEP_CRON: "30 7-19/2 * *" } });
+    expect(errorsFor(issues, "CONSULT_SWEEP_CRON")).toHaveLength(1);
+  });
+
+  test("a valid CONSULT_SWEEP_CRON passes", () => {
+    const issues = checkEnvironment({ env: { ...DEPLOYED, CONSULT_SWEEP_CRON: "30 7-19/2 * * *" } });
+    expect(errorsFor(issues, "CONSULT_SWEEP_CRON")).toEqual([]);
+  });
+
   test("an unknown DB_SOURCE is an error", () => {
     expect(errorsFor(checkEnvironment({ env: { DB_SOURCE: "prod" } }), "DB_SOURCE")).toHaveLength(1);
   });

@@ -65,6 +65,7 @@ import { registerBoardItemWriteRoutes } from "./routes/board-item-write.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { REPO_ROOT } from "./paths.js";
+import { FIRM_TIMEZONE } from "./firm.js";
 import { activeBoardKeys } from "./attorney-boards.js";
 import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
@@ -705,15 +706,25 @@ function scheduleConsultSweep() {
   const sweepCron = process.env.CONSULT_SWEEP_CRON ?? "30 7-19/2 * * *";
   const days = process.env.CONSULT_SWEEP_DAYS ?? "45";
 
-  cron.schedule(sweepCron, () => {
-    if (syncInFlight) {
-      console.log("[consult] Sweep skipped — a sync is running.");
-      return;
-    }
-    runConsultSweep(days).catch((err) => console.error("[consult] Error:", err));
-  });
+  // Scheduled in the firm's zone, not the container's. The default window is
+  // written as working hours ("07:00–19:00"); read as UTC it would run
+  // 02:30–14:30 Central, leaving an afternoon consult without its folder until
+  // the small hours — the promptness this replaced Zapier to provide.
+  cron.schedule(
+    sweepCron,
+    () => {
+      if (syncInFlight) {
+        console.log("[consult] Sweep skipped — a sync is running.");
+        return;
+      }
+      runConsultSweep(days).catch((err) => console.error("[consult] Error:", err));
+    },
+    { timezone: FIRM_TIMEZONE },
+  );
 
-  console.log(`[consult] Folder sweep scheduled — cron "${sweepCron}", window ${days} days.`);
+  console.log(
+    `[consult] Folder sweep scheduled — cron "${sweepCron}" (${FIRM_TIMEZONE}), window ${days} days.`,
+  );
 }
 
 /** Guards against overlapping sweeps, the way syncInFlight does for syncs. */

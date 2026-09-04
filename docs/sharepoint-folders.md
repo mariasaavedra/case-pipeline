@@ -135,6 +135,14 @@ fills itself from the profile once the profile column is set.
 `CONSULT_FOLDERS=on` (see `.env.example`), it runs `:30` past every second hour
 during the working day, after the incremental sync.
 
+The schedule is read in the firm's zone (`FIRM_TIMEZONE`, `apps/api/src/firm.ts`),
+not the container's. The container is UTC — Docker's default, and nothing sets
+`TZ` — so a cron written as working hours would otherwise have run 02:30–14:30
+Central, leaving an afternoon consult without its folder until the small hours.
+Write `CONSULT_SWEEP_CRON` in Central time; do not pre-shift it to UTC. An
+invalid expression is caught by `npm run check:env` rather than silently never
+firing.
+
 For each Calendly consultation in the last `CONSULT_SWEEP_DAYS` days:
 
 1. **Skip** if a link is already recorded — costs zero API calls, which is why

@@ -224,7 +224,12 @@ export function checkEnvironment(opts: CheckOptions = {}): EnvIssue[] {
   // ---------------------------------------------------------------------------
   // Cron expressions — an invalid one means the job silently never runs
   // ---------------------------------------------------------------------------
-  for (const key of ["SYNC_FULL_CRON", "SYNC_INCREMENTAL_CRON", "BACKUP_CRON"] as const) {
+  for (const key of [
+    "SYNC_FULL_CRON",
+    "SYNC_INCREMENTAL_CRON",
+    "BACKUP_CRON",
+    "CONSULT_SWEEP_CRON",
+  ] as const) {
     const expr = env[key]?.trim();
     if (expr && !cron.validate(expr)) {
       err(key, "is not a valid cron expression — the job would never run", "Check the five-field syntax.");
