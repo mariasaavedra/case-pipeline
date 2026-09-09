@@ -85,6 +85,27 @@ export function premigratePattern(source: string): RegExp {
 /** How many pre-migration snapshots to retain. Each is a full copy of the DB. */
 export const PREMIGRATE_KEEP = Number(process.env.PREMIGRATE_KEEP) || 2;
 
+/**
+ * Whether retention may run, given what the integrity check established.
+ *
+ * Only a database VERIFIED corrupt freezes retention. That rule exists so a
+ * corrupt file cannot age out the last known-good restore point (2026-07-24)
+ * and it is worth keeping — but it must not fire on a database that is merely
+ * locked.
+ *
+ * `busy` prunes. The reasoning is not "probably fine": a lock is evidence about
+ * who holds the file, not about whether it is damaged, so it is no reason to
+ * act as though damage were established. And the cost of the two mistakes is
+ * wildly asymmetric. Pruning a healthy series still leaves BACKUP_KEEP restore
+ * points; NOT pruning is unbounded, and the disk it fills is what corrupted
+ * this database in the first place. Refusing to prune whenever the answer is
+ * unavailable turns a transient lock into permanent growth — which is exactly
+ * what happened between 2026-09-02 and 2026-09-09.
+ */
+export function mayPrune(integrity: "ok" | "corrupt" | "busy"): boolean {
+  return integrity !== "corrupt";
+}
+
 /** SQLite's companion files, written beside a database it is mid-write on. */
 const SIDECAR_RE = /^(.*\.db(?:\.enc)?)(-journal|-wal|-shm)$/;
 

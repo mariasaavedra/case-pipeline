@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "vitest";
-import { initializeDatabase, closeDatabase, openDatabase, applyPragmas, isDatabaseHealthy } from "./connection";
+import { initializeDatabase, closeDatabase, openDatabase, applyPragmas, isDatabaseHealthy, checkIntegrity } from "./connection";
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import os from "node:os";
@@ -85,5 +85,59 @@ describe("initializeDatabase", () => {
     closeDatabase();
     const db = initializeDatabase({ path: ":memory:" });
     expect(db).toBeDefined();
+  });
+});
+
+// =============================================================================
+// checkIntegrity — damage vs contention
+// =============================================================================
+// Collapsing "locked" into "corrupt" disabled backup retention in production for
+// a week (2026-09-02 → 09-09). These pin the three states apart. A real
+// SQLITE_BUSY needs two connections racing a write lock, so the throwing cases
+// use a stub: the branch under test is the error-code classification, not
+// better-sqlite3's locking.
+
+/** Minimal stand-in whose `pragma` throws the given SQLite error. */
+function throwingDb(code: string | undefined) {
+  return {
+    pragma() {
+      const err = new Error(`stub ${code ?? "no code"}`) as Error & { code?: string };
+      if (code) err.code = code;
+      throw err;
+    },
+  } as unknown as Parameters<typeof checkIntegrity>[0];
+}
+
+describe("checkIntegrity", () => {
+  test("a sound database reports ok", () => {
+    const db = openDatabase(tmpFile("sound.db"));
+    db.exec("CREATE TABLE t (a)");
+    expect(checkIntegrity(db)).toBe("ok");
+    expect(isDatabaseHealthy(db)).toBe(true);
+    db.close();
+  });
+
+  test("SQLITE_BUSY is busy, not corrupt — the 2026-09-09 regression", () => {
+    expect(checkIntegrity(throwingDb("SQLITE_BUSY"))).toBe("busy");
+  });
+
+  test("SQLITE_LOCKED is busy too", () => {
+    expect(checkIntegrity(throwingDb("SQLITE_LOCKED"))).toBe("busy");
+  });
+
+  test("a malformed file still reports corrupt", () => {
+    // Load-bearing half of the original catch: a clobbered page 1 never parses
+    // as a schema and throws rather than returning error rows.
+    expect(checkIntegrity(throwingDb("SQLITE_NOTADB"))).toBe("corrupt");
+  });
+
+  test("an unrecognised throw is treated as corrupt, not busy", () => {
+    expect(checkIntegrity(throwingDb(undefined))).toBe("corrupt");
+  });
+
+  test("isDatabaseHealthy stays strict — only ok is healthy", () => {
+    // The boot gate must not soften: nothing contends at startup, so a lock
+    // there is itself a reason not to serve.
+    expect(isDatabaseHealthy(throwingDb("SQLITE_BUSY"))).toBe(false);
   });
 });
