@@ -49,32 +49,89 @@ function deriveKey(passphrase: string, salt: Buffer): Buffer {
 }
 
 /**
+ * The exact overhead this format adds: a fixed header plus the trailing GCM
+ * auth tag. AES-GCM is a stream cipher, so ciphertext length equals plaintext
+ * length — an encrypted backup is therefore ALWAYS `src + 48` bytes, and any
+ * other size means the write did not finish.
+ */
+export const ENCRYPT_OVERHEAD = HEADER_LEN + TAG_LEN; // 48
+
+/** Best-effort delete used on the failure path; never masks the real error. */
+function discard(file: string): void {
+  try {
+    unlinkSync(file);
+  } catch {
+    /* already gone, or the same condition that broke the write */
+  }
+}
+
+/**
+ * Throw unless `dest` is the exact size a complete encryption of `srcSize`
+ * bytes produces. Separate from the writers so the check itself is testable:
+ * a short write needs a full disk to reproduce, and this is the one assertion
+ * standing between a partial ciphertext and the retention series.
+ */
+export function assertCompleteCiphertext(dest: string, srcSize: number): void {
+  const written = statSync(dest).size;
+  const expected = srcSize + ENCRYPT_OVERHEAD;
+  if (written !== expected) {
+    throw new Error(
+      `encrypted backup is ${written} bytes, expected ${expected} — the write did not complete`,
+    );
+  }
+}
+
+/**
  * Encrypt `src` in-place to `src + ".enc"` (streaming, constant memory) and
  * delete the plaintext. Returns the path of the encrypted file. Use for large
  * files (live.db can be hundreds of MB).
+ *
+ * The size check before the unlink is not belt-and-braces — it is the whole
+ * point. On 2026-09-02 this wrote 999,952,384 bytes of a 1,594,970,112-byte
+ * database and stopped. Nothing noticed: the stream resolved, the plaintext was
+ * left behind, and a truncated `.db.enc` went on to sit in the daily series as
+ * one of four restore points for two days. It carries a perfectly valid name
+ * and only reveals itself as junk at restore time — which is the worst possible
+ * moment to discover it.
+ *
+ * On any failure BOTH artefacts are removed. The partial ciphertext goes
+ * because a backup that cannot be restored is worse than one that is absent;
+ * the plaintext goes because it is an unencrypted copy of client PII, written
+ * by the routine whose job is to prevent exactly that (2026-08-17). Neither is
+ * a loss: `src` is a throwaway copy, the source database is untouched, and the
+ * next scheduled run retries.
  */
 export async function encryptFile(src: string, passphrase: string): Promise<string> {
   const dest = `${src}.enc`;
+  const srcSize = statSync(src).size;
   const salt = randomBytes(SALT_LEN);
   const iv = randomBytes(IV_LEN);
   const cipher = createCipheriv("aes-256-gcm", deriveKey(passphrase, salt), iv);
 
-  const out = createWriteStream(dest);
-  out.write(Buffer.concat([MAGIC, salt, iv]));
+  try {
+    const out = createWriteStream(dest);
+    out.write(Buffer.concat([MAGIC, salt, iv]));
 
-  // Pipe plaintext through the cipher into `out`, but keep `out` open so the
-  // 16-byte auth tag can be appended after the cipher flushes.
-  await new Promise<void>((resolve, reject) => {
-    const source = createReadStream(src);
-    source.on("error", reject);
-    cipher.on("error", reject);
-    out.on("error", reject);
-    cipher.on("data", (chunk) => out.write(chunk));
-    cipher.on("end", () => {
-      out.end(cipher.getAuthTag(), () => resolve());
+    // Pipe plaintext through the cipher into `out`, but keep `out` open so the
+    // 16-byte auth tag can be appended after the cipher flushes.
+    await new Promise<void>((resolve, reject) => {
+      const source = createReadStream(src);
+      source.on("error", reject);
+      cipher.on("error", reject);
+      out.on("error", reject);
+      cipher.on("data", (chunk) => out.write(chunk));
+      cipher.on("end", () => {
+        out.end(cipher.getAuthTag(), () => resolve());
+      });
+      source.pipe(cipher);
     });
-    source.pipe(cipher);
-  });
+
+    assertCompleteCiphertext(dest, srcSize);
+  } catch (err) {
+    discard(dest);
+    discard(src);
+    throw err;
+  }
 
   unlinkSync(src);
   return dest;
@@ -89,10 +146,20 @@ export function encryptFileSync(src: string, passphrase: string): string {
   const salt = randomBytes(SALT_LEN);
   const iv = randomBytes(IV_LEN);
   const cipher = createCipheriv("aes-256-gcm", deriveKey(passphrase, salt), iv);
-  const plaintext = readFileSync(src);
-  const body = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  writeFileSync(dest, Buffer.concat([MAGIC, salt, iv, body, tag]));
+  try {
+    const plaintext = readFileSync(src);
+    const body = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    writeFileSync(dest, Buffer.concat([MAGIC, salt, iv, body, tag]));
+
+    // Same guarantee as the streaming path. A short write here needs a full
+    // disk to happen at all, which is precisely when it must not go unnoticed.
+    assertCompleteCiphertext(dest, plaintext.length);
+  } catch (err) {
+    discard(dest);
+    discard(src);
+    throw err;
+  }
   unlinkSync(src);
   return dest;
 }

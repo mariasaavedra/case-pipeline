@@ -69,7 +69,7 @@ import { FIRM_TIMEZONE } from "./firm.js";
 import { activeBoardKeys } from "./attorney-boards.js";
 import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
-import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP } from "./backup/prune.js";
+import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP, pruneOrphanedSidecars } from "./backup/prune.js";
 import { diskLevel, readDisk } from "./backup/disk.js";
 import { registerMondayOAuth, getUserMondayToken, markMondayTokenRejected } from "./routes/monday-oauth.js";
 import { makeWriteTokenOptions } from "./write-token.js";
@@ -869,6 +869,12 @@ function pruneBackups(backupDir: string): void {
       }
     }
   }
+
+  // Sweep sidecars last, so journals belonging to backups pruned just above are
+  // orphans by the time this looks. Unconditional: an orphaned journal has no
+  // parent to be the last known-good copy of, so the integrity gate above does
+  // not apply to it.
+  pruneOrphanedSidecars(backupDir);
 }
 
 function scheduleBackups() {

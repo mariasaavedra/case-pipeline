@@ -8,7 +8,7 @@ import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pruneBackupSeries, premigratePattern } from "./prune";
+import { pruneBackupSeries, premigratePattern, pruneOrphanedSidecars } from "./prune";
 
 let dir: string;
 beforeEach(() => {
@@ -103,5 +103,49 @@ describe("pruneBackupSeries", () => {
     // Pruning is housekeeping; it runs during a migration and at boot. Throwing
     // here would cost the startup to save some disk.
     expect(() => pruneBackupSeries(path.join(dir, "nope"), /x/, 2)).not.toThrow();
+  });
+});
+
+describe("pruneOrphanedSidecars", () => {
+  // Every retention pattern ends at `\.db(\.enc)?$`, so a `-journal` has never
+  // matched anything. On 2026-09-04 production held 550 of them, oldest in July.
+  test("removes a journal whose database is gone", () => {
+    touch("live-presync-2026-07-29T09-00-01-028Z.db-journal");
+    expect(pruneOrphanedSidecars(dir)).toEqual([
+      "live-presync-2026-07-29T09-00-01-028Z.db-journal",
+    ]);
+    expect(listing()).toEqual([]);
+  });
+
+  test("keeps a journal that still has its plaintext database", () => {
+    touch("live-2026-09-04T05-30-00-017Z.db");
+    touch("live-2026-09-04T05-30-00-017Z.db-journal");
+    expect(pruneOrphanedSidecars(dir)).toEqual([]);
+    expect(listing()).toHaveLength(2);
+  });
+
+  test("keeps a journal whose database has since been ENCRYPTED", () => {
+    // The parent is `X.db.enc` by the time the sweep runs, but the sidecar is
+    // still named after `X.db` — treating that as an orphan would delete a
+    // journal belonging to a backup that is very much still retained.
+    touch("live-2026-09-04T05-30-00-017Z.db.enc");
+    touch("live-2026-09-04T05-30-00-017Z.db-journal");
+    expect(pruneOrphanedSidecars(dir)).toEqual([]);
+    expect(listing()).toHaveLength(2);
+  });
+
+  test("handles -wal and -shm too, and leaves real backups alone", () => {
+    touch("live-presync-2026-07-27T17-09-00-158Z.db-wal");
+    touch("live-presync-2026-07-27T17-09-00-158Z.db-shm");
+    touch("live-2026-09-04T05-30-00-017Z.db.enc");
+    expect(pruneOrphanedSidecars(dir).sort()).toEqual([
+      "live-presync-2026-07-27T17-09-00-158Z.db-shm",
+      "live-presync-2026-07-27T17-09-00-158Z.db-wal",
+    ]);
+    expect(listing()).toEqual(["live-2026-09-04T05-30-00-017Z.db.enc"]);
+  });
+
+  test("never throws on a missing directory", () => {
+    expect(pruneOrphanedSidecars(path.join(dir, "nope"))).toEqual([]);
   });
 });
