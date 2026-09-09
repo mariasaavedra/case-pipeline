@@ -96,9 +96,29 @@ function liveDbHasData(db: ReturnType<typeof openDatabase>): boolean {
 // CLI args
 // =============================================================================
 
+/**
+ * Per-board ceiling on how many items a sync will walk.
+ *
+ * This is a safety valve against a pathological board, not a routine limit — so
+ * it must sit ABOVE real data, not through the middle of it. At 5000 it cut
+ * through call_log: the board held 8113 items, the mirror kept 5000, and the
+ * 3113 oldest were simply absent. Nothing failed. `npm run health` reported it
+ * as a warning ("call_log 5000/7999 trunc") that nobody was reading, and any
+ * analysis run against the mirror silently described a partial board — which is
+ * exactly what happened on 2026-09-08, when a call-volume study read a fabricated
+ * trend out of the truncation boundary.
+ *
+ * The API's scheduled syncs never passed --max-items, so the nightly full walk
+ * re-imposed the cap every night regardless of any one-off backfill.
+ *
+ * 20000 is roughly 2.5 years of headroom at the current ~340 calls/week. The
+ * env var exists so raising it again never needs a deploy.
+ */
+const DEFAULT_MAX_ITEMS = Number(process.env.SYNC_MAX_ITEMS) || 20000;
+
 function parseArgs() {
   const args = process.argv.slice(2);
-  let maxItems = 5000;
+  let maxItems = DEFAULT_MAX_ITEMS;
   let pageSize = 50;
   let onlyBoards: string[] | null = null;
   let full = false;
