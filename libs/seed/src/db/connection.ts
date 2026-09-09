@@ -80,11 +80,45 @@ export function openDatabase(
  * (a clobbered page 1 never even parses as a schema) — hence the catch.
  */
 export function isDatabaseHealthy(db: DatabaseInstance): boolean {
+  return checkIntegrity(db) === "ok";
+}
+
+/**
+ * What `quick_check` was able to establish.
+ *
+ *   ok      — verified sound
+ *   corrupt — verified damaged, or unreadable in a way only damage explains
+ *   busy    — could NOT be established, because something else holds the lock
+ *
+ * The third state exists because collapsing it into `corrupt` disabled backup
+ * retention in production for a week. `pruneBackups` runs inside runBackup's
+ * `finally`, moments after `db.backup()`, and a webhook-triggered sync holding
+ * a write lock at that instant makes `quick_check` throw SQLITE_BUSY. That was
+ * read as "the database is corrupt", which takes the deliberately conservative
+ * branch — keep every backup, prune nothing — and it never recovered on its own.
+ * By 2026-09-09 the daily series held 9 copies against a BACKUP_KEEP of 4, on a
+ * disk at 75%. A full disk is what corrupted this database in July, so treating
+ * "I could not check" as "it is broken" ends up causing the very thing the
+ * caution was protecting against.
+ *
+ * A lock says nothing about integrity. Damage and contention are different
+ * facts and callers need to tell them apart.
+ */
+export type IntegrityResult = "ok" | "corrupt" | "busy";
+
+/** SQLite codes that mean "someone else has it", not "it is damaged". */
+const LOCK_CODES = new Set(["SQLITE_BUSY", "SQLITE_LOCKED", "SQLITE_BUSY_SNAPSHOT"]);
+
+export function checkIntegrity(db: DatabaseInstance): IntegrityResult {
   try {
     const rows = db.pragma("quick_check") as Array<{ quick_check: string }>;
-    return rows.length === 1 && rows[0]?.quick_check === "ok";
-  } catch {
-    return false;
+    return rows.length === 1 && rows[0]?.quick_check === "ok" ? "ok" : "corrupt";
+  } catch (err) {
+    // A clobbered page 1 never parses as a schema and throws rather than
+    // returning error rows, so an unrecognised throw still means corrupt —
+    // that half of the original behaviour is load-bearing and stays.
+    const code = (err as { code?: string } | null)?.code;
+    return code && LOCK_CODES.has(code) ? "busy" : "corrupt";
   }
 }
 

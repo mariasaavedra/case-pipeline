@@ -8,7 +8,7 @@ import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pruneBackupSeries, premigratePattern, pruneOrphanedSidecars } from "./prune";
+import { pruneBackupSeries, premigratePattern, pruneOrphanedSidecars, mayPrune } from "./prune";
 
 let dir: string;
 beforeEach(() => {
@@ -147,5 +147,29 @@ describe("pruneOrphanedSidecars", () => {
 
   test("never throws on a missing directory", () => {
     expect(pruneOrphanedSidecars(path.join(dir, "nope"))).toEqual([]);
+  });
+});
+
+// =============================================================================
+// Retention gate — the 2026-09-09 regression
+// =============================================================================
+// Retention froze for a week because a SQLITE_BUSY during the nightly backup was
+// read as "corrupt". These pin the distinction: only VERIFIED damage stops a
+// prune, because refusing to prune is unbounded and fills the disk that
+// corrupted this database in July.
+
+describe("mayPrune", () => {
+  test("a sound database prunes", () => {
+    expect(mayPrune("ok")).toBe(true);
+  });
+
+  test("a VERIFIED corrupt database does not prune — the 2026-07-24 rule", () => {
+    expect(mayPrune("corrupt")).toBe(false);
+  });
+
+  test("a merely locked database still prunes", () => {
+    // The regression in one line: this returned false, so nothing was ever
+    // deleted again and the daily series grew to 9 against a BACKUP_KEEP of 4.
+    expect(mayPrune("busy")).toBe(true);
   });
 });

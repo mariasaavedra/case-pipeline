@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import cron from "node-cron";
 import { initializeSchema, getSchemaVersion, SCHEMA_VERSION } from "@case-pipeline/seed/db/schema";
-import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
+import { openDatabase, isDatabaseHealthy, checkIntegrity, type IntegrityResult } from "@case-pipeline/seed/db/connection";
 import { startWriteQueueProcessor } from "./write-queue/processor.js";
 import { refreshBoardSchema } from "./schema-refresh.js";
 import {
@@ -69,7 +69,7 @@ import { FIRM_TIMEZONE } from "./firm.js";
 import { activeBoardKeys } from "./attorney-boards.js";
 import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
-import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP, pruneOrphanedSidecars } from "./backup/prune.js";
+import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP, pruneOrphanedSidecars, mayPrune } from "./backup/prune.js";
 import { diskLevel, readDisk } from "./backup/disk.js";
 import { registerMondayOAuth, getUserMondayToken, markMondayTokenRejected } from "./routes/monday-oauth.js";
 import { makeWriteTokenOptions } from "./write-token.js";
@@ -794,6 +794,11 @@ async function runBackup(): Promise<void> {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const key = backupEncryptionKey();
 
+  // Sample integrity NOW, before db.backup() touches anything. The prune below
+  // runs from a `finally` right after the copy, which is the worst moment to ask
+  // a 1.5 GB database whether it is sound — see pruneBackups.
+  const integrity = readIntegrity();
+
   // Refuse to start on a disk that cannot hold the result. Writing a partial
   // backup is worse than not writing one: on 2026-08-17 the encryption step ran
   // out of room mid-file, leaving a 1.5 GB PLAINTEXT copy of client data behind
@@ -803,7 +808,7 @@ async function runBackup(): Promise<void> {
   if (disk.level === "critical") {
     // Prune first — that is what frees the room — then let the caller retry on
     // the next tick rather than writing into a full filesystem.
-    pruneBackups(backupDir);
+    pruneBackups(backupDir, integrity);
     throw new Error(
       `Refusing to back up: only ${disk.freeGb?.toFixed(1) ?? "?"} GB free (${disk.usedPct ?? "?"}% used). ` +
         `Old backups were pruned; the next run will retry.`,
@@ -832,25 +837,43 @@ async function runBackup(): Promise<void> {
     // skipped it entirely. That is a trap door: the one condition that makes
     // pruning urgent is the same one that prevented it, and the disk could
     // never recover on its own. It stayed full for a week.
-    pruneBackups(backupDir);
+    pruneBackups(backupDir, integrity);
   }
 }
 
-/**
- * Prune each backup series to BACKUP_KEEP, integrity-gated: a database that
- * fails its check does NOT prune, so a corrupt copy can never age out the last
- * known-good restore point (the 2026-07-24 lesson).
- */
-function pruneBackups(backupDir: string): void {
-  const KEEP = Number(process.env.BACKUP_KEEP) || 4;
-  const series: Array<{ prefix: string; healthy: boolean }> = [
-    { prefix: DB_SOURCE, healthy: isDatabaseHealthy(db) },
-    { prefix: "users", healthy: isDatabaseHealthy(usersDb) },
+/** Read both databases' integrity. Take this BEFORE any backup work. */
+function readIntegrity(): Array<{ prefix: string; integrity: IntegrityResult }> {
+  return [
+    { prefix: DB_SOURCE, integrity: checkIntegrity(db) },
+    { prefix: "users", integrity: checkIntegrity(usersDb) },
   ];
-  for (const { prefix, healthy } of series) {
-    if (!healthy) {
+}
+
+/**
+ * Prune each backup series to BACKUP_KEEP, integrity-gated: a database VERIFIED
+ * corrupt does NOT prune, so a corrupt copy can never age out the last
+ * known-good restore point (the 2026-07-24 lesson).
+ *
+ * `integrity` is passed in rather than read here, because the only caller that
+ * matters runs this from a `finally` immediately after `db.backup()` — the
+ * single moment in the day when live.db is most likely to be locked. Reading it
+ * at that instant is what produced a week of "corrupt" verdicts on a perfectly
+ * sound database. Sampled early, the same check is uncontended.
+ */
+function pruneBackups(backupDir: string, integrity = readIntegrity()): void {
+  const KEEP = Number(process.env.BACKUP_KEEP) || 4;
+  for (const { prefix, integrity: result } of integrity) {
+    if (!mayPrune(result)) {
       console.warn(`[backup] ${prefix}.db failed integrity — keeping all backups (no prune).`);
       continue;
+    }
+    if (result === "busy") {
+      // Loud on purpose. Pruning here is correct, but a database that is locked
+      // during the nightly backup is worth knowing about on its own.
+      console.warn(
+        `[backup] ${prefix}.db was locked when integrity was sampled — pruning anyway ` +
+          `(a lock is not damage). If this repeats, something holds a write lock at backup time.`,
+      );
     }
     // The pattern requires a DIGIT right after the prefix (the ISO year) so the
     // "live-" daily series never swallows the "live-presync-" safety snapshots.
