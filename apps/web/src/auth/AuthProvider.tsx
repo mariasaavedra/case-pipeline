@@ -21,15 +21,33 @@ export interface AuthUser {
 export interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
-  login: () => void;
+  /**
+   * Why a completed Microsoft sign-in still left us signed OUT of the app.
+   *
+   * These are two different gates — Microsoft authenticates, then /api/auth/me
+   * authorizes — and only the first one has a screen of its own. When the
+   * second failed, this used to be swallowed (a bare `if (res.ok)`), so the
+   * route guard sent the user back to /login with no explanation and clicking
+   * "Sign in with Microsoft" silently reused the cached account for the exact
+   * same failure. That is the sign-in screen that "repeats itself".
+   */
+  error: string | null;
+  /** The Microsoft account that was used, so a wrong-account error is obvious. */
+  signedInAs: string | null;
+  login: (opts?: { chooseAccount?: boolean }) => void;
   logout: () => void;
+  /** Re-run the /api/auth/me check without a fresh Microsoft round trip. */
+  retry: () => void;
 }
 
 export const AuthContext = createContext<AuthContextValue>({
   user: null,
   isLoading: true,
+  error: null,
+  signedInAs: null,
   login: () => {},
   logout: () => {},
+  retry: () => {},
 });
 
 // Singleton — created once, outside component lifecycle.
@@ -40,6 +58,8 @@ function AuthConsumer({ children }: { children: ReactNode }) {
   const isAuthenticated = useIsAuthenticated();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   // Set active account whenever accounts change.
   useEffect(() => {
@@ -56,6 +76,7 @@ function AuthConsumer({ children }: { children: ReactNode }) {
       setTokenGetter(null); // release API calls waiting on auth — they'd hang otherwise
       setIsLoading(false);
       setUser(null);
+      setError(null);
       return;
     }
 
@@ -87,21 +108,52 @@ function AuthConsumer({ children }: { children: ReactNode }) {
         if (res.ok) {
           const body = (await res.json()) as { data: AuthUser };
           setUser(body.data);
+          setError(null);
+        } else {
+          // The server's own words where it has them: "Access restricted to
+          // @… accounts", "Account disabled", "Invalid or expired token".
+          let reason = "";
+          try {
+            reason = ((await res.json()) as { error?: string }).error ?? "";
+          } catch {
+            // Not JSON — a proxy error page, or the API is down behind nginx.
+          }
+          setUser(null);
+          // No JSON error means the answer did not come from the API at all.
+          // In dev that is Vite's proxy, which returns a plain-text 500 when
+          // nothing is listening on the API port — indistinguishable from a
+          // real server fault unless it is named here. In production it is
+          // nginx's own page, i.e. the API container is down.
+          setError(
+            reason
+              ? `${reason} (HTTP ${res.status})`
+              : `The API did not answer (HTTP ${res.status}) — it is most likely not running or not reachable from the web server.`,
+          );
         }
       } catch (err) {
         console.error("[auth] init failed:", err);
+        setUser(null);
+        setError(err instanceof Error ? err.message : "Could not reach the server to verify your account.");
       } finally {
         setIsLoading(false);
       }
     }
 
     initUser();
-  }, [isAuthenticated, inProgress, instance, accounts]);
+  }, [isAuthenticated, inProgress, instance, accounts, attempt]);
 
-  const login = () => {
-    instance.loginRedirect(loginRequest).catch((err) => {
+  // `chooseAccount` forces Microsoft to show the account picker. Without it,
+  // an SSO session signs the same account straight back in — so someone who
+  // landed here with the wrong account (a personal login, another tenant, a
+  // guest outside the firm's domain) can never get to a different one, and the
+  // sign-in screen just reappears.
+  const login = (opts?: { chooseAccount?: boolean }) => {
+    const request = opts?.chooseAccount
+      ? { ...loginRequest, prompt: "select_account" as const }
+      : loginRequest;
+    instance.loginRedirect(request).catch((err) => {
       console.error("[auth] loginRedirect failed:", err);
-      alert(`Login error: ${err?.message ?? err}`);
+      setError(err instanceof Error ? err.message : String(err));
     });
   };
 
@@ -109,8 +161,16 @@ function AuthConsumer({ children }: { children: ReactNode }) {
     instance.logoutRedirect().catch(console.error);
   };
 
+  const retry = () => {
+    setError(null);
+    setIsLoading(true);
+    setAttempt((n) => n + 1);
+  };
+
+  const signedInAs = accounts[0]?.username ?? null;
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, error, signedInAs, login, logout, retry }}>
       {children}
     </AuthContext.Provider>
   );
