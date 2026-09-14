@@ -7,6 +7,11 @@
 // timeline (the same /api/clients/:id/updates feed the 360 view's Updates tab
 // reads) and shows them collapsed under the link, expandable in place.
 //
+// "View case notes" opens the fuller picture — the whole timeline plus the
+// case facts — in ClientCaseModal, stacked OVER the call popup. It used to be
+// a link to the 360 view in a new tab, which meant a fresh sign-in every time
+// (MSAL's token cache is sessionStorage, which is per-tab).
+//
 // Read-only on purpose: notes ABOUT this call belong on the call, and the
 // modal's own note field already mirrors those onto the profile.
 // =============================================================================
@@ -14,7 +19,7 @@
 import { useState, useEffect } from "react";
 import { fetchClientUpdates } from "../api";
 import type { ClientUpdate } from "../api";
-import { clientPath } from "../router";
+import { ClientCaseModal } from "./ClientCaseModal";
 
 interface Props {
   profileLocalId: string;
@@ -57,12 +62,16 @@ export function ProfileNotesPreview({ profileLocalId, profileName }: Props) {
   const [updates, setUpdates] = useState<ClientUpdate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [showCase, setShowCase] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setUpdates(null);
     setError(null);
     setExpanded(false);
+    // A different client was linked while the case popup was open — close it
+    // rather than leave it showing the previous client's notes.
+    setShowCase(false);
     fetchClientUpdates(profileLocalId, { limit: PREVIEW_LIMIT })
       .then((rows) => {
         if (!cancelled) setUpdates(rows);
@@ -91,16 +100,21 @@ export function ProfileNotesPreview({ profileLocalId, profileName }: Props) {
         <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)" }}>
           Recent notes — {profileName}
         </span>
-        {/* A new tab, not an SPA navigation: this renders inside the log-call
-            popup, and routing away would throw out the call being typed. */}
-        <a
-          href={clientPath(profileLocalId)}
-          target="_blank"
-          rel="noreferrer"
-          style={{ fontSize: 11, color: "var(--color-amber)", whiteSpace: "nowrap" }}
+        {/* Neither an SPA navigation nor a new tab. Routing away would throw out
+            the call being typed, and a new tab lands on a fresh sign-in —
+            MSAL's cache is sessionStorage, which is per-tab. The case opens
+            stacked over this popup instead; see ClientCaseModal. */}
+        <button
+          type="button"
+          onClick={() => setShowCase(true)}
+          style={{
+            background: "none", border: "none", padding: 0, cursor: "pointer",
+            fontSize: 11, color: "var(--color-amber)", whiteSpace: "nowrap",
+            fontFamily: "var(--font-body)", textDecoration: "underline",
+          }}
         >
-          Open 360 view ↗
-        </a>
+          View case notes
+        </button>
       </div>
 
       {error ? (
@@ -127,6 +141,14 @@ export function ProfileNotesPreview({ profileLocalId, profileName }: Props) {
             </button>
           )}
         </>
+      )}
+
+      {showCase && (
+        <ClientCaseModal
+          profileLocalId={profileLocalId}
+          profileName={profileName}
+          onClose={() => setShowCase(false)}
+        />
       )}
     </div>
   );
