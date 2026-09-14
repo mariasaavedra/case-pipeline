@@ -10,7 +10,13 @@ const JWKS = createRemoteJWKSet(
 
 export interface AzureClaims {
   oid: string;
-  name: string;
+  /**
+   * Optional on purpose. A shared or resource mailbox often carries no `name`
+   * claim, and typing it `string` made every caller believe otherwise — which
+   * is how one such account got a NOT NULL constraint failure out of
+   * /api/auth/me and an unexplained sign-in loop in the browser.
+   */
+  name?: string;
   preferred_username: string;
   email?: string;
 }
@@ -26,9 +32,15 @@ export async function validateToken(token: string): Promise<AzureClaims> {
     throw new Error(`Access restricted to @${ALLOWED_DOMAIN} accounts`);
   }
 
+  // The object id is the account's only stable key — every users.db row, audit
+  // entry and preference hangs off it. A token without one cannot be turned
+  // into a user, so refuse it here rather than fail later on a NOT NULL.
+  const oid = payload["oid"] as string | undefined;
+  if (!oid) throw new Error("Token has no oid claim — this account cannot be identified");
+
   return {
-    oid: payload["oid"] as string,
-    name: payload["name"] as string,
+    oid,
+    name: payload["name"] as string | undefined,
     preferred_username: username,
     email: payload["email"] as string | undefined,
   };

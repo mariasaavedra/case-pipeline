@@ -2,7 +2,7 @@ import { useAuth } from "../auth/useAuth";
 import { VersionBadge } from "../components/VersionBadge";
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, error, signedInAs, retry } = useAuth();
 
   return (
     <div
@@ -67,8 +67,59 @@ export function LoginPage() {
           Sign in with your firm Microsoft account
         </p>
 
+        {/* Microsoft said yes but the app said no. Without this the two gates
+            are indistinguishable: the screen simply comes back. */}
+        {error && (
+          <div
+            role="alert"
+            style={{
+              textAlign: "left",
+              marginBottom: "20px",
+              padding: "12px 14px",
+              borderRadius: "8px",
+              border: "1px solid var(--color-status-red)",
+              backgroundColor: "var(--color-status-red-bg)",
+              fontFamily: "var(--font-body)",
+              fontSize: "13px",
+              color: "var(--color-ink)",
+            }}
+          >
+            <strong style={{ display: "block", marginBottom: 4 }}>
+              Microsoft signed you in, but the app could not let you in
+            </strong>
+            <span style={{ display: "block", marginBottom: signedInAs ? 4 : 0 }}>{error}</span>
+            {signedInAs && (
+              <span style={{ display: "block", color: "var(--color-ink-faint)", fontSize: "12px" }}>
+                Account used: {signedInAs}
+              </span>
+            )}
+            <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+              <button
+                onClick={retry}
+                style={{
+                  background: "none", border: "none", padding: 0, cursor: "pointer",
+                  fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-amber)",
+                  textDecoration: "underline",
+                }}
+              >
+                Try again
+              </button>
+              <button
+                onClick={() => login({ chooseAccount: true })}
+                style={{
+                  background: "none", border: "none", padding: 0, cursor: "pointer",
+                  fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-amber)",
+                  textDecoration: "underline",
+                }}
+              >
+                Use a different account
+              </button>
+            </div>
+          </div>
+        )}
+
         <button
-          onClick={login}
+          onClick={() => login()}
           style={{
             display: "flex",
             alignItems: "center",
