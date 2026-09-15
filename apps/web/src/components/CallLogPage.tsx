@@ -4,8 +4,11 @@
 // Filters (status, taken by, day, "unlinked to a profile") over board_items
 // where board_key='call_log'. Status and "Highlighted for" are editable inline
 // via StatusEditor/HighlightedForEditor. A row with a linked profile opens that
-// client; the pencil button opens the same LogCallModal in edit mode (name/
-// phone/linked client only). The "+ Log call" button on this page (and the
+// client's case OVER the list (ClientCaseModal — notes, documents, Fee Ks),
+// rather than navigating to the 360 view and taking the day filter, the scroll
+// position and the loaded page of rows with it; the full view is still a click
+// away inside the popup. The pencil button opens the same LogCallModal in edit
+// mode (name/phone/linked client only). The "+ Log call" button on this page (and the
 // header everywhere else) opens the same modal in create mode. Defaults to
 // today's calls — front desk staff mostly care about "what's come in today" —
 // with a date picker/"show all days" toggle for the historical/follow-up view.
@@ -16,12 +19,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { fetchCallLog } from "../api";
 import type { CallLogEntry } from "../api";
-import { Link } from "./Link";
-import { clientPath } from "../router";
 import { StatusEditor } from "./StatusEditor";
 import { HighlightedForEditor } from "./HighlightedForEditor";
 import { LogCallModal } from "./LogCallModal";
 import { CallNotesModal } from "./CallNotesModal";
+import { ClientCaseModal } from "./ClientCaseModal";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { useBoardStatusOptions } from "../StatusOptionsProvider";
@@ -181,6 +183,8 @@ export function CallLogPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<CallLogEntry | null>(null);
   const [notesEntry, setNotesEntry] = useState<CallLogEntry | null>(null);
+  /** Which linked client's case is open over the list, if any. */
+  const [caseClient, setCaseClient] = useState<{ localId: string; name: string } | null>(null);
 
   const load = useCallback(async (nextOffset: number, replace: boolean) => {
     setLoading(true);
@@ -374,7 +378,23 @@ export function CallLogPage() {
                     </div>
                     <div style={{ padding: "8px 10px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {e.profileLocalId ? (
-                        <Link href={clientPath(e.profileLocalId)} style={{ fontSize: 12 }}>{e.profileName ?? "View client"}</Link>
+                        // Opens the case over the list rather than navigating
+                        // to it: checking who called costs the day filter, the
+                        // scroll position and the page of rows otherwise, and
+                        // people bounce between the two all morning. The full
+                        // 360 view is still one click away, inside the popup.
+                        <button
+                          type="button"
+                          onClick={() => setCaseClient({ localId: e.profileLocalId!, name: e.profileName ?? "Client" })}
+                          style={{
+                            background: "none", border: "none", padding: 0, cursor: "pointer",
+                            fontSize: 12, color: "var(--color-amber)", fontFamily: "var(--font-body)",
+                            textDecoration: "underline", maxWidth: "100%", overflow: "hidden",
+                            textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textAlign: "left",
+                          }}
+                        >
+                          {e.profileName ?? "View client"}
+                        </button>
                       ) : (
                         <span style={{ fontSize: 12, color: "var(--color-ink-faint)" }}>— unlinked —</span>
                       )}
@@ -439,6 +459,15 @@ export function CallLogPage() {
           localId={notesEntry.localId}
           name={notesEntry.name}
           onClose={() => setNotesEntry(null)}
+        />
+      )}
+      {caseClient && (
+        <ClientCaseModal
+          key={caseClient.localId}
+          profileLocalId={caseClient.localId}
+          profileName={caseClient.name}
+          allowOpenFullView
+          onClose={() => setCaseClient(null)}
         />
       )}
     </div>
