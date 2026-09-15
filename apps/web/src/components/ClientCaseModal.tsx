@@ -10,10 +10,11 @@
 //
 // So the fuller picture opens here instead, over the call popup, which stays
 // mounted underneath with every field intact: the case facts, the whole notes
-// timeline, and the client's SharePoint folders under a Documents tab — the
-// three things the 360 view actually gets opened for mid-call. Read-only
-// (beyond what DocumentsTab itself allows): this is context for the person on
-// the phone, not a second place to edit a case.
+// timeline, the client's SharePoint folders, and their Fee Ks — what the 360
+// view actually gets opened for mid-call. The tabs mount the 360 view's own
+// components (DocumentsTab, ContractsTab), so a folder, a file preview or a
+// new contract behaves identically to doing it there; it simply never takes
+// the reader off the call.
 //
 // One request (GET /api/clients/:id) carries everything below — the profile,
 // contracts, board items and the newest 50 timeline entries — so the facts
@@ -27,6 +28,9 @@ import type { ClientCaseSummary } from "../api";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { DocumentsTab } from "./DocumentsTab";
+import { ContractsTab } from "./ContractsTab";
+import { Link } from "./Link";
+import { clientPath } from "../router";
 import { StatusBadge } from "./StatusBadge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
@@ -35,6 +39,15 @@ interface Props {
   profileLocalId: string;
   profileName: string;
   onClose: () => void;
+  /**
+   * Offer a way through to the full 360 view.
+   *
+   * False where leaving costs something: inside the log-call popup the case
+   * sits on top of a half-typed call, and an SPA navigation would take the
+   * whole page with it. True from the Call Log list, where the reader is only
+   * looking at rows and going to the full view is a fair thing to want.
+   */
+  allowOpenFullView?: boolean;
 }
 
 interface UpcomingDate {
@@ -42,7 +55,7 @@ interface UpcomingDate {
   label: string;
 }
 
-type Panel = "notes" | "documents";
+type Panel = "notes" | "documents" | "contracts";
 
 /** `YYYY-MM-DD` at LOCAL midnight — `new Date("2026-09-20")` is UTC midnight,
  * which reads as the 19th anywhere west of Greenwich. Same convention as
@@ -85,7 +98,12 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export function ClientCaseModal({ profileLocalId, profileName, onClose }: Props) {
+export function ClientCaseModal({
+  profileLocalId,
+  profileName,
+  onClose,
+  allowOpenFullView = false,
+}: Props) {
   const [data, setData] = useState<ClientCaseSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("notes");
@@ -112,6 +130,7 @@ export function ClientCaseModal({ profileLocalId, profileName, onClose }: Props)
   const openItems = data
     ? Object.values(data.boardItems).reduce((sum, items) => sum + items.length, 0)
     : 0;
+  const contractCount = data ? data.contracts.active.length + data.contracts.closed.length : 0;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -121,7 +140,9 @@ export function ClientCaseModal({ profileLocalId, profileName, onClose }: Props)
             {data?.profile.name ?? profileName}
           </DialogTitle>
           <DialogDescription>
-            Notes and documents — the call you are logging stays open behind this
+            {allowOpenFullView
+              ? "Notes, documents and contracts for this client"
+              : "Notes, documents and contracts — the call you are logging stays open behind this"}
           </DialogDescription>
         </DialogHeader>
 
@@ -213,6 +234,22 @@ export function ClientCaseModal({ profileLocalId, profileName, onClose }: Props)
               >
                 Documents
               </button>
+              <button
+                role="tab"
+                id="case-tab-contracts"
+                aria-selected={panel === "contracts"}
+                aria-controls="case-panel-contracts"
+                className="tab-button"
+                style={{ padding: "8px 14px", fontSize: 13 }}
+                onClick={() => setPanel("contracts")}
+              >
+                Contracts
+                {contractCount > 0 && (
+                  <span style={{ marginLeft: 5, fontSize: 11, color: "var(--color-ink-faint)" }}>
+                    {contractCount}
+                  </span>
+                )}
+              </button>
             </nav>
 
             <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -220,10 +257,28 @@ export function ClientCaseModal({ profileLocalId, profileName, onClose }: Props)
                 <div role="tabpanel" id="case-panel-notes" aria-labelledby="case-tab-notes">
                   <UpdatesTimeline updates={data?.updates ?? []} loading={data === null} />
                 </div>
-              ) : (
+              ) : panel === "documents" ? (
                 <div role="tabpanel" id="case-panel-documents" aria-labelledby="case-tab-documents">
                   {data ? (
                     <DocumentsTab data={data} />
+                  ) : (
+                    <p style={{ fontSize: 13, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
+                      Loading…
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div role="tabpanel" id="case-panel-contracts" aria-labelledby="case-tab-contracts">
+                  {data ? (
+                    // The Fee Ks tab itself, "+ New contract" button included —
+                    // "has she paid?" and "start her contract" are the same
+                    // phone call, and sending someone elsewhere to do the
+                    // second one is what this popup exists to stop.
+                    <ContractsTab
+                      contracts={data.contracts}
+                      profileLocalId={data.profile.localId}
+                      clientName={data.profile.name}
+                    />
                   ) : (
                     <p style={{ fontSize: 13, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
                       Loading…
@@ -235,9 +290,19 @@ export function ClientCaseModal({ profileLocalId, profileName, onClose }: Props)
           </>
         )}
 
-        <div className="flex-shrink-0 border-t border-border px-6 py-3" style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div
+          className="flex-shrink-0 border-t border-border px-6 py-3"
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}
+        >
+          {allowOpenFullView && data ? (
+            <Link href={clientPath(data.profile.localId)} style={{ fontSize: 12 }}>
+              Open full 360 view →
+            </Link>
+          ) : (
+            <span />
+          )}
           <Button type="button" variant="outline" onClick={onClose}>
-            Back to the call
+            {allowOpenFullView ? "Close" : "Back to the call"}
           </Button>
         </div>
       </DialogContent>
