@@ -4,6 +4,9 @@
 
 import { test, expect, describe, vi, afterEach } from "vitest";
 import {
+  timeoutForAttempt,
+  resetLearnedTimeout,
+  mondayRequest,
   getLinkedItemIds,
   findColumnByType,
   findColumnByTitle,
@@ -330,3 +333,95 @@ describe("createUpdate", () => {
   });
 });
 
+
+// =============================================================================
+// Request timeouts
+// =============================================================================
+// The sync ledger recorded "Network error after 3 retries: Request timed out
+// after 30000ms" on court_cases in 5 of its first 15 runs. Retrying a timeout
+// against an unchanged wall cannot succeed — these cover the escalation that
+// makes the retry mean something.
+
+describe("timeoutForAttempt", () => {
+  test("doubles from the base", () => {
+    expect(timeoutForAttempt(0, 30_000, 120_000)).toBe(30_000);
+    expect(timeoutForAttempt(1, 30_000, 120_000)).toBe(60_000);
+    expect(timeoutForAttempt(2, 30_000, 120_000)).toBe(120_000);
+  });
+
+  test("stops at the ceiling rather than growing without bound", () => {
+    // Not 240_000: a wedged endpoint must not hold a sync open for minutes.
+    expect(timeoutForAttempt(3, 30_000, 120_000)).toBe(120_000);
+    expect(timeoutForAttempt(9, 30_000, 120_000)).toBe(120_000);
+  });
+
+  test("the first attempt is exactly the base — the fast path is unchanged", () => {
+    expect(timeoutForAttempt(0, 45_000, 120_000)).toBe(45_000);
+  });
+});
+
+describe("mondayRequest retry windows", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetLearnedTimeout();
+  });
+
+  /** Arms setTimeout recording and returns the delays each attempt was given. */
+  function recordArmedTimeouts(): number[] {
+    const armed: number[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    vi.stubGlobal("setTimeout", ((fn: () => void, ms?: number) => {
+      if (typeof ms === "number") armed.push(ms);
+      return realSetTimeout(fn, 1);
+    }) as unknown as typeof setTimeout);
+    return armed;
+  }
+
+  test("a response too slow for the first window gets a longer second one", async () => {
+    const aborted = Object.assign(new Error("The operation was aborted"), { name: "AbortError" });
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(aborted)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { ok: true } }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Record what each attempt's abort timer was armed with, and keep the
+    // backoff sleep from actually costing a second in the test.
+    const armed = recordArmedTimeouts();
+
+    // mondayRequest hands back the whole GraphQL envelope, not just `data`.
+    const out = await mondayRequest<{ data: { ok: boolean } }>("query { me { id } }", undefined, "tok");
+
+    expect(out).toEqual({ data: { ok: true } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Request windows only — the ~1s backoff sleep is armed here too.
+    expect(armed.filter((ms) => ms >= 30_000)).toEqual([30_000, 60_000]);
+  });
+  test("a window that had to be raised becomes the starting point for later requests", async () => {
+    // court_cases needed the second window on every one of its pages. Paying
+    // the 30s wall again on each is half an hour on a full nightly walk.
+    const aborted = Object.assign(new Error("The operation was aborted"), { name: "AbortError" });
+    const ok = { ok: true, json: async () => ({ data: { ok: true } }) };
+    const fetchMock = vi.fn().mockRejectedValueOnce(aborted).mockResolvedValue(ok);
+    vi.stubGlobal("fetch", fetchMock);
+    const armed = recordArmedTimeouts();
+
+    await mondayRequest("query { page1 }", undefined, "tok");
+    const afterFirst = armed.filter((ms) => ms >= 30_000).length;
+    await mondayRequest("query { page2 }", undefined, "tok");
+
+    // The second request opens at 60s rather than rediscovering the 30s wall.
+    expect(armed.filter((ms) => ms >= 30_000).slice(afterFirst)).toEqual([60_000]);
+  });
+
+  test("a request that never needed more keeps the base window", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { ok: true } }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const armed = recordArmedTimeouts();
+
+    await mondayRequest("query { fast }", undefined, "tok");
+    await mondayRequest("query { fast }", undefined, "tok");
+
+    expect(armed.filter((ms) => ms >= 30_000)).toEqual([30_000, 30_000]);
+  });
+});

@@ -67,7 +67,10 @@ interface ApiConfig {
   maxRetries: number;
   baseDelayMs: number;
   maxDelayMs: number;
+  /** First attempt's request timeout. Later attempts double it (see timeoutForAttempt). */
   timeoutMs: number;
+  /** Ceiling for the doubling, so a wedged request cannot hold a sync open forever. */
+  maxTimeoutMs: number;
   apiVersion: string;
 }
 
@@ -76,13 +79,27 @@ const DEFAULT_API_CONFIG: ApiConfig = {
   baseDelayMs: 1000,
   maxDelayMs: 10000,
   timeoutMs: 30000,
+  maxTimeoutMs: 120000,
   apiVersion: "2024-10",
 };
 
 let apiConfig: ApiConfig = { ...DEFAULT_API_CONFIG };
 
+/**
+ * What this process has learned a request actually needs, once one has proved
+ * the base window too short. Starts unset and only ever grows, within the
+ * ceiling — see noteTimeoutNeeded.
+ */
+let learnedTimeoutMs: number | null = null;
+
 export function setApiConfig(config: Partial<ApiConfig>): void {
   apiConfig = { ...apiConfig, ...config };
+  learnedTimeoutMs = null;
+}
+
+/** Test seam — forget what the process learned about slow endpoints. */
+export function resetLearnedTimeout(): void {
+  learnedTimeoutMs = null;
 }
 
 /** @deprecated Use setApiConfig instead */
@@ -103,6 +120,53 @@ function calculateBackoff(attempt: number, baseDelay: number, maxDelay: number):
   const exponentialDelay = baseDelay * Math.pow(2, attempt);
   const jitter = Math.random() * baseDelay * 0.5;
   return Math.min(exponentialDelay + jitter, maxDelay);
+}
+
+/**
+ * The timeout to give attempt `n`, doubling from the base and capped.
+ *
+ * A retry only helps if the next attempt differs from the one that failed. For
+ * a rate limit or a dropped connection, waiting IS the difference — but for a
+ * timeout it is not: re-issuing the identical request against the identical
+ * 30s wall just spends 30 more seconds arriving at the same place. That is
+ * what the sync ledger kept recording — "Network error after 3 retries:
+ * Request timed out after 30000ms" on court_cases, a board whose mirror
+ * columns make a single 50-item page genuinely slow, in 5 of the first 15
+ * runs. Four attempts, four identical failures, one board silently stale until
+ * the next pass.
+ *
+ * So each attempt gets longer to answer: 30s, 60s, 120s, 120s. The first
+ * attempt is unchanged, which keeps a genuinely dead endpoint from holding the
+ * sync for minutes before anything is reported.
+ */
+export function timeoutForAttempt(
+  attempt: number,
+  baseMs: number = learnedTimeoutMs ?? apiConfig.timeoutMs,
+  maxMs: number = apiConfig.maxTimeoutMs,
+): number {
+  return Math.min(baseMs * Math.pow(2, attempt), maxMs);
+}
+
+/**
+ * Remember that a request needed more than the base window, so the rest of this
+ * process starts where the last one succeeded instead of re-discovering the
+ * wall on every page.
+ *
+ * It matters at full-walk scale. court_cases needed the second window on all
+ * three of its pages, every time: without this, a board of ~2800 items spends
+ * a wasted 30s and a backoff on each of its 56 pages — about half an hour added
+ * to the nightly run, for a timeout we already knew was coming.
+ *
+ * Only ever raised, never lowered, and gone when the process ends. A single
+ * blip on an otherwise fast endpoint therefore costs patience on later
+ * requests, never correctness — the request itself is unchanged.
+ */
+function noteTimeoutNeeded(attempt: number): void {
+  if (attempt === 0) return;
+  const needed = timeoutForAttempt(attempt);
+  if (learnedTimeoutMs === null || needed > learnedTimeoutMs) {
+    learnedTimeoutMs = Math.min(needed, apiConfig.maxTimeoutMs);
+  }
 }
 
 async function fetchWithTimeout(
@@ -193,8 +257,9 @@ export function getApiToken(): string {
 async function executeRequest(
   token: string,
   query: string,
-  variables?: Record<string, unknown>,
-  apiVersionOverride?: string
+  variables: Record<string, unknown> | undefined,
+  apiVersionOverride: string | undefined,
+  timeoutMs: number
 ): Promise<Response> {
   return fetchWithTimeout(
     "https://api.monday.com/v2",
@@ -207,7 +272,7 @@ async function executeRequest(
       },
       body: JSON.stringify({ query, variables }),
     },
-    apiConfig.timeoutMs
+    timeoutMs
   );
 }
 
@@ -222,7 +287,13 @@ export async function mondayRequest<T>(
 
   for (let attempt = 0; attempt <= apiConfig.maxRetries; attempt++) {
     try {
-      const response = await executeRequest(token, query, variables, apiVersionOverride);
+      const response = await executeRequest(
+        token,
+        query,
+        variables,
+        apiVersionOverride,
+        timeoutForAttempt(attempt),
+      );
 
       // Handle non-OK responses
       if (!response.ok) {
@@ -289,6 +360,7 @@ export async function mondayRequest<T>(
         throw new MondayApiError(`Monday API errors: ${errorMessage}`);
       }
 
+      noteTimeoutNeeded(attempt);
       return data as T;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -311,12 +383,19 @@ export async function mondayRequest<T>(
             apiConfig.maxDelayMs
           );
           console.warn(
-            `Network error: ${error.message}. Retrying in ${Math.round(delay)}ms (${attempt + 1}/${apiConfig.maxRetries})...`
+            `Network error: ${error.message}. Retrying in ${Math.round(delay)}ms with a ` +
+              `${timeoutForAttempt(attempt + 1)}ms timeout (${attempt + 1}/${apiConfig.maxRetries})...`
           );
           await sleep(delay);
           continue;
         }
-        throw new NetworkError(`Network error after ${apiConfig.maxRetries} retries: ${error.message}`, error);
+        // Name the ceiling that was actually reached: "timed out after 30000ms"
+        // in the ledger read as though the timeout had never been raised.
+        throw new NetworkError(
+          `Network error after ${apiConfig.maxRetries} retries ` +
+            `(last timeout ${timeoutForAttempt(apiConfig.maxRetries)}ms): ${error.message}`,
+          error,
+        );
       }
 
       // Re-throw unknown errors
