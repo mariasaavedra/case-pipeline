@@ -74,9 +74,33 @@ const CONTRACT_BOARD = "fee_ks";
 const PROFILE_RELATION_KEYS = ["profile", "profiles", "person"];
 
 // How many pre-sync safety snapshots to retain (each is a full live.db copy,
-// ~0.8 GB). Kept separate from the daily backup series; 3 covers the last few
-// full syncs while capping the disk they hold.
+// now ~1.5 GB). Kept separate from the daily backup series; 3 covers the last
+// few full syncs while capping the disk they hold.
 const PRESYNC_BACKUPS_KEPT = 3;
+
+/**
+ * Whether this run needs a pre-sync snapshot: only a --full walk does.
+ *
+ * The snapshot exists to protect against a run that REMOVES rows, and only the
+ * full walk reconciles — an incremental pass never sees an unchanged row, so it
+ * never deletes one. Every other mode is pure UPSERT (schema v15+), which the
+ * daily 05:30 backup already covers.
+ *
+ * Taking it unconditionally was pathological in production. Webhook-triggered
+ * syncs fire every ~3 minutes, so a scoped incremental touching a handful of
+ * rows was copying and AES-encrypting 1.5 GB each time: roughly 30 GB of writes
+ * per hour on a 1 vCPU / 1 GB host. That churn filled the disk to 86%, and it
+ * held live.db busy often enough that the 05:30 backup's integrity sample kept
+ * timing out — which the pruner read as corruption and refused to prune on,
+ * stranding 12 daily backups instead of 4. A full disk is what corrupted this
+ * database in July 2026, so the snapshot meant to protect the data was the
+ * thing endangering it.
+ *
+ * `--presync` forces one for a run that would otherwise skip it.
+ */
+function needsPresyncBackup(full: boolean, forced: boolean): boolean {
+  return full || forced;
+}
 
 /**
  * True when live.db already holds real client data worth snapshotting before a
@@ -169,14 +193,16 @@ function parseArgs() {
   let onlyBoards: string[] | null = null;
   let full = false;
   let skipTimeline = false;
+  let forcePresync = false;
   for (const arg of args) {
     if (arg.startsWith("--max-items=")) maxItems = parseInt(arg.split("=")[1] ?? "") || maxItems;
     else if (arg.startsWith("--page-size=")) pageSize = parseInt(arg.split("=")[1] ?? "") || pageSize;
     else if (arg.startsWith("--boards=")) onlyBoards = (arg.split("=")[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
     else if (arg === "--full") full = true;
     else if (arg === "--skip-timeline") skipTimeline = true;
+    else if (arg === "--presync") forcePresync = true;
   }
-  return { maxItems, pageSize, onlyBoards, full, skipTimeline };
+  return { maxItems, pageSize, onlyBoards, full, skipTimeline, forcePresync };
 }
 
 // =============================================================================
@@ -216,7 +242,7 @@ async function main() {
   }
   setApiToken(token);
 
-  const { maxItems, pageSize, onlyBoards, full, skipTimeline } = parseArgs();
+  const { maxItems, pageSize, onlyBoards, full, skipTimeline, forcePresync } = parseArgs();
 
   const dataDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../data");
   fs.mkdirSync(dataDir, { recursive: true });
@@ -236,7 +262,9 @@ async function main() {
   // The pre-sync snapshot stays regardless: it is cheap next to a 3-hour run, and
   // it is the fallback if a bad run corrupts data rather than merely failing. If
   // there is real data and the snapshot fails, abort rather than write blind.
-  if (liveDbHasData(db)) {
+  if (!needsPresyncBackup(full, forcePresync)) {
+    console.log("[sync] Pre-sync snapshot skipped — this run only upserts. Use --presync to force one.");
+  } else if (liveDbHasData(db)) {
     try {
       const dest = await backupDatabase({
         existing: db,

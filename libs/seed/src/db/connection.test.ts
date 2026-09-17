@@ -1,4 +1,4 @@
-import { test, expect, describe, afterEach } from "vitest";
+import { test, expect, describe, vi, afterEach } from "vitest";
 import { initializeDatabase, closeDatabase, openDatabase, applyPragmas, isDatabaseHealthy, checkIntegrity } from "./connection";
 import Database from "better-sqlite3";
 import fs from "node:fs";
@@ -133,6 +133,29 @@ describe("checkIntegrity", () => {
 
   test("an unrecognised throw is treated as corrupt, not busy", () => {
     expect(checkIntegrity(throwingDb(undefined))).toBe("corrupt");
+  });
+
+  // The extended busy/locked variants carry their own codes. Each one missing
+  // from LOCK_CODES was read as damage, and a "corrupt" verdict blocks the
+  // nightly prune — which is how twelve 1.5 GB backups accumulated on a host
+  // configured to keep four, while quick_check by hand answered "ok".
+  test.each([
+    "SQLITE_BUSY_TIMEOUT",
+    "SQLITE_BUSY_RECOVERY",
+    "SQLITE_BUSY_SNAPSHOT",
+    "SQLITE_LOCKED_SHAREDCACHE",
+    "SQLITE_PROTOCOL",
+    "SQLITE_INTERRUPT",
+  ])("%s is contention, not damage", (code) => {
+    expect(checkIntegrity(throwingDb(code))).toBe("busy");
+  });
+
+  test("a corrupt verdict from a throw names the code, so the next one is diagnosable", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(checkIntegrity(throwingDb("SQLITE_IOERR_SHORT_READ"))).toBe("corrupt");
+    expect(warn).toHaveBeenCalled();
+    expect(String(warn.mock.calls[0]?.[0])).toContain("SQLITE_IOERR_SHORT_READ");
+    warn.mockRestore();
   });
 
   test("isDatabaseHealthy stays strict — only ok is healthy", () => {
