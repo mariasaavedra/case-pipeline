@@ -116,6 +116,52 @@ function liveDbHasData(db: ReturnType<typeof openDatabase>): boolean {
  */
 const DEFAULT_MAX_ITEMS = Number(process.env.SYNC_MAX_ITEMS) || 20000;
 
+/**
+ * The run currently in flight, so a fatal throw can still say what happened.
+ *
+ * Everything that finalizes the ledger lives at the bottom of `main()`, which a
+ * throw skips entirely: `main().catch` logged to stderr and exited, leaving the
+ * row at status='running' with a NULL finished_at and no reason. On a server
+ * that is invisible — a crashed run and a running one look identical, which is
+ * how the Emails & Activities pass (the only pass that fetches E&A, and the last
+ * one to run) could stop for eight weeks with the ledger showing nothing wrong.
+ *
+ * Cleared on the success path, so the handler only ever fires for a real failure.
+ */
+let activeRun: { db: LiveDatabase; runId: number; holder: string } | null = null;
+
+type LiveDatabase = ReturnType<typeof openDatabase>;
+
+/**
+ * Record why the run died, release the advisory lock, and close the handle.
+ * Best-effort by construction: it runs while something has already gone wrong,
+ * so every step is guarded and a failure here must never mask the original
+ * error, which the caller still reports.
+ */
+function finalizeFailedRun(err: unknown): void {
+  if (!activeRun) return;
+  const { db, runId, holder } = activeRun;
+  activeRun = null;
+  const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  try {
+    db.prepare(
+      "UPDATE sync_runs SET finished_at = datetime('now'), status = 'error', error = ? WHERE id = ?",
+    ).run(message.slice(0, 2000), runId);
+  } catch {
+    // Ledger unreachable (corrupt/locked db) — stderr remains the only record.
+  }
+  try {
+    releaseSyncLock(db, holder);
+  } catch {
+    // Lock rows are advisory; a stale one is cleared by the next run.
+  }
+  try {
+    db.close();
+  } catch {
+    // Already closed, or closing is what threw in the first place.
+  }
+}
+
 function parseArgs() {
   const args = process.argv.slice(2);
   let maxItems = DEFAULT_MAX_ITEMS;
@@ -232,12 +278,30 @@ async function main() {
     .run(`live-sync ${new Date().toISOString()}`, JSON.stringify({ source: "monday", maxItems }));
   const batchId = Number(batchInfo.lastInsertRowid);
 
+  // Any row still 'running' from a process that is gone. A full walk takes
+  // hours, so anything older than a day cannot still be in flight — and leaving
+  // it as 'running' makes every staleness check read a dead run as a live one.
+  const abandoned = db
+    .prepare(
+      `UPDATE sync_runs
+          SET status = 'abandoned',
+              error = COALESCE(error, 'Marked abandoned by a later run: the process left no result.')
+        WHERE status = 'running'
+          AND finished_at IS NULL
+          AND started_at < datetime('now', '-1 day')`,
+    )
+    .run();
+  if (abandoned.changes > 0) {
+    console.warn(`[sync] Marked ${abandoned.changes} earlier run(s) abandoned — they died without recording a result.`);
+  }
+
   // Ledger row for this run (finished + per-board coverage recorded at the end).
   const runId = Number(
     db
       .prepare("INSERT INTO sync_runs (started_at, mode, status) VALUES (?, ?, 'running')")
       .run(runStartedAt, full ? "full" : "incremental").lastInsertRowid,
   );
+  activeRun = { db, runId, holder: SYNC_HOLDER };
 
   const boardsConfig = await loadBoardsConfig();
 
@@ -1006,6 +1070,8 @@ async function main() {
   }
 
   recordSyncResult(db, !healthy ? "corrupt" : partial ? "partial" : "synced");
+  // The ledger row is final from here, so the fatal handler must not touch it.
+  activeRun = null;
   releaseSyncLock(db, SYNC_HOLDER);
   db.close();
   if (!healthy) process.exit(2);
@@ -1013,5 +1079,6 @@ async function main() {
 
 main().catch((err) => {
   console.error("\nFatal error during sync:", err);
+  finalizeFailedRun(err);
   process.exit(1);
 });

@@ -345,3 +345,64 @@ describe("v14 → v15 stable-identity migration", () => {
     expect((db.prepare("SELECT COUNT(*) c FROM profiles WHERE monday_item_id IS NULL").get() as { c: number }).c).toBe(2);
   });
 });
+
+describe("v22 → v23 sync_runs failure reason", () => {
+  // A v22-era ledger: sync_runs with no `error` column, which is the state in
+  // which a crashed run left its row at 'running' forever with no explanation.
+  function makeV22Db(): DatabaseInstance {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (22);
+      CREATE TABLE sync_runs (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        started_at  TEXT NOT NULL,
+        finished_at TEXT,
+        mode        TEXT NOT NULL,
+        status      TEXT NOT NULL DEFAULT 'running'
+      );
+    `);
+    return db;
+  }
+  const insRun = (db: DatabaseInstance, startedAt: string, status: string, finishedAt: string | null = null) =>
+    db
+      .prepare("INSERT INTO sync_runs (started_at, finished_at, mode, status) VALUES (?, ?, 'full', ?)")
+      .run(startedAt, finishedAt, status);
+
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString();
+
+  test("adds the error column and bumps the version", () => {
+    const db = makeV22Db();
+    initializeSchema(db);
+    const cols = db.prepare("SELECT name FROM pragma_table_info('sync_runs')").all() as { name: string }[];
+    expect(cols.map((c) => c.name)).toContain("error");
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+  });
+
+  test("marks a long-dead 'running' row abandoned, with a reason", () => {
+    const db = makeV22Db();
+    insRun(db, daysAgo(21), "running"); // the process died three weeks ago
+    initializeSchema(db);
+    const row = db.prepare("SELECT status, error FROM sync_runs").get() as { status: string; error: string | null };
+    expect(row.status).toBe("abandoned");
+    expect(row.error).toMatch(/abandoned/i);
+  });
+
+  test("leaves a recent 'running' row alone — it may still be syncing", () => {
+    const db = makeV22Db();
+    insRun(db, new Date().toISOString(), "running");
+    initializeSchema(db);
+    const row = db.prepare("SELECT status, error FROM sync_runs").get() as { status: string; error: string | null };
+    expect(row.status).toBe("running");
+    expect(row.error).toBeNull();
+  });
+
+  test("does not touch runs that already reported a result", () => {
+    const db = makeV22Db();
+    insRun(db, daysAgo(30), "synced", daysAgo(30));
+    insRun(db, daysAgo(30), "partial", daysAgo(30));
+    initializeSchema(db);
+    const statuses = (db.prepare("SELECT status FROM sync_runs ORDER BY id").all() as { status: string }[]).map((r) => r.status);
+    expect(statuses).toEqual(["synced", "partial"]);
+  });
+});
