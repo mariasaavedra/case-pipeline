@@ -414,13 +414,21 @@ Under Model A, `case-pipeline` is the only place a complete per-client history c
 exist — Monday structurally cannot hold one. That is already what `client_updates`
 is for. The gap is coverage, and it is ours to close:
 
-- **Fee Ks are never fetched** — 1,654 items, and the richest timelines in the
-  account per the 2026-07-02 pass (~30,000 entries). An activity logged on a
-  contract exists *only* on that contract, so those notes are missing from the
-  dashboard as well as from every other board.
-- **6,728 of 13,643 board items are skipped** by the `profile_local_id != ''`
-  filter — `call_log` (5,479) and `_fa_jail_intakes` (885) above all. Same
-  reasoning: whatever was logged there exists nowhere else.
+Both figures below are measured against **production** (2026-09-17), not the
+local mirror:
+
+- **Fee Ks are never fetched** — **1,666** contracts carry a `monday_item_id`
+  and **0** appear in `board_items`, so the sync's item list never includes
+  them and `fee_ks` has no row at all in the per-board E&A counts. The
+  2026-07-02 pass found contracts held the richest timelines in the account
+  (18–25 entries each). Under Manual Association an activity logged on a
+  contract exists *only* there, so those notes are absent from the dashboard
+  and from every other board.
+- **1,766 of 8,671 board items are skipped** by the `profile_local_id != ''`
+  filter. (An earlier draft said 6,728 of 13,643 — that was the stale local
+  copy.) `client_updates` is keyed by profile and some boards have no profile
+  link by design, so closing this one needs a schema decision, not just a
+  wider query.
 
 Closing both is what turns the dashboard into the unified view staff are
 currently hopping between boards to assemble by hand.
@@ -493,14 +501,12 @@ litigation 279   address_changes 242   appeals 22   _lt_i918b_s 12   calendaring
 fee_ks 0   _cd_open_forms 0   _fa_jail_intakes 0   call_log 0
 ```
 
-`_cd_open_forms` has 798 items of which **789 are linked to a profile** and are
-fetched by the sync — yet holds **zero** E&A entries, while the appointment
-boards hold thousands. Both are connected to Profiles. So "connected to a
-Profile" is not sufficient on its own, and the difference is not yet understood.
-Candidates: appointment entries get composer-sent mail (rule 1) while Open Forms
-never do; or rule 3 traversal depends on which side of the connect column the
-board sits on. **Opening one appointment item and one Open Form item in Monday
-side by side answers this.**
+**Superseded 2026-09-17.** This section originally reported `_cd_open_forms` as
+holding *zero* E&A entries. That was read from the stale local `live.db`.
+Production holds **4,514** rows for that board. There is no anomaly to explain —
+see `[[feedback_local_livedb_is_not_prod]]` and §10.2. Per-board counts are still
+skewed by insertion order and `content_sig` dedup, so treat them as a floor on
+uniqueness, never as a measure of rollup.
 
 ### 8.6 The experiment that settles it
 
