@@ -106,8 +106,26 @@ export function isDatabaseHealthy(db: DatabaseInstance): boolean {
  */
 export type IntegrityResult = "ok" | "corrupt" | "busy";
 
-/** SQLite codes that mean "someone else has it", not "it is damaged". */
-const LOCK_CODES = new Set(["SQLITE_BUSY", "SQLITE_LOCKED", "SQLITE_BUSY_SNAPSHOT"]);
+/**
+ * SQLite codes that mean "someone else has it", not "it is damaged".
+ *
+ * The busy/locked family has extended variants that carry their own codes, and
+ * every one of them missing from this set used to be reported as corruption.
+ * On production that verdict blocked the nightly prune (a corrupt database must
+ * never age out the last known-good copy), so twelve 1.5 GB backups piled up
+ * where four were configured — while `quick_check` run by hand on the very same
+ * file answered "ok".
+ */
+const LOCK_CODES = new Set([
+  "SQLITE_BUSY",
+  "SQLITE_BUSY_RECOVERY",
+  "SQLITE_BUSY_SNAPSHOT",
+  "SQLITE_BUSY_TIMEOUT",
+  "SQLITE_LOCKED",
+  "SQLITE_LOCKED_SHAREDCACHE",
+  "SQLITE_PROTOCOL",
+  "SQLITE_INTERRUPT",
+]);
 
 export function checkIntegrity(db: DatabaseInstance): IntegrityResult {
   try {
@@ -118,7 +136,17 @@ export function checkIntegrity(db: DatabaseInstance): IntegrityResult {
     // returning error rows, so an unrecognised throw still means corrupt —
     // that half of the original behaviour is load-bearing and stays.
     const code = (err as { code?: string } | null)?.code;
-    return code && LOCK_CODES.has(code) ? "busy" : "corrupt";
+    if (code && LOCK_CODES.has(code)) return "busy";
+    // Name the code on the way out. A "corrupt" verdict from a throw is either
+    // real damage or a contention variant this set does not know about yet, and
+    // those two need opposite responses — silence made them indistinguishable
+    // and cost a fortnight of disk.
+    console.warn(
+      `[integrity] quick_check threw ${code ?? "an error with no code"}; ` +
+        `treating as corrupt. If the database checks out by hand, this code belongs in LOCK_CODES.`,
+      err,
+    );
+    return "corrupt";
   }
 }
 
