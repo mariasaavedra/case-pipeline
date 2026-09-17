@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 22;
+export const SCHEMA_VERSION = 23;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -250,12 +250,18 @@ CREATE INDEX IF NOT EXISTS idx_archived_monday ON archived_rows(monday_item_id);
 CREATE INDEX IF NOT EXISTS idx_archived_source ON archived_rows(source_table, board_key);
 
 -- Per-sync-run ledger (v21+) — turns "I hope it synced" into a visible history.
+-- The error column holds why a run ended badly (v23). Without it a crashed run
+-- was indistinguishable from a running one: the process died, the fatal handler
+-- exited, and the row sat at status='running' with a NULL finished_at forever,
+-- carrying no reason. 'abandoned' is what a later run calls such a row once it
+-- is old enough that no sync could still be inside it.
 CREATE TABLE IF NOT EXISTS sync_runs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at  TEXT NOT NULL,
     finished_at TEXT,
     mode        TEXT NOT NULL,           -- full | incremental
-    status      TEXT NOT NULL DEFAULT 'running'  -- running | synced | partial | error
+    status      TEXT NOT NULL DEFAULT 'running',  -- running | synced | partial | error | abandoned
+    error       TEXT
 );
 
 -- Per-board coverage for each run (v21+): what Monday reported vs what we fetched,
@@ -1055,6 +1061,29 @@ export function initializeSchema(db: Database): void {
             processed_at    TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_webhook_events_status ON webhook_events(status, id);
+      `);
+    }
+
+    // Migration v22 → v23: give sync_runs a reason. A run that threw left its
+    // ledger row at 'running' with a NULL finished_at and no explanation, so a
+    // crash looked exactly like a sync still in progress — which is how an E&A
+    // pass could stop for weeks without anyone seeing it. Additive.
+    if (fromVersion < 23) {
+      const hasError = db
+        .prepare("SELECT COUNT(*) as cnt FROM pragma_table_info('sync_runs') WHERE name='error'")
+        .get() as { cnt: number };
+      if (hasError.cnt === 0) {
+        db.exec("ALTER TABLE sync_runs ADD COLUMN error TEXT");
+      }
+      // Rows left 'running' by a process that is long gone. Anything older than
+      // a day cannot still be syncing — a full walk takes hours, not days.
+      db.exec(`
+        UPDATE sync_runs
+           SET status = 'abandoned',
+               error = COALESCE(error, 'Marked abandoned by a later run: the process left no result.')
+         WHERE status = 'running'
+           AND finished_at IS NULL
+           AND started_at < datetime('now', '-1 day');
       `);
     }
 
