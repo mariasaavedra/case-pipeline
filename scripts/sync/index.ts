@@ -701,7 +701,7 @@ async function main() {
     });
   }
 
-  // ---- Pass 4: updates (comments + replies on every profile and board item) ----
+  // ---- Pass 4: updates + E&A on every profile, board item and contract ----
   // Still a full walk of every item: E&A activity does not move an item's
   // updated_at, so the watermark cannot narrow this pass (see the header note).
   // --skip-timeline exists so an incremental column refresh stays fast.
@@ -728,6 +728,29 @@ async function main() {
           profile_local_id: row.profile_local_id,
           board_item_local_id: row.local_id,
           board_key: row.board_key,
+        });
+      }
+
+      // Contracts live in their own table, not board_items, so every earlier
+      // version of this pass walked straight past them: 1,666 Fee Ks with a
+      // monday_item_id and not one timeline request ever made for them. The
+      // 2026-07-02 feasibility pass had found contracts carried the RICHEST
+      // timelines in the account (18-25 entries each), and since monday moved to
+      // Manual Association (docs/monday-api-and-ea-reference.md §9) a note
+      // logged on a contract is saved ONLY there — it no longer rolls up to the
+      // profile. So these were notes that existed in exactly one place and were
+      // read by nothing.
+      //
+      // They take board_key "fee_ks" and carry their own local_id in
+      // board_item_local_id, which the query layer treats as an opaque label
+      // (nothing joins it back to board_items).
+      for (const row of db.prepare(
+        "SELECT monday_item_id, local_id, profile_local_id FROM contracts WHERE monday_item_id IS NOT NULL AND profile_local_id != ''"
+      ).all() as { monday_item_id: string; local_id: string; profile_local_id: string }[]) {
+        itemMeta.set(row.monday_item_id, {
+          profile_local_id: row.profile_local_id,
+          board_item_local_id: row.local_id,
+          board_key: CONTRACT_BOARD,
         });
       }
 
