@@ -35,7 +35,8 @@ export function registerSettingsRoutes(app: Express, db: DatabaseInstance): void
   });
 
   app.post("/api/settings/attorney-boards", requireAdmin, (req, res) => {
-    const { boardKey, mondayBoardId, displayName } = req.body as Partial<AttorneyBoard>;
+    const { boardKey, mondayBoardId, displayName, attorneyName, acceptingConsults } =
+      req.body as Partial<AttorneyBoard>;
 
     if (!boardKey || !displayName) {
       res.status(400).json({ error: "boardKey and displayName are required" });
@@ -56,14 +57,55 @@ export function registerSettingsRoutes(app: Express, db: DatabaseInstance): void
       boardKey,
       mondayBoardId: mondayBoardId ?? "",
       displayName,
+      // Falls back to the badge so an entry added without a full name still
+      // reads sensibly in the booking picker.
+      attorneyName: typeof attorneyName === "string" && attorneyName.trim() ? attorneyName.trim() : undefined,
       active: true,
+      acceptingConsults: typeof acceptingConsults === "boolean" ? acceptingConsults : true,
     };
     boards.push(newBoard);
     saveAttorneyBoards(boards);
     auditFromReq(req, "attorney_board.added", {
       targetType: "attorney_board",
       targetId: boardKey,
-      metadata: { mondayBoardId: newBoard.mondayBoardId, displayName },
+      metadata: {
+        mondayBoardId: newBoard.mondayBoardId,
+        displayName,
+        attorneyName: newBoard.attorneyName ?? null,
+        acceptingConsults: newBoard.acceptingConsults,
+      },
+    });
+    res.json({ data: boards });
+  });
+
+  // Edit an existing board. The reason this exists rather than delete+re-add:
+  // an attorney who stops taking consults must keep their board (and its
+  // history) while dropping out of the booking picker — `acceptingConsults`
+  // false, `active` untouched.
+  app.patch("/api/settings/attorney-boards/:boardKey", requireAdmin, (req, res) => {
+    const { boardKey } = req.params;
+    const boards = loadAttorneyBoards();
+    const board = boards.find((b) => b.boardKey === boardKey);
+    if (!board) {
+      res.status(404).json({ error: `Board key "${boardKey}" not found` });
+      return;
+    }
+    const patch = req.body as Partial<AttorneyBoard>;
+    if (typeof patch.displayName === "string" && patch.displayName.trim()) board.displayName = patch.displayName.trim();
+    if (typeof patch.attorneyName === "string") board.attorneyName = patch.attorneyName.trim() || undefined;
+    if (typeof patch.mondayBoardId === "string") board.mondayBoardId = patch.mondayBoardId.trim();
+    if (typeof patch.active === "boolean") board.active = patch.active;
+    if (typeof patch.acceptingConsults === "boolean") board.acceptingConsults = patch.acceptingConsults;
+    saveAttorneyBoards(boards);
+    auditFromReq(req, "attorney_board.updated", {
+      targetType: "attorney_board",
+      targetId: String(boardKey),
+      metadata: {
+        displayName: board.displayName,
+        attorneyName: board.attorneyName ?? null,
+        active: board.active,
+        acceptingConsults: board.acceptingConsults ?? board.active,
+      },
     });
     res.json({ data: boards });
   });
