@@ -18,6 +18,7 @@ import {
   archiveItemByMondayId,
   deletedUpdateIdFrom,
   deleteNoteByMondayUpdateId,
+  refreshItemNotes,
 } from "./processor";
 
 type DatabaseInstance = InstanceType<typeof Database>;
@@ -40,6 +41,13 @@ function insertBoardItem(db: DatabaseInstance, mondayItemId: string, boardKey: s
     `INSERT INTO board_items (batch_id, local_id, monday_item_id, board_key, name, profile_local_id, column_values)
      VALUES (1, ?, ?, ?, 'Test Item', ?, '{}')`,
   ).run(`local-${mondayItemId}`, mondayItemId, boardKey, profileLocalId);
+}
+
+function insertContract(db: DatabaseInstance, mondayItemId: string, profileLocalId: string): void {
+  db.prepare(
+    `INSERT INTO contracts (batch_id, local_id, monday_item_id, profile_local_id, name)
+     VALUES (1, ?, ?, ?, 'Fee K')`,
+  ).run(`local-${mondayItemId}`, mondayItemId, profileLocalId);
 }
 
 function enqueueEvent(
@@ -260,5 +268,68 @@ describe("note deletions (delete_update)", () => {
 
     expect(deleteNoteByMondayUpdateId(db, "does-not-exist")).toBe(0);
     db.close();
+  });
+});
+
+// =============================================================================
+// Contracts resolve to a profile too
+// =============================================================================
+// Contracts live in their own table rather than board_items, so noteMetaFor
+// used to fall through to null for a Fee K and the note was dropped. Since
+// monday moved to Manual Association a note logged on a contract is saved ONLY
+// there, so dropping it here loses it rather than deferring it to the profile.
+
+describe("notes on a contract (Fee K)", () => {
+  const note = {
+    id: "u-contract-1",
+    body: "<p>Retainer signed, payment plan agreed.</p>",
+    created_at: "2026-09-17T10:00:00Z",
+    creator: { name: "Paralegal", email: "p@firm.test" },
+    assets: [],
+    replies: [],
+  };
+
+  it("attaches a contract's note to its profile, stamped fee_ks", async () => {
+    const db = freshDb();
+    insertProfile(db, "111", "p1");
+    insertContract(db, "999", "p1");
+    fetchItemUpdatesBatchMock.mockResolvedValue(new Map([["999", [note]]]));
+
+    await refreshItemNotes(db, "999");
+
+    const row = db
+      .prepare("SELECT profile_local_id, board_item_local_id, board_key, text_body FROM client_updates")
+      .get() as { profile_local_id: string; board_item_local_id: string; board_key: string; text_body: string };
+    expect(row.profile_local_id).toBe("p1");
+    expect(row.board_key).toBe("fee_ks");
+    expect(row.board_item_local_id).toBe("local-999");
+    expect(row.text_body).toContain("Retainer signed");
+  });
+
+  it("still ignores a contract with no profile link", async () => {
+    const db = freshDb();
+    db.prepare(
+      "INSERT INTO contracts (batch_id, local_id, monday_item_id, profile_local_id, name) VALUES (1, 'c2', '888', '', 'Orphan')",
+    ).run();
+    fetchItemUpdatesBatchMock.mockResolvedValue(new Map([["888", [note]]]));
+
+    await refreshItemNotes(db, "888");
+
+    expect((db.prepare("SELECT COUNT(*) AS c FROM client_updates").get() as { c: number }).c).toBe(0);
+  });
+
+  it("prefers a board item over a contract when both share an id", async () => {
+    // Ordering guard: profiles, then board_items, then contracts. A board item
+    // must keep its own board_key rather than being relabelled fee_ks.
+    const db = freshDb();
+    insertProfile(db, "111", "p1");
+    insertBoardItem(db, "777", "motions", "p1");
+    insertContract(db, "777", "p1");
+    fetchItemUpdatesBatchMock.mockResolvedValue(new Map([["777", [note]]]));
+
+    await refreshItemNotes(db, "777");
+
+    const row = db.prepare("SELECT board_key FROM client_updates").get() as { board_key: string };
+    expect(row.board_key).toBe("motions");
   });
 });

@@ -223,6 +223,9 @@ function serializeAssets(assets: MondayAsset[] | null | undefined): string | nul
   );
 }
 
+/** board_key stamped on notes that came from a contract (the Fee Ks board). */
+const CONTRACT_BOARD_KEY = "fee_ks";
+
 interface ItemMeta {
   batch_id: number;
   profile_local_id: string;
@@ -230,7 +233,18 @@ interface ItemMeta {
   board_key: string | null;
 }
 
-/** Where an item's notes should attach: the profile itself, or a board item. */
+/**
+ * Where an item's notes should attach: the profile itself, a board item, or a
+ * contract.
+ *
+ * Contracts are checked because they live in their own table rather than
+ * board_items, so without this a webhook event on a Fee K resolved to null and
+ * its note was dropped on the floor — the live-path twin of the gap the sync's
+ * pass 4 had. It matters more since monday moved to Manual Association
+ * (docs/monday-api-and-ea-reference.md §9): a note logged on a contract is now
+ * saved only there, so dropping it here loses it outright rather than picking
+ * it up from the profile later.
+ */
 function noteMetaFor(db: Database, mondayItemId: string): ItemMeta | null {
   const profile = db
     .prepare("SELECT local_id, batch_id FROM profiles WHERE monday_item_id = ?")
@@ -251,6 +265,19 @@ function noteMetaFor(db: Database, mondayItemId: string): ItemMeta | null {
       profile_local_id: item.profile_local_id,
       board_item_local_id: item.local_id,
       board_key: item.board_key,
+    };
+  }
+  const contract = db
+    .prepare(
+      "SELECT local_id, batch_id, profile_local_id FROM contracts WHERE monday_item_id = ? AND profile_local_id != ''",
+    )
+    .get(mondayItemId) as { local_id: string; batch_id: number; profile_local_id: string } | undefined;
+  if (contract) {
+    return {
+      batch_id: contract.batch_id,
+      profile_local_id: contract.profile_local_id,
+      board_item_local_id: contract.local_id,
+      board_key: CONTRACT_BOARD_KEY,
     };
   }
   return null;
