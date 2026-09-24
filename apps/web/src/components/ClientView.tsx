@@ -7,7 +7,7 @@ import { navigate, clientPath } from "../router";
 import { ClientHeaderSticky } from "./ClientHeaderSticky";
 import { ClientSnapshot } from "./ClientSnapshot";
 import { ClientTabs, type TabId } from "./ClientTabs";
-import { AppointmentSection } from "./AppointmentSection";
+import { AppointmentsTab } from "./AppointmentsTab";
 import { ContractsTab } from "./ContractsTab";
 import { ActiveCasesTab } from "./ActiveCasesTab";
 import { CourtCasesTab } from "./CourtCasesTab";
@@ -186,7 +186,11 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
           )}
 
           {activeTab === "appointments" && (
-            <AppointmentSection appointments={data.appointments} />
+            <AppointmentsTab
+              appointments={data.appointments}
+              profileLocalId={data.profile.localId}
+              clientName={data.profile.name}
+            />
           )}
 
           {activeTab === "contracts" && (

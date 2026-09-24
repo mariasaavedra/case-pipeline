@@ -63,6 +63,7 @@ import { auditFromReq } from "./audit/log.js";
 import { registerCallLogRoutes } from "./routes/call-log.js";
 import { registerBoardItemWriteRoutes } from "./routes/board-item-write.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
+import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { REPO_ROOT } from "./paths.js";
 import { FIRM_TIMEZONE } from "./firm.js";
@@ -436,6 +437,7 @@ app.get("/api/call-log", adapt(handleCallLog));
 // Profile write-back (notes, contracts, render) — see routes/profile-write.ts
 // =============================================================================
 registerProfileWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerAppointmentWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 
 // =============================================================================
 // Board item write-back (status + columns) — see routes/board-item-write.ts

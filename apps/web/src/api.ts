@@ -217,6 +217,29 @@ export async function createContract(
   });
 }
 
+export interface BookableBoard {
+  boardKey: string;
+  /** The attorney's name when configured, otherwise their badge initials. */
+  label: string;
+  badge: string;
+}
+
+/** Which attorneys are currently taking consults (data/attorney-boards.json). */
+export async function fetchBookableBoards(): Promise<BookableBoard[]> {
+  return apiFetch("/api/settings/bookable-boards");
+}
+
+export async function createAppointment(
+  profileLocalId: string,
+  input: { boardKey: string; date: string; time?: string; description?: string; status?: string },
+): Promise<{ name: string; appointmentItemId?: string; pending: boolean }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/appointments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
 // =============================================================================
 // Call Log
 // =============================================================================
