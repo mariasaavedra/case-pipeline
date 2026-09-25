@@ -51,32 +51,13 @@ function getInitials(name: string): string {
   return (parts[0]?.[0] ?? "?").toUpperCase();
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span
-        className="text-[10px] font-semibold uppercase tracking-wider"
-        style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-      >
-        {label}
-      </span>
-      <span
-        className="text-sm font-medium"
-        style={{ color: "var(--color-ink)", fontFamily: "var(--font-mono)" }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
 interface Props {
   entry: AppointmentEntry;
   onClose: () => void;
 }
 
 export function AppointmentModal({ entry, onClose }: Props) {
-  const { appointment, profile, snapshot, updates, caseSummary } = entry;
+  const { appointment, profile, updates, caseSummary } = entry;
   const statusStyle = getStatusStyle(appointment.status);
   const priorityStyle = profile ? getPriorityStyle(profile.priority) : null;
   const [pendingUpdates, setPendingUpdates] = useState<ClientUpdate[]>([]);
@@ -217,93 +198,6 @@ export function AppointmentModal({ entry, onClose }: Props) {
                 </Link>
               </div>
             </div>
-          )}
-
-          {/* Snapshot stats */}
-          <div
-            className="px-6 py-3 flex items-center gap-6 flex-wrap"
-            style={{
-              backgroundColor: "var(--color-surface-warm)",
-              borderBottom: "1px solid var(--color-border-light)",
-            }}
-          >
-            <Stat label="Active Cases" value={snapshot.activeCaseCount} />
-            <Stat label="Pending Contracts" value={snapshot.pendingContractCount} />
-            {snapshot.nextDeadline && (
-              <Stat
-                label="Next Deadline"
-                value={new Date(snapshot.nextDeadline + "T00:00:00").toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              />
-            )}
-          </div>
-
-          {/* Case summary */}
-          {caseSummary && (
-            (() => {
-              const activeContracts = caseSummary.contracts.active;
-              const boardEntries = Object.entries(caseSummary.boardItems).filter(([, items]) => items.length > 0);
-              if (activeContracts.length === 0 && boardEntries.length === 0) return null;
-              return (
-                <div
-                  className="px-6 py-4"
-                  style={{ borderBottom: "1px solid var(--color-border-light)" }}
-                >
-                  <h3
-                    className="text-[11px] font-semibold uppercase tracking-wider mb-3"
-                    style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-                  >
-                    Active Matters
-                  </h3>
-                  <div className="flex flex-wrap gap-4">
-                    {activeContracts.length > 0 && (
-                      <div className="flex-1 min-w-[180px]">
-                        <p
-                          className="text-[11px] font-medium mb-1.5"
-                          style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-                        >
-                          Contracts ({activeContracts.length})
-                        </p>
-                        {activeContracts.map((c) => (
-                          <div key={c.localId} className="flex items-center gap-2 mb-1">
-                            <span className="text-xs" style={{ fontFamily: "var(--font-body)", color: "var(--color-ink)" }}>
-                              {c.caseType}
-                            </span>
-                            <span className="board-tag">{c.status}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {boardEntries.map(([boardKey, items]) => (
-                      <div key={boardKey} className="flex-1 min-w-[180px]">
-                        <p
-                          className="text-[11px] font-medium mb-1.5"
-                          style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-                        >
-                          {BOARD_DISPLAY_NAMES[boardKey] ?? boardKey} ({items.length})
-                        </p>
-                        {items.slice(0, 4).map((item) => (
-                          <div key={item.localId} className="flex items-center gap-2 mb-1">
-                            <span className="text-xs" style={{ fontFamily: "var(--font-body)", color: "var(--color-ink)" }}>
-                              {item.name}
-                            </span>
-                            {item.status && <span className="board-tag">{item.status}</span>}
-                          </div>
-                        ))}
-                        {items.length > 4 && (
-                          <span className="text-[11px]" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-                            +{items.length - 4} more
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()
           )}
 
           {/* Notes + Documents — two columns on desktop, stacked on mobile */}
