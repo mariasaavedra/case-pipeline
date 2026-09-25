@@ -17,6 +17,8 @@ import { fetchJailIntakes, type JailIntake, type JailIntakeListResult } from "..
 import { Link } from "./Link";
 import { clientPath } from "../router";
 import { StatusBadge } from "./StatusBadge";
+import { NewJailIntakeModal } from "./NewJailIntakeModal";
+import { Button } from "./ui/button";
 
 const DEFAULT_WITHIN_DAYS = 10;
 
@@ -111,6 +113,7 @@ function IntakeRow({ intake }: { intake: JailIntake }) {
         <Field label="Point of contact" value={intake.pocName} />
         <Field label="Phone" value={intake.pocPhone} />
       </div>
+
     </div>
   );
 }
@@ -121,6 +124,7 @@ export function JailIntakesPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -159,13 +163,18 @@ export function JailIntakesPage() {
 
   return (
     <div className="animate-in">
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}>
-          Jail Intakes
-        </h1>
-        <p className="text-sm mt-0.5" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-          Detainee enquiries waiting to become consults.
-        </p>
+      <div className="mb-4 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}>
+            Jail Intakes
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
+            Detainee enquiries waiting to become consults.
+          </p>
+        </div>
+        <Button type="button" onClick={() => setCreating(true)}>
+          + New intake
+        </Button>
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -215,6 +224,8 @@ export function JailIntakesPage() {
           </p>
         )}
       </div>
+
+      {creating && <NewJailIntakeModal onClose={() => setCreating(false)} onCreated={load} />}
     </div>
   );
 }

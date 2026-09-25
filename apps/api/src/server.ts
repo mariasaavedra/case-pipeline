@@ -65,6 +65,7 @@ import { registerCallLogRoutes } from "./routes/call-log.js";
 import { registerBoardItemWriteRoutes } from "./routes/board-item-write.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
 import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
+import { registerJailIntakeWriteRoutes } from "./routes/jail-intake-write.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { REPO_ROOT } from "./paths.js";
 import { FIRM_TIMEZONE } from "./firm.js";
@@ -441,6 +442,7 @@ app.get("/api/jail-intakes", adapt(handleJailIntakes));
 // =============================================================================
 registerProfileWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerAppointmentWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerJailIntakeWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 
 // =============================================================================
 // Board item write-back (status + columns) — see routes/board-item-write.ts

@@ -275,6 +275,24 @@ export interface JailIntakeListResult {
   statusOptions: string[];
 }
 
+export async function createJailIntake(input: {
+  firstName: string;
+  lastName?: string;
+  jail?: string;
+  alienNumber?: string;
+  language?: string;
+  pocName?: string;
+  pocPhone?: string;
+  /** The monday item id of the call this came out of, when it came from one. */
+  callLogItemId?: string;
+}): Promise<{ name: string; intakeItemId?: string; pending: boolean }> {
+  return apiFetch("/api/jail-intakes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
 export async function fetchJailIntakes(params: {
   /** 0 means "no date limit" — the escape hatch behind the "N older" chip. */
   withinDays?: number;

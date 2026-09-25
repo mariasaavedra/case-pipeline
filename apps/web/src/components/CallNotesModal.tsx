@@ -13,12 +13,17 @@ import { fetchCallLogNotes, addCallLogNote, stripMentionMarkers } from "../api";
 import type { NoteThreadEntry, MentionedUser } from "../api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { NewJailIntakeModal } from "./NewJailIntakeModal";
 import { MentionTextarea } from "./MentionTextarea";
 
 interface Props {
   localId: string;
   name: string;
   onClose: () => void;
+  /** The call's monday item id — what a new jail intake links back to. */
+  mondayItemId?: string | null;
+  /** The number that rang, prefilled onto an intake started from here. */
+  phone?: string | null;
 }
 
 function formatTimestamp(iso: string): string {
@@ -41,8 +46,9 @@ function NoteEntry({ entry, indent }: { entry: NoteThreadEntry; indent?: boolean
   );
 }
 
-export function CallNotesModal({ localId, name, onClose }: Props) {
+export function CallNotesModal({ localId, name, onClose, mondayItemId, phone }: Props) {
   const [updates, setUpdates] = useState<NoteThreadEntry[] | null>(null);
+  const [intakeOpen, setIntakeOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -135,6 +141,12 @@ export function CallNotesModal({ localId, name, onClose }: Props) {
           {saveError && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{saveError}</p>}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            {/* Some calls are a detainee enquiry. Starting the intake here keeps
+                it attached to the call it came from, which is the link the
+                intake board already models. */}
+            <Button type="button" variant="outline" onClick={() => setIntakeOpen(true)} style={{ marginRight: "auto" }}>
+              New jail intake
+            </Button>
             <Button type="button" variant="outline" onClick={onClose}>Close</Button>
             <Button type="button" onClick={submit} disabled={saving || !note.trim()}>
               {saving ? "Adding…" : "Add note"}
@@ -142,6 +154,15 @@ export function CallNotesModal({ localId, name, onClose }: Props) {
           </div>
         </div>
       </DialogContent>
+
+      {intakeOpen && (
+        <NewJailIntakeModal
+          onClose={() => setIntakeOpen(false)}
+          callLogItemId={mondayItemId ?? null}
+          initialPocName={name}
+          initialPocPhone={phone ?? undefined}
+        />
+      )}
     </Dialog>
   );
 }
