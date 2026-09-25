@@ -130,7 +130,17 @@ const LOCK_CODES = new Set([
 export function checkIntegrity(db: DatabaseInstance): IntegrityResult {
   try {
     const rows = db.pragma("quick_check") as Array<{ quick_check: string }>;
-    return rows.length === 1 && rows[0]?.quick_check === "ok" ? "ok" : "corrupt";
+    if (rows.length === 1 && rows[0]?.quick_check === "ok") return "ok";
+    // Say WHAT came back, not just that it was not "ok". On production this
+    // branch fired every night for a fortnight while the same check run by hand
+    // answered "ok", and the verdict alone could not distinguish real page
+    // damage from an unexpected result shape — the throwing branch below logs
+    // its code for exactly the same reason.
+    console.warn(
+      `[integrity] quick_check returned ${rows.length} row(s), not a single "ok": ` +
+        `${JSON.stringify(rows).slice(0, 400)}`,
+    );
+    return "corrupt";
   } catch (err) {
     // A clobbered page 1 never parses as a schema and throws rather than
     // returning error rows, so an unrecognised throw still means corrupt —

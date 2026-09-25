@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import cron from "node-cron";
 import { initializeSchema, getSchemaVersion, SCHEMA_VERSION } from "@case-pipeline/seed/db/schema";
-import { openDatabase, isDatabaseHealthy, checkIntegrity, type IntegrityResult } from "@case-pipeline/seed/db/connection";
+import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
 import { startWriteQueueProcessor } from "./write-queue/processor.js";
 import { refreshBoardSchema } from "./schema-refresh.js";
 import {
@@ -70,7 +70,8 @@ import { FIRM_TIMEZONE } from "./firm.js";
 import { activeBoardKeys } from "./attorney-boards.js";
 import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
-import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP, pruneOrphanedSidecars, mayPrune } from "./backup/prune.js";
+import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP, pruneOrphanedSidecars } from "./backup/prune.js";
+import { verifyWrittenBackup } from "./backup/verify.js";
 import { diskLevel, readDisk } from "./backup/disk.js";
 import { registerMondayOAuth, getUserMondayToken, markMondayTokenRejected } from "./routes/monday-oauth.js";
 import { makeWriteTokenOptions } from "./write-token.js";
@@ -502,7 +503,6 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "Internal server error" });
 });
 
-
 const PORT = Number(process.env.PORT ?? 3000);
 // Bind to loopback by default. The API serves client PII, so locally it must
 // not be reachable from other hosts. Inside a container
@@ -588,8 +588,6 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 // =============================================================================
 // Nightly sync — Monday.com → live.db (runs at midnight, live mode only)
 // =============================================================================
-
-
 
 /**
  * Guards against overlapping runs. The full pass takes hours, so without this a
@@ -796,10 +794,9 @@ async function runBackup(): Promise<void> {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const key = backupEncryptionKey();
 
-  // Sample integrity NOW, before db.backup() touches anything. The prune below
-  // runs from a `finally` right after the copy, which is the worst moment to ask
-  // a 1.5 GB database whether it is sound — see pruneBackups.
-  const integrity = readIntegrity();
+  // Filled in as each copy is written and verified. A series stays false until
+  // a known-good replacement exists, which is the whole retention rule.
+  const decisions: PruneDecisions = { [DB_SOURCE]: false, users: false };
 
   // Refuse to start on a disk that cannot hold the result. Writing a partial
   // backup is worse than not writing one: on 2026-08-17 the encryption step ran
@@ -810,7 +807,14 @@ async function runBackup(): Promise<void> {
   if (disk.level === "critical") {
     // Prune first — that is what frees the room — then let the caller retry on
     // the next tick rather than writing into a full filesystem.
-    pruneBackups(backupDir, integrity);
+    //
+    // Nothing has been written yet, so there is no verified new copy to justify
+    // this the usual way. It prunes anyway, down to BACKUP_KEEP: a disk too full
+    // to back up onto cannot recover on its own, and a full disk is what
+    // corrupted this database in July 2026. Keeping four copies beats keeping
+    // eleven and losing the ability to make a fifth.
+    console.warn("[backup] disk critical — pruning to BACKUP_KEEP without a verified new copy.");
+    pruneBackups(backupDir, { [DB_SOURCE]: true, users: true });
     throw new Error(
       `Refusing to back up: only ${disk.freeGb?.toFixed(1) ?? "?"} GB free (${disk.usedPct ?? "?"}% used). ` +
         `Old backups were pruned; the next run will retry.`,
@@ -821,14 +825,17 @@ async function runBackup(): Promise<void> {
     // Back up the main client database, then encrypt at rest if a key is set.
     const dest = path.join(backupDir, `${DB_SOURCE}-${stamp}.db`);
     await db.backup(dest);
+    // Verify the copy while it is still a database, i.e. before encryption.
+    decisions[DB_SOURCE] = verifyWrittenBackup(dest);
     const destFinal = key ? await encryptFile(dest, key) : dest;
-    console.log(`[backup] wrote ${destFinal}`);
+    console.log(`[backup] wrote ${destFinal}${decisions[DB_SOURCE] ? " (verified)" : " (UNVERIFIED)"}`);
 
     // Back up users.db alongside — it holds roles, prefs, and Monday tokens.
     const usersDest = path.join(backupDir, `users-${stamp}.db`);
     await usersDb.backup(usersDest);
+    decisions.users = verifyWrittenBackup(usersDest);
     const usersFinal = key ? await encryptFile(usersDest, key) : usersDest;
-    console.log(`[backup] wrote ${usersFinal}`);
+    console.log(`[backup] wrote ${usersFinal}${decisions.users ? " (verified)" : " (UNVERIFIED)"}`);
 
     if (!key) {
       console.warn("[backup] BACKUP_ENCRYPTION_KEY not set — backups written UNENCRYPTED.");
@@ -839,16 +846,8 @@ async function runBackup(): Promise<void> {
     // skipped it entirely. That is a trap door: the one condition that makes
     // pruning urgent is the same one that prevented it, and the disk could
     // never recover on its own. It stayed full for a week.
-    pruneBackups(backupDir, integrity);
+    pruneBackups(backupDir, decisions);
   }
-}
-
-/** Read both databases' integrity. Take this BEFORE any backup work. */
-function readIntegrity(): Array<{ prefix: string; integrity: IntegrityResult }> {
-  return [
-    { prefix: DB_SOURCE, integrity: checkIntegrity(db) },
-    { prefix: "users", integrity: checkIntegrity(usersDb) },
-  ];
 }
 
 /**
@@ -862,20 +861,18 @@ function readIntegrity(): Array<{ prefix: string; integrity: IntegrityResult }> 
  * at that instant is what produced a week of "corrupt" verdicts on a perfectly
  * sound database. Sampled early, the same check is uncontended.
  */
-function pruneBackups(backupDir: string, integrity = readIntegrity()): void {
+/**
+ * Whether each backup series may be pruned this run, keyed by filename prefix.
+ * `true` means "a known-good replacement exists, older copies can go".
+ */
+type PruneDecisions = Record<string, boolean>;
+
+function pruneBackups(backupDir: string, decisions: PruneDecisions): void {
   const KEEP = Number(process.env.BACKUP_KEEP) || 4;
-  for (const { prefix, integrity: result } of integrity) {
-    if (!mayPrune(result)) {
-      console.warn(`[backup] ${prefix}.db failed integrity — keeping all backups (no prune).`);
+  for (const [prefix, may] of Object.entries(decisions)) {
+    if (!may) {
+      console.warn(`[backup] ${prefix}: no verified new copy this run — keeping all backups (no prune).`);
       continue;
-    }
-    if (result === "busy") {
-      // Loud on purpose. Pruning here is correct, but a database that is locked
-      // during the nightly backup is worth knowing about on its own.
-      console.warn(
-        `[backup] ${prefix}.db was locked when integrity was sampled — pruning anyway ` +
-          `(a lock is not damage). If this repeats, something holds a write lock at backup time.`,
-      );
     }
     // The pattern requires a DIGIT right after the prefix (the ISO year) so the
     // "live-" daily series never swallows the "live-presync-" safety snapshots.
