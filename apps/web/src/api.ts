@@ -241,6 +241,57 @@ export async function createAppointment(
 }
 
 // =============================================================================
+// Jail Intakes
+// =============================================================================
+// Pre-profile leads: a detainee contact becomes a client only when they book a
+// consult, which is what `convertedTo` reports.
+
+export interface JailIntake {
+  localId: string;
+  mondayItemId: string | null;
+  name: string;
+  status: string | null;
+  groupTitle: string | null;
+  jail: string | null;
+  alienNumber: string | null;
+  language: string | null;
+  pocName: string | null;
+  pocPhone: string | null;
+  intakeCreatedOn: string | null;
+  lastInteractionDate: string | null;
+  convertedTo: {
+    appointmentLocalId: string;
+    appointmentName: string;
+    consultDate: string | null;
+    profileLocalId: string | null;
+    profileName: string | null;
+  } | null;
+}
+
+export interface JailIntakeListResult {
+  intakes: JailIntake[];
+  total: number;
+  olderCount: number;
+  statusOptions: string[];
+}
+
+export async function fetchJailIntakes(params: {
+  /** 0 means "no date limit" — the escape hatch behind the "N older" chip. */
+  withinDays?: number;
+  includeClosed?: boolean;
+  status?: string;
+  search?: string;
+} = {}): Promise<JailIntakeListResult> {
+  const qs = new URLSearchParams();
+  if (params.withinDays != null) qs.set("withinDays", String(params.withinDays));
+  if (params.includeClosed) qs.set("includeClosed", "1");
+  if (params.status) qs.set("status", params.status);
+  if (params.search) qs.set("search", params.search);
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return apiFetch(`/api/jail-intakes${suffix}`);
+}
+
+// =============================================================================
 // Call Log
 // =============================================================================
 

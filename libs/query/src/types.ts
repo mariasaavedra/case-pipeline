@@ -453,6 +453,62 @@ export interface AlertsResult {
   attorneys: string[];
 }
 
+// =============================================================================
+// Jail Intakes
+// =============================================================================
+// Detainee intakes are PRE-PROFILE by design: a lead becomes a client only when
+// they book a consult, at which point a profile is created and the intake's
+// "X Appointments" column links to it. So an intake has no profile_local_id,
+// and `convertedTo` — resolved through that appointment — is how you tell a live
+// lead from one that became a consult.
+
+export interface JailIntake {
+  localId: string;
+  mondayItemId: string | null;
+  name: string;
+  status: string | null;
+  groupTitle: string | null;
+  /** Free-text facility, e.g. "Kay County". */
+  jail: string | null;
+  alienNumber: string | null;
+  language: string | null;
+  pocName: string | null;
+  pocPhone: string | null;
+  /** YYYY-MM-DD, from the board's "Intake Created" column. */
+  intakeCreatedOn: string | null;
+  lastInteractionDate: string | null;
+  /** Set once the lead booked a consult — the end of the funnel. */
+  convertedTo: {
+    appointmentLocalId: string;
+    appointmentName: string;
+    consultDate: string | null;
+    profileLocalId: string | null;
+    profileName: string | null;
+  } | null;
+}
+
+export interface JailIntakeFilters {
+  /**
+   * Only intakes created within this many days. The board's default is 10 —
+   * a triage list, not an archive. Omit for the whole live funnel.
+   */
+  withinDays?: number;
+  /** Include the statuses the default hides ("Not Proceeding", "Scheduled"). */
+  includeClosed?: boolean;
+  status?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface JailIntakeListResult {
+  intakes: JailIntake[];
+  total: number;
+  /** Live intakes older than `withinDays` — the backlog the default hides. */
+  olderCount: number;
+  statusOptions: string[];
+}
+
 export interface CallLogEntry {
   localId: string;
   mondayItemId: string | null;

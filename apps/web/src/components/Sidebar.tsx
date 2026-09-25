@@ -97,6 +97,17 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    id: "jail-intakes",
+    label: "Jail Intakes",
+    path: "/jail-intakes",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="3" y="3" width="14" height="14" rx="1.5" />
+        <path d="M7 3v14M10 3v14M13 3v14" />
+      </svg>
+    ),
+  },
+  {
     id: "call-log",
     label: "Call Log",
     path: "/call-log",
