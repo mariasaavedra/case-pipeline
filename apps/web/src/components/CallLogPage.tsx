@@ -458,6 +458,8 @@ export function CallLogPage() {
         <CallNotesModal
           localId={notesEntry.localId}
           name={notesEntry.name}
+          mondayItemId={notesEntry.mondayItemId}
+          phone={notesEntry.phone}
           onClose={() => setNotesEntry(null)}
         />
       )}
