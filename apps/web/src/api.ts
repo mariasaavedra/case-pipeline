@@ -231,7 +231,7 @@ export async function fetchBookableBoards(): Promise<BookableBoard[]> {
 
 export async function createAppointment(
   profileLocalId: string,
-  input: { boardKey: string; date: string; time?: string; description?: string; status?: string },
+  input: { boardKey: string; date: string; time?: string; description?: string },
 ): Promise<{ name: string; appointmentItemId?: string; pending: boolean }> {
   return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/appointments`, {
     method: "POST",
