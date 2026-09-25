@@ -4,6 +4,7 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
+import { FIRM_TIMEZONE } from "../firm.js";
 import {
   searchClients,
   listProfilesFiltered,
@@ -18,6 +19,7 @@ import {
   searchByType,
   getAlerts,
   getActiveCases,
+  getJailIntakes,
   getCallLogEntries,
   getCallLogStaffOptions,
 } from "@case-pipeline/query";
@@ -256,6 +258,31 @@ export function handleCallLog(req: Request, db: Database): Response {
   const result = getCallLogEntries(db, { status, takenBy, dateFrom, dateTo, unlinkedOnly, limit, offset });
   const staffOptions = getCallLogStaffOptions(db);
   return json({ ...result, staffOptions });
+}
+
+export function handleJailIntakes(req: Request, db: Database): Response {
+  const url = new URL(req.url);
+  const status = url.searchParams.get("status") ?? undefined;
+  const search = url.searchParams.get("search") ?? undefined;
+  const includeClosed = url.searchParams.get("includeClosed") === "1";
+
+  // The board's default is a triage list: open leads from the last 10 days.
+  // `withinDays=0` is the explicit "no date limit" escape hatch, which is what
+  // the "N older" chip uses — hence the presence check rather than `|| 10`.
+  const withinParam = url.searchParams.get("withinDays");
+  const parsedWithin = withinParam !== null ? Math.max(0, parseInt(withinParam, 10) || 0) : 10;
+  const withinDays = parsedWithin > 0 ? parsedWithin : undefined;
+
+  const limitParam = url.searchParams.get("limit");
+  const offsetParam = url.searchParams.get("offset");
+  const limit = limitParam !== null ? Math.max(0, Math.min(parseInt(limitParam, 10) || 0, 500)) : 100;
+  const offset = offsetParam !== null ? Math.max(0, parseInt(offsetParam, 10) || 0) : 0;
+
+  // "Today" is the firm's, not the container's UTC clock — a 10-day window
+  // measured in the wrong zone quietly shifts by a day every evening.
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TIMEZONE });
+
+  return json(getJailIntakes(db, { status, search, includeClosed, withinDays, limit, offset }, today));
 }
 
 // =============================================================================

@@ -27,6 +27,7 @@ import {
   handleClientRelationships,
   handleAlerts,
   handleCallLog,
+  handleJailIntakes,
 } from "./handlers/handlers";
 import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
@@ -433,6 +434,7 @@ app.get("/api/clients/:localId/updates", adapt(handleClientUpdates));
 app.get("/api/clients/:localId/relationships", adapt(handleClientRelationships));
 app.get("/api/board-items/:localId", adapt(handleBoardItemDetail));
 app.get("/api/call-log", adapt(handleCallLog));
+app.get("/api/jail-intakes", adapt(handleJailIntakes));
 
 // =============================================================================
 // Profile write-back (notes, contracts, render) — see routes/profile-write.ts

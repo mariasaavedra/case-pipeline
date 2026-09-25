@@ -20,6 +20,7 @@ const ActiveCasesPage = lazy(() => import("./components/ActiveCasesPage").then((
 const MyCasesPage = lazy(() => import("./components/MyCasesPage").then((m) => ({ default: m.MyCasesPage })));
 const CalendarPage = lazy(() => import("./components/CalendarPage").then((m) => ({ default: m.CalendarPage })));
 const CallLogPage = lazy(() => import("./components/CallLogPage").then((m) => ({ default: m.CallLogPage })));
+const JailIntakesPage = lazy(() => import("./components/JailIntakesPage").then((m) => ({ default: m.JailIntakesPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 import type { TabId } from "./components/ClientTabs";
 import { matchRoute, navigate } from "./router";
@@ -277,6 +278,7 @@ function App() {
 
             {/* Call Log page */}
             {route.page === "call-log" && !loading && <CallLogPage />}
+            {route.page === "jail-intakes" && !loading && <JailIntakesPage />}
 
             {/* Clients page — search + filtered browse */}
             {route.page === "clients" && !loading && !client && <ClientsPage />}

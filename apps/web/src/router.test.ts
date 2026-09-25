@@ -2,6 +2,10 @@ import { test, expect, describe } from "vitest";
 import { matchRoute, clientPath, clientsPath } from "./router";
 
 describe("matchRoute", () => {
+  test("/jail-intakes → the jail intakes board", () => {
+    expect(matchRoute("/jail-intakes")).toEqual({ page: "jail-intakes", params: {} });
+  });
+
   test("root path → landing", () => {
     expect(matchRoute("/")).toEqual({ page: "landing", params: {} });
   });
