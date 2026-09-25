@@ -18,10 +18,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 
-// Only the statuses that mean anything at booking time. The board defines 23;
-// the rest describe what happened afterwards (Hire, No Hire, Past Consult…).
-const BOOKING_STATUSES = ["Upcoming", "Scheduled", "To be rescheduled"];
-
 const labelStyle = {
   display: "block",
   fontSize: 12,
@@ -50,7 +46,6 @@ export function NewAppointmentModal({ profileLocalId, clientName, onClose }: Pro
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState("Upcoming");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ name: string; pending: boolean } | null>(null);
@@ -78,8 +73,11 @@ export function NewAppointmentModal({ profileLocalId, clientName, onClose }: Pro
     { value: "", label: "Select…" },
     ...(boards ?? []).map((b) => ({ value: b.boardKey, label: b.label })),
   ];
-  const statusItems = BOOKING_STATUSES.map((s) => ({ value: s, label: s }));
   const noAttorneys = boards !== null && boards.length === 0;
+  // Central time, matching the server's rule — a staffer working late elsewhere
+  // should still see the same answer the booking will get.
+  const todayCentral = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  const isToday = date === todayCentral;
 
   const submit = async () => {
     if (!boardKey) { setError("Pick an attorney."); return; }
@@ -92,7 +90,6 @@ export function NewAppointmentModal({ profileLocalId, clientName, onClose }: Pro
         date,
         time: time || undefined,
         description: description.trim() || undefined,
-        status,
       });
       setDone({ name: res.name, pending: res.pending });
     } catch (e) {
@@ -162,17 +159,14 @@ export function NewAppointmentModal({ profileLocalId, clientName, onClose }: Pro
                   className="w-full rounded-md px-2 py-1.5 text-sm" style={{ ...fieldStyle, resize: "vertical" }} />
               </label>
 
-              <label style={{ display: "block", marginBottom: 12 }}>
-                <span style={labelStyle}>Status</span>
-                <Select items={statusItems} value={status} onValueChange={(v) => setStatus(v ?? "Upcoming")}>
-                  <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="w-[var(--anchor-width)]">
-                    {statusItems.map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </label>
+              {/* Status and group are derived from the date, so say which one it
+                  will get rather than leaving the reader to guess. */}
+              {date && (
+                <p style={{ fontSize: 12, color: "var(--color-ink-faint)", marginBottom: 12, fontFamily: "var(--font-body)" }}>
+                  {isToday ? "Filed under Today's consults." : "Filed under Upcoming."}
+                </p>
+              )}
+
 
               {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
 

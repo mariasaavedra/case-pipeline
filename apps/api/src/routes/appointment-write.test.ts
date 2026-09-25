@@ -12,8 +12,10 @@
 import { describe, it, expect } from "vitest";
 import {
   planAppointmentWrite,
+  consultNoteText,
   type AppointmentBoardSchema,
   type AppointmentProfile,
+  type BoardGroup,
 } from "./appointment-write";
 import { isBookable, bookableBoards, type AttorneyBoard } from "../attorney-boards";
 
@@ -31,7 +33,11 @@ const schema: AppointmentBoardSchema = {
   columns: [
     col("date3__1", "Consult Date", "date"),
     col("long_text", "Description", "long_text"),
-    col("status", "Status", "status", ["Upcoming", "Scheduled", "To be rescheduled", "Hire"]),
+    // appointments_r's exact casing — "(1st Time)". The other three boards use
+    // "(1st time)", which is why the lookup is case-insensitive.
+    col("status", "Status", "status", [
+      "Upcoming", "Scheduled", "To be rescheduled", "Hire", "Today's consult (1st Time)", "Today's consult (follow up)",
+    ]),
     col("connect_boards4__1", "Profiles", "board_relation"),
     col("people__1", "Attorney", "people"),
     col("date_1__1", "Consult Created on", "date"),
@@ -63,8 +69,17 @@ const profile: AppointmentProfile = {
   a_number: "A123-456-789",
 };
 
+// appointments_r spells it "(1st Time)"; the other three use "(1st time)". A
+// case-sensitive lookup would silently fail for one attorney, so the fixtures
+// keep the odd one out.
+const groups: BoardGroup[] = [
+  { id: "g_past", title: "Past Consults" },
+  { id: "g_upcoming", title: "Upcoming" },
+  { id: "g_today", title: "Today's consults" },
+];
+
 const plan = (input: Record<string, unknown>, over: Partial<Parameters<typeof planAppointmentWrite>[1]> = {}) =>
-  planAppointmentWrite(input, { board, profile, schema, attorneyUserId: 42, today: "2026-09-24", ...over });
+  planAppointmentWrite(input, { board, profile, schema, groups, attorneyUserId: 42, today: "2026-09-24", ...over });
 
 describe("planAppointmentWrite", () => {
   it("splits date and time the way Monday's date column expects", () => {
@@ -122,10 +137,53 @@ describe("planAppointmentWrite", () => {
     expect(out.plan.columnValues["date_1__1"]).toEqual({ date: "2026-09-24" });
   });
 
-  it("defaults the status to Upcoming", () => {
+  it("marks a future consult Upcoming, in the Upcoming group", () => {
     const out = plan({ date: "2026-10-01" });
     if (!("plan" in out)) throw new Error("expected a plan");
     expect(out.plan.columnValues["status"]).toEqual({ label: "Upcoming" });
+    expect(out.plan.groupId).toBe("g_upcoming");
+    expect(out.plan.isToday).toBe(false);
+  });
+
+  it("marks a same-day consult as today's, in the Today's consults group", () => {
+    const out = plan({ date: "2026-09-24" });
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.columnValues["status"]).toEqual({ label: "Today's consult (1st Time)" });
+    expect(out.plan.groupId).toBe("g_today");
+    expect(out.plan.isToday).toBe(true);
+  });
+
+  it("writes the board's own spelling of the today label, not a canonical one", () => {
+    // appointments_m spells it "(1st time)". Emitting appointments_r's casing
+    // would be rejected by monday as an unknown label.
+    const lower = {
+      ...schema,
+      columns: schema.columns.map((c) =>
+        c.title === "Status"
+          ? { ...c, options: [{ label: "Upcoming" }, { label: "Today's consult (1st time)" }] }
+          : c,
+      ),
+    };
+    const out = plan({ date: "2026-09-24" }, { schema: lower });
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.columnValues["status"]).toEqual({ label: "Today's consult (1st time)" });
+  });
+
+  it("books without a status when the board offers no matching label", () => {
+    const none = {
+      ...schema,
+      columns: schema.columns.map((c) => (c.title === "Status" ? { ...c, options: [{ label: "Hire" }] } : c)),
+    };
+    const out = plan({ date: "2026-10-01" }, { schema: none });
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.columnValues).not.toHaveProperty("status");
+    expect(out.plan.status).toBeNull();
+  });
+
+  it("books without a group when the board has none matching — wh has no Today's consults", () => {
+    const out = plan({ date: "2026-09-24" }, { groups: [{ id: "g_past", title: "Past Consults" }] });
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.groupId).toBeNull();
   });
 
   it("names the item after the client", () => {
@@ -152,13 +210,6 @@ describe("planAppointmentWrite", () => {
 
   it("rejects a malformed time", () => {
     expect(plan({ date: "2026-10-01", time: "2pm" })).toHaveProperty("rejection.error", "time must be HH:MM (24-hour)");
-  });
-
-  it("rejects a status the board does not define, and says what is allowed", () => {
-    const out = plan({ date: "2026-10-01", status: "Definitely Maybe" });
-    expect(out).toHaveProperty("rejection.status", 400);
-    if (!("rejection" in out)) return;
-    expect(out.rejection.allowed).toContain("Upcoming");
   });
 
   it("refuses when the board has no Consult Date column, rather than booking a dateless consult", () => {
@@ -198,5 +249,38 @@ describe("isBookable", () => {
 
   it("bookableBoards returns an array even with no config file present", () => {
     expect(Array.isArray(bookableBoards())).toBe(true);
+  });
+});
+
+// =============================================================================
+// What lands on the client's timeline
+// =============================================================================
+// One string serves as both the monday comment and the E&A activity, so the two
+// can never drift apart.
+
+describe("consultNoteText", () => {
+  it("leads with the booking, and carries the purpose", () => {
+    expect(
+      consultNoteText({ date: "2026-10-01", time: "14:30", attorney: "Lucy Betteridge", description: "Asylum review" }),
+    ).toBe("Consult scheduled: Oct 1, 2026 at 2:30 PM with Lucy Betteridge\nPurpose: Asylum review");
+  });
+
+  it("omits the purpose line when none was given", () => {
+    expect(consultNoteText({ date: "2026-10-01", time: null, attorney: "Rekha", description: "" })).toBe(
+      "Consult scheduled: Oct 1, 2026 with Rekha",
+    );
+  });
+
+  it("does not let a timezone move the date", () => {
+    // A bare YYYY-MM-DD parsed as local time lands on the previous day west of
+    // UTC, which would announce a 1st-of-the-month consult as the 30th.
+    expect(consultNoteText({ date: "2026-10-01", time: null, attorney: "R", description: "" })).toContain("Oct 1, 2026");
+  });
+
+  it("renders midnight and noon the way a person reads them", () => {
+    const at = (t: string) => consultNoteText({ date: "2026-10-01", time: t, attorney: "R", description: "" });
+    expect(at("00:15")).toContain("12:15 AM");
+    expect(at("12:00")).toContain("12:00 PM");
+    expect(at("09:05")).toContain("9:05 AM");
   });
 });
