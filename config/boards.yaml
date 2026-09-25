@@ -492,18 +492,16 @@ boards:
       needs_to_pay_by:
         resolve: by_type
         type: date
+      # Pinned by id rather than by title: the intake-creation route writes
+      # only `by_id` columns, because this board has three near-identical
+      # POC-name titles and title matching cannot be trusted on it. Each
+      # pattern resolved to exactly one column, so this is the same target.
       first_name:
-        resolve: by_title
-        pattern: first.*name
-        types:
-          - text
-          - long_text
+        resolve: by_id
+        id: text_mm3t37m8
       last_name:
-        resolve: by_title
-        pattern: last.*name
-        types:
-          - text
-          - long_text
+        resolve: by_id
+        id: text_mm3tqjzb
   _na_originals_cards_notices:
     id: "8025618300"
     name: "[NA] Originals + Cards + Notices"

@@ -112,6 +112,16 @@ describe("planJailIntakeWrite", () => {
     expect(out.plan.columnValues).not.toHaveProperty("text_mkkg24xy");
   });
 
+  it("writes First Name and Last Name to their own columns, not just the item name", () => {
+    // Both were unmapped in boards.yaml when this route first shipped, so the
+    // intake got a correct item name and two blank columns beside it. Caught by
+    // reading the live config after deploying, not by a test.
+    const out = plan(full);
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.columnValues["text_mm3t37m8"]).toBe("Juan");
+    expect(out.plan.columnValues["text_mm3tqjzb"]).toBe("PEREZ");
+  });
+
   it("skips a column the config does not map, instead of throwing", () => {
     const out = plan(full, { status: "status", first_name: "text_mm3t37m8" });
     if (!("plan" in out)) throw new Error("expected a plan");
