@@ -171,6 +171,7 @@ export function ClientSnapshot({ data }: Props) {
           </div>
         </PopoverTrigger>
         <PopoverContent
+          code="D1"
           align="start"
           sideOffset={6}
           className="w-[clamp(240px,var(--anchor-width),360px)] p-3.5"
@@ -235,6 +236,7 @@ export function ClientSnapshot({ data }: Props) {
           )}
         </PopoverTrigger>
         <PopoverContent
+          code="D2"
           align="start"
           sideOffset={6}
           className="w-[clamp(240px,var(--anchor-width),360px)] p-3.5"
@@ -301,6 +303,7 @@ export function ClientSnapshot({ data }: Props) {
           </div>
         </PopoverTrigger>
         <PopoverContent
+          code="D3"
           align="start"
           sideOffset={6}
           className="w-[clamp(240px,var(--anchor-width),360px)] p-3.5"
@@ -366,6 +369,7 @@ export function ClientSnapshot({ data }: Props) {
           )}
         </PopoverTrigger>
         <PopoverContent
+          code="D4"
           align="start"
           sideOffset={6}
           className="w-[clamp(240px,var(--anchor-width),360px)] p-3.5"

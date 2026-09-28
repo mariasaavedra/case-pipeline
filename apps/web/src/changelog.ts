@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-09-28",
+    title: "Pages and menus have codes too",
+    items: [
+      "Every page now shows its code in the bottom-right corner of the window, like P4 for Appointments. On a client's page it changes with the tab: P3.2 is their Appointments tab.",
+      "Small menus, such as a status picker, show theirs on the last line of the menu, like D6.",
+    ],
+  },
+  {
+    date: "2026-09-28",
     title: "Every popup has a short code",
     items: [
       "Each popup now shows a small grey code under its close button, like M5. Put that code in a change request so everyone knows exactly which popup you mean.",

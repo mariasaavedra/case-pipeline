@@ -13,8 +13,16 @@ Code scheme:
 | `M` | A popup — a window over the page, closed with × or Esc | `M2 Log a call` |
 | `D` | A dropdown — a small menu that opens from a button or card | `D1 Status card menu` |
 
-Every popup shows its `M` code in small grey text just under its × button
-(`code` prop on `DialogContent` in `components/ui/dialog.tsx`).
+Every code is shown in the app, in small grey text:
+
+- **Pages and tabs** — bottom-right corner of the window (`PageCode` in
+  `components/ScreenCode.tsx`; page codes in `app.tsx`, Client 360 tab codes in
+  `ClientView.tsx`).
+- **Popups** — just under the × button (`code` prop on `DialogContent`).
+- **Dropdowns** — last line of the menu, bottom-right (`code` prop on
+  `PopoverContent`, or `MenuCode` in the two custom menus).
+
+Sections inside a page (P1.x, P2.x, P3.0, P11.x) are not labelled.
 
 When a new screen or popup ships, add it here with the next free number. Never
 reuse or renumber a code: old requests keep pointing at the right thing.
