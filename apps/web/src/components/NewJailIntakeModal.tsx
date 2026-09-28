@@ -74,7 +74,7 @@ export function NewJailIntakeModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="gap-0 p-0 sm:max-w-[520px]">
+      <DialogContent code="M8" className="gap-0 p-0 sm:max-w-[520px]">
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>New jail intake</DialogTitle>
           <DialogDescription>

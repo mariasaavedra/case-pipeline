@@ -81,7 +81,7 @@ export function ClientCaseModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-3xl">
+      <DialogContent code="M3" className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-3xl">
         {/* The 360 view's own header — name, contact and ID details, the Monday.com
             link and the watchlist star — so the caller's facts read the same here
             as on the full page. Until the profile loads, a plain title stands in. */}

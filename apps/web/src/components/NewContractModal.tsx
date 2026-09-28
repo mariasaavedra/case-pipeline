@@ -67,7 +67,7 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="gap-0 p-0 sm:max-w-[460px]">
+      <DialogContent code="M11" className="gap-0 p-0 sm:max-w-[460px]">
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>New contract (Fee K)</DialogTitle>
           <DialogDescription>{clientName}</DialogDescription>

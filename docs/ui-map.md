@@ -13,6 +13,9 @@ Code scheme:
 | `M` | A popup — a window over the page, closed with × or Esc | `M2 Log a call` |
 | `D` | A dropdown — a small menu that opens from a button or card | `D1 Status card menu` |
 
+Every popup shows its `M` code in small grey text just under its × button
+(`code` prop on `DialogContent` in `components/ui/dialog.tsx`).
+
 When a new screen or popup ships, add it here with the next free number. Never
 reuse or renumber a code: old requests keep pointing at the right thing.
 

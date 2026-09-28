@@ -15,6 +15,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-09-28",
+    title: "Every popup has a short code",
+    items: [
+      "Each popup now shows a small grey code under its close button, like M5. Put that code in a change request so everyone knows exactly which popup you mean.",
+    ],
+  },
+  {
+    date: "2026-09-28",
     title: "A client's profile while you log a call",
     items: [
       "In Log a call, the link under a client's recent notes now reads \"View profile\".",

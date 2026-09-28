@@ -11,8 +11,8 @@ interface Props {
 export function NotesModal({ updates, title, onClose }: Props) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-3xl">
-        <DialogHeader className="flex-shrink-0 border-b border-border px-6 py-4">
+      <DialogContent code="M6" className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-3xl">
+        <DialogHeader className="flex-shrink-0 border-b border-border px-6 py-4 pr-12">
           <DialogTitle className="text-lg" style={{ fontFamily: "var(--font-display)" }}>
             {title}
           </DialogTitle>

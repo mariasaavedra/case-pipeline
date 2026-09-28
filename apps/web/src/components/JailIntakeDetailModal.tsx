@@ -86,7 +86,7 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="gap-0 p-0 sm:max-w-[560px]">
+      <DialogContent code="M9" className="gap-0 p-0 sm:max-w-[560px]">
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>{intake.name}</DialogTitle>
           <DialogDescription>

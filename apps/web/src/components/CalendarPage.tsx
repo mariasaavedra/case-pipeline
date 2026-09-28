@@ -296,7 +296,7 @@ function DayModal({
 }) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[80vh] flex-col gap-0 p-0 sm:max-w-lg">
+      <DialogContent code="M7" className="flex max-h-[80vh] flex-col gap-0 p-0 sm:max-w-lg">
         <DialogHeader className="flex-shrink-0 gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle className="text-base" style={{ fontFamily: "var(--font-display)" }}>
             {formatDayLabel(date)}

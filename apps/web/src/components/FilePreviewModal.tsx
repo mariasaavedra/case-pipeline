@@ -57,7 +57,7 @@ export function FilePreviewModal({ driveId, item, onClose }: Props) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex h-[94vh] w-[94vw] flex-col gap-0 p-0 sm:max-w-[1100px]">
+      <DialogContent code="M12" className="flex h-[94vh] w-[94vw] flex-col gap-0 p-0 sm:max-w-[1100px]">
         {/* Header */}
         <div className="flex flex-shrink-0 items-center gap-3 border-b border-border px-4 py-3 pr-12">
           <DialogTitle

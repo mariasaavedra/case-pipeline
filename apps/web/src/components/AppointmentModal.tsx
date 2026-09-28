@@ -64,7 +64,7 @@ export function AppointmentModal({ entry, onClose }: Props) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-5xl">
+      <DialogContent code="M5" className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-5xl">
         {/* Amber accent strip */}
         <div className="h-1 flex-shrink-0 rounded-t-xl" style={{ backgroundColor: "var(--color-amber)" }} />
 
