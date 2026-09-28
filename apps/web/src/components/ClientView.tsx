@@ -5,6 +5,7 @@ import { BOARD_CONFIG } from "../config";
 import { NoteComposer } from "./NoteComposer";
 import { navigate, clientPath } from "../router";
 import { ClientHeaderSticky } from "./ClientHeaderSticky";
+import { PageCode } from "./ScreenCode";
 import { ClientSnapshot } from "./ClientSnapshot";
 import { ClientTabs, type TabId } from "./ClientTabs";
 import { AppointmentsTab } from "./AppointmentsTab";
@@ -23,6 +24,18 @@ import { UpdatesTimeline } from "./UpdatesTimeline";
 import { RelationsView } from "./RelationsView";
 import { DebugTab } from "./DebugTab";
 import { useAuth } from "../auth/useAuth";
+
+/** Screen codes from docs/ui-map.md — P3 is Client 360, one number per tab. */
+const TAB_CODES: Record<TabId, string> = {
+  overview: "P3.1",
+  appointments: "P3.2",
+  contracts: "P3.3",
+  active_cases: "P3.4",
+  court_cases: "P3.5",
+  documents: "P3.6",
+  relations: "P3.7",
+  debug: "P3.8",
+};
 
 interface Props {
   data: ClientCaseSummary;
@@ -120,6 +133,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
 
   return (
     <div>
+      <PageCode code={TAB_CODES[activeTab]} />
       <ClientHeaderSticky
         profile={data.profile}
         data={data}

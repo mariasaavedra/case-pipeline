@@ -12,6 +12,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useBoardStatusOptions } from "../StatusOptionsProvider";
 import { changeBoardItemStatus, type StatusColumnOption } from "../api";
+import { MenuCode } from "./ScreenCode";
 
 interface Props {
   boardKey: string | null | undefined;
@@ -168,6 +169,7 @@ export function StatusEditor({ boardKey, boardItemLocalId, status, onChanged, di
               <span className="truncate">{o.label}</span>
             </button>
           ))}
+          <MenuCode code="D6" />
         </div>
       )}
 

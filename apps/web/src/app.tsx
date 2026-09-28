@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { Sidebar } from "./components/Sidebar";
 import { LoginPage } from "./pages/LoginPage";
 import { LogCallModal } from "./components/LogCallModal";
+import { PageCode } from "./components/ScreenCode";
 import { Button } from "./components/ui/button";
 
 // Route-level code splitting. These used to be static imports, which meant one
@@ -24,6 +25,22 @@ const JailIntakesPage = lazy(() => import("./components/JailIntakesPage").then((
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 import type { TabId } from "./components/ClientTabs";
 import { matchRoute, navigate } from "./router";
+import type { Route } from "./router";
+
+/** Page codes from docs/ui-map.md. Client 360 sets its own (P3.x, per tab). */
+const PAGE_CODES: Partial<Record<Route["page"], string>> = {
+  login: "P0",
+  landing: "P1",
+  clients: "P2",
+  appointments: "P4",
+  "active-cases": "P5",
+  "my-cases": "P6",
+  calendar: "P7",
+  alerts: "P8",
+  "jail-intakes": "P9",
+  "call-log": "P10",
+  settings: "P11",
+};
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
 import { AuthProvider } from "./auth/AuthProvider";
@@ -178,7 +195,14 @@ function App() {
     return null;
   }
 
-  if (route.page === "login") return <LoginPage />;
+  if (route.page === "login") {
+    return (
+      <>
+        <LoginPage />
+        <PageCode code="P0" />
+      </>
+    );
+  }
 
   if (route.page === "settings") {
     return (
@@ -189,6 +213,7 @@ function App() {
             <SettingsPage />
           </Suspense>
         </div>
+        <PageCode code="P11" />
       </div>
     );
   }
@@ -290,6 +315,8 @@ function App() {
       </div>
 
       {showLogCallModal && <LogCallModal onClose={() => setShowLogCallModal(false)} />}
+      {/* Client 360 renders its own code, since its Debug tab has no URL of its own. */}
+      {PAGE_CODES[route.page] && <PageCode code={PAGE_CODES[route.page]!} />}
     </div>
   );
 }

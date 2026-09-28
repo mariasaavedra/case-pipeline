@@ -1,6 +1,7 @@
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
 
 import { cn } from "@/lib/utils"
+import { MenuCode } from "@/components/ScreenCode"
 
 function Popover({ ...props }: PopoverPrimitive.Root.Props) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />
@@ -41,6 +42,8 @@ function PopoverContent({
   alignOffset,
   collisionPadding = 8,
   positionerClassName,
+  code,
+  children,
   ...props
 }: PopoverPrimitive.Popup.Props &
   Pick<
@@ -49,6 +52,8 @@ function PopoverContent({
   > & {
     /** Escape hatch for sizing the positioner itself (e.g. `--anchor-width`). */
     positionerClassName?: string
+    /** The dropdown's code from docs/ui-map.md (e.g. "D1"), shown last, bottom-right. */
+    code?: string
   }) {
   return (
     <PopoverPortal>
@@ -67,7 +72,10 @@ function PopoverContent({
             className
           )}
           {...props}
-        />
+        >
+          {children}
+          {code && <MenuCode code={code} />}
+        </PopoverPrimitive.Popup>
       </PopoverPositioner>
     </PopoverPortal>
   )

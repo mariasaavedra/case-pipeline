@@ -10,6 +10,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { fetchCallLogStaffDirectory, updateCallLogEntry, type MondayStaffUser } from "../api";
+import { MenuCode } from "./ScreenCode";
 
 interface Props {
   boardItemLocalId: string;
@@ -142,6 +143,7 @@ export function HighlightedForEditor({ boardItemLocalId, highlightedFor, onChang
               {u.name}
             </button>
           ))}
+          <MenuCode code="D7" />
         </div>
       )}
 

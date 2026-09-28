@@ -117,7 +117,7 @@ export function TimelineFilters({
             📅 {period === "custom" ? rangeLabel(customRange) : "Range…"}
           </PopoverTrigger>
 
-          <PopoverContent align="end" className="w-60 p-3">
+          <PopoverContent code="D5" align="end" className="w-60 p-3">
             <label style={labelStyle}>
               From
               <input
