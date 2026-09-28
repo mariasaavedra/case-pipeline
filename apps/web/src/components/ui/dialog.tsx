@@ -41,9 +41,13 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  code,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  /** The popup's code from docs/ui-map.md (e.g. "M5"), shown small under the
+   * close button so a request can name exactly which popup it means. */
+  code?: string
 }) {
   return (
     <DialogPortal>
@@ -72,6 +76,16 @@ function DialogContent({
             />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
+        )}
+        {code && (
+          <span
+            aria-hidden
+            title="Screen code: use it when asking for a change to this popup"
+            className="absolute top-9 right-2 w-7 text-center text-[10px] leading-none text-muted-foreground/70 select-all"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {code}
+          </span>
         )}
       </DialogPrimitive.Popup>
     </DialogPortal>

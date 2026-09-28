@@ -47,9 +47,19 @@ export function VersionBadge({ className = "" }: { className?: string }) {
                     build {SHORT_SHA}{BUILD_DAY ? ` · ${BUILD_DAY}` : ""}
                   </p>
                 </div>
-                <button type="button" onClick={() => setOpen(false)} className="version-modal-close" aria-label="Close">
-                  ✕
-                </button>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                  <button type="button" onClick={() => setOpen(false)} className="version-modal-close" aria-label="Close">
+                    ✕
+                  </button>
+                  {/* Screen code from docs/ui-map.md — same label every other popup carries. */}
+                  <span
+                    aria-hidden
+                    title="Screen code: use it when asking for a change to this popup"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: 10, lineHeight: 1, color: "var(--color-ink-faint)", userSelect: "all" }}
+                  >
+                    M14
+                  </span>
+                </div>
               </div>
 
               <div className="version-modal-body">

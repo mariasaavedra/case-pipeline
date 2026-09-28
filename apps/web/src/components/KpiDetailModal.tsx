@@ -120,7 +120,7 @@ export function KpiDetailModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
+      <DialogContent code="M1"
         className="flex max-h-[88vh] flex-col gap-0 p-0 sm:max-w-4xl"
         aria-label={`${cardLabel} — all cases`}
       >

@@ -465,7 +465,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="gap-0 p-0 sm:max-w-[480px]">
+      <DialogContent code="M2" className="gap-0 p-0 sm:max-w-[480px]">
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>{isEdit ? "Edit call" : "Log a call"}</DialogTitle>
           <DialogDescription>

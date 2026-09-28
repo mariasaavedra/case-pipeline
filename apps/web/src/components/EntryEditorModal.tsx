@@ -47,7 +47,7 @@ export function EntryEditorModal({ entry, boardKey, onClose, onStatusChanged }: 
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[80vh] flex-col gap-0 p-0 sm:max-w-[520px]">
+      <DialogContent code="M13" className="flex max-h-[80vh] flex-col gap-0 p-0 sm:max-w-[520px]">
         <DialogHeader className="gap-0.5 border-b border-border px-[18px] py-4 pr-12">
           <DialogTitle className="truncate" style={{ fontFamily: "var(--font-display)" }}>
             {entry.name}
