@@ -45,7 +45,14 @@ export type IntakeColumnKey =
   | "language"
   | "poc_name_and_relationship_with_detained"
   | "poc_phone"
-  | "intake_created_on";
+  | "intake_created_on"
+  | "description"
+  | "country_of_birth"
+  | "date_of_birth"
+  // The board spells it "Have you even been removed?" — its typo, not ours, and
+  // renaming a live column is not this route's business. See the note in
+  // project_call_log about verifying labels before "fixing" them.
+  | "have_you_even_been_removed";
 
 /** Resolved column ids, keyed by config name. Missing keys are simply not written. */
 export type IntakeColumnIds = Partial<Record<IntakeColumnKey | "first_name" | "last_name" | "link_to_call_log", string>>;
@@ -58,6 +65,13 @@ export interface JailIntakeInput {
   language?: unknown;
   pocName?: unknown;
   pocPhone?: unknown;
+  /** Goes to the board's own "Description" long-text column. */
+  description?: unknown;
+  countryOfBirth?: unknown;
+  /** Free text, not a date: the board stores "03/07/1980" and "05-27-95" alike. */
+  dateOfBirth?: unknown;
+  /** "No" | "Yes" | "Unknown" — the board's own options. */
+  priorRemoval?: unknown;
   /** The monday item id of the call this intake came out of, when it came from one. */
   callLogItemId?: unknown;
 }
@@ -106,6 +120,15 @@ export function planJailIntakeWrite(
   set("alien_number", str(input.alienNumber));
   set("poc_name_and_relationship_with_detained", str(input.pocName));
   set("poc_phone", str(input.pocPhone));
+  set("description", str(input.description));
+  set("country_of_birth", str(input.countryOfBirth));
+  // A text column, deliberately: staff have typed both "03/07/1980" and
+  // "05-27-95" into it, so a date picker would impose a format the board does
+  // not use and make the new rows the odd ones out.
+  set("date_of_birth", str(input.dateOfBirth));
+
+  const priorRemoval = str(input.priorRemoval);
+  if (priorRemoval) set("have_you_even_been_removed", { label: priorRemoval });
 
   const language = str(input.language);
   if (language) set("language", { label: language });

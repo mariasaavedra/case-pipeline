@@ -302,6 +302,13 @@ export async function createJailIntake(input: {
   language?: string;
   pocName?: string;
   pocPhone?: string;
+  /** Fills the board's own "Description" long-text column. */
+  description?: string;
+  countryOfBirth?: string;
+  /** Free text — the board stores "03/07/1980" and "05-27-95" alike. */
+  dateOfBirth?: string;
+  /** "No" | "Yes" | "Unknown". */
+  priorRemoval?: string;
   /** The monday item id of the call this came out of, when it came from one. */
   callLogItemId?: string;
 }): Promise<{ name: string; intakeItemId?: string; pending: boolean }> {

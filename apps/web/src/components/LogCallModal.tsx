@@ -578,6 +578,67 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                 />
               </label>
 
+              {/* Some calls ARE a jail intake. Filling it in here means one save
+                  creates the call and then the intake linked to it, instead of
+                  logging the call and starting again in another popup. */}
+              {!isEdit && (
+                <div
+                  style={{
+                    marginBottom: 12,
+                    padding: "10px 0",
+                    borderTop: "1px solid var(--color-border-light)",
+                    borderBottom: "1px solid var(--color-border-light)",
+                  }}
+                >
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={isIntake}
+                      onChange={(e) => setIsIntake(e.target.checked)}
+                      style={{ cursor: "pointer" }}
+                    />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
+                      This call is a jail intake
+                    </span>
+                  </label>
+
+                  {isIntake && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ display: "flex", gap: 10 }}>
+                        <div style={{ flex: 1 }}>
+                          {fieldLabel("Detainee first name")}
+                          <input type="text" value={dFirst} onChange={(e) => setDFirst(e.target.value)}
+                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          {fieldLabel("Detainee last name")}
+                          <input type="text" value={dLast} onChange={(e) => setDLast(e.target.value)}
+                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                        <div style={{ flex: 1 }}>
+                          {fieldLabel("Facility")}
+                          <input type="text" value={dJail} onChange={(e) => setDJail(e.target.value)}
+                            placeholder="e.g. Kay County"
+                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          {fieldLabel("A-number")}
+                          <input type="text" value={dANumber} onChange={(e) => setDANumber(e.target.value)}
+                            placeholder="000-000-000"
+                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
+                        </div>
+                      </div>
+                      <p style={{ fontSize: 11, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginTop: 8 }}>
+                        The caller above becomes the intake&rsquo;s point of contact, and the call&rsquo;s language is reused.
+                        Everything else can be filled in on the board.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: "block", marginBottom: 12 }}>
                 {fieldLabel("Status")}
                 {statusDef && statusDef.options.length > 0 ? (
@@ -690,60 +751,6 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                   <Button type="button" variant="outline" onClick={addNote} disabled={saving || !note.trim()}>
                     {saving ? "Working…" : "Add note"}
                   </Button>
-                </div>
-              )}
-
-              {/* Some calls ARE a jail intake. Filling it in here means one save
-                  creates the call and then the intake linked to it, instead of
-                  logging the call and starting again in another popup. */}
-              {!isEdit && (
-                <div style={{ marginBottom: 12, paddingTop: 4, borderTop: "1px solid var(--color-border-light)" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", paddingTop: 10 }}>
-                    <input
-                      type="checkbox"
-                      checked={isIntake}
-                      onChange={(e) => setIsIntake(e.target.checked)}
-                      style={{ cursor: "pointer" }}
-                    />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
-                      This call is a jail intake
-                    </span>
-                  </label>
-
-                  {isIntake && (
-                    <div style={{ marginTop: 10 }}>
-                      <div style={{ display: "flex", gap: 10 }}>
-                        <div style={{ flex: 1 }}>
-                          {fieldLabel("Detainee first name")}
-                          <input type="text" value={dFirst} onChange={(e) => setDFirst(e.target.value)}
-                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          {fieldLabel("Detainee last name")}
-                          <input type="text" value={dLast} onChange={(e) => setDLast(e.target.value)}
-                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-                        <div style={{ flex: 1 }}>
-                          {fieldLabel("Facility")}
-                          <input type="text" value={dJail} onChange={(e) => setDJail(e.target.value)}
-                            placeholder="e.g. Kay County"
-                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          {fieldLabel("A-number")}
-                          <input type="text" value={dANumber} onChange={(e) => setDANumber(e.target.value)}
-                            placeholder="000-000-000"
-                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
-                        </div>
-                      </div>
-                      <p style={{ fontSize: 11, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginTop: 8 }}>
-                        The caller above becomes the intake&rsquo;s point of contact, and the call&rsquo;s language is reused.
-                        Everything else can be filled in on the board.
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
 

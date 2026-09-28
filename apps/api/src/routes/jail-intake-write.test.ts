@@ -20,6 +20,10 @@ const columnIds: IntakeColumnIds = {
   poc_name_and_relationship_with_detained: "text_mkkgcg74",
   poc_phone: "text2",
   intake_created_on: "date_1__1",
+  description: "long_text",
+  country_of_birth: "country_of_birth__1",
+  date_of_birth: "date_of_birth_mkn33y83",
+  have_you_even_been_removed: "status_1_mkkgm2z6",
   first_name: "text_mm3t37m8",
   last_name: "text_mm3tqjzb",
   link_to_call_log: "board_relation_mm0xdg80",
@@ -37,6 +41,10 @@ const full = {
   language: "Spanish",
   pocName: "Maria, sister",
   pocPhone: "316-869-3861",
+  description: "Picked up at a traffic stop; family wants a bond hearing.",
+  countryOfBirth: "Mexico",
+  dateOfBirth: "03/07/1980",
+  priorRemoval: "Yes",
 };
 
 describe("planJailIntakeWrite", () => {
@@ -65,6 +73,34 @@ describe("planJailIntakeWrite", () => {
       text2: "316-869-3861",
       status_1__1: { label: "Spanish" },
     });
+  });
+
+  it("puts the description in the board's own Description column", () => {
+    const out = plan(full);
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.columnValues["long_text"]).toBe("Picked up at a traffic stop; family wants a bond hearing.");
+  });
+
+  it("writes country and date of birth as TEXT, matching what the board holds", () => {
+    // Date of Birth is a text column and staff have typed both "03/07/1980" and
+    // "05-27-95" into it. Sending a date object, or forcing ISO, would make the
+    // new rows the odd ones out.
+    const out = plan(full);
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.columnValues["country_of_birth__1"]).toBe("Mexico");
+    expect(out.plan.columnValues["date_of_birth_mkn33y83"]).toBe("03/07/1980");
+  });
+
+  it("shapes prior removal as a status label", () => {
+    const out = plan(full);
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.columnValues["status_1_mkkgm2z6"]).toEqual({ label: "Yes" });
+  });
+
+  it("omits prior removal when unanswered, rather than guessing No", () => {
+    const out = plan({ ...full, priorRemoval: "" });
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.columnValues).not.toHaveProperty("status_1_mkkgm2z6");
   });
 
   it("starts every lead at New Detainee", () => {
