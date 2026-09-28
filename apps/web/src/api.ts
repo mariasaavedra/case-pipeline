@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -17,6 +17,10 @@ export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from 
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
+export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail } from "@case-pipeline/query";
+
+/** A saved notice as the API returns it: the server keeps the file path to itself. */
+export type MailDocument = Omit<MailDocumentDetail, "pdfPath"> & { hasPdf: boolean };
 
 let _tokenGetter: (() => Promise<string | null>) | null = null;
 
@@ -918,4 +922,50 @@ export function fetchAuditLog(
   if (filters.from) params.set("from", filters.from);
   if (filters.to) params.set("to", filters.to);
   return apiFetch<AuditEntry[]>(`/api/admin/audit?${params.toString()}`);
+}
+
+// ---- Mail intake (prototype, read-only) ----
+export function scanMail(pdf: Blob, opts: { name: string; sample?: boolean }): Promise<MailScanResult> {
+  const params = new URLSearchParams({ name: opts.name });
+  if (opts.sample) params.set("sample", "1");
+  return apiFetch<MailScanResult>(`/api/mail/scan?${params.toString()}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/pdf" },
+    body: pdf,
+  });
+}
+
+/** A fake multi-notice scan built from the loaded DB — for trying the page.
+ *  `scanned` returns the image-only variant, which exercises OCR. */
+export async function fetchSampleMailPdf(scanned = false): Promise<Blob> {
+  const res = await fetch(`/api/mail/sample.pdf${scanned ? "?scanned=1" : ""}`, { headers: await authHeaders() });
+  if (!res.ok) throw new Error(`Could not load the sample PDF (HTTP ${res.status})`);
+  return res.blob();
+}
+
+export function fetchMailDocument(id: number): Promise<MailDocument> {
+  return apiFetch<MailDocument>(`/api/mail/documents/${id}`);
+}
+
+/** Just this notice's pages. Fetched as a blob because an iframe can't send the auth header. */
+export async function fetchMailDocumentPdf(id: number): Promise<Blob> {
+  const res = await fetch(`/api/mail/documents/${id}/pdf`, { headers: await authHeaders() });
+  if (!res.ok) throw new Error(`Could not load the notice (HTTP ${res.status})`);
+  return res.blob();
+}
+
+export function fetchOpenFormsFor(profileLocalId: string): Promise<MatchedOpenForm[]> {
+  return apiFetch<MatchedOpenForm[]>(`/api/mail/open-forms?profile=${encodeURIComponent(profileLocalId)}`);
+}
+
+export type ResolveMailBody =
+  | { action: "assign"; openFormLocalId?: string; profileLocalId?: string; note?: string }
+  | { action: "dismiss"; note: string };
+
+export function resolveMailDocument(id: number, body: ResolveMailBody): Promise<MailDocument> {
+  return apiFetch<MailDocument>(`/api/mail/documents/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }

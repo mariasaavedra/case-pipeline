@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 23;
+export const SCHEMA_VERSION = 24;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -327,6 +327,48 @@ CREATE TABLE IF NOT EXISTS board_columns (
     updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (board_key, column_id)
 );
+
+-- Mail intake (v24+). One mail_scans row per uploaded PDF (the file itself is
+-- kept under data/mail/), one mail_documents row per notice it was split into.
+-- A notice the matcher couldn't settle — conflict, no match, unreadable, or a
+-- low-confidence OCR read — has needs_review = 1 and shows in Alerts until a
+-- person assigns it (review_state 'assigned') or dismisses it ('dismissed').
+-- The match column holds the full NoticeMatch JSON from libs/query/src/mail.ts.
+CREATE TABLE IF NOT EXISTS mail_scans (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_name       TEXT NOT NULL,
+    total_pages     INTEGER NOT NULL,
+    ocr_pages       INTEGER NOT NULL DEFAULT 0,
+    pdf_path        TEXT,
+    is_sample       INTEGER NOT NULL DEFAULT 0,
+    uploaded_by     INTEGER,
+    uploaded_by_name TEXT,
+    uploaded_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS mail_documents (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id            INTEGER NOT NULL REFERENCES mail_scans(id) ON DELETE CASCADE,
+    pages              TEXT NOT NULL,
+    split_reason       TEXT NOT NULL,
+    uncertain_pages    TEXT NOT NULL DEFAULT '[]',
+    ocr_confidence     INTEGER,
+    fields             TEXT NOT NULL,
+    match              TEXT NOT NULL,
+    status             TEXT NOT NULL,
+    reason             TEXT,
+    message            TEXT NOT NULL,
+    profile_local_id   TEXT,
+    open_form_local_id TEXT,
+    needs_review       INTEGER NOT NULL DEFAULT 0,
+    review_state       TEXT NOT NULL DEFAULT 'open',
+    resolved_by        INTEGER,
+    resolved_by_name   TEXT,
+    resolved_at        TEXT,
+    resolution_note    TEXT,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_mail_documents_review ON mail_documents(needs_review, review_state);
+CREATE INDEX IF NOT EXISTS idx_mail_documents_scan ON mail_documents(scan_id);
 
 -- Schema version tracking
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -1084,6 +1126,48 @@ export function initializeSchema(db: Database): void {
          WHERE status = 'running'
            AND finished_at IS NULL
            AND started_at < datetime('now', '-1 day');
+      `);
+    }
+
+    // Migration v23 → v24: mail intake — saved scans, and the notices in them
+    // that need a person. Additive; empty until someone scans mail.
+    if (fromVersion < 24) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS mail_scans (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_name       TEXT NOT NULL,
+            total_pages     INTEGER NOT NULL,
+            ocr_pages       INTEGER NOT NULL DEFAULT 0,
+            pdf_path        TEXT,
+            is_sample       INTEGER NOT NULL DEFAULT 0,
+            uploaded_by     INTEGER,
+            uploaded_by_name TEXT,
+            uploaded_at     TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS mail_documents (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id            INTEGER NOT NULL REFERENCES mail_scans(id) ON DELETE CASCADE,
+            pages              TEXT NOT NULL,
+            split_reason       TEXT NOT NULL,
+            uncertain_pages    TEXT NOT NULL DEFAULT '[]',
+            ocr_confidence     INTEGER,
+            fields             TEXT NOT NULL,
+            match              TEXT NOT NULL,
+            status             TEXT NOT NULL,
+            reason             TEXT,
+            message            TEXT NOT NULL,
+            profile_local_id   TEXT,
+            open_form_local_id TEXT,
+            needs_review       INTEGER NOT NULL DEFAULT 0,
+            review_state       TEXT NOT NULL DEFAULT 'open',
+            resolved_by        INTEGER,
+            resolved_by_name   TEXT,
+            resolved_at        TEXT,
+            resolution_note    TEXT,
+            created_at         TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_mail_documents_review ON mail_documents(needs_review, review_state);
+        CREATE INDEX IF NOT EXISTS idx_mail_documents_scan ON mail_documents(scan_id);
       `);
     }
 

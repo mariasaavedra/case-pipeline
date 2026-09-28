@@ -8,6 +8,7 @@ import type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "../api"
 import { Link } from "./Link";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { clientPath } from "../router";
+import { MailReviewModal } from "./MailReviewModal";
 import { SectionCode } from "./ScreenCode";
 
 type SeverityFilter = "all" | AlertSeverity;
@@ -78,13 +79,37 @@ function savePreference(key: string, value: string) {
 // Alert Item Row
 // =============================================================================
 
-function AlertItemRow({ item, severity }: { item: AlertItem; severity: AlertSeverity }) {
+function AlertItemRow({
+  item,
+  severity,
+  onOpenMail,
+}: {
+  item: AlertItem;
+  severity: AlertSeverity;
+  onOpenMail: (id: number) => void;
+}) {
   const style = SEVERITY_STYLES[severity];
+  // Mail-review rows open the review popup; everything else is read-only here.
+  const mailId = item.mailDocumentId;
+  const clickable = mailId != null;
 
   return (
     <div
       className="flex items-start justify-between gap-3 px-4 py-3"
-      style={{ borderBottom: "1px solid var(--color-border-light)" }}
+      style={{ borderBottom: "1px solid var(--color-border-light)", cursor: clickable ? "pointer" : undefined }}
+      {...(clickable
+        ? {
+            role: "button",
+            tabIndex: 0,
+            onClick: () => onOpenMail(mailId),
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpenMail(mailId);
+              }
+            },
+          }
+        : {})}
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -116,13 +141,30 @@ function AlertItemRow({ item, severity }: { item: AlertItem; severity: AlertSeve
               {item.status}
             </span>
           )}
+
+          {item.sample && (
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+              title="From a “Try a sample” scan — test data. Drops off after a day."
+              style={{ background: "var(--color-status-gray-bg)", color: "var(--color-status-gray)", fontFamily: "var(--font-body)" }}
+            >
+              SAMPLE
+            </span>
+          )}
         </div>
+
+        {item.detail && (
+          <p className="text-xs mb-1" style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>
+            {item.detail}
+          </p>
+        )}
 
         {/* Client name */}
         <div className="flex items-center gap-2">
           {item.clientLocalId ? (
             <Link
               href={clientPath(item.clientLocalId)}
+              onClick={(e) => e.stopPropagation()}
               className="text-xs hover:underline"
               style={{ color: "var(--color-amber)", fontFamily: "var(--font-body)" }}
             >
@@ -130,7 +172,7 @@ function AlertItemRow({ item, severity }: { item: AlertItem; severity: AlertSeve
             </Link>
           ) : (
             <span className="text-xs" style={{ color: "var(--color-ink-muted)" }}>
-              Unknown client
+              {item.clientName ? `${item.clientName} (not matched)` : "Unknown client"}
             </span>
           )}
 
@@ -184,7 +226,7 @@ function AlertItemRow({ item, severity }: { item: AlertItem; severity: AlertSeve
 // Alert Group Section
 // =============================================================================
 
-function AlertGroupSection({ group }: { group: AlertGroup }) {
+function AlertGroupSection({ group, onOpenMail }: { group: AlertGroup; onOpenMail: (id: number) => void }) {
   const [collapsed, setCollapsed] = useState(false);
   const style = SEVERITY_STYLES[group.severity];
 
@@ -241,7 +283,7 @@ function AlertGroupSection({ group }: { group: AlertGroup }) {
       {!collapsed && (
         <div>
           {group.items.map((item) => (
-            <AlertItemRow key={item.localId} item={item} severity={group.severity} />
+            <AlertItemRow key={item.localId} item={item} severity={group.severity} onOpenMail={onOpenMail} />
           ))}
           {group.count > group.items.length && (
             <div
@@ -270,6 +312,7 @@ export function AlertsPage() {
   );
 
   const [data, setData] = useState<AlertsResult | null>(null);
+  const [reviewing, setReviewing] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -432,7 +475,7 @@ export function AlertsPage() {
               All clear
             </p>
             <p className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-              No overdue deadlines, stale cases, or pending contracts without activity.
+              No overdue deadlines, stale cases, pending contracts without activity, or mail to review.
             </p>
           </div>
         </div>
@@ -452,7 +495,8 @@ export function AlertsPage() {
       {!loading && data && totalFiltered > 0 && (
         <div className="space-y-1">
           {filteredGroups.map((group) => (
-            <AlertGroupSection key={group.severity} group={group} />
+            // Keyed by label: two groups can share a severity (Stale Cases and Mail to review).
+            <AlertGroupSection key={group.label} group={group} onOpenMail={setReviewing} />
           ))}
         </div>
       )}
@@ -467,6 +511,11 @@ export function AlertsPage() {
           {severity !== "all" ? ` (${severity})` : ""}
           {attorney !== "all" ? ` for ${attorney}` : ""}
         </div>
+      )}
+
+      {/* A decision closes the item: reload so it leaves the list and the counts. */}
+      {reviewing != null && (
+        <MailReviewModal documentId={reviewing} onClose={() => setReviewing(null)} onResolved={() => void load()} />
       )}
     </div>
   );

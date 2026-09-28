@@ -22,6 +22,7 @@ const MyCasesPage = lazy(() => import("./components/MyCasesPage").then((m) => ({
 const CalendarPage = lazy(() => import("./components/CalendarPage").then((m) => ({ default: m.CalendarPage })));
 const CallLogPage = lazy(() => import("./components/CallLogPage").then((m) => ({ default: m.CallLogPage })));
 const JailIntakesPage = lazy(() => import("./components/JailIntakesPage").then((m) => ({ default: m.JailIntakesPage })));
+const MailPage = lazy(() => import("./components/MailPage").then((m) => ({ default: m.MailPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 import type { TabId } from "./components/ClientTabs";
 import { matchRoute, navigate } from "./router";
@@ -40,6 +41,7 @@ const PAGE_CODES: Partial<Record<Route["page"], string>> = {
   "jail-intakes": "P9",
   "call-log": "P10",
   settings: "P11",
+  mail: "P12",
 };
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
@@ -307,6 +309,7 @@ function App() {
             {/* Call Log page */}
             {route.page === "call-log" && !loading && <CallLogPage />}
             {route.page === "jail-intakes" && !loading && <JailIntakesPage />}
+            {route.page === "mail" && !loading && <MailPage />}
 
             {/* Clients page — search + filtered browse */}
             {route.page === "clients" && !loading && !client && <ClientsPage />}

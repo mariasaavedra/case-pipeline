@@ -27,6 +27,7 @@
     "health": "tsx scripts/health.ts --db=live",
     "stats": "tsx scripts/export-stats.ts",
     "stats:live": "tsx scripts/export-stats.ts --db=live",
+    "mail:sample": "tsx scripts/mail-sample.ts",
     "lint:strict": "eslint . --max-warnings=0",
     "sharepoint:folders": "tsx --env-file-if-exists=.env scripts/sharepoint-folders.ts",
     "consult:folders": "tsx --env-file-if-exists=.env scripts/consult-folders.ts",

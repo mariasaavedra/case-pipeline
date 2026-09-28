@@ -406,3 +406,36 @@ describe("v22 → v23 sync_runs failure reason", () => {
     expect(statuses).toEqual(["synced", "partial"]);
   });
 });
+
+describe("v23 → v24 mail intake tables", () => {
+  test("a v23 database gains empty mail tables and keeps its data", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (23);
+      CREATE TABLE profiles (id INTEGER PRIMARY KEY, local_id TEXT, name TEXT);
+      INSERT INTO profiles (local_id, name) VALUES ('p1', 'Kept');
+    `);
+    initializeSchema(db);
+    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(
+      (t) => t.name,
+    );
+    expect(tables).toEqual(expect.arrayContaining(["mail_scans", "mail_documents"]));
+    expect(db.prepare("SELECT COUNT(*) c FROM mail_documents").get()).toEqual({ c: 0 });
+    expect(db.prepare("SELECT name FROM profiles").get()).toEqual({ name: "Kept" });
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(24);
+  });
+
+  test("deleting a scan removes its documents", () => {
+    const db = new Database(":memory:");
+    db.pragma("foreign_keys = ON");
+    initializeSchema(db);
+    db.prepare("INSERT INTO mail_scans (file_name, total_pages) VALUES ('a.pdf', 1)").run();
+    db.prepare(
+      `INSERT INTO mail_documents (scan_id, pages, split_reason, fields, match, status, message)
+       VALUES (1, '[1]', 'first_page', '{}', '{}', 'no_match', 'x')`,
+    ).run();
+    db.prepare("DELETE FROM mail_scans WHERE id = 1").run();
+    expect(db.prepare("SELECT COUNT(*) c FROM mail_documents").get()).toEqual({ c: 0 });
+  });
+});

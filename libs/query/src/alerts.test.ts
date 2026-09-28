@@ -121,10 +121,13 @@ describe("getAlerts", () => {
     const db = freshDb();
     const result = getAlerts(db);
     expect(result.totalCount).toBe(0);
-    expect(result.groups).toHaveLength(3);
-    expect(result.groups[0]!.count).toBe(0);
-    expect(result.groups[1]!.count).toBe(0);
-    expect(result.groups[2]!.count).toBe(0);
+    expect(result.groups.map((g) => g.label)).toEqual([
+      "Overdue Deadlines",
+      "Stale Cases",
+      "Pending Contracts",
+      "Mail to review",
+    ]);
+    expect(result.groups.every((g) => g.count === 0)).toBe(true);
   });
 
   test("overdue deadline detected — past next_date with active status", () => {

@@ -51,6 +51,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P9 | Jail Intakes | `/jail-intakes` | Sidebar → Jail Intakes | `components/JailIntakesPage.tsx` |
 | P10 | Call Log | `/call-log` | Sidebar → Call Log | `components/CallLogPage.tsx` |
 | P11 | Settings | `/settings` | Sidebar → Settings (bottom) | `pages/SettingsPage.tsx` |
+| P12 | Mail | `/mail` | Sidebar → Mail | `components/MailPage.tsx` |
 
 ### Global
 
@@ -161,6 +162,14 @@ Top to bottom. Sections marked *admin* only show for admins.
 | P11.9 | Users *(admin)* |
 | P11.10 | Audit log *(admin)* |
 
+### Inside P12 Mail
+
+| Code | Name | Notes |
+|---|---|---|
+| P12.1 | Drop zone | Choose a PDF, or try a sample (text or scanned/OCR) |
+| P12.2 | Result filters | Matched / needs attention / no match / unreadable; OCR and separator summary |
+| P12.3 | Notices + preview | One row per notice; **Review** → M15; the scan's pages on the right |
+
 ## Popups
 
 | Code | Name | Title on screen | Opened from | Component |
@@ -179,6 +188,7 @@ Top to bottom. Sections marked *admin* only show for admins.
 | M12 | File preview | The file name | P3.6; the documents section of M5 | `FilePreviewModal.tsx` |
 | M13 | Entry editor | The entry's name | P3.8 (admin) | `EntryEditorModal.tsx` |
 | M14 | What's new | Changelog | Version badge on P1 Home / P0 Sign in | `VersionBadge.tsx` |
+| M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
 
 ## Dropdowns
 
