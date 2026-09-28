@@ -6,16 +6,16 @@
 // happen per notice (see libs/query/src/mail.ts), so the matching can be
 // judged on real mail before any write-back exists.
 //
-// Text extraction only — a scanned image with no text layer comes back as
-// "unreadable" on every page. OCR is the next step, not part of this one.
+// Pages with a text layer are read directly; image-only pages go through OCR
+// (see mail/ocr.ts), which is what makes a plain scanner PDF work.
 // =============================================================================
 
 import express, { type Express } from "express";
 import type BetterSqlite3 from "better-sqlite3";
-import { extractText, getDocumentProxy } from "unpdf";
-import { scanMailPages } from "@case-pipeline/query";
+import { scanMailPages, type MailPageInput } from "@case-pipeline/query";
 import { requireAuth } from "../auth/middleware.js";
-import { buildSampleMailPdf } from "../mail/sample.js";
+import { buildSampleMailPdf, buildScannedSampleMailPdf } from "../mail/sample.js";
+import { readPdfPages } from "../mail/ocr.js";
 
 type DatabaseInstance = BetterSqlite3.Database;
 
@@ -25,18 +25,13 @@ export interface MailDeps {
   db: DatabaseInstance;
 }
 
-export async function readPdfPages(bytes: Uint8Array): Promise<string[]> {
-  const pdf = await getDocumentProxy(bytes);
-  const { text } = await extractText(pdf, { mergePages: false });
-  return text;
-}
-
 export function registerMailRoutes(app: Express, deps: MailDeps): void {
   const { db } = deps;
 
-  app.get("/api/mail/sample.pdf", requireAuth, async (_req, res) => {
+  // ?scanned=1 → the same notices as images only, so every page needs OCR.
+  app.get("/api/mail/sample.pdf", requireAuth, async (req, res) => {
     try {
-      const bytes = await buildSampleMailPdf(db);
+      const bytes = req.query.scanned === "1" ? await buildScannedSampleMailPdf(db) : await buildSampleMailPdf(db);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", 'inline; filename="sample-mail.pdf"');
       res.send(Buffer.from(bytes));
@@ -60,7 +55,7 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
         res.status(400).json({ error: "That file is not a PDF" });
         return;
       }
-      let pages: string[];
+      let pages: MailPageInput[];
       try {
         pages = await readPdfPages(new Uint8Array(body));
       } catch (err) {

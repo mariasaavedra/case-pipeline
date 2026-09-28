@@ -18,6 +18,7 @@ import {
   normalizeANumber,
   normalizeFormType,
   scanMailPages,
+  repairOcrText,
 } from "./mail";
 
 function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
@@ -104,6 +105,45 @@ describe("extractNoticeFields", () => {
     expect(normalizeFormType("Jane - I-485 (Asylum)")).toBe("I485");
     expect(normalizeFormType("i-601a")).toBe("I601A");
     expect(normalizeFormType("Full Packet")).toBeNull();
+  });
+});
+
+describe("repairOcrText", () => {
+  test("receipt numbers: letters in the prefix, digits in the number", () => {
+    expect(repairOcrText("Receipt Number: I0E09l2345S78")).toBe("Receipt Number: IOE0912345578");
+    expect(repairOcrText("Receipt Number: MSC229OOO0001")).toBe("Receipt Number: MSC2290000001");
+    expect(repairOcrText("Receipt Number: 1OE0912345678")).toBe("Receipt Number: IOE0912345678");
+  });
+
+  test("form numbers read as 1-130 become I-130, phone numbers are left alone", () => {
+    expect(repairOcrText("Case Type: 1-130")).toBe("Case Type: I-130");
+    expect(repairOcrText("Case Type: l-601A")).toBe("Case Type: I-601A");
+    expect(repairOcrText("Call 1-800-375-5283")).toBe("Call 1-800-375-5283");
+  });
+
+  test("A-numbers after their label become digits", () => {
+    expect(repairOcrText("A# 3O6-725-76l")).toBe("A# 306-725-761");
+    expect(repairOcrText("Alien Number: S12 345 678")).toBe("Alien Number: 512 345 678");
+  });
+
+  test("ordinary words are never turned into numbers", () => {
+    const prose = "Please bring this notice. Signed by ISABEL SOLIS on Monday.";
+    expect(repairOcrText(prose)).toBe(prose);
+  });
+
+  test("only OCR'd pages are repaired", () => {
+    expect(analyzePage(1, "Case Type: 1-130").fields.formType).toBeNull();
+    const ocr = analyzePage(1, { text: "Case Type: 1-130", ocr: true, ocrConfidence: 88 });
+    expect(ocr.fields.formType).toBe("I130");
+    expect(ocr.ocrConfidence).toBe(88);
+  });
+
+  test("a document reports its OCR pages and lowest confidence", () => {
+    const { documents } = splitIntoDocuments([
+      analyzePage(1, { text: "Notice of Action A# 123-456-789 Page 1 of 2", ocr: true, ocrConfidence: 91 }),
+      analyzePage(2, { text: "More of the same notice, Page 2 of 2", ocr: true, ocrConfidence: 64 }),
+    ]);
+    expect(documents[0]).toMatchObject({ ocrPages: [1, 2], ocrConfidence: 64 });
   });
 });
 

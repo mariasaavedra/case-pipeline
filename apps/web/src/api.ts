@@ -929,9 +929,10 @@ export function scanMail(pdf: Blob): Promise<MailScanResult> {
   });
 }
 
-/** A fake multi-notice scan built from the loaded DB — for trying the page. */
-export async function fetchSampleMailPdf(): Promise<Blob> {
-  const res = await fetch("/api/mail/sample.pdf", { headers: await authHeaders() });
+/** A fake multi-notice scan built from the loaded DB — for trying the page.
+ *  `scanned` returns the image-only variant, which exercises OCR. */
+export async function fetchSampleMailPdf(scanned = false): Promise<Blob> {
+  const res = await fetch(`/api/mail/sample.pdf${scanned ? "?scanned=1" : ""}`, { headers: await authHeaders() });
   if (!res.ok) throw new Error(`Could not load the sample PDF (HTTP ${res.status})`);
   return res.blob();
 }

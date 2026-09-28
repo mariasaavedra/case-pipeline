@@ -14,10 +14,15 @@
 //   page  5    A-number nobody has              → no match
 //   page  6    blank separator sheet            → dropped
 //   page  7    letter with no identifiers       → unreadable
+//
+// buildScannedSampleMailPdf renders those same pages to images and rebuilds the
+// PDF from the pictures alone — no text layer, like a plain scanner — so every
+// page has to go through OCR.
 // =============================================================================
 
 import type BetterSqlite3 from "better-sqlite3";
 import { PDFDocument, StandardFonts, rgb, degrees, type PDFFont, type PDFPage } from "pdf-lib";
+import { getDocumentProxy, renderPageAsImage } from "unpdf";
 import { findFormsForProfile, type MatchedOpenForm } from "@case-pipeline/query";
 
 type Database = BetterSqlite3.Database;
@@ -245,4 +250,27 @@ export async function buildSampleMailPdf(db: Database): Promise<Uint8Array> {
     .line("A family member");
 
   return doc.save();
+}
+
+/** Scanner resolution for the image-only variant. 200 DPI is a common default. */
+const SCAN_DPI = 200;
+
+export async function buildScannedSampleMailPdf(db: Database): Promise<Uint8Array> {
+  const textPdf = await buildSampleMailPdf(db);
+  const source = await getDocumentProxy(textPdf.slice());
+  const out = await PDFDocument.create();
+  out.setTitle("Sample scanned mail (image only)");
+
+  for (let n = 1; n <= source.numPages; n++) {
+    const png = await renderPageAsImage(source, n, {
+      scale: SCAN_DPI / 72,
+      canvasImport: () => import("@napi-rs/canvas"),
+    });
+    const image = await out.embedPng(png);
+    const page = out.addPage([612, 792]);
+    // A real feeder never lands a sheet perfectly square; a slight skew keeps
+    // the OCR honest.
+    page.drawImage(image, { x: 4, y: -2, width: 612, height: 792, rotate: degrees(n % 2 ? 0.4 : -0.3) });
+  }
+  return out.save();
 }

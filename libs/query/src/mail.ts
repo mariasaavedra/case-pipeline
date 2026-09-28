@@ -7,6 +7,8 @@
 // a PDF) plus the documents a person has to decide on.
 //
 // Three stages, each usable on its own:
+//   0. repairOcrText(text)        — undo OCR's letter/digit swaps, where a
+//                                   field's format says which one it must be
 //   1. extractNoticeFields(text)  — one page's text → identifiers
 //   2. splitIntoDocuments(pages)  — one big scan → separate notices
 //   3. matchNotice(db, fields)    — identifiers → profile + Open Form
@@ -41,9 +43,20 @@ export interface NoticeFields {
   people: NoticePerson[];
 }
 
+/** One page as the PDF reader produced it. */
+export interface MailPageInput {
+  text: string;
+  /** True when the text came from OCR rather than the PDF's text layer. */
+  ocr?: boolean;
+  /** Tesseract's 0-100 page confidence, when OCR'd. */
+  ocrConfidence?: number | null;
+}
+
 export interface PageInfo {
   page: number; // 1-based
   text: string;
+  ocr: boolean;
+  ocrConfidence: number | null;
   fields: NoticeFields;
   blank: boolean;
   /** "Page 2 of 3" → { index: 2, total: 3 } */
@@ -63,6 +76,9 @@ export interface SplitDocument {
   splitReason: SplitReason;
   /** Pages that joined only because nothing said "new document" — worth a look. */
   uncertainPages: number[];
+  /** Pages read by OCR, and the lowest confidence among them (null if none). */
+  ocrPages: number[];
+  ocrConfidence: number | null;
   fields: NoticeFields;
 }
 
@@ -112,6 +128,8 @@ export interface MailScanDocument extends SplitDocument {
 export interface MailScanResult {
   totalPages: number;
   separatorPages: number[];
+  /** Pages with no usable text layer, read by OCR instead. */
+  ocrPages: number[];
   documents: MailScanDocument[];
   summary: Record<MatchStatus, number>;
 }
@@ -213,11 +231,53 @@ export function extractNoticeFields(text: string): NoticeFields {
   };
 }
 
-export function analyzePage(page: number, text: string): PageInfo {
+// -----------------------------------------------------------------------------
+// 0. OCR repair
+// -----------------------------------------------------------------------------
+// Tesseract confuses glyphs that look alike: I/1/l/|, O/0, S/5, B/8, Z/2. A
+// general "fix" would wreck ordinary words, so repairs only happen where a
+// field's format pins down which kind of character belongs: a receipt number
+// is 3 letters then 10 digits, a form is I-/N- then digits, an A-number after
+// its label is all digits.
+
+const TO_DIGIT: Record<string, string> = { O: "0", o: "0", D: "0", Q: "0", I: "1", l: "1", "|": "1", i: "1", S: "5", s: "5", B: "8", Z: "2", z: "2", G: "6" };
+const TO_LETTER: Record<string, string> = { "0": "O", "1": "I", "5": "S", "8": "B", "2": "Z", "6": "G" };
+
+const digitsOf = (s: string) => s.replace(/./g, (c) => TO_DIGIT[c] ?? c);
+const lettersOf = (s: string) => s.replace(/./g, (c) => TO_LETTER[c] ?? c);
+
+// Loose shapes. Each requires most characters already be the right kind, so a
+// word is never turned into a number.
+const LOOSE_RECEIPT_RE = /\b([A-Z0-9]{3})([\s-]?)([0-9OoDQIl|iSsBZzG]{10})\b/g;
+const LOOSE_FORM_RE = /\b([1l|])-(\d{3}[A-Z]?)\b(?![-\d])/g;
+const LOOSE_A_NUMBER_RE = /(\bA\s*[#:]\s*|\bA-?\s*Number\s*:?\s*|\bAlien\s+Number\s*:?\s*)([0-9OoDQIl|iSsBZzG]{2,3}[-\s]?[0-9OoDQIl|iSsBZzG]{3}[-\s]?[0-9OoDQIl|iSsBZzG]{3})(?![0-9A-Za-z])/gi;
+
+export function repairOcrText(text: string): string {
+  return text
+    .replace(LOOSE_RECEIPT_RE, (whole, prefix: string, sep: string, num: string) => {
+      const realDigits = num.replace(/\D/g, "").length;
+      const realLetters = prefix.replace(/[^A-Z]/g, "").length;
+      if (realDigits < 7 || realLetters < 2) return whole;
+      const fixedPrefix = lettersOf(prefix);
+      const fixedNum = digitsOf(num);
+      return /^[A-Z]{3}$/.test(fixedPrefix) && /^\d{10}$/.test(fixedNum) ? `${fixedPrefix}${sep}${fixedNum}` : whole;
+    })
+    .replace(LOOSE_FORM_RE, (_w, _one: string, rest: string) => `I-${rest}`)
+    .replace(LOOSE_A_NUMBER_RE, (whole, label: string, num: string) => {
+      if (num.replace(/\D/g, "").length < 6) return whole;
+      return `${label}${digitsOf(num)}`;
+    });
+}
+
+export function analyzePage(page: number, input: string | MailPageInput): PageInfo {
+  const { text: raw, ocr = false, ocrConfidence = null } = typeof input === "string" ? { text: input } : input;
+  const text = ocr ? repairOcrText(raw) : raw;
   const marker = PAGE_MARKER_RE.exec(text);
   return {
     page,
     text,
+    ocr,
+    ocrConfidence: ocr ? ocrConfidence : null,
     fields: extractNoticeFields(text),
     // A scanner's blank separator sheet still yields a few stray characters.
     blank: text.replace(/\s/g, "").length < 15,
@@ -292,12 +352,18 @@ export function splitIntoDocuments(pages: PageInfo[]): { documents: SplitDocumen
     afterSeparator = false;
 
     if (reason) {
-      current = { pages: [p.page], splitReason: reason, uncertainPages: [], fields: p.fields };
+      current = { pages: [], splitReason: reason, uncertainPages: [], ocrPages: [], ocrConfidence: null, fields: p.fields };
       documents.push(current);
     } else {
-      current!.pages.push(p.page);
       current!.fields = mergeFields(current!.fields, p.fields);
       if (uncertain) current!.uncertainPages.push(p.page);
+    }
+    current!.pages.push(p.page);
+    if (p.ocr) {
+      current!.ocrPages.push(p.page);
+      if (p.ocrConfidence != null) {
+        current!.ocrConfidence = Math.min(current!.ocrConfidence ?? 100, p.ocrConfidence);
+      }
     }
   }
 
@@ -554,11 +620,12 @@ export function matchNotice(db: Database, fields: NoticeFields): NoticeMatch {
 // Orchestration
 // -----------------------------------------------------------------------------
 
-export function scanMailPages(db: Database, pageTexts: string[]): MailScanResult {
-  const pages = pageTexts.map((t, i) => analyzePage(i + 1, t));
+export function scanMailPages(db: Database, pageInputs: Array<string | MailPageInput>): MailScanResult {
+  const pages = pageInputs.map((t, i) => analyzePage(i + 1, t));
   const { documents, separatorPages } = splitIntoDocuments(pages);
   const scanned = documents.map((d) => ({ ...d, match: matchNotice(db, d.fields) }));
   const summary: Record<MatchStatus, number> = { matched: 0, needs_attention: 0, no_match: 0, unreadable: 0 };
   for (const d of scanned) summary[d.match.status]++;
-  return { totalPages: pageTexts.length, separatorPages, documents: scanned, summary };
+  const ocrPages = pages.filter((p) => p.ocr).map((p) => p.page);
+  return { totalPages: pageInputs.length, separatorPages, ocrPages, documents: scanned, summary };
 }

@@ -9,6 +9,10 @@
 //
 // The PDF never leaves the browser except for the one scan request: the preview
 // on the right is a local blob URL.
+//
+// Pages without a text layer are read by OCR on the server. Its confidence is
+// shown per notice, because a misread digit is the one failure the matching
+// can't catch by itself.
 // =============================================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -80,6 +84,26 @@ function Field({ label, value }: { label: string; value: string | null }) {
   );
 }
 
+/** Below this, OCR'd identifiers deserve a second look against the preview. */
+const LOW_OCR_CONFIDENCE = 75;
+
+function OcrBadge({ confidence }: { confidence: number | null }) {
+  const low = confidence != null && confidence < LOW_OCR_CONFIDENCE;
+  return (
+    <span
+      className="text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap"
+      title="No text layer on these pages — read by OCR"
+      style={{
+        color: low ? "var(--color-status-yellow)" : "var(--color-status-blue)",
+        backgroundColor: low ? "var(--color-status-yellow-bg)" : "var(--color-status-blue-bg)",
+        fontFamily: "var(--font-body)",
+      }}
+    >
+      OCR{confidence != null ? ` ${confidence}%` : ""}
+    </span>
+  );
+}
+
 function StatusPill({ status }: { status: MatchStatus }) {
   const m = STATUS_META[status];
   return (
@@ -142,6 +166,7 @@ function DocumentRow({
               {fields.formType ? ` · ${fields.formType}` : ""}
             </span>
             <StatusPill status={match.status} />
+            {doc.ocrPages.length > 0 && <OcrBadge confidence={doc.ocrConfidence} />}
           </div>
           <span className="text-[11px]" style={faint}>
             {pageRange(doc.pages)} · split on {SPLIT_LABEL[doc.splitReason]}
@@ -162,6 +187,12 @@ function DocumentRow({
       <p className="text-sm mt-2" style={{ ...ink, color: "var(--color-ink-muted)" }}>
         {match.message}
       </p>
+
+      {doc.ocrConfidence != null && doc.ocrConfidence < LOW_OCR_CONFIDENCE && (
+        <p className="text-[11px] mt-1" style={{ color: "var(--color-status-yellow)", fontFamily: "var(--font-body)" }}>
+          Low OCR confidence — compare the numbers below with the preview before trusting the match.
+        </p>
+      )}
 
       {doc.uncertainPages.length > 0 && (
         <p className="text-[11px] mt-1" style={{ color: "var(--color-status-yellow)", fontFamily: "var(--font-body)" }}>
@@ -254,12 +285,12 @@ export function MailPage() {
     void run(f.name, f);
   };
 
-  const trySample = async () => {
+  const trySample = async (scanned: boolean) => {
     setError(null);
     setScanning(true);
     try {
-      const blob = await fetchSampleMailPdf();
-      await run("sample-mail.pdf", blob);
+      const blob = await fetchSampleMailPdf(scanned);
+      await run(scanned ? "sample-mail-scanned.pdf" : "sample-mail.pdf", blob);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load the sample");
       setScanning(false);
@@ -348,8 +379,11 @@ export function MailPage() {
           <Button type="button" onClick={() => inputRef.current?.click()} disabled={scanning}>
             {file ? "Scan another PDF" : "Choose PDF"}
           </Button>
-          <Button type="button" variant="outline" onClick={() => void trySample()} disabled={scanning}>
+          <Button type="button" variant="outline" onClick={() => void trySample(false)} disabled={scanning}>
             Try a sample PDF
+          </Button>
+          <Button type="button" variant="outline" onClick={() => void trySample(true)} disabled={scanning}>
+            Try a scanned sample (OCR)
           </Button>
         </div>
         <input
@@ -363,7 +397,7 @@ export function MailPage() {
           }}
         />
         <p className="text-[11px]" style={faint}>
-          Reads PDFs that have a text layer (e-notices, scanner PDFs with OCR on). Image-only scans show as unreadable for now.
+          Image-only scans are read with OCR, about a second per page. Handwriting can’t be read.
         </p>
       </div>
 
@@ -375,7 +409,7 @@ export function MailPage() {
 
       {scanning && (
         <p className="mb-4 text-sm" style={faint}>
-          Reading pages…
+          Reading pages… image-only pages take about a second each.
         </p>
       )}
 
@@ -384,11 +418,16 @@ export function MailPage() {
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             {chip("all", "All", result.documents.length)}
             {(Object.keys(STATUS_META) as MatchStatus[]).map((s) => chip(s, STATUS_META[s].label, result.summary[s]))}
-            {result.separatorPages.length > 0 && (
-              <span className="text-[11px] ml-auto" style={faint}>
-                Blank separator page{result.separatorPages.length > 1 ? "s" : ""} {result.separatorPages.join(", ")} skipped
-              </span>
-            )}
+            <span className="text-[11px] ml-auto" style={faint}>
+              {[
+                result.ocrPages.length > 0 &&
+                  `${result.ocrPages.length} of ${result.totalPages} pages read by OCR`,
+                result.separatorPages.length > 0 &&
+                  `blank separator page${result.separatorPages.length > 1 ? "s" : ""} ${result.separatorPages.join(", ")} skipped`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
