@@ -275,6 +275,25 @@ export interface JailIntakeListResult {
   statusOptions: string[];
 }
 
+/**
+ * Post a note on a jail intake — a monday update AND an E&A activity, under the
+ * firm's "Casenote" type.
+ *
+ * Write-only by necessity: `client_updates.profile_local_id` is NOT NULL and an
+ * intake has no profile until it books a consult, so there is nowhere local to
+ * store it and the sync skips profile-less items. The note lives in monday.
+ */
+export async function addJailIntakeNote(
+  localId: string,
+  text: string,
+): Promise<{ pending: boolean }> {
+  return apiFetch(`/api/jail-intakes/${encodeURIComponent(localId)}/notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+}
+
 export async function createJailIntake(input: {
   firstName: string;
   lastName?: string;

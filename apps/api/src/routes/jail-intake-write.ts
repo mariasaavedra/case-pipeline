@@ -25,6 +25,7 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { fetchBoardStructure } from "@case-pipeline/monday";
+import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { FIRM_TIMEZONE } from "../firm.js";
 
@@ -176,6 +177,84 @@ export function registerJailIntakeWriteRoutes(app: Express, deps: JailIntakeWrit
     boardCache = { boardId: board.id, columnIds, groupId, at: Date.now() };
     return boardCache;
   }
+
+  /**
+   * "Casenote" — the firm's existing E&A activity type, queried from the account
+   * rather than invented. See docs/decisions.md 2026-08-25 for why creating a
+   * new type has a cost (staff get two identically named picker entries).
+   */
+  const CASENOTE_ACTIVITY_ID = "70e734ee-0261-4489-9047-35966b929ca3";
+
+  /**
+   * Post a note on an intake: a monday update AND an E&A activity.
+   *
+   * Write-only, and deliberately so. `client_updates.profile_local_id` is NOT
+   * NULL, and an intake has no profile until it books a consult — so there is
+   * nowhere local to put this, and the sync's pass 4 skips profile-less items,
+   * meaning it could not be read back either. The note lives in monday. The UI
+   * says so rather than pretending a local history exists.
+   */
+  app.post("/api/jail-intakes/:localId/notes", requireAuth, async (req, res) => {
+    if (!MONDAY_API_TOKEN) {
+      res.status(503).json({ error: "Monday.com write-back not configured" });
+      return;
+    }
+    const localId = String(req.params.localId);
+    const text = ((req.body as { text?: unknown })?.text ?? "").toString().trim();
+    if (!text) {
+      res.status(400).json({ error: "text is required" });
+      return;
+    }
+
+    const intake = db
+      .prepare("SELECT monday_item_id, name FROM board_items WHERE local_id = ? AND board_key = ?")
+      .get(localId, BOARD_KEY) as { monday_item_id: string | null; name: string } | null;
+    if (!intake) {
+      res.status(404).json({ error: "Jail intake not found" });
+      return;
+    }
+    if (!intake.monday_item_id) {
+      res.status(400).json({ error: "This intake has not synced to Monday yet — try again after the next sync" });
+      return;
+    }
+    const mondayItemId = intake.monday_item_id;
+
+    const activity: CreateTimelineItemInput = {
+      itemId: mondayItemId,
+      title: `Intake note — ${intake.name}`,
+      customActivityId: CASENOTE_ACTIVITY_ID,
+      content: text,
+    };
+
+    let pending = false;
+    try {
+      await withTokenFallback((token) => dataSource.postUpdate(mondayItemId, text, token), writeTokenOptions(req));
+    } catch (err) {
+      console.error("[write-back] intake note update failed; queueing for retry:", err);
+      enqueueWrite(db, {
+        opType: "create_update", targetTable: "board_items", targetLocalId: localId,
+        mondayItemId, authorOid: req.user?.oid ?? null, payload: { body: text },
+      });
+      pending = true;
+    }
+
+    try {
+      await withTokenFallback((token) => dataSource.createTimelineItem(activity, token), writeTokenOptions(req));
+    } catch (err) {
+      console.error("[write-back] intake note activity failed; queueing for retry:", err);
+      enqueueWrite(db, {
+        opType: "create_timeline_item", targetTable: "board_items", targetLocalId: localId,
+        mondayItemId, authorOid: req.user?.oid ?? null, payload: { ...activity },
+      });
+      pending = true;
+    }
+
+    auditFromReq(req, "monday.jail_intake_note_added", {
+      targetType: "board_item", targetId: localId, targetMondayId: mondayItemId,
+      metadata: { name: intake.name, queued: pending },
+    });
+    res.status(pending ? 202 : 200).json({ data: { pending } });
+  });
 
   app.post("/api/jail-intakes", requireAuth, async (req, res) => {
     if (!MONDAY_API_TOKEN) {

@@ -18,6 +18,7 @@ import { Link } from "./Link";
 import { clientPath } from "../router";
 import { StatusBadge } from "./StatusBadge";
 import { NewJailIntakeModal } from "./NewJailIntakeModal";
+import { JailIntakeDetailModal } from "./JailIntakeDetailModal";
 import { Button } from "./ui/button";
 
 const DEFAULT_WITHIN_DAYS = 10;
@@ -49,11 +50,20 @@ function Field({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-function IntakeRow({ intake }: { intake: JailIntake }) {
+function IntakeRow({ intake, onOpen }: { intake: JailIntake; onOpen: () => void }) {
   return (
     <div
-      className="px-5 py-3"
-      style={{ borderBottom: "1px solid var(--color-border-light)" }}
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="px-5 py-3 jail-intake-row"
+      style={{ borderBottom: "1px solid var(--color-border-light)", cursor: "pointer" }}
     >
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
@@ -92,6 +102,9 @@ function IntakeRow({ intake }: { intake: JailIntake }) {
             {intake.convertedTo.profileLocalId && (
               <Link
                 href={clientPath(intake.convertedTo.profileLocalId)}
+                // The whole row opens the detail modal, so the link has to stop
+                // the click reaching it — otherwise you get both at once.
+                onClick={(e) => e.stopPropagation()}
                 className="text-[11px] font-medium px-2 py-1 rounded-md"
                 style={{
                   color: "var(--color-amber)",
@@ -125,6 +138,7 @@ export function JailIntakesPage() {
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [opened, setOpened] = useState<JailIntake | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -210,7 +224,7 @@ export function JailIntakesPage() {
             Loading…
           </p>
         ) : data && data.intakes.length > 0 ? (
-          data.intakes.map((i) => <IntakeRow key={i.localId} intake={i} />)
+          data.intakes.map((i) => <IntakeRow key={i.localId} intake={i} onOpen={() => setOpened(i)} />)
         ) : (
           <p
             className="px-5 py-8 text-center text-sm"
@@ -226,6 +240,8 @@ export function JailIntakesPage() {
       </div>
 
       {creating && <NewJailIntakeModal onClose={() => setCreating(false)} onCreated={load} />}
+
+      {opened && <JailIntakeDetailModal intake={opened} onClose={() => setOpened(null)} />}
     </div>
   );
 }
