@@ -23,6 +23,9 @@ const LANGUAGES = [
   "Tigrinya", "Creole", "Quiche", "Russian", "Vietnamese", "Portuguese",
 ];
 
+// The board's own options on "Have you even been removed?" (its spelling).
+const PRIOR_REMOVAL = ["No", "Yes", "Unknown"];
+
 const labelStyle = {
   display: "block",
   fontSize: 12,
@@ -64,6 +67,10 @@ export function NewJailIntakeModal({
   const [language, setLanguage] = useState("");
   const [pocName, setPocName] = useState(initialPocName ?? "");
   const [pocPhone, setPocPhone] = useState(initialPocPhone ?? "");
+  const [countryOfBirth, setCountryOfBirth] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [priorRemoval, setPriorRemoval] = useState("");
+  const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ name: string; pending: boolean } | null>(null);
@@ -71,6 +78,10 @@ export function NewJailIntakeModal({
   const languageItems = [
     { value: "", label: "Select…" },
     ...LANGUAGES.map((l) => ({ value: l, label: l })),
+  ];
+  const removalItems = [
+    { value: "", label: "Not asked" },
+    ...PRIOR_REMOVAL.map((o) => ({ value: o, label: o })),
   ];
 
   const submit = async () => {
@@ -89,6 +100,10 @@ export function NewJailIntakeModal({
         language: language || undefined,
         pocName: pocName.trim() || undefined,
         pocPhone: pocPhone.trim() || undefined,
+        countryOfBirth: countryOfBirth.trim() || undefined,
+        dateOfBirth: dateOfBirth.trim() || undefined,
+        priorRemoval: priorRemoval || undefined,
+        description: description.trim() || undefined,
         callLogItemId: callLogItemId ?? undefined,
       });
       setDone({ name: res.name, pending: res.pending });
@@ -184,6 +199,39 @@ export function NewJailIntakeModal({
                 {text("Point of contact", pocName, setPocName, "Name and relationship")}
                 {text("Their phone", pocPhone, setPocPhone)}
               </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                {text("Country of birth", countryOfBirth, setCountryOfBirth)}
+                {/* A text column on the board, not a date: it already holds
+                    "03/07/1980" and "05-27-95", so a date picker would impose a
+                    format the board does not use. */}
+                {text("Date of birth", dateOfBirth, setDateOfBirth, "MM/DD/YYYY")}
+              </div>
+
+              <div style={{ display: "block", marginBottom: 12 }}>
+                <span style={labelStyle}>Prior removal?</span>
+                <Select items={removalItems} value={priorRemoval} onValueChange={(v) => setPriorRemoval(v ?? "")}>
+                  <SelectTrigger aria-label="Prior removal?" size="sm" className="w-full border-border-light bg-surface">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="w-[var(--anchor-width)]">
+                    <SelectItem value="">Not asked</SelectItem>
+                    {removalItems.slice(1).map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <label style={{ display: "block", marginBottom: 12 }}>
+                <span style={labelStyle}>Description</span>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  placeholder="What the caller told you…"
+                  className="w-full rounded-md px-2 py-1.5 text-sm"
+                  style={{ ...fieldStyle, resize: "vertical" }}
+                />
+              </label>
 
               {error && (
                 <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>
