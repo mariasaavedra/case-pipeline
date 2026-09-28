@@ -18,8 +18,16 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-/** A held lock older than this is considered abandoned and may be stolen. */
-const STALE_MS = 30 * 60 * 1000; // 30 minutes — comfortably longer than a sync run
+/**
+ * A held lock older than this is considered abandoned and may be stolen.
+ *
+ * It is NOT "longer than a sync run" any more — a full walk took ~4 hours on
+ * 2026-09-28 and keeps growing. The holder is expected to call
+ * refreshSyncLock() as it works, so this is the window after a holder goes
+ * SILENT, not the length of the job. Keeping it short is the point: a crashed
+ * sync frees the lock in half an hour instead of wedging the queue for a day.
+ */
+const STALE_MS = 30 * 60 * 1000;
 
 /**
  * Try to acquire the single-row advisory lock. Returns true if acquired.
@@ -37,6 +45,34 @@ export function acquireSyncLock(db: Database, holder: string): boolean {
     )
     .run(holder, new Date(now).toISOString(), staleBefore);
   return res.changes > 0;
+}
+
+/**
+ * Keep a held lock alive. Long jobs must call this periodically.
+ *
+ * Without it a sync that outlives STALE_MS looks abandoned, and the write-queue
+ * processor — which tries every minute — steals the lock and runs mutations
+ * against a database mid-sync. That is the exact thing the lock exists to
+ * prevent, and it had been possible from minute 30 of every nightly walk.
+ *
+ * Returns false when the lock was already lost, so a caller can notice rather
+ * than carry on believing it holds it.
+ */
+export function refreshSyncLock(db: Database, holder: string): boolean {
+  const res = db
+    .prepare(`UPDATE sync_state SET locked_at = ? WHERE id = 1 AND locked_by = ?`)
+    .run(new Date().toISOString(), holder);
+  return res.changes > 0;
+}
+
+/** Who holds the lock right now, or null when it is free or gone stale. */
+export function syncLockHolder(db: Database): string | null {
+  const staleBefore = new Date(Date.now() - STALE_MS).toISOString();
+  const row = db
+    .prepare(`SELECT locked_by, locked_at FROM sync_state WHERE id = 1`)
+    .get() as { locked_by: string | null; locked_at: string | null } | undefined;
+  if (!row?.locked_by || !row.locked_at) return null;
+  return row.locked_at < staleBefore ? null : row.locked_by;
 }
 
 /** Release the lock, but only if this holder still owns it. */
