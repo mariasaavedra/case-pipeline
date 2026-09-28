@@ -18,7 +18,7 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
-import type { JailIntake, JailIntakeFilters, JailIntakeListResult } from "./types";
+import type { JailIntake, JailIntakeFilters, JailIntakeListResult, JailIntakeNote } from "./types";
 
 const BOARD_KEY = "_fa_jail_intakes";
 
@@ -214,4 +214,31 @@ export function getJailIntakes(
   ).map((r) => r.status);
 
   return { intakes, total, olderCount: Math.max(0, openTotal - total), statusOptions };
+}
+
+/**
+ * Notes on one intake, newest first.
+ *
+ * Keyed on board_item_local_id rather than a profile, because an intake has no
+ * profile — the sync stores these with profile_local_id = "" (see the note on
+ * intakeIds in scripts/sync/index.ts). Nothing else reads a "" profile: the
+ * client timeline filters on an exact profile id, so these stay out of it.
+ *
+ * Updates only, by design. The E&A walk skips intakes because its content_sig
+ * dedup is keyed on profile_local_id, and a shared "" would collapse notes
+ * across different intakes. Every note this app posts on an intake goes out as
+ * an update too, so this is the full history as far as the dashboard is
+ * concerned.
+ */
+export function getJailIntakeNotes(db: Database, boardItemLocalId: string, limit = 100): JailIntakeNote[] {
+  return db
+    .prepare(`
+      SELECT local_id AS localId, author_name AS authorName, text_body AS textBody,
+             created_at_source AS createdAtSource, source_type AS sourceType
+      FROM client_updates
+      WHERE board_item_local_id = ? AND board_key = ?
+      ORDER BY created_at_source DESC
+      LIMIT ?
+    `)
+    .all(boardItemLocalId, BOARD_KEY, limit) as JailIntakeNote[];
 }

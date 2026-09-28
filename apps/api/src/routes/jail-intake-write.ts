@@ -26,6 +26,7 @@ import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { fetchBoardStructure, fetchItem } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
+import { getJailIntakeNotes } from "@case-pipeline/query";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { FIRM_TIMEZONE } from "../firm.js";
 
@@ -269,6 +270,10 @@ export function registerJailIntakeWriteRoutes(app: Express, deps: JailIntakeWrit
    * meaning it could not be read back either. The note lives in monday. The UI
    * says so rather than pretending a local history exists.
    */
+  app.get("/api/jail-intakes/:localId/notes", requireAuth, (req, res) => {
+    res.json({ data: getJailIntakeNotes(db, String(req.params.localId)) });
+  });
+
   app.post("/api/jail-intakes/:localId/notes", requireAuth, async (req, res) => {
     if (!MONDAY_API_TOKEN) {
       res.status(503).json({ error: "Monday.com write-back not configured" });

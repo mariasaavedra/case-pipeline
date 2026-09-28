@@ -284,6 +284,19 @@ export interface JailIntakeListResult {
  * activity; only the column append was skipped, and the UI says so rather than
  * truncating a client note.
  */
+export interface JailIntakeNote {
+  localId: string;
+  authorName: string;
+  textBody: string;
+  createdAtSource: string;
+  sourceType: string;
+}
+
+/** An intake's note history, newest first. Empty until the next sync picks them up. */
+export async function fetchJailIntakeNotes(localId: string): Promise<JailIntakeNote[]> {
+  return apiFetch(`/api/jail-intakes/${encodeURIComponent(localId)}/notes`);
+}
+
 export async function addJailIntakeNote(
   localId: string,
   text: string,
