@@ -48,6 +48,13 @@ import { MentionTextarea } from "./MentionTextarea";
 import { ProfileNotesPreview } from "./ProfileNotesPreview";
 import { NewJailIntakeModal } from "./NewJailIntakeModal";
 import { createJailIntake } from "../api";
+import {
+  JailIntakeFields,
+  emptyJailIntakeFields,
+  hasIntakeName,
+  toCreateJailIntakeInput,
+  type JailIntakeFieldValues,
+} from "./JailIntakeFields";
 
 interface Props {
   onClose: () => void;
@@ -218,12 +225,10 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
   const [done, setDone] = useState<{ name: string; pending: boolean; mondayItemId: string | null; intake?: { name: string; linked: boolean } } | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
   // "This call is a jail intake" — filled in alongside the call and created
-  // straight after it, so the intake can carry the new call's monday id.
+  // straight after it, so the intake can carry the new call's monday id. The
+  // fields are the shared set, so this cannot fall behind the popup again.
   const [isIntake, setIsIntake] = useState(false);
-  const [dFirst, setDFirst] = useState("");
-  const [dLast, setDLast] = useState("");
-  const [dJail, setDJail] = useState("");
-  const [dANumber, setDANumber] = useState("");
+  const [intakeFields, setIntakeFields] = useState<JailIntakeFieldValues>(emptyJailIntakeFields);
 
   // Default status once the board's real options load. In edit mode the entry's
   // own status is already the initial value, so this only fills a blank one.
@@ -338,7 +343,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
     // Checked before anything is created: an intake with no detainee name is
     // not worth having, and finding out after the call was logged would leave
     // half the work done.
-    if (isIntake && !dFirst.trim() && !dLast.trim()) {
+    if (isIntake && !hasIntakeName(intakeFields)) {
       setError("Add the detainee's name, or untick \u201cthis call is a jail intake\u201d.");
       return;
     }
@@ -377,18 +382,16 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
       let intakeResult: { name: string; linked: boolean } | undefined;
       if (isIntake) {
         try {
-          const intake = await createJailIntake({
-            firstName: dFirst.trim(),
-            lastName: dLast.trim() || undefined,
-            jail: dJail.trim() || undefined,
-            alienNumber: dANumber.trim() || undefined,
-            // The caller's language is the detainee's often enough to reuse,
-            // and one fewer field matters on a live call.
-            language: language || undefined,
-            pocName: effectiveName || undefined,
-            pocPhone: phone.trim() || undefined,
-            callLogItemId: res.mondayItemId ?? undefined,
-          });
+          // The caller is the point of contact and the call's language is
+          // reused, so those three inputs are hidden rather than asked twice.
+          const intake = await createJailIntake(
+            toCreateJailIntakeInput(intakeFields, {
+              callLogItemId: res.mondayItemId ?? undefined,
+              pocName: effectiveName || undefined,
+              pocPhone: phone.trim() || undefined,
+              language: language || undefined,
+            }),
+          );
           intakeResult = { name: intake.name, linked: !!res.mondayItemId };
         } catch (intakeErr) {
           // The call IS logged by this point. Say so rather than throwing the
@@ -447,10 +450,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
     // details filled in, and the next save creates a second intake for the same
     // person against a different call.
     setIsIntake(false);
-    setDFirst("");
-    setDLast("");
-    setDJail("");
-    setDANumber("");
+    setIntakeFields(emptyJailIntakeFields);
     setDone(null);
     setError(null);
   };
@@ -604,33 +604,12 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
 
                   {isIntake && (
                     <div style={{ marginTop: 10 }}>
-                      <div style={{ display: "flex", gap: 10 }}>
-                        <div style={{ flex: 1 }}>
-                          {fieldLabel("Detainee first name")}
-                          <input type="text" value={dFirst} onChange={(e) => setDFirst(e.target.value)}
-                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          {fieldLabel("Detainee last name")}
-                          <input type="text" value={dLast} onChange={(e) => setDLast(e.target.value)}
-                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-                        <div style={{ flex: 1 }}>
-                          {fieldLabel("Facility")}
-                          <input type="text" value={dJail} onChange={(e) => setDJail(e.target.value)}
-                            placeholder="e.g. Kay County"
-                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          {fieldLabel("A-number")}
-                          <input type="text" value={dANumber} onChange={(e) => setDANumber(e.target.value)}
-                            placeholder="000-000-000"
-                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
-                        </div>
-                      </div>
-                      <p style={{ fontSize: 11, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginTop: 8 }}>
+                      <JailIntakeFields
+                        value={intakeFields}
+                        onChange={setIntakeFields}
+                        omit={["pocName", "pocPhone", "language"]}
+                      />
+                      <p style={{ fontSize: 11, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginTop: -4 }}>
                         The caller above becomes the intake&rsquo;s point of contact, and the call&rsquo;s language is reused.
                         Everything else can be filled in on the board.
                       </p>

@@ -6,41 +6,26 @@
 // the rest for monday. Only the detainee's name is required — half a story
 // taken live is still worth having.
 //
-// Opened from two places: the Jail Intakes board, and the notes popup on a call,
-// since a call is often where an intake starts. In that second case the caller's
-// details come through prefilled and the new intake is linked back to the call.
+// The fields themselves live in JailIntakeFields, shared with the "this call is
+// a jail intake" section inside Log a call. They were separate until the two
+// drifted apart.
+//
+// Opened from the Jail Intakes board and from both call popups — in that second
+// case the caller's details come through prefilled and the intake links back to
+// the call.
 // =============================================================================
 
 import { useState } from "react";
 import { createJailIntake } from "../api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
-
-// The board's own Language options, in its order.
-const LANGUAGES = [
-  "Hindi", "English", "Espanol", "Arabic", "French", "Farsi",
-  "Tigrinya", "Creole", "Quiche", "Russian", "Vietnamese", "Portuguese",
-];
-
-// The board's own options on "Have you even been removed?" (its spelling).
-const PRIOR_REMOVAL = ["No", "Yes", "Unknown"];
-
-const labelStyle = {
-  display: "block",
-  fontSize: 12,
-  fontWeight: 600,
-  color: "var(--color-ink-muted)",
-  marginBottom: 4,
-  fontFamily: "var(--font-body)",
-} as const;
-
-const fieldStyle = {
-  border: "1px solid var(--color-border-light)",
-  background: "var(--color-surface)",
-  color: "var(--color-ink)",
-  fontFamily: "var(--font-body)",
-} as const;
+import {
+  JailIntakeFields,
+  emptyJailIntakeFields,
+  hasIntakeName,
+  toCreateJailIntakeInput,
+  type JailIntakeFieldValues,
+} from "./JailIntakeFields";
 
 interface Props {
   onClose: () => void;
@@ -60,52 +45,24 @@ export function NewJailIntakeModal({
   initialPocName,
   initialPocPhone,
 }: Props) {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [jail, setJail] = useState("");
-  const [alienNumber, setAlienNumber] = useState("");
-  const [language, setLanguage] = useState("");
-  const [pocName, setPocName] = useState(initialPocName ?? "");
-  const [pocPhone, setPocPhone] = useState(initialPocPhone ?? "");
-  const [countryOfBirth, setCountryOfBirth] = useState("");
-  const [dateOfBirth, setDateOfBirth] = useState("");
-  const [priorRemoval, setPriorRemoval] = useState("");
-  const [description, setDescription] = useState("");
+  const [fields, setFields] = useState<JailIntakeFieldValues>({
+    ...emptyJailIntakeFields,
+    pocName: initialPocName ?? "",
+    pocPhone: initialPocPhone ?? "",
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ name: string; pending: boolean } | null>(null);
 
-  const languageItems = [
-    { value: "", label: "Select…" },
-    ...LANGUAGES.map((l) => ({ value: l, label: l })),
-  ];
-  const removalItems = [
-    { value: "", label: "Not asked" },
-    ...PRIOR_REMOVAL.map((o) => ({ value: o, label: o })),
-  ];
-
   const submit = async () => {
-    if (!firstName.trim() && !lastName.trim()) {
+    if (!hasIntakeName(fields)) {
       setError("Enter the detainee's name.");
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const res = await createJailIntake({
-        firstName: firstName.trim(),
-        lastName: lastName.trim() || undefined,
-        jail: jail.trim() || undefined,
-        alienNumber: alienNumber.trim() || undefined,
-        language: language || undefined,
-        pocName: pocName.trim() || undefined,
-        pocPhone: pocPhone.trim() || undefined,
-        countryOfBirth: countryOfBirth.trim() || undefined,
-        dateOfBirth: dateOfBirth.trim() || undefined,
-        priorRemoval: priorRemoval || undefined,
-        description: description.trim() || undefined,
-        callLogItemId: callLogItemId ?? undefined,
-      });
+      const res = await createJailIntake(toCreateJailIntakeInput(fields, { callLogItemId }));
       setDone({ name: res.name, pending: res.pending });
       onCreated?.();
     } catch (e) {
@@ -114,25 +71,6 @@ export function NewJailIntakeModal({
       setSaving(false);
     }
   };
-
-  const text = (
-    label: string,
-    value: string,
-    set: (v: string) => void,
-    placeholder?: string,
-  ) => (
-    <label style={{ display: "block", marginBottom: 12, flex: 1 }}>
-      <span style={labelStyle}>{label}</span>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => set(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-md px-2 py-1.5 text-sm"
-        style={fieldStyle}
-      />
-    </label>
-  );
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -144,7 +82,7 @@ export function NewJailIntakeModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-5 py-4">
+        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
           {done ? (
             <div style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "var(--color-ink)" }}>
               <p style={{ marginBottom: 8 }}>
@@ -170,68 +108,7 @@ export function NewJailIntakeModal({
             </div>
           ) : (
             <>
-              <div style={{ display: "flex", gap: 10 }}>
-                {text("First name", firstName, setFirstName)}
-                {text("Last name", lastName, setLastName)}
-              </div>
-
-              <div style={{ display: "flex", gap: 10 }}>
-                {text("Facility", jail, setJail, "e.g. Kay County")}
-                {text("A-number", alienNumber, setAlienNumber, "000-000-000")}
-              </div>
-
-              <div style={{ display: "block", marginBottom: 12 }}>
-                <span style={labelStyle}>Language</span>
-                <Select items={languageItems} value={language} onValueChange={(v) => setLanguage(v ?? "")}>
-                  <SelectTrigger aria-label="Language" size="sm" className="w-full border-border-light bg-surface">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="w-[var(--anchor-width)]">
-                    <SelectItem value="">Select…</SelectItem>
-                    {languageItems.slice(1).map((i) => (
-                      <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div style={{ display: "flex", gap: 10 }}>
-                {text("Point of contact", pocName, setPocName, "Name and relationship")}
-                {text("Their phone", pocPhone, setPocPhone)}
-              </div>
-
-              <div style={{ display: "flex", gap: 10 }}>
-                {text("Country of birth", countryOfBirth, setCountryOfBirth)}
-                {/* A text column on the board, not a date: it already holds
-                    "03/07/1980" and "05-27-95", so a date picker would impose a
-                    format the board does not use. */}
-                {text("Date of birth", dateOfBirth, setDateOfBirth, "MM/DD/YYYY")}
-              </div>
-
-              <div style={{ display: "block", marginBottom: 12 }}>
-                <span style={labelStyle}>Prior removal?</span>
-                <Select items={removalItems} value={priorRemoval} onValueChange={(v) => setPriorRemoval(v ?? "")}>
-                  <SelectTrigger aria-label="Prior removal?" size="sm" className="w-full border-border-light bg-surface">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="w-[var(--anchor-width)]">
-                    <SelectItem value="">Not asked</SelectItem>
-                    {removalItems.slice(1).map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <label style={{ display: "block", marginBottom: 12 }}>
-                <span style={labelStyle}>Description</span>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  placeholder="What the caller told you…"
-                  className="w-full rounded-md px-2 py-1.5 text-sm"
-                  style={{ ...fieldStyle, resize: "vertical" }}
-                />
-              </label>
+              <JailIntakeFields value={fields} onChange={setFields} />
 
               {error && (
                 <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>
