@@ -171,7 +171,7 @@ Top to bottom. Sections marked *admin* only show for admins.
 |---|---|---|
 | P12.1 | Drop zone | Choose a PDF, or try a sample (text or scanned/OCR) |
 | P12.2 | Result filters | Matched / needs attention / no match / unreadable; OCR and separator summary |
-| P12.3 | Notices + preview | One row per notice; **Review** → M15; the scan's pages on the right |
+| P12.3 | Notices + preview | One row per notice; **Review** (needs a person) or **Confirm & send** (matched) → M15; the scan's pages on the right |
 
 ## Popups
 

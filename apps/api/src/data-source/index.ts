@@ -15,6 +15,7 @@ import {
   changeColumnValue,
   createItem as mondayCreateItem,
   createTimelineItem as mondayCreateTimelineItem,
+  addFileToColumn,
 } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput, UpdateMention } from "@case-pipeline/monday";
 
@@ -29,6 +30,8 @@ export interface DataSource {
   createItem(boardId: string, itemName: string, columnValues: Record<string, unknown>, token?: string, groupId?: string): Promise<string>;
   /** Create an Emails & Activities timeline entry on an item. Returns the new timeline item id. */
   createTimelineItem(input: CreateTimelineItemInput, token?: string): Promise<string>;
+  /** Upload a file into an item's file column. Returns the new asset id. */
+  addFile(itemId: string, columnId: string, fileName: string, bytes: Uint8Array, contentType: string, token?: string): Promise<string>;
 }
 
 /** Backed by Monday.com — the current, only implementation. */
@@ -42,6 +45,8 @@ export const mondayDataSource: DataSource = {
   },
   createItem: (boardId, itemName, columnValues, token, groupId) => mondayCreateItem(boardId, itemName, columnValues, token, groupId),
   createTimelineItem: (input, token) => mondayCreateTimelineItem(input, token),
+  addFile: (itemId, columnId, fileName, bytes, contentType, token) =>
+    addFileToColumn(itemId, columnId, fileName, bytes, contentType, token),
 };
 
 /** The active data source the app writes through. Swap this one line the day a

@@ -26,6 +26,8 @@ export { getCallLogEntries, getCallLogStaffOptions } from "./call-log";
 export { getJailIntakes, getJailIntakeNotes, cutoffDate } from "./jail-intakes";
 export { scanMailPages, needsReview, extractNoticeFields, splitIntoDocuments, analyzePage, repairOcrText, matchNotice, findFormsForProfile, normalizeANumber, normalizeFormType } from "./mail";
 export { saveMailScan, setMailScanPdfPath, getMailDocument, getMailReviewAlertGroup, countMailToReview, resolveMailDocument } from "./mail-review";
+export { planMailWriteBack, planForDocument, readOpenFormState, findWriteBackColumns, noticeFileName, recordWriteBack, settleQueuedMailStep, applyLocalColumn, overallState, OPEN_FORMS_BOARD_KEY } from "./mail-writeback";
+export type { MailWriteBackPlan, WriteStep, WriteStepKind, SkippedStep, StepOutcome, WriteBackState, OpenFormState } from "./mail-writeback";
 export type { MailDocumentDetail, MailReviewState, ResolveMailInput, SaveScanInput } from "./mail-review";
 export type { MailPageInput, MailScanResult, MailScanDocument, NoticeMatch, NoticeFields, MatchStatus, AttentionReason, SplitReason, MatchedProfile, MatchedOpenForm } from "./mail";
 export type { CallLogEntry, CallLogFilters, CallLogListResult } from "./types";

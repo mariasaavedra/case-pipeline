@@ -5,8 +5,10 @@
 // notices the matcher couldn't settle appear in Alerts → "Mail to review",
 // where a person assigns each to an Open Form (or client) or dismisses it.
 //
-// Still no Monday writes. An assignment is recorded (and audited) so the
-// write-back — fill Receipt No., attach the PDF — can act on it once built.
+// Assigning to an Open Form then pushes it to Monday (mail/writeback.ts): fill
+// Receipt No., set Receipt Status, attach the notice. The popup previews that
+// exact plan first (GET …/writeback-plan). A failed write-back can be retried
+// (POST …/writeback) without repeating the steps that already landed.
 //
 // Pages with a text layer are read directly; image-only pages go through OCR
 // (see mail/ocr.ts), which is what makes a plain scanner PDF work.
@@ -24,6 +26,8 @@ import {
   getMailDocument,
   resolveMailDocument,
   findFormsForProfile,
+  planForDocument,
+  recordWriteBack,
   type MailPageInput,
   type ResolveMailInput,
 } from "@case-pipeline/query";
@@ -33,6 +37,8 @@ import { auditFromReq } from "../audit/log.js";
 import { DATA_DIR } from "../paths.js";
 import { buildSampleMailPdf, buildScannedSampleMailPdf } from "../mail/sample.js";
 import { readPdfPages } from "../mail/ocr.js";
+import { executeMailWriteBack } from "../mail/writeback.js";
+import type { WriteTokenOptions } from "../write-token.js";
 
 type DatabaseInstance = BetterSqlite3.Database;
 
@@ -42,6 +48,9 @@ export interface MailDeps {
   db: DatabaseInstance;
   /** Where scans are kept (as <dataDir>/mail/scan-<id>.pdf). Defaults to data/. */
   dataDir?: string;
+  /** Without it, assignments are recorded but nothing is written to Monday. */
+  mondayApiToken?: string;
+  writeTokenOptions?: WriteTokenOptions;
 }
 
 /** Keep what a person would recognise; drop anything path-like. */
@@ -56,8 +65,38 @@ function parseId(raw: unknown): number | null {
 }
 
 export function registerMailRoutes(app: Express, deps: MailDeps): void {
-  const { db } = deps;
+  const { db, mondayApiToken, writeTokenOptions } = deps;
   const dataDir = deps.dataDir ?? DATA_DIR;
+  const writeBackEnabled = Boolean(mondayApiToken && writeTokenOptions);
+
+  const publicDoc = (id: number) => {
+    const doc = getMailDocument(db, id)!;
+    return { ...doc, pdfPath: undefined, hasPdf: Boolean(doc.pdfPath) };
+  };
+
+  const runWriteBack = async (req: express.Request, id: number) => {
+    if (!writeBackEnabled) {
+      recordWriteBack(db, id, "skipped", [], "Monday write-back isn't configured on this server (MONDAY_API_TOKEN).");
+      return;
+    }
+    const result = await executeMailWriteBack(
+      { db, dataDir, tokenOptions: writeTokenOptions!(req), authorOid: req.user?.oid ?? null },
+      id,
+    );
+    const doc = getMailDocument(db, id)!;
+    auditFromReq(req, "mail.writeback", {
+      targetType: "mail_document",
+      targetId: String(id),
+      targetMondayId: result.plan.mondayItemId,
+      metadata: {
+        state: result.state,
+        openForm: result.plan.openFormLocalId,
+        steps: result.steps.map((s) => ({ kind: s.kind, result: s.result, value: s.value, detail: s.detail })),
+        blockers: result.plan.blockers,
+        error: doc.writebackError,
+      },
+    });
+  };
   const mailDir = path.join(dataDir, "mail");
 
   // ?scanned=1 → the same notices as images only, so every page needs OCR.
@@ -181,7 +220,7 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
     res.json({ data: findFormsForProfile(db, profile) });
   });
 
-  app.post("/api/mail/documents/:id/resolve", requireAuth, (req, res) => {
+  app.post("/api/mail/documents/:id/resolve", requireAuth, async (req, res) => {
     const id = parseId(req.params.id);
     const body = (req.body ?? {}) as Record<string, unknown>;
     const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -222,6 +261,56 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
         matcherSaid: doc.match.reason ?? doc.status,
       },
     });
-    res.json({ data: { ...doc, pdfPath: undefined, hasPdf: Boolean(doc.pdfPath) } });
+    if (input.action === "assign" && doc.openForm) {
+      try {
+        await runWriteBack(req, id);
+      } catch (err) {
+        // The assignment stands; the write-back can be retried from the popup.
+        console.error("[mail] write-back crashed:", err);
+        recordWriteBack(db, id, "failed", [], err instanceof Error ? err.message : String(err));
+      }
+    }
+    res.json({ data: publicDoc(id) });
+  });
+
+  // What Assign would write, for the popup to show before anyone presses it.
+  // ?openForm= previews a form other than the one the notice is on now.
+  app.get("/api/mail/documents/:id/writeback-plan", requireAuth, (req, res) => {
+    const id = parseId(req.params.id);
+    const doc = id ? getMailDocument(db, id) : null;
+    if (!doc) {
+      res.status(404).json({ error: "Mail document not found" });
+      return;
+    }
+    const formId = typeof req.query.openForm === "string" && req.query.openForm ? req.query.openForm : (doc.openForm?.localId ?? null);
+    const plan = planForDocument(db, doc, formId);
+    if (!writeBackEnabled) plan.blockers.push("Monday write-back isn't configured on this server.");
+    res.json({ data: plan });
+  });
+
+  // Retry a write-back that failed, partly failed, or was blocked (e.g. before
+  // the board's columns synced). Steps that landed or are queued are not redone.
+  app.post("/api/mail/documents/:id/writeback", requireAuth, async (req, res) => {
+    const id = parseId(req.params.id);
+    const doc = id ? getMailDocument(db, id) : null;
+    if (!doc || !id) {
+      res.status(404).json({ error: "Mail document not found" });
+      return;
+    }
+    if (doc.reviewState !== "assigned" || !doc.openForm) {
+      res.status(409).json({ error: "Only a notice assigned to an Open Form can be sent to Monday" });
+      return;
+    }
+    if (doc.writebackState === "done" || doc.writebackState === "queued") {
+      res.status(409).json({ error: `Already ${doc.writebackState === "done" ? "in Monday" : "queued for retry"}` });
+      return;
+    }
+    try {
+      await runWriteBack(req, id);
+    } catch (err) {
+      console.error("[mail] write-back retry crashed:", err);
+      recordWriteBack(db, id, "failed", doc.writebackSteps, err instanceof Error ? err.message : String(err));
+    }
+    res.json({ data: publicDoc(id) });
   });
 }

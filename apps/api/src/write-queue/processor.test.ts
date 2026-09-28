@@ -6,7 +6,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 
-const { createUpdateMock, changeSimpleColumnValueMock, changeColumnValueMock, createItemMock } = vi.hoisted(() => ({
+const { createUpdateMock, changeSimpleColumnValueMock, changeColumnValueMock, createItemMock, addFileToColumnMock } = vi.hoisted(() => ({
+  addFileToColumnMock: vi.fn(),
   createUpdateMock: vi.fn(),
   changeSimpleColumnValueMock: vi.fn(),
   changeColumnValueMock: vi.fn(),
@@ -21,10 +22,14 @@ vi.mock("@case-pipeline/monday", async (importOriginal) => ({
   changeSimpleColumnValue: changeSimpleColumnValueMock,
   changeColumnValue: changeColumnValueMock,
   createItem: createItemMock,
+  addFileToColumn: addFileToColumnMock,
 }));
 
 import { AuthError, MondayApiError } from "@case-pipeline/monday";
 import { enqueueWrite, drainWriteQueue } from "./processor";
+import fs from "node:fs";
+import path from "node:path";
+import { DATA_DIR } from "../paths.js";
 
 type DatabaseInstance = InstanceType<typeof Database>;
 
@@ -395,5 +400,60 @@ describe("write-queue processor", () => {
     expect(createUpdateMock).not.toHaveBeenCalled();
     expect(queueRow(db).status).toBe("pending");
     db.close();
+  });
+});
+
+describe("add_file (scanned-mail notices)", () => {
+  beforeEach(() => addFileToColumnMock.mockReset());
+
+  function mailDoc(db: DatabaseInstance): number {
+    db.prepare("INSERT INTO mail_scans (file_name, total_pages) VALUES ('m.pdf', 1)").run();
+    db.prepare(
+      `INSERT INTO mail_documents (scan_id, pages, split_reason, fields, match, status, message, review_state, writeback_state, writeback_steps)
+       VALUES (1, '[1]', 'first_page', '{}', '{}', 'matched', 'x', 'assigned', 'queued', ?)`,
+    ).run(JSON.stringify([
+      { kind: "receipt_no", columnTitle: "Receipt No.", value: "IOE1", result: "done" },
+      { kind: "attach", columnTitle: "Receipt Doc", value: "n.pdf", result: "queued" },
+    ]));
+    return 1;
+  }
+
+  it("uploads the stored file and marks the notice's step done", async () => {
+    const db = freshDb();
+    const docId = mailDoc(db);
+    const rel = path.join("mail", `_queue-test-${process.pid}.pdf`);
+    fs.mkdirSync(path.join(DATA_DIR, "mail"), { recursive: true });
+    fs.writeFileSync(path.join(DATA_DIR, rel), Buffer.from("%PDF-1.7 test"));
+    try {
+      addFileToColumnMock.mockResolvedValue("asset-1");
+      enqueueWrite(db, {
+        opType: "add_file",
+        mondayItemId: "999",
+        payload: { columnId: "file_mm223wma", filePath: rel, fileName: "n.pdf", mailDocumentId: docId, mailStepKind: "attach" },
+      });
+      expect(await drainWriteQueue(db, { token: "tok" })).toBe(1);
+      const [itemId, columnId, fileName, bytes, type, token] = addFileToColumnMock.mock.calls[0]!;
+      expect([itemId, columnId, fileName, type, token]).toEqual(["999", "file_mm223wma", "n.pdf", "application/pdf", "tok"]);
+      expect(Buffer.from(bytes as Uint8Array).toString()).toBe("%PDF-1.7 test");
+      expect(db.prepare("SELECT writeback_state AS s FROM mail_documents").get()).toEqual({ s: "done" });
+    } finally {
+      fs.rmSync(path.join(DATA_DIR, rel), { force: true });
+    }
+  });
+
+  it("refuses a path outside the data directory and, once dead-lettered, marks the step failed", async () => {
+    const db = freshDb();
+    const docId = mailDoc(db);
+    enqueueWrite(db, {
+      opType: "add_file",
+      mondayItemId: "999",
+      maxAttempts: 1,
+      payload: { columnId: "c", filePath: "../../etc/passwd", fileName: "x", mailDocumentId: docId, mailStepKind: "attach" },
+    });
+    await drainWriteQueue(db, { token: "tok" });
+    expect(addFileToColumnMock).not.toHaveBeenCalled();
+    expect(queueRow(db)).toMatchObject({ status: "failed" });
+    expect(queueRow(db).last_error).toMatch(/escapes the data directory/);
+    expect(db.prepare("SELECT writeback_state AS s FROM mail_documents").get()).toEqual({ s: "partial" });
   });
 });

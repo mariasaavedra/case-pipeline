@@ -133,7 +133,8 @@ const PAGES = [
     { code:"P7.3", name:"Agenda" } ] },
   { code:"P8", name:"Alerts", path:"/alerts", items:[
     { code:"P8.1", name:"Controls", note:"attorney and severity filters" },
-    { code:"P8.2", name:"Alert groups", note:"critical / warning / info" } ] },
+    { code:"P8.2", name:"Alert groups", note:"critical / warning / info, and Mail to review", pops:[
+      { code:"M15", name:"Mail review", note:"click a “Mail to review” row" } ] } ] },
   { code:"P9", name:"Jail Intakes", path:"/jail-intakes", items:[
     { code:"P9.1", name:"Filters + search", note:"recent / older / all, name or facility" },
     { code:"P9.2", name:"Intake list", pops:[ { code:"M9", name:"Jail intake detail", note:"click an intake" } ] } ], pops:[
@@ -153,6 +154,11 @@ const PAGES = [
     { code:"P11.6", name:"Status tags", admin:true, pops:[ { code:"D12", name:"Urgency picker" } ] }, { code:"P11.7", name:"Urgency", admin:true },
     { code:"P11.8", name:"Sync health", admin:true }, { code:"P11.9", name:"Users", admin:true },
     { code:"P11.10", name:"Audit log", admin:true } ] },
+  { code:"P12", name:"Mail", path:"/mail", items:[
+    { code:"P12.1", name:"Drop zone", note:"choose a PDF, or try a sample (text or scanned/OCR)" },
+    { code:"P12.2", name:"Result filters", note:"matched / needs attention / no match / unreadable" },
+    { code:"P12.3", name:"Notices + preview", note:"one row per notice; the scan’s pages on the right", pops:[
+      { code:"M15", name:"Mail review", note:"“Review” or “Confirm & send” on a notice" } ] } ] },
 ];
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));

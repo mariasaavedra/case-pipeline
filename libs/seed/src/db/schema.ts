@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 24;
+export const SCHEMA_VERSION = 25;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -334,6 +334,8 @@ CREATE TABLE IF NOT EXISTS board_columns (
 -- low-confidence OCR read — has needs_review = 1 and shows in Alerts until a
 -- person assigns it (review_state 'assigned') or dismisses it ('dismissed').
 -- The match column holds the full NoticeMatch JSON from libs/query/src/mail.ts.
+-- writeback_* (v25+) track pushing an assignment to Monday: state none → done |
+-- partial | queued | failed | skipped, steps = JSON of each column/file write.
 CREATE TABLE IF NOT EXISTS mail_scans (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     file_name       TEXT NOT NULL,
@@ -365,7 +367,11 @@ CREATE TABLE IF NOT EXISTS mail_documents (
     resolved_by_name   TEXT,
     resolved_at        TEXT,
     resolution_note    TEXT,
-    created_at         TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    writeback_state    TEXT NOT NULL DEFAULT 'none',
+    writeback_steps    TEXT,
+    writeback_error    TEXT,
+    writeback_at       TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_mail_documents_review ON mail_documents(needs_review, review_state);
 CREATE INDEX IF NOT EXISTS idx_mail_documents_scan ON mail_documents(scan_id);
@@ -1169,6 +1175,23 @@ export function initializeSchema(db: Database): void {
         CREATE INDEX IF NOT EXISTS idx_mail_documents_review ON mail_documents(needs_review, review_state);
         CREATE INDEX IF NOT EXISTS idx_mail_documents_scan ON mail_documents(scan_id);
       `);
+    }
+
+    // Migration v24 → v25: track the Monday write-back of an assigned notice.
+    // Additive columns on a table that is empty until mail is scanned.
+    if (fromVersion < 25) {
+      const cols = new Set(
+        (db.prepare("SELECT name FROM pragma_table_info('mail_documents')").all() as { name: string }[]).map((c) => c.name),
+      );
+      const add: Array<[string, string]> = [
+        ["writeback_state", "TEXT NOT NULL DEFAULT 'none'"],
+        ["writeback_steps", "TEXT"],
+        ["writeback_error", "TEXT"],
+        ["writeback_at", "TEXT"],
+      ];
+      for (const [name, type] of add) {
+        if (!cols.has(name)) db.exec(`ALTER TABLE mail_documents ADD COLUMN ${name} ${type}`);
+      }
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

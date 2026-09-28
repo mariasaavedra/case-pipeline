@@ -459,7 +459,7 @@ registerCallLogRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOpt
 // =============================================================================
 // Mail intake (prototype, read-only) — see routes/mail.ts
 // =============================================================================
-registerMailRoutes(app, { db });
+registerMailRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 
 // =============================================================================
 // Settings (attorney boards, KPI columns, status overrides, urgency) —

@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -17,7 +17,7 @@ export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from 
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
-export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail } from "@case-pipeline/query";
+export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail, MailWriteBackPlan, StepOutcome, WriteBackState } from "@case-pipeline/query";
 
 /** A saved notice as the API returns it: the server keeps the file path to itself. */
 export type MailDocument = Omit<MailDocumentDetail, "pdfPath"> & { hasPdf: boolean };
@@ -968,4 +968,16 @@ export function resolveMailDocument(id: number, body: ResolveMailBody): Promise<
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+/** Exactly what Assign would write to Monday for this notice and Open Form. */
+export function fetchMailWriteBackPlan(id: number, openFormLocalId: string): Promise<MailWriteBackPlan> {
+  return apiFetch<MailWriteBackPlan>(
+    `/api/mail/documents/${id}/writeback-plan?openForm=${encodeURIComponent(openFormLocalId)}`,
+  );
+}
+
+/** Retry a failed or partial write-back; steps that already landed aren't redone. */
+export function retryMailWriteBack(id: number): Promise<MailDocument> {
+  return apiFetch<MailDocument>(`/api/mail/documents/${id}/writeback`, { method: "POST" });
 }

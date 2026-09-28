@@ -169,3 +169,38 @@ describe("saved scans and review", () => {
     expect((await fetch(`${base}/api/mail/documents/abc/pdf`)).status).toBe(404);
   });
 });
+
+describe("write-back routes (server without a Monday token)", () => {
+  test("the plan preview explains why nothing would be written", async () => {
+    const sample = await (await fetch(`${base}/api/mail/sample.pdf`)).arrayBuffer();
+    const data = await scan(sample, "?sample=1");
+    const first = data.documents[0]!;
+    const res = await fetch(`${base}/api/mail/documents/${first.id}/writeback-plan?openForm=f1`);
+    const plan = (await res.json()).data;
+    expect(plan.steps).toEqual([]);
+    expect(plan.blockers.join(" ")).toMatch(/Sample scans are never written/);
+    expect(plan.blockers.join(" ")).toMatch(/isn't configured/);
+  });
+
+  test("assigning records the decision, and the write-back as skipped with the reason", async () => {
+    const sample = await (await fetch(`${base}/api/mail/sample.pdf`)).arrayBuffer();
+    const data = await scan(sample);
+    const first = data.documents[0]!;
+    const res = await fetch(`${base}/api/mail/documents/${first.id}/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "assign", openFormLocalId: "f1" }),
+    });
+    const doc = (await res.json()).data;
+    expect(doc).toMatchObject({ reviewState: "assigned", writebackState: "skipped" });
+    expect(doc.writebackError).toMatch(/MONDAY_API_TOKEN/);
+  });
+
+  test("retry: refused for a notice that isn't assigned to an Open Form", async () => {
+    const sample = await (await fetch(`${base}/api/mail/sample.pdf`)).arrayBuffer();
+    const data = await scan(sample);
+    const res = await fetch(`${base}/api/mail/documents/${data.documents[0]!.id}/writeback`, { method: "POST" });
+    expect(res.status).toBe(409);
+    expect((await fetch(`${base}/api/mail/documents/999/writeback`, { method: "POST" })).status).toBe(404);
+  });
+});

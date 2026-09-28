@@ -14,6 +14,8 @@ import {
   getExistingLabelNames,
   parseStatusOptions,
   createUpdate,
+  addFileToColumn,
+  AuthError,
 } from "./api";
 import type { MondayItem, MondayColumn } from "./types";
 
@@ -423,5 +425,45 @@ describe("mondayRequest retry windows", () => {
     await mondayRequest("query { fast }", undefined, "tok");
 
     expect(armed.filter((ms) => ms >= 30_000)).toEqual([30_000, 30_000]);
+  });
+});
+
+describe("addFileToColumn", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("posts a GraphQL multipart request to the file endpoint and returns the asset id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { add_file_to_column: { id: "asset-9" } } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const id = await addFileToColumn("123", "file_mm223wma", "notice.pdf", new Uint8Array([37, 80, 68, 70]), "application/pdf", "tok");
+    expect(id).toBe("asset-9");
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://api.monday.com/v2/file");
+    expect(init.headers).toMatchObject({ Authorization: "tok" });
+    expect(init.headers["Content-Type"]).toBeUndefined(); // fetch adds the boundary
+    const form = init.body as FormData;
+    expect(form.get("query")).toContain('add_file_to_column(item_id: "123", column_id: "file_mm223wma"');
+    const file = form.get("variables[file]") as File;
+    expect(file.name).toBe("notice.pdf");
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(new Uint8Array([37, 80, 68, 70]));
+  });
+
+  test("a rejected token surfaces as AuthError, so the token fallback applies", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403, statusText: "Forbidden", headers: new Headers() }));
+    await expect(addFileToColumn("1", "c", "f.pdf", new Uint8Array([1]), "application/pdf", "tok")).rejects.toBeInstanceOf(AuthError);
+  });
+
+  test("ids are JSON-escaped into the mutation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { add_file_to_column: { id: "x" } } }) });
+    vi.stubGlobal("fetch", fetchMock);
+    await addFileToColumn('1") { id } evil(', "c", "f.pdf", new Uint8Array([1]), "application/pdf", "tok");
+    const query = (fetchMock.mock.calls[0]![1].body as FormData).get("query") as string;
+    expect(query).toContain('item_id: "1\\") { id } evil("');
   });
 });
