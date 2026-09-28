@@ -20,7 +20,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       "New Mail page in the sidebar. Drop in a scanned PDF — one notice or a whole day's mail in one file — and each notice is matched to the client's Open Form by its receipt number or A-number.",
       "Plain scans work too: pages without text are read automatically. A notice read that way shows how sure the reading is, like OCR 93%.",
       "Notices that can't be matched to exactly one Open Form go to Alerts under \"Mail to review\". Open one to see the page next to the possible cases, then assign it or dismiss it with a note.",
-      "This is a trial: nothing is changed in Monday.com yet. Filling in the receipt number and attaching the notice there comes next.",
+      "Assigning a notice updates its Open Form in Monday.com: the receipt number is filled in (never overwritten if a different one is already there), Receipt Status is set to Received, and the notice is attached. The popup shows exactly what will change before you press Assign. Matched notices on the Mail page have a \"Confirm & send\" button for the same step.",
+      "Notices from the sample buttons are never sent to Monday.com.",
     ],
   },
   {

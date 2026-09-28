@@ -5,7 +5,9 @@
 // it into notices), and each notice comes back with the Open Form it belongs to
 // and what the write-back WOULD do. The scan is saved; notices that need a
 // person also land in Alerts → "Mail to review" (M15 settles them, here or
-// there). Nothing reaches Monday yet.
+// there). Nothing reaches Monday until a person assigns a notice in M15 —
+// matched notices included ("Confirm & send"), after seeing exactly what will
+// be written.
 //
 // The PDF never leaves the browser except for the one scan request: the preview
 // on the right is a local blob URL.
@@ -187,16 +189,17 @@ function DocumentRow({
           </span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-        {doc.needsReview && doc.id != null && !resolved && (
+        {doc.id != null && !resolved && (
           <Button
             type="button"
             size="sm"
+            variant={doc.needsReview ? "default" : "outline"}
             onClick={(e) => {
               e.stopPropagation();
               onReview();
             }}
           >
-            Review
+            {doc.needsReview ? "Review" : "Confirm & send"}
           </Button>
         )}
         {match.profile && (
@@ -370,7 +373,7 @@ export function MailPage() {
           className="text-[11px] px-2 py-1 rounded-md"
           style={{ background: "var(--color-status-blue-bg)", color: "var(--color-status-blue)", fontFamily: "var(--font-body)" }}
         >
-          Prototype · scans are saved; nothing is sent to Monday yet
+          Trial · Monday is updated only when you assign a notice
         </span>
       </div>
 

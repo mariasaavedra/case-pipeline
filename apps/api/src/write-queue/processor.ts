@@ -14,11 +14,26 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import cron from "node-cron";
-import { createUpdate, changeSimpleColumnValue, changeColumnValue, createItem, createTimelineItem } from "@case-pipeline/monday";
+import fs from "node:fs";
+import path from "node:path";
+import { createUpdate, changeSimpleColumnValue, changeColumnValue, createItem, createTimelineItem, addFileToColumn } from "@case-pipeline/monday";
 import type { UpdateMention } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { acquireSyncLock, releaseSyncLock } from "@case-pipeline/seed/db/sync-lock";
 import { withTokenFallback } from "../write-auth.js";
+import { DATA_DIR } from "../paths.js";
+import { settleQueuedMailStep } from "@case-pipeline/query";
+
+/** A queued step of a scanned notice's write-back reports back to that notice. */
+function settleMailStep(db: Database, row: QueueRow, result: "done" | "failed", detail?: string): void {
+  try {
+    const payload = JSON.parse(row.payload) as { mailDocumentId?: unknown; mailStepKind?: unknown };
+    if (typeof payload.mailDocumentId !== "number" || typeof payload.mailStepKind !== "string") return;
+    settleQueuedMailStep(db, payload.mailDocumentId, payload.mailStepKind as "receipt_no" | "receipt_status" | "attach", result, detail);
+  } catch (err) {
+    console.warn(`[write-queue] op ${row.id}: could not update its mail notice:`, err);
+  }
+}
 
 const LOCK_HOLDER = "write-queue";
 const BATCH_SIZE = 20;
@@ -29,6 +44,7 @@ export type WriteOpType =
   | "change_column_json"
   | "create_item"
   | "create_timeline_item"
+  | "add_file"
   | "reschedule";
 
 export interface EnqueueInput {
@@ -180,6 +196,26 @@ async function dispatch(row: QueueRow, token?: string): Promise<string | undefin
       }
       return await createTimelineItem(input, token);
     }
+    case "add_file": {
+      // The file lives under data/ (a scanned notice is cut to its own PDF
+      // before it is queued), so a retry after a restart still has the bytes.
+      if (!row.monday_item_id) throw new Error("add_file requires monday_item_id");
+      const columnId = String(payload.columnId ?? "");
+      const rel = String(payload.filePath ?? "");
+      if (!columnId || !rel) throw new Error("add_file requires columnId and filePath");
+      const file = path.resolve(DATA_DIR, rel);
+      if (!file.startsWith(path.resolve(DATA_DIR) + path.sep)) throw new Error("add_file path escapes the data directory");
+      const bytes = new Uint8Array(fs.readFileSync(file));
+      await addFileToColumn(
+        row.monday_item_id,
+        columnId,
+        String(payload.fileName ?? path.basename(file)),
+        bytes,
+        String(payload.contentType ?? "application/pdf"),
+        token,
+      );
+      return undefined;
+    }
     // TODO(monday-write): case "reschedule" → change a date column value
     default:
       throw new Error(`Unsupported write_queue op_type: ${row.op_type}`);
@@ -265,6 +301,7 @@ export async function drainWriteQueue(
             console.warn(`[write-queue] op ${row.id}: unrecognized target_table "${row.target_table}", skipped reconciliation`);
           }
         }
+        settleMailStep(db, row, "done");
         synced++;
       } catch (err) {
         const attempts = row.attempts + 1;
@@ -275,6 +312,7 @@ export async function drainWriteQueue(
             `UPDATE write_queue SET status = 'failed', attempts = ?, last_error = ?, updated_at = ? WHERE id = ?`,
           ).run(attempts, message, new Date().toISOString(), row.id);
           console.error(`[write-queue] op ${row.id} (${row.op_type}) dead-lettered after ${attempts} attempts: ${message}`);
+          settleMailStep(db, row, "failed", message);
         } else {
           const nextAttempt = new Date(Date.now() + backoffMs(attempts)).toISOString();
           db.prepare(

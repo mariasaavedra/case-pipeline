@@ -6,9 +6,8 @@
 // Alerts → "Mail to review" until someone assigns them to an Open Form (or a
 // client) or dismisses them.
 //
-// Assigning is still bookkeeping only: it records the decision and who made
-// it. Writing the receipt number / attaching the PDF in Monday is the next
-// step, and will read these decisions.
+// Assigning records the decision and who made it; the API then pushes it to
+// Monday (see mail-writeback.ts for what is written).
 //
 // Sample scans (the "Try a sample" buttons) are saved like any other so the
 // flow can be tried end to end, but drop out of Alerts after SAMPLE_TTL_HOURS
@@ -29,6 +28,7 @@ import type {
   SplitReason,
 } from "./mail";
 import { findFormsForProfile } from "./mail";
+import type { StepOutcome, WriteBackState } from "./mail-writeback";
 
 const SAMPLE_TTL_HOURS = 24;
 const ALERT_ITEM_LIMIT = 50;
@@ -63,6 +63,11 @@ export interface MailDocumentDetail {
   resolvedByName: string | null;
   resolvedAt: string | null;
   resolutionNote: string | null;
+  /** Monday write-back of the assignment (v25). */
+  writebackState: WriteBackState;
+  writebackSteps: StepOutcome[];
+  writebackError: string | null;
+  writebackAt: string | null;
   /** What the review settled on (or the matcher, if it never needed review). */
   profile: MatchedProfile | null;
   openForm: MatchedOpenForm | null;
@@ -154,6 +159,10 @@ interface DocRow {
   resolvedByName: string | null;
   resolvedAt: string | null;
   resolutionNote: string | null;
+  writebackState: WriteBackState;
+  writebackSteps: string | null;
+  writebackError: string | null;
+  writebackAt: string | null;
 }
 
 const DOC_SELECT = `
@@ -163,7 +172,9 @@ const DOC_SELECT = `
          d.ocr_confidence AS ocrConfidence, d.fields, d.match, d.status, d.reason, d.message,
          d.profile_local_id AS profileLocalId, d.open_form_local_id AS openFormLocalId,
          d.needs_review AS needsReview, d.review_state AS reviewState,
-         d.resolved_by_name AS resolvedByName, d.resolved_at AS resolvedAt, d.resolution_note AS resolutionNote
+         d.resolved_by_name AS resolvedByName, d.resolved_at AS resolvedAt, d.resolution_note AS resolutionNote,
+         d.writeback_state AS writebackState, d.writeback_steps AS writebackSteps,
+         d.writeback_error AS writebackError, d.writeback_at AS writebackAt
   FROM mail_documents d JOIN mail_scans s ON s.id = d.scan_id`;
 
 /** Open, needs a person, and not an expired sample. */
@@ -213,6 +224,10 @@ function toDetail(db: Database, r: DocRow): MailDocumentDetail {
     resolvedByName: r.resolvedByName,
     resolvedAt: r.resolvedAt,
     resolutionNote: r.resolutionNote,
+    writebackState: r.writebackState,
+    writebackSteps: r.writebackSteps ? (JSON.parse(r.writebackSteps) as StepOutcome[]) : [],
+    writebackError: r.writebackError,
+    writebackAt: r.writebackAt,
     profile: getProfile(db, r.profileLocalId),
     openForm: getOpenForm(db, r.openFormLocalId, r.profileLocalId),
   };

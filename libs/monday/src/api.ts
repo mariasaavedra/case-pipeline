@@ -283,17 +283,22 @@ export async function mondayRequest<T>(
   apiVersionOverride?: string
 ): Promise<T> {
   const token = tokenOverride ?? getApiToken();
+  return requestWithRetry<T>((timeoutMs) =>
+    executeRequest(token, query, variables, apiVersionOverride, timeoutMs),
+  );
+}
+
+/**
+ * The retry/backoff/GraphQL-error loop behind every Monday call. `send` makes
+ * one attempt with the given timeout; it is called again for each retry, so a
+ * body that can't be re-sent (a multipart upload) is rebuilt every time.
+ */
+async function requestWithRetry<T>(send: (timeoutMs: number) => Promise<Response>): Promise<T> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= apiConfig.maxRetries; attempt++) {
     try {
-      const response = await executeRequest(
-        token,
-        query,
-        variables,
-        apiVersionOverride,
-        timeoutForAttempt(attempt),
-      );
+      const response = await send(timeoutForAttempt(attempt));
 
       // Handle non-OK responses
       if (!response.ok) {
@@ -405,6 +410,44 @@ export async function mondayRequest<T>(
 
   // Should not reach here, but just in case
   throw lastError || new MondayApiError("Request failed after all retries");
+}
+
+/**
+ * Upload a file into an item's file column (add_file_to_column). Monday takes
+ * files only on its separate /v2/file endpoint, as a GraphQL multipart request:
+ * the mutation in `query`, the bytes in `variables[file]`. Same retry and
+ * error rules as every other call — a permission failure throws the same
+ * errors, so write-auth's token fallback applies unchanged. Returns the asset id.
+ */
+export async function addFileToColumn(
+  itemId: string,
+  columnId: string,
+  fileName: string,
+  bytes: Uint8Array,
+  contentType = "application/pdf",
+  tokenOverride?: string,
+): Promise<string> {
+  const token = tokenOverride ?? getApiToken();
+  const query = `mutation ($file: File!) {
+    add_file_to_column(item_id: ${JSON.stringify(String(itemId))}, column_id: ${JSON.stringify(columnId)}, file: $file) { id }
+  }`;
+  const result = await requestWithRetry<{ data: { add_file_to_column: { id: string } } }>((timeoutMs) => {
+    const form = new FormData();
+    form.append("query", query);
+    // Copy into a plain ArrayBuffer: Blob won't take a view over a SharedArrayBuffer.
+    form.append("variables[file]", new Blob([new Uint8Array(bytes)], { type: contentType }), fileName);
+    return fetchWithTimeout(
+      "https://api.monday.com/v2/file",
+      {
+        method: "POST",
+        // No Content-Type: fetch sets the multipart boundary itself.
+        headers: { Authorization: token, "API-Version": apiConfig.apiVersion },
+        body: form,
+      },
+      timeoutMs,
+    );
+  });
+  return result.data.add_file_to_column.id;
 }
 
 // =============================================================================

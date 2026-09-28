@@ -7,9 +7,11 @@
 // has no form yet, and a search for any other client. Or dismiss it, with a
 // reason.
 //
-// Assigning records the decision (audited). It does not touch Monday yet —
-// filling Receipt No. and attaching the PDF is the next step and will act on
-// these decisions.
+// Assigning to an Open Form records the decision and then updates Monday:
+// Receipt No., Receipt Status, and the notice attached. Before the button is
+// pressed, the popup shows that exact plan (fetched from the server, which runs
+// it), including what it will NOT touch and why. Afterwards it shows what
+// happened per step, with Retry for anything that failed.
 // =============================================================================
 
 import { useEffect, useMemo, useState } from "react";
@@ -17,9 +19,12 @@ import {
   fetchMailDocument,
   fetchMailDocumentPdf,
   fetchOpenFormsFor,
+  fetchMailWriteBackPlan,
+  retryMailWriteBack,
   resolveMailDocument,
   searchClients,
   type MailDocument,
+  type MailWriteBackPlan,
   type MatchedOpenForm,
   type SearchResult,
 } from "../api";
@@ -99,6 +104,82 @@ function ChoiceRow({
   );
 }
 
+const STEP_LABEL = { receipt_no: "Receipt No.", receipt_status: "Receipt Status", attach: "Attach notice" } as const;
+
+function PlanPreview({ plan, loading }: { plan: MailWriteBackPlan | null; loading: boolean }) {
+  if (loading && !plan) {
+    return (
+      <p className="text-xs" style={faint}>
+        Checking what this would change in Monday…
+      </p>
+    );
+  }
+  if (!plan) return null;
+  if (plan.blockers.length > 0) {
+    return (
+      <div className="text-xs px-3 py-2 rounded-md" style={{ background: "var(--color-status-gray-bg)", color: "var(--color-status-gray)", fontFamily: "var(--font-body)" }}>
+        <span className="font-semibold">Nothing will be written to Monday.</span> {plan.blockers.join(" ")}
+      </div>
+    );
+  }
+  return (
+    <div className="text-xs px-3 py-2 rounded-md flex flex-col gap-1" style={{ background: "var(--color-status-blue-bg)", color: "var(--color-status-blue)", fontFamily: "var(--font-body)" }}>
+      <span className="font-semibold">{plan.steps.length > 0 ? "Assign will update Monday:" : "Assign changes nothing in Monday:"}</span>
+      {plan.steps.map((st) => (
+        <span key={st.kind}>
+          • {st.kind === "attach" ? `${st.columnTitle}: attach “${st.value}”` : `${st.columnTitle}: ${st.current ?? "empty"} → ${st.value}`}
+        </span>
+      ))}
+      {plan.skipped.map((sk) => (
+        <span key={sk.kind} style={{ opacity: 0.75 }}>
+          • {STEP_LABEL[sk.kind]} left as is — {sk.reason}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+const RESULT_STYLE = {
+  done: { text: "✓", color: "var(--color-status-green)" },
+  queued: { text: "…", color: "var(--color-status-blue)" },
+  failed: { text: "✗", color: "var(--color-status-red)" },
+  skipped: { text: "–", color: "var(--color-ink-faint)" },
+} as const;
+
+const STATE_TEXT: Record<string, string> = {
+  done: "Updated in Monday",
+  queued: "Monday didn't answer — retrying in the background",
+  partial: "Partly updated in Monday",
+  failed: "Monday update failed",
+  skipped: "Not written to Monday",
+  none: "Not sent to Monday",
+};
+
+function WriteBackResult({ doc, onRetry, retrying }: { doc: MailDocument; onRetry: () => void; retrying: boolean }) {
+  if (doc.reviewState !== "assigned" || !doc.openForm) return null;
+  const canRetry = ["failed", "partial", "none"].includes(doc.writebackState) || (doc.writebackState === "skipped" && !doc.isSample);
+  return (
+    <div className="flex flex-col gap-1 text-xs px-3 py-2 rounded-md" style={{ border: "1px solid var(--color-border-light)", fontFamily: "var(--font-body)", color: "var(--color-ink)" }}>
+      <span className="font-semibold">{STATE_TEXT[doc.writebackState] ?? doc.writebackState}</span>
+      {doc.writebackSteps.map((st, i) => (
+        <span key={`${st.kind}-${i}`} style={{ color: RESULT_STYLE[st.result].color }}>
+          {RESULT_STYLE[st.result].text} {st.columnTitle || STEP_LABEL[st.kind]}
+          {st.result !== "skipped" && st.value ? `: ${st.value}` : ""}
+          {st.detail ? ` — ${st.detail}` : ""}
+        </span>
+      ))}
+      {doc.writebackError && doc.writebackSteps.length === 0 && <span style={faint}>{doc.writebackError}</span>}
+      {canRetry && (
+        <div>
+          <Button type="button" size="sm" variant="outline" disabled={retrying} onClick={onRetry}>
+            {retrying ? "Sending…" : "Retry sending to Monday"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MailReviewModal({
   documentId,
   onClose,
@@ -118,6 +199,9 @@ export function MailReviewModal({
   const [results, setResults] = useState<SearchResult[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [plan, setPlan] = useState<MailWriteBackPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   // The notice, then its pages.
   useEffect(() => {
@@ -165,8 +249,10 @@ export function MailReviewModal({
     m.candidateForms.forEach((f) => add(f.profileLocalId, f.profileName));
     if (m.openForm) add(m.openForm.profileLocalId, m.profile?.name);
     seen.forEach((name, id) => addClient(id, name));
-    // Pre-select the single obvious candidate, if there is one.
-    if (m.candidateForms.length === 1 && m.candidateForms[0]!.profileLocalId) {
+    // Pre-select the obvious answer: the matcher's own form, or a lone candidate.
+    if (m.openForm?.profileLocalId) {
+      setChoice({ kind: "form", formLocalId: m.openForm.localId, profileLocalId: m.openForm.profileLocalId });
+    } else if (m.candidateForms.length === 1 && m.candidateForms[0]!.profileLocalId) {
       setChoice({ kind: "form", formLocalId: m.candidateForms[0]!.localId, profileLocalId: m.candidateForms[0]!.profileLocalId });
     }
   }, [doc]);
@@ -192,6 +278,42 @@ export function MailReviewModal({
   }, [query]);
 
   const open = doc?.reviewState === "open";
+
+  // The write-back plan for whatever form is picked — the server's own plan,
+  // so the preview can't drift from what actually runs.
+  const pickedForm = choice?.kind === "form" ? choice.formLocalId : null;
+  useEffect(() => {
+    if (!doc || !open || !pickedForm) {
+      setPlan(null);
+      return;
+    }
+    let cancelled = false;
+    setPlanLoading(true);
+    fetchMailWriteBackPlan(doc.id, pickedForm)
+      .then((p) => !cancelled && setPlan(p))
+      .catch(() => !cancelled && setPlan(null))
+      .finally(() => !cancelled && setPlanLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [doc, open, pickedForm]);
+
+  const retry = async () => {
+    if (!doc) return;
+    setRetrying(true);
+    setError(null);
+    try {
+      const updated = await retryMailWriteBack(doc.id);
+      setDoc(updated);
+      onResolved?.(updated);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not retry");
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const willWrite = choice?.kind === "form" && plan != null && plan.blockers.length === 0 && plan.steps.length > 0;
 
   const submit = async (action: "assign" | "dismiss") => {
     if (!doc) return;
@@ -297,7 +419,16 @@ export function MailReviewModal({
                     )}
                     {doc.resolutionNote ? ` — “${doc.resolutionNote}”` : ""}
                   </div>
-                ) : (
+                ) : null}
+
+                {!open && <WriteBackResult doc={doc} onRetry={() => void retry()} retrying={retrying} />}
+                {!open && error && (
+                  <p role="alert" className="text-sm" style={{ color: "var(--color-status-red)", fontFamily: "var(--font-body)" }}>
+                    {error}
+                  </p>
+                )}
+
+                {open && (
                   <div className="flex flex-col gap-3">
                     <span className="text-[10px] font-semibold uppercase tracking-wider" style={faint}>
                       Where does it go?
@@ -397,6 +528,13 @@ export function MailReviewModal({
                       style={{ border: "1px solid var(--color-border-light)", background: "var(--color-surface)", ...ink }}
                     />
 
+                    {choice?.kind === "form" && <PlanPreview plan={plan} loading={planLoading} />}
+                    {choice?.kind === "client" && (
+                      <p className="text-xs" style={faint}>
+                        Client only: the decision is recorded; nothing is written to Monday.
+                      </p>
+                    )}
+
                     {error && (
                       <p role="alert" className="text-sm" style={{ color: "var(--color-status-red)", fontFamily: "var(--font-body)" }}>
                         {error}
@@ -413,13 +551,14 @@ export function MailReviewModal({
                       >
                         Dismiss
                       </Button>
-                      <Button type="button" disabled={saving || !choice} onClick={() => void submit("assign")}>
-                        {saving ? "Saving…" : "Assign"}
+                      <Button
+                        type="button"
+                        disabled={saving || !choice || (choice.kind === "form" && planLoading)}
+                        onClick={() => void submit("assign")}
+                      >
+                        {saving ? (willWrite ? "Updating Monday…" : "Saving…") : willWrite ? "Assign & update Monday" : "Assign"}
                       </Button>
                     </div>
-                    <p className="text-[11px]" style={faint}>
-                      Assigning records the decision. Updating Monday (Receipt No., attaching the PDF) comes in a later step.
-                    </p>
                   </div>
                 )}
               </>

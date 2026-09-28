@@ -113,6 +113,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `case-summary.ts` | Full 360° client summary + `batchGetClientCaseSummaries` |
 | `contracts.ts` | Contract queries + `batchGetClientContracts` |
 | `mail-review.ts` | Saved mail scans, the "Mail to review" Alerts group, assign/dismiss decisions |
+| `mail-writeback.ts` | What an assigned notice writes to its Open Form (plan, by column title), write-back state per notice |
 | `mail.ts` | Mail intake: OCR-misread repair, regex field extraction from notice text, auto-split of one scan into notices, match to profile + Open Form |
 | `dashboard.ts` | KPI card queries (6 cards, 7-day windows) |
 | `search.ts` | Cross-type search (contracts, court cases, etc.) |
@@ -173,8 +174,9 @@ Writes and user/account routes:
 | `GET/PUT /api/settings/urgency` | Urgency thresholds (criticalDays/soonDays) + whether status urgency reorders Active Cases (PUT admin-only, audited) |
 | `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only) |
 | `/api/auth/monday`, `/callback`, `/status` | Personal Monday.com OAuth connection (`routes/monday-oauth.ts`) |
-| `POST /api/mail/scan`, `GET /api/mail/sample.pdf` | Mail intake: raw PDF body (`?name=`, `?sample=1`) → split notices matched to Open Forms, saved to `mail_scans`/`mail_documents` (schema v24) with the PDF under `data/mail/`; and a fake multi-notice sample built from the loaded DB. Image-only pages are OCR'd (`apps/api/src/mail/ocr.ts`, tesseract.js + vendored English model, ~1 s/page); `?scanned=1` gives an image-only sample. Nothing written to Monday yet |
+| `POST /api/mail/scan`, `GET /api/mail/sample.pdf` | Mail intake: raw PDF body (`?name=`, `?sample=1`) → split notices matched to Open Forms, saved to `mail_scans`/`mail_documents` (schema v24) with the PDF under `data/mail/`; and a fake multi-notice sample built from the loaded DB. Image-only pages are OCR'd (`apps/api/src/mail/ocr.ts`, tesseract.js + vendored English model, ~1 s/page); `?scanned=1` gives an image-only sample. Nothing written to Monday at scan time |
 | `GET /api/mail/documents/:id` (`/pdf` = just its pages), `GET /api/mail/open-forms?profile=`, `POST /api/mail/documents/:id/resolve` | Mail review (M15): notices flagged `needs_review` show in Alerts → "Mail to review" until assigned to an Open Form/client or dismissed with a note (audited). Sample scans drop out of Alerts after 24 h |
+| `GET /api/mail/documents/:id/writeback-plan?openForm=`, `POST /api/mail/documents/:id/writeback` | Mail write-back: assigning to an Open Form writes Receipt No. (never overwrites a different one), Receipt Status → Received (receipt notices), and attaches the notice (Receipt Doc / USCIS Notice). Plan = `libs/query/src/mail-writeback.ts`, shown before Assign; executor = `apps/api/src/mail/writeback.ts`. Samples and seed rows are never written. Outage → remaining steps queued (`add_file` op reads the cut PDF from `data/mail/notice-<id>.pdf`); retry skips steps already done |
 | `POST /api/webhooks/monday/:token` | Monday.com webhook receiver (unauthenticated by design — secret URL token, constant-time compare). Persists events to the `webhook_events` inbox; a background processor applies them (deletions archived directly, notes re-fetched, column changes via targeted incremental sync). See `docs/webhooks.md` |
 
 ## Key Directories

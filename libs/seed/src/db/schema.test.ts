@@ -423,7 +423,7 @@ describe("v23 → v24 mail intake tables", () => {
     expect(tables).toEqual(expect.arrayContaining(["mail_scans", "mail_documents"]));
     expect(db.prepare("SELECT COUNT(*) c FROM mail_documents").get()).toEqual({ c: 0 });
     expect(db.prepare("SELECT name FROM profiles").get()).toEqual({ name: "Kept" });
-    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(24);
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
   });
 
   test("deleting a scan removes its documents", () => {
@@ -437,5 +437,26 @@ describe("v23 → v24 mail intake tables", () => {
     ).run();
     db.prepare("DELETE FROM mail_scans WHERE id = 1").run();
     expect(db.prepare("SELECT COUNT(*) c FROM mail_documents").get()).toEqual({ c: 0 });
+  });
+});
+
+describe("v24 → v25 mail write-back tracking", () => {
+  test("adds the write-back columns to an existing mail_documents, keeping rows", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (24);
+      CREATE TABLE mail_documents (id INTEGER PRIMARY KEY, message TEXT);
+      INSERT INTO mail_documents (message) VALUES ('kept');
+    `);
+    initializeSchema(db);
+    const cols = (db.prepare("SELECT name FROM pragma_table_info('mail_documents')").all() as { name: string }[]).map(
+      (c) => c.name,
+    );
+    expect(cols).toEqual(expect.arrayContaining(["writeback_state", "writeback_steps", "writeback_error", "writeback_at"]));
+    expect(db.prepare("SELECT message, writeback_state FROM mail_documents").get()).toEqual({
+      message: "kept",
+      writeback_state: "none",
+    });
   });
 });
