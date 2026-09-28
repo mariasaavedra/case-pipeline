@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -17,6 +17,7 @@ export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from 
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
+export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile } from "@case-pipeline/query";
 
 let _tokenGetter: (() => Promise<string | null>) | null = null;
 
@@ -917,4 +918,20 @@ export function fetchAuditLog(
   if (filters.from) params.set("from", filters.from);
   if (filters.to) params.set("to", filters.to);
   return apiFetch<AuditEntry[]>(`/api/admin/audit?${params.toString()}`);
+}
+
+// ---- Mail intake (prototype, read-only) ----
+export function scanMail(pdf: Blob): Promise<MailScanResult> {
+  return apiFetch<MailScanResult>("/api/mail/scan", {
+    method: "POST",
+    headers: { "Content-Type": "application/pdf" },
+    body: pdf,
+  });
+}
+
+/** A fake multi-notice scan built from the loaded DB — for trying the page. */
+export async function fetchSampleMailPdf(): Promise<Blob> {
+  const res = await fetch("/api/mail/sample.pdf", { headers: await authHeaders() });
+  if (!res.ok) throw new Error(`Could not load the sample PDF (HTTP ${res.status})`);
+  return res.blob();
 }

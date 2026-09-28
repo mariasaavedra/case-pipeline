@@ -117,6 +117,17 @@ const NAV_ITEMS: NavItem[] = [
       </svg>
     ),
   },
+  {
+    id: "mail",
+    label: "Mail",
+    path: "/mail",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="2.5" y="4.5" width="15" height="11" rx="1.5" />
+        <path d="M3 5.5l7 5 7-5" />
+      </svg>
+    ),
+  },
 ];
 
 function isActiveItem(item: NavItem, pathname: string): boolean {

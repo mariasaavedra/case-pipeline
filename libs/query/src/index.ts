@@ -24,6 +24,8 @@ export { getAlerts, getAlertsTotalCount } from "./alerts";
 export { getActiveCases } from "./active-cases";
 export { getCallLogEntries, getCallLogStaffOptions } from "./call-log";
 export { getJailIntakes, getJailIntakeNotes, cutoffDate } from "./jail-intakes";
+export { scanMailPages, extractNoticeFields, splitIntoDocuments, analyzePage, matchNotice, findFormsForProfile, normalizeANumber, normalizeFormType } from "./mail";
+export type { MailScanResult, MailScanDocument, NoticeMatch, NoticeFields, MatchStatus, AttentionReason, SplitReason, MatchedProfile, MatchedOpenForm } from "./mail";
 export type { CallLogEntry, CallLogFilters, CallLogListResult } from "./types";
 export type { ActiveCase, ActiveCasesAssignee, ActiveCasesResult, ActiveCasesOptions, Urgency } from "./active-cases";
 export type {

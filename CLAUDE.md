@@ -112,6 +112,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `board-items.ts` | Per-profile board item queries + `batchGetClientBoardItems` |
 | `case-summary.ts` | Full 360° client summary + `batchGetClientCaseSummaries` |
 | `contracts.ts` | Contract queries + `batchGetClientContracts` |
+| `mail.ts` | Mail intake (prototype): regex field extraction from notice text, auto-split of one scan into notices, match to profile + Open Form |
 | `dashboard.ts` | KPI card queries (6 cards, 7-day windows) |
 | `search.ts` | Cross-type search (contracts, court cases, etc.) |
 | `status-options.ts` | Each board's real status labels + colors (write-back validates against these) |
@@ -171,6 +172,7 @@ Writes and user/account routes:
 | `GET/PUT /api/settings/urgency` | Urgency thresholds (criticalDays/soonDays) + whether status urgency reorders Active Cases (PUT admin-only, audited) |
 | `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only) |
 | `/api/auth/monday`, `/callback`, `/status` | Personal Monday.com OAuth connection (`routes/monday-oauth.ts`) |
+| `POST /api/mail/scan`, `GET /api/mail/sample.pdf` | Mail intake prototype (read-only): raw PDF body → split notices matched to Open Forms, and a fake multi-notice sample built from the loaded DB. Text-layer PDFs only (no OCR yet); nothing stored or written to Monday |
 | `POST /api/webhooks/monday/:token` | Monday.com webhook receiver (unauthenticated by design — secret URL token, constant-time compare). Persists events to the `webhook_events` inbox; a background processor applies them (deletions archived directly, notes re-fetched, column changes via targeted incremental sync). See `docs/webhooks.md` |
 
 ## Key Directories
@@ -196,6 +198,7 @@ Run with `tsx scripts/<name>.ts`:
 | `snapshot.ts` | Fetch all 19 boards from Monday.com → `data/monday-snapshot.md` + `.json`. |
 | `sample-real-data.ts` | Pull sample profile + linked item data from Monday.com → `data/samples/`. |
 | `fetch-profile.ts` | Fetch a single profile by ID and dump it to stdout. |
+| `mail-sample.ts` | Write the fake scanned-mail PDF (every page stamped SAMPLE) to `data/samples/sample-mail.pdf`. `npm run mail:sample` (`-- --db=live` builds it from live.db). |
 | `setup-webhooks.ts` | Register/list/remove Monday.com webhooks for all tracked boards. `npm run webhooks:setup -- --url=https://<host>` (requires the API deployed with `MONDAY_WEBHOOK_SECRET` first). |
 | `sync-config/` | Internal sync logic called by `npm run dev:cli -- sync`. |
 | `preflight.sh` | Checks Node 22+, npm, and data directory writability. |

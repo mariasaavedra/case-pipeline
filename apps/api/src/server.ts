@@ -62,6 +62,7 @@ import { currentUserId } from "./db/user-context.js";
 import { sanitizeKpiColumns } from "./db/users-types.js";
 import { auditFromReq } from "./audit/log.js";
 import { registerCallLogRoutes } from "./routes/call-log.js";
+import { registerMailRoutes } from "./routes/mail.js";
 import { registerBoardItemWriteRoutes } from "./routes/board-item-write.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
 import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
@@ -454,6 +455,11 @@ registerBoardItemWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeT
 // Call Log — see routes/call-log.ts
 // =============================================================================
 registerCallLogRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+
+// =============================================================================
+// Mail intake (prototype, read-only) — see routes/mail.ts
+// =============================================================================
+registerMailRoutes(app, { db });
 
 // =============================================================================
 // Settings (attorney boards, KPI columns, status overrides, urgency) —
