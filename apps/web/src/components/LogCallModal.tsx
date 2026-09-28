@@ -46,6 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Button } from "./ui/button";
 import { MentionTextarea } from "./MentionTextarea";
 import { ProfileNotesPreview } from "./ProfileNotesPreview";
+import { NewJailIntakeModal } from "./NewJailIntakeModal";
 
 interface Props {
   onClose: () => void;
@@ -213,7 +214,8 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ name: string; pending: boolean } | null>(null);
+  const [done, setDone] = useState<{ name: string; pending: boolean; mondayItemId: string | null } | null>(null);
+  const [intakeOpen, setIntakeOpen] = useState(false);
 
   // Default status once the board's real options load. In edit mode the entry's
   // own status is already the initial value, so this only fills a blank one.
@@ -354,7 +356,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
         highlightedForUserId: highlightedForId || null,
         mentionedUserIds: noteMentions.length ? noteMentions.map((m) => m.id) : undefined,
       });
-      setDone({ name: res.name, pending: res.pending });
+      setDone({ name: res.name, pending: res.pending, mondayItemId: res.mondayItemId });
       onLogged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : `Failed to ${isEdit ? "save the call" : "log the call"}`);
@@ -426,7 +428,14 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                 {selectedProfile ? <> and linked to <strong>{selectedProfile.name}</strong></> : null}
                 {done.pending ? " — queued (Monday was unreachable, will sync shortly)." : "."}
               </p>
-              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              {/* Offered here rather than on the form: a jail intake links back
+                  to the call through "link to Call Log", and the call has no
+                  monday id until it has actually been created. A queued call has
+                  no id yet either, so the intake is created unlinked. */}
+              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                <Button type="button" variant="outline" onClick={() => setIntakeOpen(true)}>
+                  New jail intake
+                </Button>
                 <Button type="button" variant="outline" onClick={logAnother}>Log another call</Button>
                 <Button type="button" onClick={onClose}>Done</Button>
               </div>
@@ -626,6 +635,16 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
               {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+                {isEdit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIntakeOpen(true)}
+                    style={{ marginRight: "auto" }}
+                  >
+                    New jail intake
+                  </Button>
+                )}
                 <Button type="button" variant="outline" onClick={onClose}>{isEdit ? "Close" : "Cancel"}</Button>
                 <Button type="button" onClick={submit} disabled={saving || !effectiveName}>
                   {isEdit ? (saving ? "Saving…" : "Save") : (saving ? "Logging…" : "Log call")}
@@ -635,6 +654,15 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
           )}
         </div>
       </DialogContent>
+
+      {intakeOpen && (
+        <NewJailIntakeModal
+          onClose={() => setIntakeOpen(false)}
+          callLogItemId={done?.mondayItemId ?? entry?.mondayItemId ?? null}
+          initialPocName={effectiveName || undefined}
+          initialPocPhone={phone.trim() || undefined}
+        />
+      )}
     </Dialog>
   );
 }
