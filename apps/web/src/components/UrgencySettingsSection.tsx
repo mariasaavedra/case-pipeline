@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { fetchUrgencySettings, updateUrgencySettings, type UrgencySettings } from "../api";
 import { Button } from "./ui/button";
+import { SectionCode } from "./ScreenCode";
 
 export function UrgencySettingsSection() {
   const [settings, setSettings] = useState<UrgencySettings | null>(null);
@@ -57,7 +58,7 @@ export function UrgencySettingsSection() {
     <section style={{ marginBottom: "40px" }}>
       <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--color-ink)", marginBottom: 4 }}>
         Urgency
-      </h2>
+      <SectionCode code="P11.7" inline /></h2>
       <p style={{ fontSize: 13, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginBottom: 16, maxWidth: 620 }}>
         How the Active Cases board scores urgency by a case's target date, and whether a status's own
         urgency (set under Status Tags) reorders the board.

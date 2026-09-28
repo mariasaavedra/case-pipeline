@@ -2,6 +2,7 @@ import type { ProfileSummary, ClientCaseSummary } from "../api";
 import { ActionButtons } from "./ActionButtons";
 import { WatchlistPin } from "./WatchlistPin";
 import { DialogTitle } from "./ui/dialog";
+import { SectionCode } from "./ScreenCode";
 import { mondayItemUrl, MONDAY_PROFILES_BOARD_ID } from "../config";
 import { formatANumber } from "@case-pipeline/core";
 
@@ -40,6 +41,14 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
     <div className={isPopup ? "flex-shrink-0 border-b border-border" : "client-header-sticky"}>
       {/* Accent strip */}
       <div className="h-1" style={{ backgroundColor: "var(--color-amber)" }} />
+
+      {/* P3.0 labels this header + the snapshot cards on the 360 page. In the M3
+          popup the header belongs to the popup, which carries its own code. */}
+      {!isPopup && (
+        <div style={{ position: "absolute", right: 10, bottom: 6 }}>
+          <SectionCode code="P3.0" />
+        </div>
+      )}
 
       <div className={isPopup ? "px-6 py-4 pr-12" : "max-w-6xl mx-auto px-6 py-4"}>
         <div className="flex items-start gap-5">

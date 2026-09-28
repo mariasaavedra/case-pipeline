@@ -8,6 +8,8 @@
 //   PageCode  pinned to the bottom-right of the window, one per screen
 //   MenuCode  a last line at the bottom-right of a dropdown menu, in flow so it
 //             never sits on top of an option
+//   SectionCode  a section inside a page (P2.3, P11.6…): after its heading
+//             when it has one (`inline`), else a small line above its right edge
 // =============================================================================
 
 const TITLE = "Screen code: use it when asking for a change to this screen";
@@ -50,6 +52,28 @@ export function MenuCode({ code }: { code: string }) {
         userSelect: "all",
       }}
     >
+      {code}
+    </div>
+  );
+}
+
+export function SectionCode({ code, inline = false }: { code: string; inline?: boolean }) {
+  const style = {
+    fontFamily: "var(--font-mono)",
+    fontSize: 10,
+    fontWeight: 400,
+    lineHeight: 1,
+    letterSpacing: "normal",
+    textTransform: "none" as const,
+    color: "var(--color-ink-faint)",
+    userSelect: "all" as const,
+  };
+  return inline ? (
+    <span aria-hidden title={TITLE} style={{ ...style, marginLeft: 8, verticalAlign: "middle" }}>
+      {code}
+    </span>
+  ) : (
+    <div aria-hidden title={TITLE} style={{ ...style, textAlign: "right", marginBottom: 3 }}>
       {code}
     </div>
   );
