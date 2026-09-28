@@ -47,6 +47,7 @@ import { Button } from "./ui/button";
 import { MentionTextarea } from "./MentionTextarea";
 import { ProfileNotesPreview } from "./ProfileNotesPreview";
 import { NewJailIntakeModal } from "./NewJailIntakeModal";
+import { createJailIntake } from "../api";
 
 interface Props {
   onClose: () => void;
@@ -214,8 +215,15 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ name: string; pending: boolean; mondayItemId: string | null } | null>(null);
+  const [done, setDone] = useState<{ name: string; pending: boolean; mondayItemId: string | null; intake?: { name: string; linked: boolean } } | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
+  // "This call is a jail intake" — filled in alongside the call and created
+  // straight after it, so the intake can carry the new call's monday id.
+  const [isIntake, setIsIntake] = useState(false);
+  const [dFirst, setDFirst] = useState("");
+  const [dLast, setDLast] = useState("");
+  const [dJail, setDJail] = useState("");
+  const [dANumber, setDANumber] = useState("");
 
   // Default status once the board's real options load. In edit mode the entry's
   // own status is already the initial value, so this only fills a blank one.
@@ -327,6 +335,13 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
       setError("Add the caller's name or phone number.");
       return;
     }
+    // Checked before anything is created: an intake with no detainee name is
+    // not worth having, and finding out after the call was logged would leave
+    // half the work done.
+    if (isIntake && !dFirst.trim() && !dLast.trim()) {
+      setError("Add the detainee's name, or untick \u201cthis call is a jail intake\u201d.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -356,7 +371,37 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
         highlightedForUserId: highlightedForId || null,
         mentionedUserIds: noteMentions.length ? noteMentions.map((m) => m.id) : undefined,
       });
-      setDone({ name: res.name, pending: res.pending, mondayItemId: res.mondayItemId });
+      // The intake is created after the call so it can link back to it. A
+      // queued call has no monday id yet, so the intake is created unlinked
+      // rather than with a dangling reference — and the confirmation says which.
+      let intakeResult: { name: string; linked: boolean } | undefined;
+      if (isIntake) {
+        try {
+          const intake = await createJailIntake({
+            firstName: dFirst.trim(),
+            lastName: dLast.trim() || undefined,
+            jail: dJail.trim() || undefined,
+            alienNumber: dANumber.trim() || undefined,
+            // The caller's language is the detainee's often enough to reuse,
+            // and one fewer field matters on a live call.
+            language: language || undefined,
+            pocName: effectiveName || undefined,
+            pocPhone: phone.trim() || undefined,
+            callLogItemId: res.mondayItemId ?? undefined,
+          });
+          intakeResult = { name: intake.name, linked: !!res.mondayItemId };
+        } catch (intakeErr) {
+          // The call IS logged by this point. Say so rather than throwing the
+          // whole thing away.
+          console.error("[log-call] intake creation failed after the call was logged:", intakeErr);
+          setError(
+            intakeErr instanceof Error
+              ? `The call was logged, but the jail intake failed: ${intakeErr.message}`
+              : "The call was logged, but the jail intake failed.",
+          );
+        }
+      }
+      setDone({ name: res.name, pending: res.pending, mondayItemId: res.mondayItemId, intake: intakeResult });
       onLogged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : `Failed to ${isEdit ? "save the call" : "log the call"}`);
@@ -398,6 +443,14 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
     setNoteMentions([]);
     setLanguage("");
     setHighlightedForId("");
+    // Without these, "Log another call" keeps the toggle on and the detainee's
+    // details filled in, and the next save creates a second intake for the same
+    // person against a different call.
+    setIsIntake(false);
+    setDFirst("");
+    setDLast("");
+    setDJail("");
+    setDANumber("");
     setDone(null);
     setError(null);
   };
@@ -428,6 +481,14 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                 {selectedProfile ? <> and linked to <strong>{selectedProfile.name}</strong></> : null}
                 {done.pending ? " — queued (Monday was unreachable, will sync shortly)." : "."}
               </p>
+              {done.intake && (
+                <p style={{ marginBottom: 8 }}>
+                  ✓ Jail intake created for <strong>{done.intake.name}</strong>
+                  {done.intake.linked
+                    ? " and linked to this call."
+                    : " — not linked to the call, which has no Monday id yet."}
+                </p>
+              )}
               {/* Offered here rather than on the form: a jail intake links back
                   to the call through "link to Call Log", and the call has no
                   monday id until it has actually been created. A queued call has
@@ -632,6 +693,60 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                 </div>
               )}
 
+              {/* Some calls ARE a jail intake. Filling it in here means one save
+                  creates the call and then the intake linked to it, instead of
+                  logging the call and starting again in another popup. */}
+              {!isEdit && (
+                <div style={{ marginBottom: 12, paddingTop: 4, borderTop: "1px solid var(--color-border-light)" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", paddingTop: 10 }}>
+                    <input
+                      type="checkbox"
+                      checked={isIntake}
+                      onChange={(e) => setIsIntake(e.target.checked)}
+                      style={{ cursor: "pointer" }}
+                    />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
+                      This call is a jail intake
+                    </span>
+                  </label>
+
+                  {isIntake && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ display: "flex", gap: 10 }}>
+                        <div style={{ flex: 1 }}>
+                          {fieldLabel("Detainee first name")}
+                          <input type="text" value={dFirst} onChange={(e) => setDFirst(e.target.value)}
+                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          {fieldLabel("Detainee last name")}
+                          <input type="text" value={dLast} onChange={(e) => setDLast(e.target.value)}
+                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                        <div style={{ flex: 1 }}>
+                          {fieldLabel("Facility")}
+                          <input type="text" value={dJail} onChange={(e) => setDJail(e.target.value)}
+                            placeholder="e.g. Kay County"
+                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          {fieldLabel("A-number")}
+                          <input type="text" value={dANumber} onChange={(e) => setDANumber(e.target.value)}
+                            placeholder="000-000-000"
+                            className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
+                        </div>
+                      </div>
+                      <p style={{ fontSize: 11, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginTop: 8 }}>
+                        The caller above becomes the intake&rsquo;s point of contact, and the call&rsquo;s language is reused.
+                        Everything else can be filled in on the board.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
@@ -647,7 +762,13 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                 )}
                 <Button type="button" variant="outline" onClick={onClose}>{isEdit ? "Close" : "Cancel"}</Button>
                 <Button type="button" onClick={submit} disabled={saving || !effectiveName}>
-                  {isEdit ? (saving ? "Saving…" : "Save") : (saving ? "Logging…" : "Log call")}
+                  {isEdit
+                    ? (saving ? "Saving…" : "Save")
+                    : saving
+                      ? "Logging…"
+                      : isIntake
+                        ? "Log call + intake"
+                        : "Log call"}
                 </Button>
               </div>
             </>
