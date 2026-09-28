@@ -517,11 +517,11 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                 />
               </label>
 
-              <label style={{ display: "block", marginBottom: 12 }}>
+              <div style={{ display: "block", marginBottom: 12 }}>
                 {fieldLabel("Status")}
                 {statusDef && statusDef.options.length > 0 ? (
                   <Select items={statusDef.options.map((o) => ({ value: o.label, label: o.label }))} value={status} onValueChange={(v) => setStatus(v ?? "")}>
-                    <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                    <SelectTrigger aria-label="Status" size="sm" className="w-full border-border-light bg-surface">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="w-[var(--anchor-width)]">
@@ -531,7 +531,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                 ) : (
                   <span style={{ fontSize: 12, color: "var(--color-status-red)" }}>Call Log status options not synced yet.</span>
                 )}
-              </label>
+              </div>
 
               <button
                 type="button"
@@ -543,39 +543,39 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
 
               {showMore && (
                 <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-                  <label style={{ flex: 1, display: "block" }}>
+                  <div style={{ flex: 1, display: "block" }}>
                     {fieldLabel("Language")}
                     <Select items={languageItems} value={language} onValueChange={(v) => setLanguage(v ?? "")}>
-                      <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                      <SelectTrigger aria-label="Language" size="sm" className="w-full border-border-light bg-surface">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="w-[var(--anchor-width)]">
                         {languageItems.map((l) => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                  </label>
-                  <label style={{ flex: 1, display: "block" }}>
+                  </div>
+                  <div style={{ flex: 1, display: "block" }}>
                     {fieldLabel("Taken by")}
                     <Select items={staffItems} value={takenById} onValueChange={(v) => setTakenById(v ?? "")}>
-                      <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                      <SelectTrigger aria-label="Taken by" size="sm" className="w-full border-border-light bg-surface">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="w-[var(--anchor-width)]">
                         {staffItems.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                  </label>
-                  <label style={{ flex: 1, display: "block" }}>
+                  </div>
+                  <div style={{ flex: 1, display: "block" }}>
                     {fieldLabel("Highlight for")}
                     <Select items={staffItems} value={highlightedForId} onValueChange={(v) => setHighlightedForId(v ?? "")}>
-                      <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                      <SelectTrigger aria-label="Highlight for" size="sm" className="w-full border-border-light bg-surface">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="w-[var(--anchor-width)]">
                         {staffItems.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                  </label>
+                  </div>
                 </div>
               )}
 

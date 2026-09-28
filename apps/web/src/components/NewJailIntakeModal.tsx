@@ -165,10 +165,10 @@ export function NewJailIntakeModal({
                 {text("A-number", alienNumber, setAlienNumber, "000-000-000")}
               </div>
 
-              <label style={{ display: "block", marginBottom: 12 }}>
+              <div style={{ display: "block", marginBottom: 12 }}>
                 <span style={labelStyle}>Language</span>
                 <Select items={languageItems} value={language} onValueChange={(v) => setLanguage(v ?? "")}>
-                  <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                  <SelectTrigger aria-label="Language" size="sm" className="w-full border-border-light bg-surface">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="w-[var(--anchor-width)]">
@@ -178,7 +178,7 @@ export function NewJailIntakeModal({
                     ))}
                   </SelectContent>
                 </Select>
-              </label>
+              </div>
 
               <div style={{ display: "flex", gap: 10 }}>
                 {text("Point of contact", pocName, setPocName, "Name and relationship")}

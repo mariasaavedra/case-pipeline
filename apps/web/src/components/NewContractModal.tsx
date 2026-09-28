@@ -82,13 +82,13 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
               </div>
             ) : (
               <>
-                <label style={{ display: "block", marginBottom: 12 }}>
+                <div style={{ display: "block", marginBottom: 12 }}>
                   <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)", marginBottom: 4, fontFamily: "var(--font-body)" }}>Case type (Contract for…)</span>
                   {options.length === 0 ? (
                     <span style={{ fontSize: 12, color: "var(--color-status-red)" }}>Fee Ks options not synced yet — run a sync first.</span>
                   ) : (
                     <Select items={caseTypeItems} value={caseType} onValueChange={(v) => setCaseType(v ?? "")}>
-                      <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                      <SelectTrigger aria-label="Case type (Contract for…)" size="sm" className="w-full border-border-light bg-surface">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="w-[var(--anchor-width)]">
@@ -97,7 +97,7 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
                       </SelectContent>
                     </Select>
                   )}
-                </label>
+                </div>
 
                 <div style={{ display: "flex", gap: 10 }}>
                   <div style={{ flex: 1 }}>{numInput("Attorney's fees (AF)", af, setAf)}</div>
