@@ -31,6 +31,9 @@ import { FIRM_TIMEZONE } from "../firm.js";
 
 const BOARD_KEY = "_fa_jail_intakes";
 
+/** The board stores this one as a real date, so it is validated as one. */
+const DATE_RE_ISO = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Where a new lead belongs — the board's non-scheduled group. */
 const INTAKE_GROUP_TITLE = "Jail Intakes";
 
@@ -52,7 +55,8 @@ export type IntakeColumnKey =
   // The board spells it "Have you even been removed?" — its typo, not ours, and
   // renaming a live column is not this route's business. See the note in
   // project_call_log about verifying labels before "fixing" them.
-  | "have_you_even_been_removed";
+  | "have_you_even_been_removed"
+  | "what_date_did_you_get_picked_up_by_ice";
 
 /** Resolved column ids, keyed by config name. Missing keys are simply not written. */
 export type IntakeColumnIds = Partial<Record<IntakeColumnKey | "first_name" | "last_name" | "link_to_call_log", string>>;
@@ -72,6 +76,11 @@ export interface JailIntakeInput {
   dateOfBirth?: unknown;
   /** "No" | "Yes" | "Unknown" — the board's own options. */
   priorRemoval?: unknown;
+  /**
+   * YYYY-MM-DD. A real DATE column, unlike dateOfBirth beside it — this one
+   * holds proper ISO values on 799 rows, so it takes {date} and a picker.
+   */
+  pickedUpByIce?: unknown;
   /** The monday item id of the call this intake came out of, when it came from one. */
   callLogItemId?: unknown;
 }
@@ -129,6 +138,14 @@ export function planJailIntakeWrite(
 
   const priorRemoval = str(input.priorRemoval);
   if (priorRemoval) set("have_you_even_been_removed", { label: priorRemoval });
+
+  const pickedUp = str(input.pickedUpByIce);
+  if (pickedUp) {
+    if (!DATE_RE_ISO.test(pickedUp)) {
+      return { rejection: { status: 400, error: "pickedUpByIce must be YYYY-MM-DD" } };
+    }
+    set("what_date_did_you_get_picked_up_by_ice", { date: pickedUp });
+  }
 
   const language = str(input.language);
   if (language) set("language", { label: language });

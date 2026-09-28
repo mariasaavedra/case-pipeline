@@ -24,6 +24,7 @@ const columnIds: IntakeColumnIds = {
   country_of_birth: "country_of_birth__1",
   date_of_birth: "date_of_birth_mkn33y83",
   have_you_even_been_removed: "status_1_mkkgm2z6",
+  what_date_did_you_get_picked_up_by_ice: "date_mkkg7br7",
   first_name: "text_mm3t37m8",
   last_name: "text_mm3tqjzb",
   link_to_call_log: "board_relation_mm0xdg80",
@@ -45,6 +46,7 @@ const full = {
   countryOfBirth: "Mexico",
   dateOfBirth: "03/07/1980",
   priorRemoval: "Yes",
+  pickedUpByIce: "2026-02-21",
 };
 
 describe("planJailIntakeWrite", () => {
@@ -101,6 +103,26 @@ describe("planJailIntakeWrite", () => {
     const out = plan({ ...full, priorRemoval: "" });
     if (!("plan" in out)) throw new Error("expected a plan");
     expect(out.plan.columnValues).not.toHaveProperty("status_1_mkkgm2z6");
+  });
+
+  it("writes the ICE pickup date as a DATE, not the text DOB is", () => {
+    // date_mkkg7br7 is a real date column holding ISO values on 799 rows, so it
+    // takes {date} — unlike Date of Birth beside it, which is free text.
+    const out = plan(full);
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.columnValues["date_mkkg7br7"]).toEqual({ date: "2026-02-21" });
+  });
+
+  it("refuses an ICE pickup date that is not ISO", () => {
+    expect(plan({ ...full, pickedUpByIce: "21/02/2026" })).toEqual({
+      rejection: { status: 400, error: "pickedUpByIce must be YYYY-MM-DD" },
+    });
+  });
+
+  it("omits the ICE pickup date when it was not asked", () => {
+    const out = plan({ ...full, pickedUpByIce: "" });
+    if (!("plan" in out)) throw new Error("expected a plan");
+    expect(out.plan.columnValues).not.toHaveProperty("date_mkkg7br7");
   });
 
   it("starts every lead at New Detainee", () => {
