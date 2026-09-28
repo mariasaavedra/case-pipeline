@@ -22,7 +22,9 @@ Every code is shown in the app, in small grey text:
 - **Dropdowns** — last line of the menu, bottom-right (`code` prop on
   `PopoverContent`, or `MenuCode` in the two custom menus).
 
-Sections inside a page (P1.x, P2.x, P3.0, P11.x) are not labelled.
+- **Sections inside a page** — after the section's heading (Settings), or on a
+  small line above the section's right edge (Home, Clients); P3.0 sits in the
+  bottom-right of the Client 360 header (`SectionCode` in `ScreenCode.tsx`).
 
 When a new screen or popup ships, add it here with the next free number. Never
 reuse or renumber a code: old requests keep pointing at the right thing.

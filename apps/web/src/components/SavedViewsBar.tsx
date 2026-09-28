@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { getSavedViews, addSavedView, deleteSavedView } from "../api";
 import type { SavedViewItem } from "../api";
+import { SectionCode } from "./ScreenCode";
 
 interface Props {
   /** Current filter values (flat string map). */
@@ -55,57 +56,60 @@ export function SavedViewsBar({ filters, applyFilters, hasActiveFilters }: Props
   if (views.length === 0 && !hasActiveFilters) return null;
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 12px" }}>
-      {views.map((v) => (
-        <span key={v.id} className="filter-chip" style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "default" }}>
-          <button
-            onClick={() => apply(v)}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", font: "inherit", padding: 0 }}
-            title="Apply this saved view"
-          >
-            {v.name}
-          </button>
-          <button
-            onClick={() => remove(v.id)}
-            title="Delete saved view"
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-ink-faint)", padding: 0, lineHeight: 1, fontSize: 14 }}
-          >
-            ×
-          </button>
-        </span>
-      ))}
-
-      {hasActiveFilters &&
-        (showSave ? (
-          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && save()}
-              placeholder="View name"
-              autoFocus
-              style={{
-                padding: "4px 8px",
-                borderRadius: 8,
-                border: "1px solid var(--color-border)",
-                background: "var(--color-card)",
-                color: "var(--color-ink)",
-                fontFamily: "var(--font-body)",
-                fontSize: 12,
-              }}
-            />
-            <button onClick={save} disabled={saving || !name.trim()} className="filter-chip filter-chip-active">
-              Save
+    <>
+      <SectionCode code="P2.2" />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 12px" }}>
+        {views.map((v) => (
+          <span key={v.id} className="filter-chip" style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "default" }}>
+            <button
+              onClick={() => apply(v)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", font: "inherit", padding: 0 }}
+              title="Apply this saved view"
+            >
+              {v.name}
             </button>
-            <button onClick={() => { setShowSave(false); setName(""); }} className="filter-chip">
-              Cancel
+            <button
+              onClick={() => remove(v.id)}
+              title="Delete saved view"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-ink-faint)", padding: 0, lineHeight: 1, fontSize: 14 }}
+            >
+              ×
             </button>
           </span>
-        ) : (
-          <button onClick={() => setShowSave(true)} className="filter-chip">
-            + Save current filters
-          </button>
         ))}
-    </div>
+
+        {hasActiveFilters &&
+          (showSave ? (
+            <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && save()}
+                placeholder="View name"
+                autoFocus
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 8,
+                  border: "1px solid var(--color-border)",
+                  background: "var(--color-card)",
+                  color: "var(--color-ink)",
+                  fontFamily: "var(--font-body)",
+                  fontSize: 12,
+                }}
+              />
+              <button onClick={save} disabled={saving || !name.trim()} className="filter-chip filter-chip-active">
+                Save
+              </button>
+              <button onClick={() => { setShowSave(false); setName(""); }} className="filter-chip">
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button onClick={() => setShowSave(true)} className="filter-chip">
+              + Save current filters
+            </button>
+          ))}
+      </div>
+    </>
   );
 }

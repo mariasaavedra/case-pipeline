@@ -9,6 +9,7 @@ import { KpiDetailModal } from "./KpiDetailModal";
 import { formatColumnValue } from "../utils/columnValue";
 import { useAuth } from "../auth/useAuth";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { SectionCode } from "./ScreenCode";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -358,6 +359,7 @@ export function LandingPage() {
       <QuickAccess />
 
       {/* KPI Grid */}
+      <SectionCode code="P1.1" />
       <div className="kpi-grid">
         {cards.map((card, i) => (
           <KpiCardComponent
