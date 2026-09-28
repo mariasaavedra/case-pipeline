@@ -2,6 +2,7 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { CheckIcon, ChevronDownIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { MenuCode } from "@/components/ScreenCode"
 
 function Select<Value>({ ...props }: SelectPrimitive.Root.Props<Value>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />
@@ -47,6 +48,7 @@ function SelectContent({
   sideOffset = 4,
   alignItemWithTrigger = false,
   positionerClassName,
+  code,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
@@ -54,6 +56,8 @@ function SelectContent({
     "side" | "align" | "sideOffset" | "alignItemWithTrigger"
   > & {
     positionerClassName?: string
+    /** The dropdown's code from docs/ui-map.md (e.g. "D8"), shown last, bottom-right. */
+    code?: string
   }) {
   return (
     <SelectPrimitive.Portal>
@@ -75,6 +79,7 @@ function SelectContent({
           {...props}
         >
           {children}
+          {code && <MenuCode code={code} />}
         </SelectPrimitive.Popup>
       </SelectPrimitive.Positioner>
     </SelectPrimitive.Portal>

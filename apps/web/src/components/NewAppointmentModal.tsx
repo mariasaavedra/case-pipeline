@@ -131,7 +131,7 @@ export function NewAppointmentModal({ profileLocalId, clientName, onClose }: Pro
                     <SelectTrigger aria-label="Attorney" size="sm" className="w-full border-border-light bg-surface">
                       <SelectValue placeholder={boards === null ? "Loading…" : "Select…"} />
                     </SelectTrigger>
-                    <SelectContent className="w-[var(--anchor-width)]">
+                    <SelectContent code="D14" className="w-[var(--anchor-width)]">
                       <SelectItem value="">Select…</SelectItem>
                       {attorneyItems.slice(1).map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
                     </SelectContent>

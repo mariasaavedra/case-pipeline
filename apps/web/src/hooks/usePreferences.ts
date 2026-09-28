@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getPreferences, updatePreferences } from "../api";
+import { setScreenCodesVisible } from "./useScreenCodes";
 
 export type Theme = "light" | "dark" | "system";
 export type DefaultPage = "/" | "/clients" | "/appointments" | "/active-cases" | "/my-cases" | "/alerts";
@@ -10,6 +11,7 @@ export interface Preferences {
   defaultPage: DefaultPage;
   sidebarCollapsedDefault: boolean;
   dateFormat: DateFormat;
+  showScreenCodes: boolean;
 }
 
 const STORAGE_KEY = "user-preferences";
@@ -19,6 +21,7 @@ const DEFAULTS: Preferences = {
   defaultPage: "/",
   sidebarCollapsedDefault: false,
   dateFormat: "MM/DD/YYYY",
+  showScreenCodes: true,
 };
 
 function load(): Preferences {
@@ -68,6 +71,7 @@ export function usePreferences() {
           defaultPage: server.defaultPage as DefaultPage,
           sidebarCollapsedDefault: server.sidebarCollapsedDefault,
           dateFormat: server.dateFormat,
+          showScreenCodes: server.showScreenCodes ?? true,
         };
         setPrefs(merged);
         save(merged);
@@ -84,6 +88,7 @@ export function usePreferences() {
   useEffect(() => {
     applyTheme(prefs.theme);
     save(prefs);
+    setScreenCodesVisible(prefs.showScreenCodes);
   }, [prefs]);
 
   // Re-apply when the OS theme changes and the user is on "system".

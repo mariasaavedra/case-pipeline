@@ -28,6 +28,7 @@ import { Link } from "./Link";
 import { clientPath } from "../router";
 import { Button } from "./ui/button";
 import { MailReviewModal } from "./MailReviewModal";
+import { SectionCode } from "./ScreenCode";
 
 const STATUS_META: Record<MatchStatus, { label: string; color: string; bg: string }> = {
   matched: { label: "Matched", color: "var(--color-status-green)", bg: "var(--color-status-green-bg)" },
@@ -375,6 +376,7 @@ export function MailPage() {
       </div>
 
       {/* Drop zone */}
+      <SectionCode code="P12.1" />
       <div
         className="card card-elevated mb-4 px-5 py-6 flex flex-col items-center gap-3 text-center"
         onDragOver={(e) => {
@@ -465,6 +467,7 @@ export function MailPage() {
             );
           })()}
 
+          <SectionCode code="P12.2" />
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             {chip("all", "All", result.documents.length)}
             {(Object.keys(STATUS_META) as MatchStatus[]).map((s) => chip(s, STATUS_META[s].label, result.summary[s]))}
@@ -480,6 +483,7 @@ export function MailPage() {
             </span>
           </div>
 
+          <SectionCode code="P12.3" />
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="card card-elevated overflow-hidden self-start">
               {visible.length === 0 ? (

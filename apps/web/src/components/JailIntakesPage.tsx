@@ -20,6 +20,7 @@ import { StatusBadge } from "./StatusBadge";
 import { NewJailIntakeModal } from "./NewJailIntakeModal";
 import { JailIntakeDetailModal } from "./JailIntakeDetailModal";
 import { Button } from "./ui/button";
+import { SectionCode } from "./ScreenCode";
 
 const DEFAULT_WITHIN_DAYS = 10;
 
@@ -191,6 +192,7 @@ export function JailIntakesPage() {
         </Button>
       </div>
 
+      <SectionCode code="P9.1" />
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {chip(!showAll, `Recent${data && !showAll ? ` (${data.total})` : ""}`, () => setShowAll(false))}
         {data && data.olderCount > 0 && !showAll && chip(false, `${data.olderCount} older`, () => setShowAll(true))}
@@ -211,6 +213,7 @@ export function JailIntakesPage() {
         />
       </div>
 
+      <SectionCode code="P9.2" />
       <div className="card card-elevated overflow-hidden">
         {error ? (
           <p role="alert" className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-status-red)" }}>

@@ -216,7 +216,7 @@ export function StatusTagsSection() {
                         >
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent code="D12">
                           <SelectItem value="">No urgency</SelectItem>
                           {urgencyItems.slice(1).map((i) => (
                             <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>

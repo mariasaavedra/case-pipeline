@@ -10,9 +10,11 @@ import { useState } from "react";
 import { SHORT_SHA, BUILD_DAY, VERSION_LABEL } from "../version";
 import { CHANGELOG } from "../changelog";
 import { ModalPortal } from "./ModalPortal";
+import { useScreenCodesVisible } from "../hooks/useScreenCodes";
 
 export function VersionBadge({ className = "" }: { className?: string }) {
   const [open, setOpen] = useState(false);
+  const showCode = useScreenCodesVisible();
   const label = VERSION_LABEL || SHORT_SHA;
 
   return (
@@ -52,13 +54,13 @@ export function VersionBadge({ className = "" }: { className?: string }) {
                     ✕
                   </button>
                   {/* Screen code from docs/ui-map.md — same label every other popup carries. */}
-                  <span
+                  {showCode && <span
                     aria-hidden
                     title="Screen code: use it when asking for a change to this popup"
                     style={{ fontFamily: "var(--font-mono)", fontSize: 10, lineHeight: 1, color: "var(--color-ink-faint)", userSelect: "all" }}
                   >
                     M14
-                  </span>
+                  </span>}
                 </div>
               </div>
 
