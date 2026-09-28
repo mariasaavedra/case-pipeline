@@ -7,7 +7,7 @@
 // timeline (the same /api/clients/:id/updates feed the 360 view's Updates tab
 // reads) and shows them collapsed under the link, expandable in place.
 //
-// "View case notes" opens the fuller picture — the whole timeline plus the
+// "View profile" opens the fuller picture — the whole timeline plus the
 // case facts — in ClientCaseModal, stacked OVER the call popup. It used to be
 // a link to the 360 view in a new tab, which meant a fresh sign-in every time
 // (MSAL's token cache is sessionStorage, which is per-tab).
@@ -113,7 +113,7 @@ export function ProfileNotesPreview({ profileLocalId, profileName }: Props) {
             fontFamily: "var(--font-body)", textDecoration: "underline",
           }}
         >
-          View case notes
+          View profile
         </button>
       </div>
 

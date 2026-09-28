@@ -1,6 +1,7 @@
 import type { ProfileSummary, ClientCaseSummary } from "../api";
 import { ActionButtons } from "./ActionButtons";
 import { WatchlistPin } from "./WatchlistPin";
+import { DialogTitle } from "./ui/dialog";
 import { mondayItemUrl, MONDAY_PROFILES_BOARD_ID } from "../config";
 import { formatANumber } from "@case-pipeline/core";
 
@@ -19,19 +20,28 @@ function getInitials(name: string): string {
 
 interface Props {
   profile: ProfileSummary;
-  data: ClientCaseSummary;
-  onViewRelations: () => void;
+  /**
+   * "page" is the 360 view's sticky header. "popup" is the same header inside a
+   * dialog (M3 Client case): not sticky, no document/relations actions, and the
+   * name is the dialog's title so screen readers announce it.
+   */
+  variant?: "page" | "popup";
+  /** Needed for the page variant's action buttons; unused in a popup. */
+  data?: ClientCaseSummary;
+  onViewRelations?: () => void;
 }
 
-export function ClientHeaderSticky({ profile, data, onViewRelations }: Props) {
+export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "page" }: Props) {
   const priority = profile.priority ? PRIORITY_STYLES[profile.priority] : null;
+  const isPopup = variant === "popup";
+  const Name = isPopup ? DialogTitle : "h2";
 
   return (
-    <div className="client-header-sticky">
+    <div className={isPopup ? "flex-shrink-0 border-b border-border" : "client-header-sticky"}>
       {/* Accent strip */}
       <div className="h-1" style={{ backgroundColor: "var(--color-amber)" }} />
 
-      <div className="max-w-6xl mx-auto px-6 py-4">
+      <div className={isPopup ? "px-6 py-4 pr-12" : "max-w-6xl mx-auto px-6 py-4"}>
         <div className="flex items-start gap-5">
           {/* Avatar */}
           <div
@@ -54,12 +64,12 @@ export function ClientHeaderSticky({ profile, data, onViewRelations }: Props) {
                 full name keeps the top line and the priority pill + actions drop below
                 instead of squeezing the name. See styles.css. */}
             <div className="client-header-namerow flex items-center gap-3 mb-1">
-              <h2
+              <Name
                 className="client-header-name text-2xl font-semibold tracking-tight truncate"
                 style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
               >
                 {profile.name}
-              </h2>
+              </Name>
               {priority && (
                 <span
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium flex-shrink-0"
@@ -95,7 +105,9 @@ export function ClientHeaderSticky({ profile, data, onViewRelations }: Props) {
                     Monday.com
                   </a>
                 )}
-                <ActionButtons data={data} onViewRelations={onViewRelations} />
+                {!isPopup && data && onViewRelations && (
+                  <ActionButtons data={data} onViewRelations={onViewRelations} />
+                )}
               </div>
             </div>
 
