@@ -276,17 +276,31 @@ export interface JailIntakeListResult {
 }
 
 /**
- * Post a note on a jail intake — a monday update AND an E&A activity, under the
- * firm's "Casenote" type.
+ * Post a note on a jail intake — a monday update, an E&A activity under the
+ * firm's "Casenote" type, and an append to the board's own Description column.
  *
- * Write-only by necessity: `client_updates.profile_local_id` is NOT NULL and an
- * intake has no profile until it books a consult, so there is nowhere local to
- * store it and the sync skips profile-less items. The note lives in monday.
+ * `descriptionFull` reports that the Description had no room left (monday caps
+ * long text at 2,000 characters). The note still landed as an update and an
+ * activity; only the column append was skipped, and the UI says so rather than
+ * truncating a client note.
  */
+export interface JailIntakeNote {
+  localId: string;
+  authorName: string;
+  textBody: string;
+  createdAtSource: string;
+  sourceType: string;
+}
+
+/** An intake's note history, newest first. Empty until the next sync picks them up. */
+export async function fetchJailIntakeNotes(localId: string): Promise<JailIntakeNote[]> {
+  return apiFetch(`/api/jail-intakes/${encodeURIComponent(localId)}/notes`);
+}
+
 export async function addJailIntakeNote(
   localId: string,
   text: string,
-): Promise<{ pending: boolean }> {
+): Promise<{ pending: boolean; descriptionUpdated: boolean; descriptionFull: boolean }> {
   return apiFetch(`/api/jail-intakes/${encodeURIComponent(localId)}/notes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

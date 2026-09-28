@@ -12,7 +12,7 @@ import { test, expect, describe } from "vitest";
 import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
-import { getJailIntakes, cutoffDate } from "./jail-intakes";
+import { getJailIntakes, getJailIntakeNotes, cutoffDate } from "./jail-intakes";
 
 const TODAY = "2026-09-25";
 
@@ -238,5 +238,81 @@ describe("getJailIntakes — fields and filters", () => {
     const [i] = getJailIntakes(db, {}, TODAY).intakes;
     expect(i?.name).toBe("Broken");
     expect(i?.jail).toBeNull();
+  });
+});
+
+// =============================================================================
+// Intake notes
+// =============================================================================
+// An intake has no profile, so its notes are stored with profile_local_id = ""
+// and found by board_item_local_id. The important property is isolation: a ""
+// profile must never surface in a client's timeline.
+
+function insertNote(
+  db: DatabaseInstance,
+  opts: {
+    localId: string; boardItemLocalId: string; boardKey?: string; profileLocalId?: string;
+    author?: string; body: string; at: string; updateId?: string;
+  },
+): void {
+  run(
+    db,
+    `INSERT INTO client_updates
+       (batch_id, local_id, monday_update_id, profile_local_id, board_item_local_id, board_key,
+        author_name, text_body, source_type, created_at_source, sync_status)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, 'update', ?, 'synced')`,
+    [
+      opts.localId, opts.updateId ?? opts.localId, opts.profileLocalId ?? "",
+      opts.boardItemLocalId, opts.boardKey ?? "_fa_jail_intakes",
+      opts.author ?? "Rafael", opts.body, opts.at,
+    ],
+  );
+}
+
+describe("getJailIntakeNotes", () => {
+  test("returns an intake's notes, newest first", () => {
+    const db = freshDb();
+    insertNote(db, { localId: "n1", boardItemLocalId: "i1", body: "First contact", at: "2026-09-20T10:00:00Z" });
+    insertNote(db, { localId: "n2", boardItemLocalId: "i1", body: "Family called back", at: "2026-09-25T10:00:00Z" });
+    const out = getJailIntakeNotes(db, "i1");
+    expect(out.map((n) => n.textBody)).toEqual(["Family called back", "First contact"]);
+  });
+
+  test("does not mix up two intakes' notes", () => {
+    const db = freshDb();
+    insertNote(db, { localId: "n1", boardItemLocalId: "i1", body: "About Juan", at: "2026-09-20T10:00:00Z" });
+    insertNote(db, { localId: "n2", boardItemLocalId: "i2", body: "About Ana", at: "2026-09-20T10:00:00Z" });
+    expect(getJailIntakeNotes(db, "i1").map((n) => n.textBody)).toEqual(["About Juan"]);
+  });
+
+  test("ignores notes from other boards that share a local id", () => {
+    const db = freshDb();
+    insertNote(db, { localId: "n1", boardItemLocalId: "x1", boardKey: "call_log", body: "A call", at: "2026-09-20T10:00:00Z" });
+    expect(getJailIntakeNotes(db, "x1")).toHaveLength(0);
+  });
+
+  test("an intake with no notes yet is empty, not an error", () => {
+    expect(getJailIntakeNotes(freshDb(), "nope")).toEqual([]);
+  });
+
+  test("carries the author and the timestamp", () => {
+    const db = freshDb();
+    insertNote(db, { localId: "n1", boardItemLocalId: "i1", author: "Lucy", body: "Bond hearing", at: "2026-09-25T14:30:00Z" });
+    expect(getJailIntakeNotes(db, "i1")[0]).toMatchObject({
+      authorName: "Lucy",
+      textBody: "Bond hearing",
+      createdAtSource: "2026-09-25T14:30:00Z",
+    });
+  });
+
+  test('a "" profile note stays OUT of a client timeline', () => {
+    // The isolation that makes storing these without a profile safe at all.
+    const db = freshDb();
+    run(db, "INSERT INTO profiles (batch_id, local_id, name) VALUES (1, 'p1', 'Ana GOMEZ')");
+    insertNote(db, { localId: "n1", boardItemLocalId: "i1", body: "Intake note", at: "2026-09-25T10:00:00Z" });
+    const leaked = db
+      .prepare("SELECT COUNT(*) AS c FROM client_updates WHERE profile_local_id = 'p1'")
+      .get() as { c: number };
+    expect(leaked.c).toBe(0);
   });
 });

@@ -12,8 +12,8 @@
 // pretending otherwise would be worse than saying it plainly.
 // =============================================================================
 
-import { useState } from "react";
-import { addJailIntakeNote, type JailIntake } from "../api";
+import { useCallback, useEffect, useState } from "react";
+import { addJailIntakeNote, fetchJailIntakeNotes, type JailIntake, type JailIntakeNote } from "../api";
 import { MONDAY_JAIL_INTAKES_BOARD_ID, mondayItemUrl } from "../config";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
@@ -53,7 +53,18 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [posted, setPosted] = useState<{ pending: boolean } | null>(null);
+  const [posted, setPosted] = useState<{ pending: boolean; descriptionUpdated: boolean; descriptionFull: boolean } | null>(null);
+  const [notes, setNotes] = useState<JailIntakeNote[] | null>(null);
+
+  const loadNotes = useCallback(() => {
+    fetchJailIntakeNotes(intake.localId)
+      .then(setNotes)
+      // A history we cannot load is not worth an error banner over the note box
+      // that still works — show it as empty and let them write.
+      .catch(() => setNotes([]));
+  }, [intake.localId]);
+
+  useEffect(loadNotes, [loadNotes]);
 
   const submit = async () => {
     if (!note.trim()) {
@@ -64,7 +75,7 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
     setError(null);
     try {
       const res = await addJailIntakeNote(intake.localId, note.trim());
-      setPosted({ pending: res.pending });
+      setPosted(res);
       setNote("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not add the note");
@@ -154,17 +165,60 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
               className="text-[11px] font-semibold uppercase tracking-wider mb-2"
               style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
             >
-              Add details
+              Notes {notes && notes.length > 0 ? `(${notes.length})` : ""}
             </h3>
 
+            {notes && notes.length > 0 && (
+              <div className="mb-3">
+                {notes.map((n) => (
+                  <div
+                    key={n.localId}
+                    className="mb-2 pb-2"
+                    style={{ borderBottom: "1px solid var(--color-border-light)" }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-[11px] font-semibold"
+                        style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
+                      >
+                        {n.authorName}
+                      </span>
+                      <span
+                        className="text-[11px]"
+                        style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+                      >
+                        {new Date(n.createdAtSource).toLocaleString("en-US", {
+                          month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <p
+                      className="text-sm whitespace-pre-wrap"
+                      style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
+                    >
+                      {n.textBody}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {posted && (
-              <p
-                className="text-sm mb-2"
-                style={{ color: "var(--color-status-green)", fontFamily: "var(--font-body)" }}
-              >
-                ✓ Added to Monday as an update and a Casenote
-                {posted.pending ? " — queued, Monday was unreachable." : "."}
-              </p>
+              <div className="mb-2" style={{ fontFamily: "var(--font-body)" }}>
+                <p className="text-sm" style={{ color: "var(--color-status-green)" }}>
+                  ✓ Added to Monday as an update and a Casenote
+                  {posted.descriptionUpdated ? ", and appended to the Description" : ""}
+                  {posted.pending ? " — queued, Monday was unreachable." : "."}
+                </p>
+                {/* Said plainly: the note IS in monday, it just could not also go
+                    in a column that only holds 2,000 characters. */}
+                {posted.descriptionFull && (
+                  <p className="text-sm" style={{ color: "var(--color-status-yellow)" }}>
+                    The Description column is full (2,000 characters), so this was not added there. Trim it in Monday
+                    if you want future notes to keep appending.
+                  </p>
+                )}
+              </div>
             )}
 
             <textarea
@@ -188,7 +242,8 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
               className="text-[11px] mt-1"
               style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
             >
-              Posts to Monday as an update and a Casenote activity. Intake notes live on the Monday item, not here.
+              Posts to Monday as an update, a Casenote activity, and an append to the intake&rsquo;s Description.
+              It appears in the list above after the next sync.
             </p>
 
             {error && (

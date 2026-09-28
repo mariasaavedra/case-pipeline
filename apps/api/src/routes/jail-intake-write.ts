@@ -24,8 +24,9 @@ import { withTokenFallback } from "../write-auth.js";
 import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
-import { fetchBoardStructure } from "@case-pipeline/monday";
+import { fetchBoardStructure, fetchItem } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
+import { getJailIntakeNotes } from "@case-pipeline/query";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { FIRM_TIMEZONE } from "../firm.js";
 
@@ -170,6 +171,41 @@ export function planJailIntakeWrite(
   };
 }
 
+/**
+ * Monday's long-text columns hold 2,000 characters. Not a soft limit: a longer
+ * value is rejected outright, so an append-forever field has to be checked
+ * rather than hoped about.
+ */
+export const LONG_TEXT_LIMIT = 2000;
+
+export interface AppendedDescription {
+  /** The value to write, or null when there is no room for this note. */
+  next: string | null;
+  /** True when the note did not fit — the caller must say so, not truncate. */
+  full: boolean;
+}
+
+/**
+ * Append a note to the board's Description, dated and attributed.
+ *
+ * Refuses rather than truncates when the column is full. A client note is not
+ * something to silently cut in half, and the note has already been posted as an
+ * update and an activity by this point — so the honest outcome is "it is in
+ * Monday, just not in this column", which the UI can then say.
+ */
+export function appendToDescription(
+  existing: string | null,
+  note: string,
+  opts: { author: string; today: string; limit?: number },
+): AppendedDescription {
+  const limit = opts.limit ?? LONG_TEXT_LIMIT;
+  const entry = `${opts.today} — ${opts.author}: ${note.trim()}`;
+  const base = (existing ?? "").trim();
+  const next = base ? `${base}\n\n${entry}` : entry;
+  if (next.length > limit) return { next: null, full: true };
+  return { next, full: false };
+}
+
 export interface JailIntakeWriteDeps {
   db: DatabaseInstance;
   mondayApiToken: string | undefined;
@@ -234,6 +270,10 @@ export function registerJailIntakeWriteRoutes(app: Express, deps: JailIntakeWrit
    * meaning it could not be read back either. The note lives in monday. The UI
    * says so rather than pretending a local history exists.
    */
+  app.get("/api/jail-intakes/:localId/notes", requireAuth, (req, res) => {
+    res.json({ data: getJailIntakeNotes(db, String(req.params.localId)) });
+  });
+
   app.post("/api/jail-intakes/:localId/notes", requireAuth, async (req, res) => {
     if (!MONDAY_API_TOKEN) {
       res.status(503).json({ error: "Monday.com write-back not configured" });
@@ -243,6 +283,12 @@ export function registerJailIntakeWriteRoutes(app: Express, deps: JailIntakeWrit
     const text = ((req.body as { text?: unknown })?.text ?? "").toString().trim();
     if (!text) {
       res.status(400).json({ error: "text is required" });
+      return;
+    }
+
+    const board = await intakeBoard();
+    if (!board) {
+      res.status(409).json({ error: `Board "${BOARD_KEY}" is not in config/boards.yaml` });
       return;
     }
 
@@ -289,11 +335,43 @@ export function registerJailIntakeWriteRoutes(app: Express, deps: JailIntakeWrit
       pending = true;
     }
 
+    // Also append to the board's own Description column, which is where staff
+    // read an intake's story. Read-modify-write, because setting a long-text
+    // column REPLACES it — and read from monday rather than our mirror, which is
+    // as stale as the last sync and would drop anything typed on the board since.
+    let descriptionUpdated = false;
+    let descriptionFull = false;
+    const descColumnId = board.columnIds.description;
+    if (descColumnId) {
+      try {
+        const live = await fetchItem(mondayItemId);
+        const current = live.column_values?.find((c) => c.id === descColumnId)?.text ?? null;
+        const appended = appendToDescription(current, text, {
+          author: req.user?.name ?? req.user?.preferred_username ?? "Staff",
+          today: new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TIMEZONE }),
+        });
+        if (appended.full) {
+          descriptionFull = true;
+          console.warn(`[jail-intakes] Description is full for item ${mondayItemId} — note left as update + activity only.`);
+        } else if (appended.next) {
+          await withTokenFallback(
+            (token) => dataSource.setColumnValue(board.boardId, mondayItemId, descColumnId, appended.next!, token),
+            writeTokenOptions(req),
+          );
+          descriptionUpdated = true;
+        }
+      } catch (err) {
+        // The update and the activity already landed; losing the Description
+        // append is a partial success worth reporting, not a failed request.
+        console.error("[write-back] intake Description append failed:", err);
+      }
+    }
+
     auditFromReq(req, "monday.jail_intake_note_added", {
       targetType: "board_item", targetId: localId, targetMondayId: mondayItemId,
-      metadata: { name: intake.name, queued: pending },
+      metadata: { name: intake.name, queued: pending, descriptionUpdated, descriptionFull },
     });
-    res.status(pending ? 202 : 200).json({ data: { pending } });
+    res.status(pending ? 202 : 200).json({ data: { pending, descriptionUpdated, descriptionFull } });
   });
 
   app.post("/api/jail-intakes", requireAuth, async (req, res) => {

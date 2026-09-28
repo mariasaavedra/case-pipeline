@@ -487,6 +487,14 @@ export interface JailIntake {
   } | null;
 }
 
+export interface JailIntakeNote {
+  localId: string;
+  authorName: string;
+  textBody: string;
+  createdAtSource: string;
+  sourceType: string;
+}
+
 export interface JailIntakeFilters {
   /**
    * Only intakes created within this many days. The board's default is 10 —

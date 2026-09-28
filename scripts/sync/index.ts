@@ -70,6 +70,7 @@ import {
 
 const PROFILE_BOARD = "profiles";
 const CONTRACT_BOARD = "fee_ks";
+const JAIL_INTAKE_BOARD = "_fa_jail_intakes";
 // Config keys that, when present as a board_relation, link an item to a profile.
 const PROFILE_RELATION_KEYS = ["profile", "profiles", "person"];
 
@@ -773,8 +774,37 @@ async function main() {
         });
       }
 
+      // Jail intakes, for UPDATES ONLY.
+      //
+      // They are pre-profile by design, so they take profile_local_id = "" and
+      // carry their own local_id in board_item_local_id. The "" never leaks into
+      // a client timeline: getClientUpdates filters on an exact profile id.
+      //
+      // Deliberately excluded from the E&A walk below. That loop dedups on
+      // content_sig, whose unique index is keyed on (profile_local_id,
+      // content_sig) — with "" shared across every intake, two intakes holding
+      // the same timestamp + author + body would collapse into one and a note
+      // would vanish. Updates dedup on monday_update_id, which is globally
+      // unique, so they are safe. Every note this app posts on an intake goes out
+      // as an update as well as an activity, so updates alone carry the history.
+      const intakeIds: string[] = [];
+      for (const row of db.prepare(
+        "SELECT monday_item_id, local_id FROM board_items WHERE board_key = ? AND monday_item_id IS NOT NULL",
+      ).all(JAIL_INTAKE_BOARD) as { monday_item_id: string; local_id: string }[]) {
+        if (itemMeta.has(row.monday_item_id)) continue; // already covered (linked to a profile)
+        itemMeta.set(row.monday_item_id, {
+          profile_local_id: "",
+          board_item_local_id: row.local_id,
+          board_key: JAIL_INTAKE_BOARD,
+        });
+        intakeIds.push(row.monday_item_id);
+      }
+
       const allIds = [...itemMeta.keys()];
       const BATCH = 25;
+      // The E&A walk uses this narrower list — see the note on intakeIds.
+      const intakeIdSet = new Set(intakeIds);
+      const timelineIds = allIds.filter((id) => !intakeIdSet.has(id));
       // E&A timeline queries are heavier than updates, so they get a smaller
       // per-request fan-out to stay under the API complexity budget.
       const TIMELINE_BATCH = 12;
@@ -925,9 +955,9 @@ async function main() {
         tx();
       };
 
-      for (let i = 0; i < allIds.length; i += TIMELINE_BATCH) {
+      for (let i = 0; i < timelineIds.length; i += TIMELINE_BATCH) {
         keepLockAlive();
-        const batch = allIds.slice(i, i + TIMELINE_BATCH);
+        const batch = timelineIds.slice(i, i + TIMELINE_BATCH);
         try {
           insertTimelineFor(await fetchTimelineBatch(batch, 50));
         } catch (batchErr) {
