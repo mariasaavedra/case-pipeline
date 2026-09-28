@@ -32,6 +32,9 @@ Every code is shown in the app, in small grey text:
 Everyone can hide them all: Settings → Preferences → **Show screen codes**
 (saved per user; `showScreenCodes` preference, `hooks/useScreenCodes.ts`).
 
+A browsable version with search is `docs/ui-map.html` (open it in a browser);
+update both when codes change.
+
 When a new screen or popup ships, add it here with the next free number. Never
 reuse or renumber a code: old requests keep pointing at the right thing.
 

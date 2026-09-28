@@ -1,0 +1,194 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Published copy: https://claude.ai/artifact/NXtuF8S4N7GLpJaAVTjHUc — keep in step with docs/ui-map.md -->
+<title>Case Pipeline Screen Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Outfit:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: sticky legend + search, then one card per page with its tabs and the popups it opens; global chrome first. Palette borrowed from the dashboard itself. */
+:root{
+  --bg:#faf9f6; --card:#ffffff; --ink:#1a1a2e; --muted:#5c5c6f; --faint:#8a8998; --line:#e6e3dc;
+  --navy:#0c1222; --amber:#b45309; --amber-bg:#fef3c7;
+  --p:#1e40af; --p-bg:#eff6ff; --m:#92400e; --m-bg:#fef3c7; --d:#6b21a8; --d-bg:#faf5ff; --t:#065f46; --t-bg:#ecfdf5;
+  --display:"Fraunces",Georgia,serif; --body:"Outfit",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1320; --card:#171c2b; --ink:#ecebf2; --muted:#a8a7b8; --faint:#7d7c8e; --line:#2a3043;
+  --navy:#070a13; --amber:#f0a44b; --amber-bg:#3a2a12;
+  --p:#93b4ff; --p-bg:#1b2645; --m:#f5c77a; --m-bg:#3a2a12; --d:#d4b0ff; --d-bg:#2d1f45; --t:#7fe0b8; --t-bg:#12332a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1320; --card:#171c2b; --ink:#ecebf2; --muted:#a8a7b8; --faint:#7d7c8e; --line:#2a3043;
+  --navy:#070a13; --amber:#f0a44b; --amber-bg:#3a2a12;
+  --p:#93b4ff; --p-bg:#1b2645; --m:#f5c77a; --m-bg:#3a2a12; --d:#d4b0ff; --d-bg:#2d1f45; --t:#7fe0b8; --t-bg:#12332a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:32px 64px}
+h1{font-family:var(--display);font-weight:600;font-size:clamp(28px,4vw,40px);margin:0;text-wrap:balance;letter-spacing:-.01em}
+.lede{color:var(--muted);max-width:62ch;margin:8px 0 0}
+.example{margin-top:18px;display:inline-flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:14px}
+.example em{font-style:normal;color:var(--muted)}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:14px;margin-top:20px;border-bottom:1px solid var(--line);display:flex;gap:12px 20px;flex-wrap:wrap;align-items:center}
+.bar input{font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);width:min(320px,100%)}
+.bar input:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+.legend{display:flex;gap:8px 14px;flex-wrap:wrap;font-size:13px;color:var(--muted);align-items:center}
+.code{font-family:var(--mono);font-weight:600;font-size:12px;padding:2px 7px;border-radius:5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.k-P{color:var(--p);background:var(--p-bg)} .k-G{color:var(--muted);background:var(--line)} .k-T{color:var(--t);background:var(--t-bg)} .k-M{color:var(--m);background:var(--m-bg)} .k-D{color:var(--d);background:var(--d-bg)}
+h2{font-family:var(--display);font-weight:500;font-size:22px;margin:36px 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+@media (max-width:420px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.card.global{border-style:dashed}
+.head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.head h3{font-family:var(--display);font-weight:600;font-size:19px;margin:0}
+.path{font-family:var(--mono);font-size:12px;color:var(--faint);margin-left:auto}
+.sub{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);font-weight:600;margin-top:2px}
+ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:baseline;font-size:14px}
+li .note{color:var(--muted);font-size:13px}
+li.pop{padding-left:2px}
+li.pop::before{content:none}
+.arrow{color:var(--faint);font-family:var(--mono);font-size:12px}
+.admin{font-size:11px;color:var(--amber);border:1px solid currentColor;border-radius:4px;padding:0 5px;margin-left:6px;vertical-align:1px}
+.nest{margin:4px 0 0 20px;border-left:2px solid var(--line);padding-left:10px}
+.hide{display:none!important}
+.empty{color:var(--muted);padding:20px 0}
+footer{margin-top:40px;color:var(--faint);font-size:13px}
+footer code{font-family:var(--mono);font-size:12px}
+</style>
+
+<div class="wrap">
+  <h1>Case Pipeline screen map</h1>
+  <p class="lede">Every page, section, popup and dropdown in the dashboard has a short code, shown in small grey text on screen. Put the code at the start of an improvement request so everyone is looking at the same thing. Don’t see them? Settings → Preferences → Show screen codes.</p>
+  <div class="example"><span class="code k-M">M5</span><span>Appointment detail: show the attorney's name in the header</span><em>← a good request</em></div>
+
+  <div class="bar">
+    <input id="q" type="search" placeholder="Find a screen: “notes”, “M7”, “contract”…" aria-label="Find a screen">
+    <div class="legend">
+      <span><span class="code k-P">P</span> page</span>
+      <span><span class="code k-T">P4.1</span> tab or section</span>
+      <span><span class="code k-M">M</span> popup</span>
+      <span><span class="code k-D">D</span> dropdown menu</span>
+      <span><span class="code k-G">G</span> on every screen</span>
+    </div>
+  </div>
+
+  <h2>On every page</h2>
+  <div class="grid" id="global"></div>
+
+  <h2>Pages</h2>
+  <div class="grid" id="pages"></div>
+  <p class="empty hide" id="none">Nothing matches. Try a shorter word.</p>
+
+  <footer>Source of truth: <code>docs/ui-map.md</code> in the repo. New screens get the next free number; codes are never reused.</footer>
+</div>
+
+<script>
+const GLOBAL = [
+  { code:"G1", name:"Sidebar", note:"page links, Settings, your name and sign-out; code sits just above Settings" },
+  { code:"G2", name:"Top bar", note:"Back and “+ Log call”; code sits next to the button. Not on Settings.", pops:[
+    { code:"M2", name:"Log a call", note:"“+ Log call”", pops:[
+      { code:"M3", name:"Client case", note:"“View profile” after picking a linked client; opens on top of M2" },
+      { code:"D13", name:"Intake field picker", note:"choice fields on the intake part of the form" },
+      { code:"D16", name:"Call status" }, { code:"D17", name:"Language", note:"more fields" },
+      { code:"D18", name:"Taken by", note:"more fields" }, { code:"D19", name:"Highlight for", note:"more fields" } ] } ] },
+];
+
+const PAGES = [
+  { code:"P0", name:"Sign in", path:"/login", pops:[ { code:"M14", name:"What's new", note:"version badge at the bottom" } ] },
+  { code:"P1", name:"Home", path:"/", items:[
+    { code:"P1.1", name:"KPI cards", note:"six number cards", pops:[ { code:"M1", name:"KPI detail", note:"click a card", pops:[ { code:"D22", name:"Show column" } ] } ] },
+    { code:"P1.2", name:"Quick access", note:"watchlist and recently viewed" } ],
+    pops:[ { code:"M14", name:"What's new", note:"version badge in the header" } ] },
+  { code:"P2", name:"Clients", path:"/clients", items:[
+    { code:"P2.1", name:"Search bar", pops:[ { code:"D11", name:"Search type" } ] },
+    { code:"P2.2", name:"Saved views bar" },
+    { code:"P2.3", name:"Filters", pops:[ { code:"D8", name:"Status filter" }, { code:"D9", name:"Attorney filter" }, { code:"D10", name:"Board type filter" } ] },
+    { code:"P2.4", name:"Results list" } ] },
+  { code:"P3", name:"Client 360", path:"/clients/:id", items:[
+    { code:"P3.0", name:"Client header + snapshot", note:"above the tabs, same on every tab", pops:[
+      { code:"D1", name:"Status card menu" }, { code:"D2", name:"Deadline card menu" },
+      { code:"D3", name:"Relief card menu" }, { code:"D4", name:"Next action card menu" } ] },
+    { code:"P3.1", name:"Overview tab", note:"notes timeline + composer", pops:[ { code:"D5", name:"Timeline date range" } ] },
+    { code:"P3.2", name:"Appointments tab", pops:[ { code:"M10", name:"Book a consult", pops:[ { code:"D14", name:"Attorney picker" } ] } ] },
+    { code:"P3.3", name:"Contracts tab", pops:[ { code:"M11", name:"New contract (Fee K)", pops:[ { code:"D15", name:"Case type picker" } ] } ] },
+    { code:"P3.4", name:"Active Cases tab" },
+    { code:"P3.5", name:"Court Cases tab" },
+    { code:"P3.6", name:"Documents tab", note:"SharePoint files", pops:[ { code:"M12", name:"File preview" } ] },
+    { code:"P3.7", name:"Relations tab" },
+    { code:"P3.8", name:"Debug tab", admin:true, pops:[ { code:"M13", name:"Entry editor", pops:[ { code:"D6", name:"Status picker" } ] } ] } ] },
+  { code:"P4", name:"Appointments", path:"/appointments", items:[
+    { code:"P4.1", name:"Controls", note:"board/list, attorney focus, range, detail" },
+    { code:"P4.2", name:"Attorney boards", note:"one column per attorney, or one full width" },
+    { code:"P4.3", name:"Appointment list", note:"list view, grouped by date" } ], pops:[
+    { code:"M5", name:"Appointment detail", note:"click an appointment; has notes and documents", pops:[ { code:"M12", name:"File preview" } ] },
+    { code:"M6", name:"Client notes", note:"“Open in modal” under a row’s notes" } ] },
+  { code:"P5", name:"Active Cases", path:"/active-cases", items:[
+    { code:"P5.1", name:"Case count + North Pole toggle" },
+    { code:"P5.2", name:"Swim-lane board", note:"paralegal rows × urgency columns" } ] },
+  { code:"P6", name:"My Cases", path:"/my-cases", items:[
+    { code:"P6.1", name:"Case list", note:"also the “link your identity” and “no cases” states" } ] },
+  { code:"P7", name:"Calendar", path:"/calendar", items:[
+    { code:"P7.1", name:"Controls", note:"month/agenda, navigation, categories, attorney" },
+    { code:"P7.2", name:"Month grid", pops:[ { code:"M7", name:"Day agenda", note:"click a day" } ] },
+    { code:"P7.3", name:"Agenda" } ] },
+  { code:"P8", name:"Alerts", path:"/alerts", items:[
+    { code:"P8.1", name:"Controls", note:"attorney and severity filters" },
+    { code:"P8.2", name:"Alert groups", note:"critical / warning / info, and Mail to review", pops:[
+      { code:"M15", name:"Mail review", note:"click a “Mail to review” row" } ] } ] },
+  { code:"P9", name:"Jail Intakes", path:"/jail-intakes", items:[
+    { code:"P9.1", name:"Filters + search", note:"recent / older / all, name or facility" },
+    { code:"P9.2", name:"Intake list", pops:[ { code:"M9", name:"Jail intake detail", note:"click an intake" } ] } ], pops:[
+    { code:"M8", name:"New jail intake", note:"“+ New intake” button", pops:[ { code:"D13", name:"Intake field picker" } ] } ] },
+  { code:"P10", name:"Call Log", path:"/call-log", items:[
+    { code:"P10.1", name:"Filters", note:"status, taken by, unlinked, day", pops:[ { code:"D20", name:"Call status filter" }, { code:"D21", name:"Taken-by filter" } ] },
+    { code:"P10.2", name:"Call table", pops:[
+      { code:"M2", name:"Edit call", note:"pencil on a row; same popup as Log a call" },
+      { code:"M4", name:"Call notes", note:"notes button on a row" },
+      { code:"M3", name:"Client case", note:"a row’s linked client" },
+      { code:"D6", name:"Status picker", note:"status on a row" },
+      { code:"D7", name:"Highlighted For picker", note:"Highlighted For on a row" } ] } ] },
+  { code:"P11", name:"Settings", path:"/settings", items:[
+    { code:"P11.1", name:"Profile" }, { code:"P11.2", name:"Preferences", note:"has the “Show screen codes” switch" },
+    { code:"P11.3", name:"My board identity" }, { code:"P11.4", name:"Monday.com account" },
+    { code:"P11.5", name:"Attorney appointment boards" },
+    { code:"P11.6", name:"Status tags", admin:true, pops:[ { code:"D12", name:"Urgency picker" } ] }, { code:"P11.7", name:"Urgency", admin:true },
+    { code:"P11.8", name:"Sync health", admin:true }, { code:"P11.9", name:"Users", admin:true },
+    { code:"P11.10", name:"Audit log", admin:true } ] },
+  { code:"P12", name:"Mail", path:"/mail", items:[
+    { code:"P12.1", name:"Drop zone", note:"choose a PDF, or try a sample (text or scanned/OCR)" },
+    { code:"P12.2", name:"Result filters", note:"matched / needs attention / no match / unreadable" },
+    { code:"P12.3", name:"Notices + preview", note:"one row per notice; the scan’s pages on the right", pops:[
+      { code:"M15", name:"Mail review", note:"“Review” or “Confirm & send” on a notice" } ] } ] },
+];
+
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const kind = c => c.includes(".") ? "T" : c[0];
+const chip = c => `<span class="code k-${kind(c)}">${esc(c)}</span>`;
+
+function row(n){
+  const nested = n.pops?.length ? `<ul class="nest">${n.pops.map(row).join("")}</ul>` : "";
+  return `<li>${chip(n.code)}<div><span>${esc(n.name)}</span>${n.admin?'<span class="admin">admin</span>':""}${n.note?` <span class="note">· ${esc(n.note)}</span>`:""}${nested}</div></li>`;
+}
+function text(n){ return [n.code,n.name,n.note,n.path,...(n.items||[]).map(text),...(n.pops||[]).map(text)].join(" ").toLowerCase(); }
+function card(p, global){
+  const items = p.items?.length ? `<div class="sub">Inside</div><ul>${p.items.map(row).join("")}</ul>` : "";
+  const pops = p.pops?.length ? `<div class="sub">Opens</div><ul>${p.pops.map(row).join("")}</ul>` : "";
+  const body = items + pops;
+  return `<section class="card${global?" global":""}" data-text="${esc(text(p))}">
+    <div class="head">${p.code?chip(p.code):""}<h3>${esc(p.name)}</h3>${p.path?`<span class="path">${esc(p.path)}</span>`:""}</div>
+    ${p.note?`<div class="note" style="color:var(--muted);font-size:14px">${esc(p.note)}</div>`:""}${body}</section>`;
+}
+document.getElementById("global").innerHTML = GLOBAL.map(g => card(g, true)).join("");
+document.getElementById("pages").innerHTML = PAGES.map(p => card(p)).join("");
+
+const q = document.getElementById("q");
+q.addEventListener("input", () => {
+  const term = q.value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll(".card").forEach(c => {
+    const hit = !term || c.dataset.text.includes(term);
+    c.classList.toggle("hide", !hit); if (hit) shown++;
+  });
+  document.getElementById("none").classList.toggle("hide", shown > 0);
+});
+</script>
