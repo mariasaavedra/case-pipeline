@@ -11,6 +11,7 @@ import { FilterBar } from "./FilterBar";
 import { SavedViewsBar } from "./SavedViewsBar";
 import { useUrlFilters } from "../hooks/useUrlFilters";
 import { navigate } from "../router";
+import { SectionCode } from "./ScreenCode";
 
 const FILTER_DEFAULTS = {
   status: "",
@@ -88,6 +89,7 @@ export function ClientsPage() {
     <div className="animate-in">
       {/* Search bar in page body (not header) */}
       <div className="mb-5">
+        <SectionCode code="P2.1" />
         <SearchBar
           onResults={handleSearchResults}
           onTypedResults={handleTypedResults}
@@ -95,6 +97,7 @@ export function ClientsPage() {
       </div>
 
       {/* Search results take priority over browse */}
+      {showSearch && <SectionCode code="P2.4" />}
       {showSearch && typedType !== "profiles" && typedResults.length > 0 && (
         <TypedSearchResults results={typedResults} onSelect={handleSelect} />
       )}
@@ -105,6 +108,7 @@ export function ClientsPage() {
       {/* Filter bar + browse when not searching */}
       {!showSearch && (
         <>
+          <SectionCode code="P2.3" />
           <FilterBar
             filters={filters}
             onFilterChange={(key: FilterKeys, value: string) => setFilter(key, value)}
@@ -159,6 +163,7 @@ export function ClientsPage() {
 
           {!loading && filteredProfiles.length > 0 && (
             <div className="animate-in">
+              <SectionCode code="P2.4" />
               <SearchResults results={filteredProfiles} onSelect={handleSelect} />
             </div>
           )}

@@ -15,6 +15,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-09-28",
+    title: "Sections have codes as well",
+    items: [
+      "Parts of a page now carry their own code: each Settings section next to its title (Users is P11.9), and on Home and Clients a small code above each block, such as P2.3 for the filters.",
+    ],
+  },
+  {
+    date: "2026-09-28",
     title: "Pages and menus have codes too",
     items: [
       "Every page now shows its code in the bottom-right corner of the window, like P4 for Appointments. On a client's page it changes with the tab: P3.2 is their Appointments tab.",

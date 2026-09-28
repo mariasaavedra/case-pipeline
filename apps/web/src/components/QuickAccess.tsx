@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { getRecentlyViewed, getWatchlist } from "../api";
 import type { RecentlyViewedItem, WatchlistItem } from "../api";
 import { Link } from "./Link";
+import { SectionCode } from "./ScreenCode";
 
 const STAR = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -83,19 +84,22 @@ export function QuickAccess() {
   if (!loaded || (recent.length === 0 && watch.length === 0)) return null;
 
   return (
-    <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-      <MiniList
-        title="Watchlist"
-        icon={STAR}
-        items={watch.map((w) => ({ id: w.profileLocalId, name: w.name }))}
-        empty="Pin clients to see them here"
-      />
-      <MiniList
-        title="Recently viewed"
-        icon={CLOCK}
-        items={recent.map((r) => ({ id: r.profileLocalId, name: r.name }))}
-        empty="Clients you open appear here"
-      />
-    </div>
+    <>
+      <SectionCode code="P1.2" />
+      <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+        <MiniList
+          title="Watchlist"
+          icon={STAR}
+          items={watch.map((w) => ({ id: w.profileLocalId, name: w.name }))}
+          empty="Pin clients to see them here"
+        />
+        <MiniList
+          title="Recently viewed"
+          icon={CLOCK}
+          items={recent.map((r) => ({ id: r.profileLocalId, name: r.name }))}
+          empty="Clients you open appear here"
+        />
+      </div>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import type { AttorneyBoard, PublicUser, AuditEntry, MondayConnectionStatus } fr
 import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
+import { SectionCode } from "../components/ScreenCode";
 
 // =============================================================================
 // User management (admin section)
@@ -62,7 +63,7 @@ function UsersSection() {
 
   return (
     <section>
-      <h2 style={styles.sectionTitle}>Users</h2>
+      <h2 style={styles.sectionTitle}>Users<SectionCode code="P11.9" inline /></h2>
       <p style={styles.sectionDesc}>
         Users sign in with their firm Microsoft account (created as a regular user on first login).
         Promote to admin, link them to their board name for “My Cases”, or disable access here.
@@ -181,7 +182,7 @@ function BoardIdentitySection() {
 
   return (
     <section style={{ marginBottom: "40px" }}>
-      <h2 style={styles.sectionTitle}>My board identity</h2>
+      <h2 style={styles.sectionTitle}>My board identity<SectionCode code="P11.3" inline /></h2>
       <p style={styles.sectionDesc}>
         Link your account to your name on the Monday.com boards so “My Cases” shows your workload.
       </p>
@@ -250,7 +251,7 @@ function AuditLogSection() {
 
   return (
     <section style={{ marginBottom: "40px" }}>
-      <h2 style={styles.sectionTitle}>Audit log</h2>
+      <h2 style={styles.sectionTitle}>Audit log<SectionCode code="P11.10" inline /></h2>
       <p style={styles.sectionDesc}>
         Recent sensitive actions — role changes, Monday.com writes, and board/profile edits.
       </p>
@@ -369,7 +370,7 @@ function AttorneyBoardsSection() {
 
   return (
     <section style={{ marginBottom: "40px" }}>
-      <h2 style={styles.sectionTitle}>Attorney Appointment Boards</h2>
+      <h2 style={styles.sectionTitle}>Attorney Appointment Boards<SectionCode code="P11.5" inline /></h2>
       <p style={styles.sectionDesc}>
         Each attorney has a dedicated Monday.com appointments board. Add or remove boards here —
         the board will appear as a column in the Appointments view immediately, and the next sync
@@ -621,7 +622,7 @@ function MondayConnectionSection() {
 
   return (
     <section style={{ marginBottom: "40px" }}>
-      <h2 style={styles.sectionTitle}>Monday.com Account</h2>
+      <h2 style={styles.sectionTitle}>Monday.com Account<SectionCode code="P11.4" inline /></h2>
       <p style={styles.sectionDesc}>
         Connect your personal Monday.com account so notes you post are attributed to you.
       </p>
@@ -713,7 +714,7 @@ export function SettingsPage() {
 
       {/* Profile */}
       <section style={{ marginBottom: "40px" }}>
-        <h2 style={styles.sectionTitle}>Profile</h2>
+        <h2 style={styles.sectionTitle}>Profile<SectionCode code="P11.1" inline /></h2>
         <div style={styles.card}>
           <div style={styles.fieldRow}>
             <span style={styles.fieldLabel}>Name</span>
@@ -742,7 +743,7 @@ export function SettingsPage() {
 
       {/* Preferences */}
       <section style={{ marginBottom: "40px" }}>
-        <h2 style={styles.sectionTitle}>Preferences</h2>
+        <h2 style={styles.sectionTitle}>Preferences<SectionCode code="P11.2" inline /></h2>
         <p style={styles.sectionDesc}>Synced to your account, so they follow you across devices.</p>
 
         <div style={styles.card}>
@@ -850,7 +851,7 @@ export function SettingsPage() {
       {/* Sync health — admin only */}
       {user?.role === "admin" && (
         <section style={{ marginBottom: "40px" }}>
-          <h2 style={styles.sectionTitle}>Sync health</h2>
+          <h2 style={styles.sectionTitle}>Sync health<SectionCode code="P11.8" inline /></h2>
           <p style={styles.sectionDesc}>
             Coverage of the last Monday.com sync (per board), the write-back queue, and archived rows
             (reconciled-away but recoverable — nothing is hard-deleted).
