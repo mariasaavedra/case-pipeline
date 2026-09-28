@@ -91,7 +91,7 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
                       <SelectTrigger aria-label="Case type (Contract for…)" size="sm" className="w-full border-border-light bg-surface">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="w-[var(--anchor-width)]">
+                      <SelectContent code="D15" className="w-[var(--anchor-width)]">
                         <SelectItem value="">Select…</SelectItem>
                         {caseTypeItems.slice(1).map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
                       </SelectContent>

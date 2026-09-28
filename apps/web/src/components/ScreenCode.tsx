@@ -12,9 +12,15 @@
 //             when it has one (`inline`), else a small line above its right edge
 // =============================================================================
 
+import { useScreenCodesVisible } from "../hooks/useScreenCodes";
+
+// All of them hide together when "Show screen codes" is off (Settings →
+// Preferences); see hooks/useScreenCodes.ts.
+
 const TITLE = "Screen code: use it when asking for a change to this screen";
 
 export function PageCode({ code }: { code: string }) {
+  if (!useScreenCodesVisible()) return null;
   return (
     <span
       aria-hidden
@@ -37,6 +43,7 @@ export function PageCode({ code }: { code: string }) {
 }
 
 export function MenuCode({ code }: { code: string }) {
+  if (!useScreenCodesVisible()) return null;
   return (
     <div
       aria-hidden
@@ -58,6 +65,8 @@ export function MenuCode({ code }: { code: string }) {
 }
 
 export function SectionCode({ code, inline = false }: { code: string; inline?: boolean }) {
+  const visible = useScreenCodesVisible();
+  if (!visible) return null;
   const style = {
     fontFamily: "var(--font-mono)",
     fontSize: 10,

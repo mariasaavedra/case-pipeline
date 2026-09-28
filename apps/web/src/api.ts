@@ -740,6 +740,7 @@ export interface ServerPreferences {
   sidebarCollapsedDefault: boolean;
   dateFormat: DateFormatPref;
   density: "comfortable" | "compact";
+  showScreenCodes: boolean;
   dashboardLayout: string[];
   columns: Record<string, string[]>;
   /** Per-card display column on the dashboard, overriding the firm-wide default. */

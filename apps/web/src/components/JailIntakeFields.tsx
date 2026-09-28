@@ -84,7 +84,7 @@ export function JailIntakeFields({ value, onChange, omit = [] }: Props) {
           <SelectTrigger aria-label={label} size="sm" className="w-full border-border-light bg-surface">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="w-[var(--anchor-width)]">
+          <SelectContent code="D13" className="w-[var(--anchor-width)]">
             <SelectItem value="">{blank}</SelectItem>
             {items.slice(1).map((i) => (
               <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>

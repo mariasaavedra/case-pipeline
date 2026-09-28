@@ -9,6 +9,7 @@ import { Link } from "./Link";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { clientPath } from "../router";
 import { MailReviewModal } from "./MailReviewModal";
+import { SectionCode } from "./ScreenCode";
 
 type SeverityFilter = "all" | AlertSeverity;
 
@@ -360,6 +361,7 @@ export function AlertsPage() {
       </div>
 
       {/* Controls */}
+      <SectionCode code="P8.1" />
       <div
         className="flex items-center gap-4 flex-wrap mb-5 px-4 py-3 rounded-xl"
         style={{
@@ -489,6 +491,7 @@ export function AlertsPage() {
       )}
 
       {/* Alert groups */}
+      {!loading && data && totalFiltered > 0 && <SectionCode code="P8.2" />}
       {!loading && data && totalFiltered > 0 && (
         <div className="space-y-1">
           {filteredGroups.map((group) => (

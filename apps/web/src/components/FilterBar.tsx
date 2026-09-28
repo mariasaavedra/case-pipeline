@@ -129,7 +129,7 @@ export function FilterBar({ filters, onFilterChange, onClear, hasActiveFilters, 
         <SelectTrigger size="sm" className={triggerClass(!!filters.status)} aria-label="Status">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent code="D8">
           {statusItems.map((i) => (
             <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
           ))}
@@ -145,7 +145,7 @@ export function FilterBar({ filters, onFilterChange, onClear, hasActiveFilters, 
         <SelectTrigger size="sm" className={triggerClass(!!filters.attorney)} aria-label="Attorney">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent code="D9">
           {attorneyItems.map((i) => (
             <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
           ))}
@@ -161,7 +161,7 @@ export function FilterBar({ filters, onFilterChange, onClear, hasActiveFilters, 
         <SelectTrigger size="sm" className={triggerClass(!!filters.board_type)} aria-label="Board type">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent code="D10">
           {boardTypeItems.map((i) => (
             <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
           ))}

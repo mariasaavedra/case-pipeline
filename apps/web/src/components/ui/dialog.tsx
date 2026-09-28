@@ -4,6 +4,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
+import { useScreenCodesVisible } from "@/hooks/useScreenCodes"
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
@@ -49,6 +50,7 @@ function DialogContent({
    * close button so a request can name exactly which popup it means. */
   code?: string
 }) {
+  const showCode = useScreenCodesVisible()
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -77,7 +79,7 @@ function DialogContent({
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
-        {code && (
+        {code && showCode && (
           <span
             aria-hidden
             title="Screen code: use it when asking for a change to this popup"

@@ -813,6 +813,31 @@ export function SettingsPage() {
             </button>
           </div>
 
+          {/* Screen codes */}
+          <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
+            <div>
+              <div style={styles.prefLabel}>Show screen codes</div>
+              <div style={styles.prefHint}>The small grey codes (P4, M5, D6…) that name each page, section, popup and menu in a change request</div>
+            </div>
+            <button
+              onClick={() => update("showScreenCodes", !prefs.showScreenCodes)}
+              style={{
+                ...styles.toggle,
+                backgroundColor: prefs.showScreenCodes ? "var(--color-amber)" : "var(--color-border)",
+              }}
+              role="switch"
+              aria-checked={prefs.showScreenCodes}
+              aria-label="Show screen codes"
+            >
+              <span
+                style={{
+                  ...styles.toggleKnob,
+                  transform: prefs.showScreenCodes ? "translateX(18px)" : "translateX(2px)",
+                }}
+              />
+            </button>
+          </div>
+
           {/* Date format */}
           <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
             <div>

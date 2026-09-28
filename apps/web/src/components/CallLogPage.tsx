@@ -27,6 +27,7 @@ import { ClientCaseModal } from "./ClientCaseModal";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { useBoardStatusOptions } from "../StatusOptionsProvider";
+import { SectionCode } from "./ScreenCode";
 
 const PAGE_SIZE = 50;
 const WIDTHS_STORAGE_KEY = "call-log-column-widths";
@@ -233,13 +234,14 @@ export function CallLogPage() {
         <Button type="button" onClick={() => setShowModal(true)}>+ Log call</Button>
       </div>
 
+      <SectionCode code="P10.1" />
       <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ minWidth: 160 }}>
           <Select items={statusItems} value={status} onValueChange={(v) => setStatus(v ?? "")}>
             <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent code="D20">
               {statusItems.map((s) => <SelectItem key={s.value || "all"} value={s.value}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -249,7 +251,7 @@ export function CallLogPage() {
             <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent code="D21">
               {staffItems.map((s) => <SelectItem key={s.value || "all"} value={s.value}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -297,6 +299,7 @@ export function CallLogPage() {
         </div>
       )}
 
+      <SectionCode code="P10.2" />
       <div style={{ border: "1px solid var(--color-border-light)", borderRadius: 10, overflow: "hidden", overflowX: "auto" }}>
         <div style={{ minWidth: "fit-content" }}>
           <div
