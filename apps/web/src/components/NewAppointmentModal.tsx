@@ -120,7 +120,7 @@ export function NewAppointmentModal({ profileLocalId, clientName, onClose }: Pro
             </div>
           ) : (
             <>
-              <label style={{ display: "block", marginBottom: 12 }}>
+              <div style={{ display: "block", marginBottom: 12 }}>
                 <span style={labelStyle}>Attorney</span>
                 {noAttorneys ? (
                   <span style={{ fontSize: 12, color: "var(--color-status-red)" }}>
@@ -128,7 +128,7 @@ export function NewAppointmentModal({ profileLocalId, clientName, onClose }: Pro
                   </span>
                 ) : (
                   <Select items={attorneyItems} value={boardKey} onValueChange={(v) => setBoardKey(v ?? "")}>
-                    <SelectTrigger size="sm" className="w-full border-border-light bg-surface">
+                    <SelectTrigger aria-label="Attorney" size="sm" className="w-full border-border-light bg-surface">
                       <SelectValue placeholder={boards === null ? "Loading…" : "Select…"} />
                     </SelectTrigger>
                     <SelectContent className="w-[var(--anchor-width)]">
@@ -137,7 +137,7 @@ export function NewAppointmentModal({ profileLocalId, clientName, onClose }: Pro
                     </SelectContent>
                   </Select>
                 )}
-              </label>
+              </div>
 
               <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
                 <label style={{ flex: 2 }}>

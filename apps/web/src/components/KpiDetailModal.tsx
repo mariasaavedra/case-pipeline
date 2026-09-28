@@ -159,7 +159,7 @@ export function KpiDetailModal({
           />
 
           {columns.length > 0 && (
-            <label className="flex items-center gap-2 text-xs" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
+            <div className="flex items-center gap-2 text-xs" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
               Show column
               <Select
                 items={columnItems}
@@ -169,7 +169,7 @@ export function KpiDetailModal({
                   onSelectColumn(v || null);
                 }}
               >
-                <SelectTrigger size="sm" className="border-border-light bg-surface">
+                <SelectTrigger aria-label="Show column" size="sm" className="border-border-light bg-surface">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -181,7 +181,7 @@ export function KpiDetailModal({
                   ))}
                 </SelectContent>
               </Select>
-            </label>
+            </div>
           )}
 
           {isPersonalChoice && (
