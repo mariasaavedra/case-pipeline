@@ -18,6 +18,7 @@ import { NotesModal } from "./NotesModal";
 import { AppointmentModal } from "./AppointmentModal";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
 import { clientPath } from "../router";
+import { SectionCode } from "./ScreenCode";
 
 type DetailLevel = "minimal" | "snapshot" | "full";
 type DateRange = "day" | "week" | "upcoming" | "all" | "calendar";
@@ -880,6 +881,7 @@ export function AppointmentsPage() {
       </div>
 
       {/* Controls */}
+      <SectionCode code="P4.1" />
       <div
         className="flex items-center gap-4 flex-wrap mb-5 px-4 py-3 rounded-xl"
         style={{
@@ -1127,6 +1129,7 @@ export function AppointmentsPage() {
       )}
 
       {/* ── Dedicated Mode — one attorney's board, full width ──────────────── */}
+      {!loading && data && (focusBoard !== "all" || viewMode === "board") && <SectionCode code="P4.2" />}
       {!loading && data && focusBoard !== "all" && (
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           <AttorneyColumn
@@ -1164,6 +1167,7 @@ export function AppointmentsPage() {
       )}
 
       {/* ── List Mode ──────────────────────────────────────────────────────── */}
+      {!loading && data && focusBoard === "all" && viewMode === "list" && totalCount > 0 && <SectionCode code="P4.3" />}
       {!loading && data && focusBoard === "all" && viewMode === "list" && totalCount > 0 && (
         <div className="space-y-6">
           {dateKeys.map((dateKey) => (

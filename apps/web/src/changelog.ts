@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-09-28",
+    title: "Codes everywhere, and a switch to hide them",
+    items: [
+      "Appointments, Active Cases, My Cases, Calendar, Alerts, Jail Intakes and Call Log now show a code on each part of the page, like P10.1 for the Call Log filters.",
+      "Every dropdown list carries one too, and the sidebar and top bar are G1 and G2.",
+      "Don't want to see them? Settings → Preferences → Show screen codes turns them all off. The setting follows you to any computer you sign in on.",
+    ],
+  },
+  {
+    date: "2026-09-28",
     title: "Sections have codes as well",
     items: [
       "Parts of a page now carry their own code: each Settings section next to its title (Users is P11.9), and on Home and Clients a small code above each block, such as P2.3 for the filters.",

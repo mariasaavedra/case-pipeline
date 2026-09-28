@@ -172,7 +172,7 @@ export function KpiDetailModal({
                 <SelectTrigger aria-label="Show column" size="sm" className="border-border-light bg-surface">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent code="D22">
                   <SelectItem value="">None</SelectItem>
                   {columns.map((col) => (
                     <SelectItem key={col.id} value={col.id}>

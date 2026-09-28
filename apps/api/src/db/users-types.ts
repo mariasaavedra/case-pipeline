@@ -32,6 +32,8 @@ export interface Preferences {
   sidebarCollapsedDefault: boolean;
   dateFormat: DateFormatPref;
   density: DensityPref;
+  /** Show the small screen codes (P4, M5, D6… from docs/ui-map.md) across the app. */
+  showScreenCodes: boolean;
   /** Ordered list of visible KPI-card ids on the dashboard ([] = default order). */
   dashboardLayout: string[];
   /** Per-table visible column ids, keyed by table id. */
@@ -50,6 +52,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sidebarCollapsedDefault: false,
   dateFormat: "MM/DD/YYYY",
   density: "comfortable",
+  showScreenCodes: true,
   dashboardLayout: [],
   columns: {},
   kpiColumns: {},
@@ -109,6 +112,9 @@ export function sanitizePreferencesPatch(input: unknown): Partial<Preferences> {
   }
   if (typeof o.sidebarCollapsedDefault === "boolean") {
     out.sidebarCollapsedDefault = o.sidebarCollapsedDefault;
+  }
+  if (typeof o.showScreenCodes === "boolean") {
+    out.showScreenCodes = o.showScreenCodes;
   }
   if (typeof o.dateFormat === "string" && DATE_FORMATS.includes(o.dateFormat as DateFormatPref)) {
     out.dateFormat = o.dateFormat as DateFormatPref;

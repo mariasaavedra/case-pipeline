@@ -99,7 +99,7 @@ export function SearchBar({ onResults, onTypedResults }: Props) {
         <SelectTrigger className="min-w-27.5 bg-secondary font-normal" aria-label="Search type">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent code="D11">
           {SEARCH_TYPE_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}

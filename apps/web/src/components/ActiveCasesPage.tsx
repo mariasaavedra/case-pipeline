@@ -4,6 +4,7 @@ import type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from
 import { Link } from "./Link";
 import { StatusBadge } from "./StatusBadge";
 import { clientPath } from "../router";
+import { SectionCode } from "./ScreenCode";
 
 // =============================================================================
 // Constants
@@ -192,6 +193,7 @@ export function ActiveCasesPage() {
   return (
     <div>
       {/* Page header */}
+      <SectionCode code="P5.1" />
       <div className="flex items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
           Active Cases
@@ -232,6 +234,7 @@ export function ActiveCasesPage() {
         <div className="text-gray-500 text-sm">No active cases found.</div>
       )}
 
+      {data && data.assignees.length > 0 && <SectionCode code="P5.2" />}
       {data && data.assignees.length > 0 && (
         <div style={{ overflowX: "auto" }}>
           {/* Grid: 1 label col + 5 urgency cols */}

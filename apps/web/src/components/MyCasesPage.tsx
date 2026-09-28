@@ -4,6 +4,7 @@ import type { MyCasesResult } from "../api";
 import type { ActiveCase, Urgency } from "../api";
 import { navigate, clientPath } from "../router";
 import { Button } from "./ui/button";
+import { SectionCode } from "./ScreenCode";
 
 const URGENCY_META: Record<Urgency, { label: string; color: string; bg: string }> = {
   overdue: { label: "Overdue", color: "var(--color-status-red)", bg: "var(--color-status-red-bg)" },
@@ -108,6 +109,9 @@ export function MyCasesPage() {
       {loading && (
         <div style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", fontSize: "14px" }}>Loading…</div>
       )}
+
+      {/* P6.1 covers the list and the two states that stand in for it. */}
+      {!loading && data && <SectionCode code="P6.1" />}
 
       {/* Not linked yet → prompt to set board identity in Settings */}
       {!loading && data?.needsLink && (
