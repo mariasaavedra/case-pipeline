@@ -31,6 +31,8 @@ export interface JailIntakeFieldValues {
   countryOfBirth: string;
   dateOfBirth: string;
   priorRemoval: string;
+  /** YYYY-MM-DD — a real date column on the board, unlike dateOfBirth. */
+  pickedUpByIce: string;
   description: string;
 }
 
@@ -47,6 +49,7 @@ export const emptyJailIntakeFields: JailIntakeFieldValues = {
   countryOfBirth: "",
   dateOfBirth: "",
   priorRemoval: "",
+  pickedUpByIce: "",
   description: "",
 };
 
@@ -68,6 +71,7 @@ export function toCreateJailIntakeInput(
     countryOfBirth: t(v.countryOfBirth),
     dateOfBirth: t(v.dateOfBirth),
     priorRemoval: v.priorRemoval || undefined,
+    pickedUpByIce: v.pickedUpByIce || undefined,
     description: t(v.description),
     callLogItemId: extra.callLogItemId ?? undefined,
   };

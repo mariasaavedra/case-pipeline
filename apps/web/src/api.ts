@@ -309,6 +309,8 @@ export async function createJailIntake(input: {
   dateOfBirth?: string;
   /** "No" | "Yes" | "Unknown". */
   priorRemoval?: string;
+  /** YYYY-MM-DD — a real date column on the board. */
+  pickedUpByIce?: string;
   /** The monday item id of the call this came out of, when it came from one. */
   callLogItemId?: string;
 }): Promise<{ name: string; intakeItemId?: string; pending: boolean }> {

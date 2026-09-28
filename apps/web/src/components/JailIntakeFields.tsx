@@ -95,6 +95,20 @@ export function JailIntakeFields({ value, onChange, omit = [] }: Props) {
     );
   };
 
+  /** A real date column, so a real picker — unlike dateOfBirth, which is text. */
+  const date = (k: JailIntakeFieldName, label: string) => (
+    <label style={{ display: "block", marginBottom: 12, flex: 1 }}>
+      <span style={labelStyle}>{label}</span>
+      <input
+        type="date"
+        value={value[k]}
+        onChange={(e) => set(k)(e.target.value)}
+        className="w-full rounded-md px-2 py-1.5 text-sm"
+        style={fieldStyle}
+      />
+    </label>
+  );
+
   const row = (...children: React.ReactNode[]) => {
     const kept = children.filter(Boolean);
     if (kept.length === 0) return null;
@@ -115,6 +129,7 @@ export function JailIntakeFields({ value, onChange, omit = [] }: Props) {
         !hidden.has("language") && select("language", "Language", INTAKE_LANGUAGES, "Select…"),
         select("priorRemoval", "Prior removal?", PRIOR_REMOVAL_OPTIONS, "Not asked"),
       )}
+      {row(date("pickedUpByIce", "Date picked up by ICE"))}
       {row(
         !hidden.has("pocName") && text("pocName", "Point of contact", "Name and relationship"),
         !hidden.has("pocPhone") && text("pocPhone", "Their phone"),

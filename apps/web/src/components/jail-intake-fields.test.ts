@@ -28,6 +28,7 @@ const filled: JailIntakeFieldValues = {
   countryOfBirth: "Mexico",
   dateOfBirth: "03/07/1980",
   priorRemoval: "Yes",
+  pickedUpByIce: "2026-02-21",
   description: "Picked up at a traffic stop.",
 };
 
@@ -64,6 +65,7 @@ describe("toCreateJailIntakeInput", () => {
       countryOfBirth: "Mexico",
       dateOfBirth: "03/07/1980",
       priorRemoval: "Yes",
+      pickedUpByIce: "2026-02-21",
       description: "Picked up at a traffic stop.",
       callLogItemId: undefined,
     });
@@ -76,6 +78,7 @@ describe("toCreateJailIntakeInput", () => {
       expect(out[k]).toBeUndefined();
     }
     expect(out.priorRemoval).toBeUndefined();
+    expect(out.pickedUpByIce).toBeUndefined();
   });
 
   test("trims what it keeps", () => {
