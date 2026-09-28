@@ -14,6 +14,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-09-28",
+    title: "A client's profile while you log a call",
+    items: [
+      "In Log a call, the link under a client's recent notes now reads \"View profile\".",
+      "The popup it opens starts with the same header as the client's full page: contact details, date and place of birth, A-number, the Monday.com link and the watchlist star.",
+    ],
+  },
+  {
     date: "2026-08-07",
     title: "New filters on a client's timeline",
     items: [
