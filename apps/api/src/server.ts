@@ -74,6 +74,7 @@ import { usersDb } from "./db/users-db.js";
 import { backupEncryptionKey, encryptFile } from "./backup/crypto.js";
 import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP, pruneOrphanedSidecars } from "./backup/prune.js";
 import { verifyWrittenBackup } from "./backup/verify.js";
+import { syncLockHolder } from "@case-pipeline/seed/db/sync-lock";
 import { diskLevel, readDisk } from "./backup/disk.js";
 import { registerMondayOAuth, getUserMondayToken, markMondayTokenRejected } from "./routes/monday-oauth.js";
 import { makeWriteTokenOptions } from "./write-token.js";
@@ -792,9 +793,52 @@ function scheduleWalCheckpoint() {
   console.log("[wal] Hourly WAL checkpoint scheduled (passive, skipped during sync).");
 }
 
+/**
+ * How long the backup will wait for a running sync before going ahead anyway.
+ *
+ * Generous, because the nightly full walk grew past the backup's slot: it
+ * finished at 04:44 on 2026-09-17 and 05:00 a week later, and adding the Fee Ks
+ * pushed it past 05:30 — so the daily backup was snapshotting a half-synced
+ * database, which is the exact thing moving it from 02:30 to 05:30 was meant to
+ * avoid.
+ */
+const BACKUP_SYNC_WAIT_MS = 90 * 60 * 1000;
+const BACKUP_SYNC_POLL_MS = 60 * 1000;
+
+/**
+ * Wait for a running sync to finish, so the day's restore point is a settled
+ * database rather than one mid-rebuild.
+ *
+ * It gives up waiting rather than skipping: a missing backup is worse than a
+ * mid-sync one. A snapshot taken during a sync is still internally consistent —
+ * SQLite's online backup sees committed state — it is just semantically halfway
+ * through, which makes it a poor thing to restore from, not a broken file.
+ */
+async function waitForSyncToSettle(): Promise<void> {
+  const holder = syncLockHolder(db);
+  if (!holder) return;
+
+  console.log(`[backup] a sync is running (${holder}) — waiting for it to finish before taking the snapshot.`);
+  const deadline = Date.now() + BACKUP_SYNC_WAIT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, BACKUP_SYNC_POLL_MS));
+    if (!syncLockHolder(db)) {
+      console.log("[backup] sync finished — taking the snapshot now.");
+      return;
+    }
+  }
+  console.warn(
+    `[backup] sync still running after ${Math.round(BACKUP_SYNC_WAIT_MS / 60000)} minutes — ` +
+      `backing up anyway. The snapshot will be of a half-synced database; a missing backup would be worse.`,
+  );
+}
+
 async function runBackup(): Promise<void> {
   const backupDir = path.join(DATA_DIR, "backups");
   fs.mkdirSync(backupDir, { recursive: true });
+  // Before the stamp, so the filename reflects when the copy was actually taken.
+  await waitForSyncToSettle();
+
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const key = backupEncryptionKey();
 

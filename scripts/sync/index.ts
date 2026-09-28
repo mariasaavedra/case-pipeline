@@ -55,7 +55,7 @@ import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
 import { backupDatabase } from "../backup-db.js";
 import { backupEncryptionKey, encryptFile } from "../../apps/api/src/backup/crypto.js";
-import { acquireSyncLock, releaseSyncLock, recordSyncResult } from "@case-pipeline/seed/db/sync-lock";
+import { acquireSyncLock, releaseSyncLock, refreshSyncLock, recordSyncResult } from "@case-pipeline/seed/db/sync-lock";
 import { normalizeANumber } from "@case-pipeline/core";
 import {
   buildColumnValues,
@@ -331,6 +331,21 @@ async function main() {
   );
   activeRun = { db, runId, holder: SYNC_HOLDER };
 
+  /**
+   * Keep the advisory lock alive. Called at every pass boundary and inside the
+   * long E&A walk, which is hours on its own.
+   *
+   * A lost lock is reported once and not treated as fatal: another writer has
+   * already decided we were gone, and abandoning a run that is most of the way
+   * through would cost more than it saves.
+   */
+  let warnedLockLost = false;
+  function keepLockAlive(): void {
+    if (refreshSyncLock(db, SYNC_HOLDER) || warnedLockLost) return;
+    warnedLockLost = true;
+    console.warn("[sync] advisory lock was taken by another writer — continuing, but something else may be writing.");
+  }
+
   const boardsConfig = await loadBoardsConfig();
 
   // Merge attorney boards from data/attorney-boards.json into the boards config.
@@ -415,6 +430,10 @@ async function main() {
   // Run one board's sync in isolation: a failure logs and is skipped so one bad
   // board never aborts the rest of the sync.
   async function runPass(key: string, fn: () => Promise<void>): Promise<void> {
+    // The lock goes stale after 30 minutes of silence and a full walk runs for
+    // hours, so it has to be kept alive as we go. Without this the write-queue
+    // processor steals it mid-sync and mutates a database being rebuilt.
+    keepLockAlive();
     try {
       await fn();
     } catch (err) {
@@ -828,6 +847,7 @@ async function main() {
       }
 
       for (let i = 0; i < allIds.length; i += BATCH) {
+        keepLockAlive();
         const batch = allIds.slice(i, i + BATCH);
         const updatesMap = await fetchItemUpdatesBatch(batch, 100);
 
@@ -906,6 +926,7 @@ async function main() {
       };
 
       for (let i = 0; i < allIds.length; i += TIMELINE_BATCH) {
+        keepLockAlive();
         const batch = allIds.slice(i, i + TIMELINE_BATCH);
         try {
           insertTimelineFor(await fetchTimelineBatch(batch, 50));
