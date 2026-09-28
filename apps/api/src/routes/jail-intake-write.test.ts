@@ -8,7 +8,7 @@
 // =============================================================================
 
 import { describe, it, expect } from "vitest";
-import { planJailIntakeWrite, type IntakeColumnIds } from "./jail-intake-write";
+import { planJailIntakeWrite, appendToDescription, LONG_TEXT_LIMIT, type IntakeColumnIds } from "./jail-intake-write";
 
 // The real ids from config/boards.yaml. `poc_name_and_relationship_with_detained`
 // is text_mkkgcg74 — NOT text_mm22stss, the "…: 1" column beside it.
@@ -202,5 +202,63 @@ describe("planJailIntakeWrite", () => {
 
   it("treats a whitespace-only name as missing", () => {
     expect(plan({ firstName: "   ", lastName: "  " })).toHaveProperty("rejection.status", 400);
+  });
+});
+
+// =============================================================================
+// Appending a note to the board's Description
+// =============================================================================
+// Setting a long-text column REPLACES it, and monday caps the column at 2,000
+// characters — a longer value is rejected outright. So an append-forever field
+// has to be checked, and a client note is not something to silently halve.
+
+describe("appendToDescription", () => {
+  const opts = { author: "Rafael", today: "2026-09-28" };
+
+  it("dates and attributes the entry", () => {
+    const { next } = appendToDescription(null, "Family called about a bond hearing.", opts);
+    expect(next).toBe("2026-09-28 — Rafael: Family called about a bond hearing.");
+  });
+
+  it("keeps what was already there and separates the new entry", () => {
+    const { next } = appendToDescription("Picked up at a traffic stop.", "Bond hearing requested.", opts);
+    expect(next).toBe("Picked up at a traffic stop.\n\n2026-09-28 — Rafael: Bond hearing requested.");
+  });
+
+  it("does not leave a leading blank line when the column was empty", () => {
+    expect(appendToDescription("   ", "First note.", opts).next).toBe("2026-09-28 — Rafael: First note.");
+  });
+
+  it("trims the note rather than writing its whitespace", () => {
+    expect(appendToDescription(null, "  Spaced out.  ", opts).next).toBe("2026-09-28 — Rafael: Spaced out.");
+  });
+
+  it("refuses rather than truncating when the column is full", () => {
+    // The note has already been posted as an update and an activity by this
+    // point, so refusing here loses nothing — truncating would lose half a
+    // client note with no sign of it.
+    const nearlyFull = "x".repeat(LONG_TEXT_LIMIT - 10);
+    const res = appendToDescription(nearlyFull, "This will not fit at all.", opts);
+    expect(res.full).toBe(true);
+    expect(res.next).toBeNull();
+  });
+
+  it("accepts a note that exactly reaches the limit", () => {
+    const entry = "2026-09-28 — Rafael: ";
+    const note = "y".repeat(LONG_TEXT_LIMIT - entry.length);
+    const res = appendToDescription(null, note, opts);
+    expect(res.full).toBe(false);
+    expect(res.next).toHaveLength(LONG_TEXT_LIMIT);
+  });
+
+  it("rejects one character over the limit", () => {
+    const entry = "2026-09-28 — Rafael: ";
+    const note = "y".repeat(LONG_TEXT_LIMIT - entry.length + 1);
+    expect(appendToDescription(null, note, opts).full).toBe(true);
+  });
+
+  it("counts the existing text and the separator toward the limit", () => {
+    const existing = "z".repeat(LONG_TEXT_LIMIT - 30);
+    expect(appendToDescription(existing, "a short note", opts).full).toBe(true);
   });
 });

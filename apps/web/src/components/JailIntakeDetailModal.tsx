@@ -53,7 +53,7 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [posted, setPosted] = useState<{ pending: boolean } | null>(null);
+  const [posted, setPosted] = useState<{ pending: boolean; descriptionUpdated: boolean; descriptionFull: boolean } | null>(null);
 
   const submit = async () => {
     if (!note.trim()) {
@@ -64,7 +64,7 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
     setError(null);
     try {
       const res = await addJailIntakeNote(intake.localId, note.trim());
-      setPosted({ pending: res.pending });
+      setPosted(res);
       setNote("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not add the note");
@@ -158,13 +158,21 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
             </h3>
 
             {posted && (
-              <p
-                className="text-sm mb-2"
-                style={{ color: "var(--color-status-green)", fontFamily: "var(--font-body)" }}
-              >
-                ✓ Added to Monday as an update and a Casenote
-                {posted.pending ? " — queued, Monday was unreachable." : "."}
-              </p>
+              <div className="mb-2" style={{ fontFamily: "var(--font-body)" }}>
+                <p className="text-sm" style={{ color: "var(--color-status-green)" }}>
+                  ✓ Added to Monday as an update and a Casenote
+                  {posted.descriptionUpdated ? ", and appended to the Description" : ""}
+                  {posted.pending ? " — queued, Monday was unreachable." : "."}
+                </p>
+                {/* Said plainly: the note IS in monday, it just could not also go
+                    in a column that only holds 2,000 characters. */}
+                {posted.descriptionFull && (
+                  <p className="text-sm" style={{ color: "var(--color-status-yellow)" }}>
+                    The Description column is full (2,000 characters), so this was not added there. Trim it in Monday
+                    if you want future notes to keep appending.
+                  </p>
+                )}
+              </div>
             )}
 
             <textarea
@@ -188,7 +196,7 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
               className="text-[11px] mt-1"
               style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
             >
-              Posts to Monday as an update and a Casenote activity. Intake notes live on the Monday item, not here.
+              Posts to Monday as an update, a Casenote activity, and an append to the intake&rsquo;s Description.
             </p>
 
             {error && (
