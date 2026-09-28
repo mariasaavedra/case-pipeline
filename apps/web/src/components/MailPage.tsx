@@ -1,11 +1,11 @@
 // =============================================================================
 // MailPage — scan incoming mail, match each notice to a client's Open Form
 // =============================================================================
-// Prototype, read-only. Drop one PDF (a whole day's mail scanned in one pass is
-// fine — the API splits it into notices), and each notice comes back with the
-// Open Form it belongs to and what the write-back WOULD do. Nothing is stored
-// and nothing reaches Monday yet; the point is to judge the matching on real
-// mail first.
+// Drop one PDF (a whole day's mail scanned in one pass is fine — the API splits
+// it into notices), and each notice comes back with the Open Form it belongs to
+// and what the write-back WOULD do. The scan is saved; notices that need a
+// person also land in Alerts → "Mail to review" (M15 settles them, here or
+// there). Nothing reaches Monday yet.
 //
 // The PDF never leaves the browser except for the one scan request: the preview
 // on the right is a local blob URL.
@@ -27,6 +27,7 @@ import {
 import { Link } from "./Link";
 import { clientPath } from "../router";
 import { Button } from "./ui/button";
+import { MailReviewModal } from "./MailReviewModal";
 
 const STATUS_META: Record<MatchStatus, { label: string; color: string; bg: string }> = {
   matched: { label: "Matched", color: "var(--color-status-green)", bg: "var(--color-status-green-bg)" },
@@ -131,10 +132,15 @@ function DocumentRow({
   doc,
   selected,
   onSelect,
+  resolved,
+  onReview,
 }: {
   doc: MailScanDocument;
   selected: boolean;
   onSelect: () => void;
+  /** "assigned" / "dismissed" once settled in this session. */
+  resolved: string | undefined;
+  onReview: () => void;
 }) {
   const { fields, match } = doc;
   const person = fields.people[0];
@@ -167,11 +173,32 @@ function DocumentRow({
             </span>
             <StatusPill status={match.status} />
             {doc.ocrPages.length > 0 && <OcrBadge confidence={doc.ocrConfidence} />}
+            {resolved && (
+              <span
+                className="text-[11px] px-2 py-0.5 rounded-full"
+                style={{ color: "var(--color-status-green)", backgroundColor: "var(--color-status-green-bg)", fontFamily: "var(--font-body)" }}
+              >
+                {resolved === "assigned" ? "Assigned" : "Dismissed"}
+              </span>
+            )}
           </div>
           <span className="text-[11px]" style={faint}>
             {pageRange(doc.pages)} · split on {SPLIT_LABEL[doc.splitReason]}
           </span>
         </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+        {doc.needsReview && doc.id != null && !resolved && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onReview();
+            }}
+          >
+            Review
+          </Button>
+        )}
         {match.profile && (
           <Link
             href={clientPath(match.profile.localId)}
@@ -182,6 +209,7 @@ function DocumentRow({
             {match.profile.name}
           </Link>
         )}
+        </div>
       </div>
 
       <p className="text-sm mt-2" style={{ ...ink, color: "var(--color-ink-muted)" }}>
@@ -250,6 +278,8 @@ export function MailPage() {
   const [filter, setFilter] = useState<MatchStatus | "all">("all");
   const [selected, setSelected] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [reviewing, setReviewing] = useState<number | null>(null);
+  const [resolved, setResolved] = useState<Record<number, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -259,15 +289,16 @@ export function MailPage() {
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  const run = async (name: string, blob: Blob) => {
+  const run = async (name: string, blob: Blob, sample = false) => {
     setFile({ name, blob });
+    setResolved({});
     setResult(null);
     setError(null);
     setFilter("all");
     setSelected(0);
     setScanning(true);
     try {
-      setResult(await scanMail(blob));
+      setResult(await scanMail(blob, { name, sample }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
     } finally {
@@ -290,7 +321,7 @@ export function MailPage() {
     setScanning(true);
     try {
       const blob = await fetchSampleMailPdf(scanned);
-      await run(scanned ? "sample-mail-scanned.pdf" : "sample-mail.pdf", blob);
+      await run(scanned ? "sample-mail-scanned.pdf" : "sample-mail.pdf", blob, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load the sample");
       setScanning(false);
@@ -339,7 +370,7 @@ export function MailPage() {
           className="text-[11px] px-2 py-1 rounded-md"
           style={{ background: "var(--color-status-blue-bg)", color: "var(--color-status-blue)", fontFamily: "var(--font-body)" }}
         >
-          Prototype · nothing is saved or sent to Monday
+          Prototype · scans are saved; nothing is sent to Monday yet
         </span>
       </div>
 
@@ -415,6 +446,25 @@ export function MailPage() {
 
       {result && (
         <>
+          {(() => {
+            const open = result.documents.filter((d) => d.needsReview && d.id != null && !resolved[d.id]).length;
+            if (open === 0) return null;
+            return (
+              <div
+                className="mb-3 px-4 py-2.5 rounded-lg text-sm flex items-center gap-2 flex-wrap"
+                style={{ background: "var(--color-status-yellow-bg)", color: "var(--color-status-yellow)", fontFamily: "var(--font-body)" }}
+              >
+                <span>
+                  {open} notice{open > 1 ? "s" : ""} need{open > 1 ? "" : "s"} a person. Review {open > 1 ? "them" : "it"} here, or later from{" "}
+                  <Link href="/alerts" style={{ color: "inherit", fontWeight: 600 }}>
+                    Alerts → Mail to review
+                  </Link>
+                  .
+                </span>
+              </div>
+            );
+          })()}
+
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             {chip("all", "All", result.documents.length)}
             {(Object.keys(STATUS_META) as MatchStatus[]).map((s) => chip(s, STATUS_META[s].label, result.summary[s]))}
@@ -438,7 +488,14 @@ export function MailPage() {
                 </p>
               ) : (
                 visible.map(({ d, i }) => (
-                  <DocumentRow key={i} doc={d} selected={i === selected} onSelect={() => setSelected(i)} />
+                  <DocumentRow
+                    key={i}
+                    doc={d}
+                    selected={i === selected}
+                    onSelect={() => setSelected(i)}
+                    resolved={d.id != null ? resolved[d.id] : undefined}
+                    onReview={() => d.id != null && setReviewing(d.id)}
+                  />
                 ))
               )}
             </div>
@@ -460,6 +517,14 @@ export function MailPage() {
             )}
           </div>
         </>
+      )}
+
+      {reviewing != null && (
+        <MailReviewModal
+          documentId={reviewing}
+          onClose={() => setReviewing(null)}
+          onResolved={(doc) => setResolved((prev) => ({ ...prev, [doc.id]: doc.reviewState }))}
+        />
       )}
     </div>
   );

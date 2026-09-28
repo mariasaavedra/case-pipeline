@@ -41,6 +41,7 @@ const PAGE_CODES: Partial<Record<Route["page"], string>> = {
   "jail-intakes": "P9",
   "call-log": "P10",
   settings: "P11",
+  mail: "P12",
 };
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";

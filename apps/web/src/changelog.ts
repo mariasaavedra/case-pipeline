@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-09-28",
+    title: "Mail: scan notices and match them to cases (trial)",
+    items: [
+      "New Mail page in the sidebar. Drop in a scanned PDF — one notice or a whole day's mail in one file — and each notice is matched to the client's Open Form by its receipt number or A-number.",
+      "Plain scans work too: pages without text are read automatically. A notice read that way shows how sure the reading is, like OCR 93%.",
+      "Notices that can't be matched to exactly one Open Form go to Alerts under \"Mail to review\". Open one to see the page next to the possible cases, then assign it or dismiss it with a note.",
+      "This is a trial: nothing is changed in Monday.com yet. Filling in the receipt number and attaching the notice there comes next.",
+    ],
+  },
+  {
+    date: "2026-09-28",
     title: "Pages and menus have codes too",
     items: [
       "Every page now shows its code in the bottom-right corner of the window, like P4 for Appointments. On a client's page it changes with the tab: P3.2 is their Appointments tab.",

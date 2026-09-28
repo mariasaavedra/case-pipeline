@@ -3,8 +3,9 @@
 // =============================================================================
 // End to end over HTTP: the generated sample PDF goes in as a raw body and
 // comes back split and matched against an in-memory DB — once with a text
-// layer, once as images only, which forces real OCR. Auth is stubbed —
-// requireAuth has its own tests.
+// layer, once as images only, which forces real OCR — then saved, cut into
+// per-notice PDFs, and resolved. Auth, the user lookup and the audit log are
+// stubbed; each has its own tests.
 // =============================================================================
 
 import { test, expect, describe, vi, beforeAll, afterAll } from "vitest";
@@ -12,11 +13,23 @@ import express from "express";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import Database from "better-sqlite3";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { PDFDocument } from "pdf-lib";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import type { MailScanResult } from "@case-pipeline/query";
 
 vi.mock("../auth/middleware.js", () => ({
   requireAuth: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+vi.mock("../db/user-context.js", () => ({
+  currentUser: () => ({ id: 7, name: "Front Desk" }),
+}));
+const audits: Array<{ action: string; targetId?: string | null }> = [];
+vi.mock("../audit/log.js", () => ({
+  auditFromReq: (_req: unknown, action: string, opts: { targetId?: string | null }) =>
+    audits.push({ action, targetId: opts.targetId }),
 }));
 
 const { registerMailRoutes } = await import("./mail.js");
@@ -24,6 +37,7 @@ const { closeOcr } = await import("../mail/ocr.js");
 
 let server: Server;
 let base: string;
+let dataDir: string;
 
 beforeAll(async () => {
   const db = new Database(":memory:");
@@ -37,7 +51,8 @@ beforeAll(async () => {
 
   const app = express();
   app.use(express.json());
-  registerMailRoutes(app, { db });
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "mail-test-"));
+  registerMailRoutes(app, { db, dataDir });
   server = app.listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -45,10 +60,11 @@ beforeAll(async () => {
 afterAll(async () => {
   server.close();
   await closeOcr();
+  fs.rmSync(dataDir, { recursive: true, force: true });
 });
 
-async function scan(pdf: ArrayBuffer): Promise<MailScanResult> {
-  const res = await fetch(`${base}/api/mail/scan`, {
+async function scan(pdf: ArrayBuffer, query = ""): Promise<MailScanResult> {
+  const res = await fetch(`${base}/api/mail/scan${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/pdf" },
     body: pdf,
@@ -101,5 +117,55 @@ describe("mail routes", () => {
   test("rejects a missing body", async () => {
     const res = await fetch(`${base}/api/mail/scan`, { method: "POST" });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("saved scans and review", () => {
+  test("a scan is stored, its notices get ids, and each notice's pages can be fetched alone", async () => {
+    const sample = await (await fetch(`${base}/api/mail/sample.pdf`)).arrayBuffer();
+    const data = await scan(sample, "?name=../../etc/passwd%20mail.pdf&sample=1");
+    expect(data.scanId).toBeGreaterThan(0);
+    expect(fs.existsSync(path.join(dataDir, "mail", `scan-${data.scanId}.pdf`))).toBe(true);
+    expect(audits.some((a) => a.action === "mail.scan" && a.targetId === String(data.scanId))).toBe(true);
+
+    const first = data.documents[0]!;
+    const detail = await (await fetch(`${base}/api/mail/documents/${first.id}`)).json();
+    expect(detail.data).toMatchObject({ fileName: "passwd mail.pdf", isSample: true, hasPdf: true });
+    expect(detail.data.pdfPath).toBeUndefined();
+
+    const cut = await fetch(`${base}/api/mail/documents/${first.id}/pdf`);
+    expect(cut.headers.get("content-type")).toBe("application/pdf");
+    const pdf = await PDFDocument.load(await cut.arrayBuffer());
+    expect(pdf.getPageCount()).toBe(first.pages.length);
+  });
+
+  test("resolve: validation, assign, then a second decision is refused", async () => {
+    const sample = await (await fetch(`${base}/api/mail/sample.pdf`)).arrayBuffer();
+    const data = await scan(sample);
+    const noMatch = data.documents.find((d) => d.match.status === "no_match")!;
+    const post = (body: unknown) =>
+      fetch(`${base}/api/mail/documents/${noMatch.id}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    expect((await post({ action: "maybe" })).status).toBe(400);
+    expect((await post({ action: "dismiss" })).status).toBe(400); // needs a reason
+
+    const forms = await (await fetch(`${base}/api/mail/open-forms?profile=p1`)).json();
+    expect(forms.data.map((f: { localId: string }) => f.localId)).toEqual(["f1"]);
+
+    const ok = await post({ action: "assign", openFormLocalId: "f1" });
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).data).toMatchObject({ reviewState: "assigned", resolvedByName: "Front Desk" });
+    expect(audits.some((a) => a.action === "mail.review.assign")).toBe(true);
+
+    expect((await post({ action: "dismiss", note: "x" })).status).toBe(409);
+  });
+
+  test("unknown ids are 404", async () => {
+    expect((await fetch(`${base}/api/mail/documents/999`)).status).toBe(404);
+    expect((await fetch(`${base}/api/mail/documents/abc/pdf`)).status).toBe(404);
   });
 });

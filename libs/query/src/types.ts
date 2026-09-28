@@ -420,6 +420,13 @@ export const CLOSED_BOARD_ITEM_STATUSES = new Set([
 ]);
 
 // =============================================================================
+// Mail intake
+// =============================================================================
+
+/** Below this OCR confidence a notice goes to review even when it matched. */
+export const LOW_OCR_CONFIDENCE = 75;
+
+// =============================================================================
 // Alert Types
 // =============================================================================
 
@@ -437,6 +444,12 @@ export interface AlertItem {
   daysOverdue?: number;
   daysSinceUpdate?: number;
   caseType?: string;
+  /** Set on "Mail to review" items: opens the review popup instead of a board item. */
+  mailDocumentId?: number;
+  /** One line on why the item is here (mail review). */
+  detail?: string;
+  /** Came from a "Try a sample" scan — test data, not real mail. */
+  sample?: boolean;
 }
 
 export interface AlertGroup {

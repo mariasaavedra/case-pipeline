@@ -43,6 +43,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P9 | Jail Intakes | `/jail-intakes` | Sidebar → Jail Intakes | `components/JailIntakesPage.tsx` |
 | P10 | Call Log | `/call-log` | Sidebar → Call Log | `components/CallLogPage.tsx` |
 | P11 | Settings | `/settings` | Sidebar → Settings (bottom) | `pages/SettingsPage.tsx` |
+| P12 | Mail | `/mail` | Sidebar → Mail | `components/MailPage.tsx` |
 
 Always on screen (not pages): the **Sidebar** (`components/Sidebar.tsx`), the
 **Top bar** with Back and **+ Log call** (`app.tsx`), and the **Version badge**
@@ -115,6 +116,7 @@ Top to bottom. Sections marked *admin* only show for admins.
 | M12 | File preview | The file name | P3.6; the documents section of M5 | `FilePreviewModal.tsx` |
 | M13 | Entry editor | The entry's name | P3.8 (admin) | `EntryEditorModal.tsx` |
 | M14 | What's new | Changelog | Version badge in the sidebar | `VersionBadge.tsx` |
+| M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
 
 ## Dropdowns
 

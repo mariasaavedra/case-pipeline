@@ -22,6 +22,7 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
+import { LOW_OCR_CONFIDENCE } from "./types";
 
 const OPEN_FORMS_BOARD = "_cd_open_forms";
 
@@ -106,6 +107,7 @@ export interface MatchedOpenForm {
   formType: string | null;
   receiptNo: string | null;
   profileLocalId: string | null;
+  profileName: string | null;
 }
 
 export interface NoticeMatch {
@@ -123,6 +125,10 @@ export interface NoticeMatch {
 
 export interface MailScanDocument extends SplitDocument {
   match: NoticeMatch;
+  /** Goes to Alerts → Mail to review. */
+  needsReview: boolean;
+  /** Saved row id, once the scan is stored. */
+  id?: number;
 }
 
 export interface MailScanResult {
@@ -132,6 +138,8 @@ export interface MailScanResult {
   ocrPages: number[];
   documents: MailScanDocument[];
   summary: Record<MatchStatus, number>;
+  /** Saved scan id, once stored. */
+  scanId?: number;
 }
 
 // -----------------------------------------------------------------------------
@@ -380,6 +388,7 @@ interface OpenFormRow {
   name: string;
   status: string | null;
   profileLocalId: string | null;
+  profileName: string | null;
   columnValues: string;
 }
 
@@ -415,11 +424,13 @@ function toOpenForm(row: OpenFormRow): MatchedOpenForm {
     formType: readFormType(cv, row.name),
     receiptNo: readReceipt(cv),
     profileLocalId: row.profileLocalId || null,
+    profileName: row.profileName,
   };
 }
 
 const OPEN_FORM_COLS = `local_id AS localId, monday_item_id AS mondayItemId, name, status,
-  profile_local_id AS profileLocalId, column_values AS columnValues`;
+  profile_local_id AS profileLocalId, column_values AS columnValues,
+  (SELECT p.name FROM profiles p WHERE p.local_id = board_items.profile_local_id) AS profileName`;
 
 function findFormsByReceipt(db: Database, receipt: string): MatchedOpenForm[] {
   const rows = db
@@ -616,6 +627,19 @@ export function matchNotice(db: Database, fields: NoticeFields): NoticeMatch {
   });
 }
 
+/**
+ * A person has to look when the match isn't settled — and also when it looks
+ * settled but rests on shaky input: a low-confidence OCR read (one wrong digit
+ * is a different client) or a page that joined the notice only by default.
+ */
+export function needsReview(doc: Pick<MailScanDocument, "match" | "ocrConfidence" | "uncertainPages">): boolean {
+  return (
+    doc.match.status !== "matched" ||
+    (doc.ocrConfidence != null && doc.ocrConfidence < LOW_OCR_CONFIDENCE) ||
+    doc.uncertainPages.length > 0
+  );
+}
+
 // -----------------------------------------------------------------------------
 // Orchestration
 // -----------------------------------------------------------------------------
@@ -623,7 +647,10 @@ export function matchNotice(db: Database, fields: NoticeFields): NoticeMatch {
 export function scanMailPages(db: Database, pageInputs: Array<string | MailPageInput>): MailScanResult {
   const pages = pageInputs.map((t, i) => analyzePage(i + 1, t));
   const { documents, separatorPages } = splitIntoDocuments(pages);
-  const scanned = documents.map((d) => ({ ...d, match: matchNotice(db, d.fields) }));
+  const scanned = documents.map((d) => {
+    const match = matchNotice(db, d.fields);
+    return { ...d, match, needsReview: needsReview({ ...d, match }) };
+  });
   const summary: Record<MatchStatus, number> = { matched: 0, needs_attention: 0, no_match: 0, unreadable: 0 };
   for (const d of scanned) summary[d.match.status]++;
   const ocrPages = pages.filter((p) => p.ocr).map((p) => p.page);

@@ -5,6 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import type { AlertsResult, AlertGroup, AlertItem } from "./types";
+import { getMailReviewAlertGroup, countMailToReview } from "./mail-review";
 import {
   CLOSED_BOARD_ITEM_STATUSES,
   APPOINTMENT_BOARD_KEYS,
@@ -27,6 +28,7 @@ export function getAlerts(
     getOverdueDeadlines(db, todayStr, opts),
     getStaleCases(db, todayStr, opts),
     getPendingContractsWithoutActivity(db),
+    getMailReviewAlertGroup(db, opts),
   ];
   const totalCount = groups.reduce((sum, g) => sum + g.count, 0);
   const attorneys = getAlertAttorneys(db, todayStr);
@@ -86,7 +88,7 @@ export function getAlertsTotalCount(db: Database): number {
     )
     .get(...paidStatuses, ...closedStatuses, ...apptKeys) as { cnt: number };
 
-  return overdue.cnt + stale.cnt + pending.cnt;
+  return overdue.cnt + stale.cnt + pending.cnt + countMailToReview(db);
 }
 
 // =============================================================================

@@ -112,7 +112,8 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `board-items.ts` | Per-profile board item queries + `batchGetClientBoardItems` |
 | `case-summary.ts` | Full 360° client summary + `batchGetClientCaseSummaries` |
 | `contracts.ts` | Contract queries + `batchGetClientContracts` |
-| `mail.ts` | Mail intake (prototype): OCR-misread repair, regex field extraction from notice text, auto-split of one scan into notices, match to profile + Open Form |
+| `mail-review.ts` | Saved mail scans, the "Mail to review" Alerts group, assign/dismiss decisions |
+| `mail.ts` | Mail intake: OCR-misread repair, regex field extraction from notice text, auto-split of one scan into notices, match to profile + Open Form |
 | `dashboard.ts` | KPI card queries (6 cards, 7-day windows) |
 | `search.ts` | Cross-type search (contracts, court cases, etc.) |
 | `status-options.ts` | Each board's real status labels + colors (write-back validates against these) |
@@ -143,7 +144,7 @@ Data reads:
 | `GET /api/dashboard/:key/items` | Every row behind one KPI card + the display-column options (`?column=` previews one) |
 | `GET /api/appointments` | Daily appointments with enriched profiles, snapshots, updates, case summaries |
 | `GET /api/active-cases` | Swim-lane board data (paralegal rows × urgency). `?includeSnoozed=1` reveals North-Pole-parked cases |
-| `GET /api/alerts` | Grouped alerts by severity (critical / warning / info) |
+| `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Mail to review" |
 | `GET /api/search` | Cross-type search: profiles, contracts, court cases, etc. |
 | `GET /api/filter-options` | Distinct values for filter dropdowns (priorities, statuses, attorneys, board types) |
 | `GET /api/clients` | Filtered + paginated profile listing |
@@ -172,7 +173,8 @@ Writes and user/account routes:
 | `GET/PUT /api/settings/urgency` | Urgency thresholds (criticalDays/soonDays) + whether status urgency reorders Active Cases (PUT admin-only, audited) |
 | `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only) |
 | `/api/auth/monday`, `/callback`, `/status` | Personal Monday.com OAuth connection (`routes/monday-oauth.ts`) |
-| `POST /api/mail/scan`, `GET /api/mail/sample.pdf` | Mail intake prototype (read-only): raw PDF body → split notices matched to Open Forms, and a fake multi-notice sample built from the loaded DB. Image-only pages are OCR'd (`apps/api/src/mail/ocr.ts`, tesseract.js + vendored English model, ~1 s/page); `?scanned=1` gives an image-only sample. Nothing stored or written to Monday |
+| `POST /api/mail/scan`, `GET /api/mail/sample.pdf` | Mail intake: raw PDF body (`?name=`, `?sample=1`) → split notices matched to Open Forms, saved to `mail_scans`/`mail_documents` (schema v24) with the PDF under `data/mail/`; and a fake multi-notice sample built from the loaded DB. Image-only pages are OCR'd (`apps/api/src/mail/ocr.ts`, tesseract.js + vendored English model, ~1 s/page); `?scanned=1` gives an image-only sample. Nothing written to Monday yet |
+| `GET /api/mail/documents/:id` (`/pdf` = just its pages), `GET /api/mail/open-forms?profile=`, `POST /api/mail/documents/:id/resolve` | Mail review (M15): notices flagged `needs_review` show in Alerts → "Mail to review" until assigned to an Open Form/client or dismissed with a note (audited). Sample scans drop out of Alerts after 24 h |
 | `POST /api/webhooks/monday/:token` | Monday.com webhook receiver (unauthenticated by design — secret URL token, constant-time compare). Persists events to the `webhook_events` inbox; a background processor applies them (deletions archived directly, notes re-fetched, column changes via targeted incremental sync). See `docs/webhooks.md` |
 
 ## Key Directories
