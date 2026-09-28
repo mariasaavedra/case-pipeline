@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-09-28",
+    title: "Mail reads the whole notice, and you can correct it",
+    items: [
+      "Each scanned notice now shows everything read from it: notice type, case type, receipt number, received, priority and notice dates, petitioner, beneficiary or applicant, A-number, date of birth and section.",
+      "Matching uses those too. A notice with no A-number (common for a first I-130) is matched by the beneficiary's or applicant's name. If the names don't fit the client the A-number or receipt points to, it's flagged for review instead of matched. When a client has two Open Forms of the same type, the received or priority date picks the right one.",
+      "In the review popup, Edit lets you fix anything that was misread. Saving re-matches the notice straight away, and each corrected field still shows what was originally read.",
+    ],
+  },
+  {
+    date: "2026-09-28",
     title: "Mail: scan notices and match them to cases (trial)",
     items: [
       "New Mail page in the sidebar. Drop in a scanned PDF — one notice or a whole day's mail in one file — and each notice is matched to the client's Open Form by its receipt number or A-number.",

@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 25;
+export const SCHEMA_VERSION = 26;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -336,6 +336,8 @@ CREATE TABLE IF NOT EXISTS board_columns (
 -- The match column holds the full NoticeMatch JSON from libs/query/src/mail.ts.
 -- writeback_* (v25+) track pushing an assignment to Monday: state none → done |
 -- partial | queued | failed | skipped, steps = JSON of each column/file write.
+-- original_fields (v26+) keeps what was READ once a person corrects the fields
+-- in M15; the fields column is then the corrected version, and matching uses it.
 CREATE TABLE IF NOT EXISTS mail_scans (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     file_name       TEXT NOT NULL,
@@ -371,7 +373,11 @@ CREATE TABLE IF NOT EXISTS mail_documents (
     writeback_state    TEXT NOT NULL DEFAULT 'none',
     writeback_steps    TEXT,
     writeback_error    TEXT,
-    writeback_at       TEXT
+    writeback_at       TEXT,
+    original_fields    TEXT,
+    fields_edited_by   INTEGER,
+    fields_edited_by_name TEXT,
+    fields_edited_at   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_mail_documents_review ON mail_documents(needs_review, review_state);
 CREATE INDEX IF NOT EXISTS idx_mail_documents_scan ON mail_documents(scan_id);
@@ -1188,6 +1194,23 @@ export function initializeSchema(db: Database): void {
         ["writeback_steps", "TEXT"],
         ["writeback_error", "TEXT"],
         ["writeback_at", "TEXT"],
+      ];
+      for (const [name, type] of add) {
+        if (!cols.has(name)) db.exec(`ALTER TABLE mail_documents ADD COLUMN ${name} ${type}`);
+      }
+    }
+
+    // Migration v25 → v26: people can correct what was read off a notice; keep
+    // the original reading next to the correction. Additive.
+    if (fromVersion < 26) {
+      const cols = new Set(
+        (db.prepare("SELECT name FROM pragma_table_info('mail_documents')").all() as { name: string }[]).map((c) => c.name),
+      );
+      const add: Array<[string, string]> = [
+        ["original_fields", "TEXT"],
+        ["fields_edited_by", "INTEGER"],
+        ["fields_edited_by_name", "TEXT"],
+        ["fields_edited_at", "TEXT"],
       ];
       for (const [name, type] of add) {
         if (!cols.has(name)) db.exec(`ALTER TABLE mail_documents ADD COLUMN ${name} ${type}`);

@@ -10,6 +10,10 @@
 // @tesseract.js-data/eng, so the server never downloads anything at runtime.
 // Rendering uses @napi-rs/canvas (prebuilt for the bookworm Docker image).
 //
+// Both paths also return WORD POSITIONS (text-layer items, or OCR word boxes),
+// because an I-797 prints its values under their labels and plain text loses
+// the columns — see libs/query/src/mail-layout.ts.
+//
 // One worker, created on first use and shut down after IDLE_MS without work:
 // it holds ~100 MB, which isn't worth keeping for a page that is used a few
 // times a day. tesseract.js queues recognize() calls on a worker itself, so
@@ -18,9 +22,9 @@
 
 import { createRequire } from "node:module";
 import path from "node:path";
-import { extractText, getDocumentProxy, renderPageAsImage } from "unpdf";
-import { createWorker, OEM, type Worker } from "tesseract.js";
-import type { MailPageInput } from "@case-pipeline/query";
+import { extractText, extractTextItems, getDocumentProxy, renderPageAsImage, type StructuredTextItem } from "unpdf";
+import { createWorker, OEM, type Worker, type Block } from "tesseract.js";
+import type { MailPageInput, Word } from "@case-pipeline/query";
 
 /** Below this many non-space characters a text layer is treated as missing. */
 const MIN_TEXT_CHARS = 40;
@@ -65,6 +69,39 @@ export function needsOcr(text: string): boolean {
   return text.replace(/\s/g, "").length < MIN_TEXT_CHARS;
 }
 
+/**
+ * Text-layer items → words, top-down. An item is a run of text ("Receipt
+ * Number") at a point in PDF space (origin bottom-left); split it into words,
+ * spreading its width by character count.
+ */
+export function wordsFromTextItems(items: StructuredTextItem[], pageHeight: number): Word[] {
+  const words: Word[] = [];
+  for (const it of items) {
+    const str = it.str ?? "";
+    if (!str.trim()) continue;
+    const perChar = str.length ? it.width / str.length : 0;
+    const y1 = pageHeight - it.y;
+    const y0 = y1 - (it.height || 10);
+    for (const m of str.matchAll(/\S+/g)) {
+      const x0 = it.x + m.index! * perChar;
+      words.push({ text: m[0], x0, x1: x0 + m[0].length * perChar, y0, y1 });
+    }
+  }
+  return words;
+}
+
+/** OCR blocks → words, in image pixels (already top-down). */
+export function wordsFromOcrBlocks(blocks: Block[] | null | undefined): Word[] {
+  const words: Word[] = [];
+  for (const b of blocks ?? [])
+    for (const p of b.paragraphs)
+      for (const l of p.lines)
+        for (const w of l.words) {
+          if (w.text.trim()) words.push({ text: w.text, x0: w.bbox.x0, x1: w.bbox.x1, y0: w.bbox.y0, y1: w.bbox.y1 });
+        }
+  return words;
+}
+
 export interface ReadPdfOptions {
   /** false skips OCR entirely (text layer only). Default true. */
   ocr?: boolean;
@@ -74,7 +111,12 @@ export async function readPdfPages(bytes: Uint8Array, opts: ReadPdfOptions = {})
   // pdf.js may detach the buffer it is handed; keep our own copy for rendering.
   const pdf = await getDocumentProxy(bytes.slice());
   const { text } = await extractText(pdf, { mergePages: false });
-  const pages: MailPageInput[] = text.map((t) => ({ text: t }));
+  const { items } = await extractTextItems(pdf);
+  const pages: MailPageInput[] = [];
+  for (const [i, t] of text.entries()) {
+    const height = (await pdf.getPage(i + 1)).getViewport({ scale: 1 }).height;
+    pages.push({ text: t, words: wordsFromTextItems(items[i] ?? [], height) });
+  }
   if (opts.ocr === false) return pages;
 
   const todo = pages.map((p, i) => (needsOcr(p.text) ? i : -1)).filter((i) => i >= 0);
@@ -88,8 +130,13 @@ export async function readPdfPages(bytes: Uint8Array, opts: ReadPdfOptions = {})
         scale,
         canvasImport: () => import("@napi-rs/canvas"),
       });
-      const { data } = await worker.recognize(Buffer.from(image));
-      pages[i] = { text: data.text, ocr: true, ocrConfidence: Math.round(data.confidence) };
+      const { data } = await worker.recognize(Buffer.from(image), {}, { text: true, blocks: true });
+      pages[i] = {
+        text: data.text,
+        ocr: true,
+        ocrConfidence: Math.round(data.confidence),
+        words: wordsFromOcrBlocks(data.blocks),
+      };
     }
   } finally {
     scheduleIdleShutdown();

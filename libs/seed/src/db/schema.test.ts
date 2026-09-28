@@ -460,3 +460,19 @@ describe("v24 → v25 mail write-back tracking", () => {
     });
   });
 });
+
+describe("v25 → v26 mail field corrections", () => {
+  test("adds the correction columns, keeping rows", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (25);
+      CREATE TABLE mail_documents (id INTEGER PRIMARY KEY, fields TEXT);
+      INSERT INTO mail_documents (fields) VALUES ('{}');
+    `);
+    initializeSchema(db);
+    const cols = (db.prepare("SELECT name FROM pragma_table_info('mail_documents')").all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toEqual(expect.arrayContaining(["original_fields", "fields_edited_by", "fields_edited_by_name", "fields_edited_at"]));
+    expect(db.prepare("SELECT fields, original_fields FROM mail_documents").get()).toEqual({ fields: "{}", original_fields: null });
+  });
+});

@@ -28,6 +28,8 @@ import {
   findFormsForProfile,
   planForDocument,
   recordWriteBack,
+  updateMailDocumentFields,
+  type FieldEdits,
   type MailPageInput,
   type ResolveMailInput,
 } from "@case-pipeline/query";
@@ -269,6 +271,46 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
         console.error("[mail] write-back crashed:", err);
         recordWriteBack(db, id, "failed", [], err instanceof Error ? err.message : String(err));
       }
+    }
+    res.json({ data: publicDoc(id) });
+  });
+
+  // Correct what was read (M15). The notice is re-matched on the corrected
+  // fields; the first correction keeps the original reading. Audited with the
+  // names of the fields that changed — the values stay in the notice record.
+  app.patch("/api/mail/documents/:id/fields", requireAuth, (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) {
+      res.status(404).json({ error: "Mail document not found" });
+      return;
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const edits: FieldEdits = {};
+    const EDITABLE = [
+      "receiptNumbers", "aNumbers", "caseType", "noticeType", "noticeDate", "receivedDate",
+      "priorityDate", "petitioner", "beneficiary", "applicant", "dateOfBirth", "section",
+    ] as const;
+    for (const key of EDITABLE) {
+      const v = body[key];
+      if (v === undefined) continue;
+      if (v !== null && typeof v !== "string" && !(Array.isArray(v) && v.every((x) => typeof x === "string"))) {
+        res.status(400).json({ error: `${key} must be text` });
+        return;
+      }
+      (edits as Record<string, unknown>)[key] = v;
+    }
+    const user = currentUser(req);
+    const result = updateMailDocumentFields(db, id, edits, { userId: user?.id ?? null, userName: user?.name ?? null });
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error, ...(result.fieldErrors ? { fieldErrors: result.fieldErrors } : {}) });
+      return;
+    }
+    if (result.changed.length > 0) {
+      auditFromReq(req, "mail.fields_edited", {
+        targetType: "mail_document",
+        targetId: String(id),
+        metadata: { changed: result.changed, nowMatched: result.document.status, reason: result.document.match.reason },
+      });
     }
     res.json({ data: publicDoc(id) });
   });

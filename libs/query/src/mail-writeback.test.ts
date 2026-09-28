@@ -10,7 +10,7 @@ import { test, expect, describe } from "vitest";
 import Database from "better-sqlite3";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import type { BoardColumns, StatusColumnOption } from "./types";
-import type { NoticeFields } from "./mail";
+import { emptyFields, type NoticeFields } from "./mail";
 import {
   planMailWriteBack,
   readOpenFormState,
@@ -37,12 +37,12 @@ const SCHEMA: BoardColumns = {
 
 function fields(over: Partial<NoticeFields> = {}): NoticeFields {
   return {
+    ...emptyFields(),
     receiptNumbers: ["IOE0912345678"],
     aNumbers: ["123456789"],
     formType: "I130",
     noticeType: "Receipt Notice",
     noticeDate: "2026-09-22",
-    people: [],
     ...over,
   };
 }

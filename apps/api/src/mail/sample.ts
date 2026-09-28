@@ -11,9 +11,15 @@
 //   pages 1-2  receipt notice, new receipt no.  → matched, fill Receipt No.
 //   page  3    approval, receipt already on file → matched, attach (live data only)
 //   page  4    notice for a form the client lacks → needs attention
-//   page  5    A-number nobody has              → no match
-//   page  6    blank separator sheet            → dropped
-//   page  7    letter with no identifiers       → unreadable
+//   page  5    receipt notice with NO A-number  → matched by the beneficiary's name
+//   page  6    A-number nobody has              → no match
+//   page  7    blank separator sheet            → dropped
+//   page  8    letter with no identifiers       → unreadable
+//
+// Notices are laid out like a real I-797C: a grid of labels with each value
+// printed BELOW its label (Receipt Number / Case Type; Received / Priority /
+// Notice Date / Page; Petitioner / Beneficiary), which is what the layout
+// reader in libs/query/src/mail-layout.ts has to handle.
 //
 // buildScannedSampleMailPdf renders those same pages to images and rebuilds the
 // PDF from the pictures alone — no text layer, like a plain scanner — so every
@@ -43,10 +49,6 @@ function formatA(aNumber: string): string {
   return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
 }
 
-function formLabel(f: string): string {
-  return `${f[0]}-${f.slice(1)}`;
-}
-
 /** Stable per profile, so regenerating gives the same numbers. */
 function fakeReceipt(seed: string): string {
   let h = 0;
@@ -56,6 +58,7 @@ function fakeReceipt(seed: string): string {
 
 interface Picks {
   fill: { profile: ProfileRow; form: MatchedOpenForm } | null;
+  byName: { profile: ProfileRow; form: MatchedOpenForm } | null;
   attach: { profile: ProfileRow | null; form: MatchedOpenForm } | null;
   missingForm: { profile: ProfileRow; formType: string } | null;
   unknownA: string;
@@ -77,18 +80,24 @@ function pick(db: Database): Picks {
   );
   const receiptCount = (r: string) => (countStmt.get(r) as { n: number }).n;
 
-  const picks: Picks = { fill: null, attach: null, missingForm: null, unknownA: "" };
+  const picks: Picks = { fill: null, byName: null, attach: null, missingForm: null, unknownA: "" };
   for (const p of profiles) {
-    if (picks.fill && picks.attach && picks.missingForm) break;
+    if (picks.fill && picks.byName && picks.attach && picks.missingForm) break;
     const forms = findFormsForProfile(db, p.localId);
     if (forms.length === 0) continue;
 
-    if (!picks.fill) {
+    if (!picks.fill || !picks.byName) {
       const candidate = forms.find(
         (f) => f.formType && !f.receiptNo && forms.filter((g) => g.formType === f.formType).length === 1,
       );
-      if (candidate) {
+      // The name-only notice needs a name no other client shares.
+      const uniqueName = profiles.filter((q) => q.name === p.name).length === 1;
+      if (candidate && !picks.fill) {
         picks.fill = { profile: p, form: candidate };
+        continue;
+      }
+      if (candidate && !picks.byName && uniqueName) {
+        picks.byName = { profile: p, form: candidate };
         continue;
       }
     }
@@ -131,6 +140,21 @@ class Writer {
       rotate: degrees(35),
     });
   }
+  /** One row of cells at fixed x positions — how an I-797's grid is printed. */
+  row(cells: Array<[number, string]>, opts: { size?: number; bold?: boolean; gap?: number } = {}): this {
+    for (const [x, text] of cells) {
+      if (!text) continue;
+      this.page.drawText(ascii(text), {
+        x,
+        y: this.y,
+        size: opts.size ?? 10,
+        font: opts.bold ? this.bold : this.font,
+        color: rgb(0.1, 0.1, 0.1),
+      });
+    }
+    this.y -= opts.gap ?? 15;
+    return this;
+  }
   line(text: string, opts: { size?: number; bold?: boolean; gap?: number } = {}): this {
     this.page.drawText(ascii(text), {
       x: 56,
@@ -148,17 +172,55 @@ class Writer {
   }
 }
 
+const CASE_TYPES: Record<string, string> = {
+  I130: "PETITION FOR ALIEN RELATIVE",
+  I131: "APPLICATION FOR TRAVEL DOCUMENT",
+  I485: "APPLICATION TO ADJUST STATUS",
+  I589: "APPLICATION FOR ASYLUM",
+  I601: "APPLICATION FOR WAIVER",
+  I765: "APPLICATION FOR WORK PERMIT",
+  I864: "AFFIDAVIT OF SUPPORT",
+  I912: "REQUEST FOR FEE WAIVER",
+  N400: "APPLICATION FOR NATURALIZATION",
+};
+
+/** "Ms. Danielle Franecki" → "FRANECKI, DANIELLE", the way USCIS prints names. */
+function noticeName(name: string): string {
+  const words = ascii(name)
+    .replace(/\b(Mr|Mrs|Ms|Miss|Dr|MD|Jr|Sr|II|III|IV|DDS|DVM|PhD)\.?(?=\s|$)/gi, "")
+    .trim()
+    .split(/\s+/);
+  if (words.length < 2) return words.join(" ").toUpperCase();
+  const last = words.pop()!;
+  return `${last}, ${words.join(" ")}`.toUpperCase();
+}
+
 function i797(
   w: Writer,
-  o: { receipt: string; formType: string; noticeType: string; date: string; name: string; aNumber: string; page?: string },
+  o: {
+    receipt: string;
+    formType: string;
+    noticeType: string;
+    date: string;
+    received?: string;
+    name: string;
+    aNumber: string;
+    page?: string;
+  },
 ): void {
+  // Column x positions, as on a real I-797C.
+  const [c1, c2, c3, c4] = [56, 180, 300, 430];
   w.line("SAMPLE FIXTURE - Department of Homeland Security", { size: 8, gap: 14 })
     .line("I-797C, Notice of Action", { size: 15, bold: true, gap: 26 })
-    .line(`Receipt Number: ${o.receipt}          Case Type: ${formLabel(o.formType)}`)
-    .line(`Notice Date: ${o.date}          Notice Type: ${o.noticeType}`)
-    .space()
-    .line(`Applicant: ${o.name.toUpperCase()}`)
-    .line(`A# ${formatA(o.aNumber)}`)
+    .row([[c1, "Receipt Number"], [c3, "Case Type"]], { size: 8, gap: 12 })
+    .row([[c1, o.receipt], [c3, `${o.formType} - ${CASE_TYPES[o.formType] ?? "APPLICATION"}`]], { gap: 20 })
+    .row([[c1, "Received Date"], [c2, "Priority Date"], [c3, "Notice Date"], [c4, "Page"]], { size: 8, gap: 12 })
+    // Priority Date is left blank, as it is on most receipt notices.
+    .row([[c1, o.received ?? "09/15/2026"], [c3, o.date], [c4, o.page ?? "1 of 1"]], { gap: 20 })
+    .row([[c1, "Petitioner"], [c3, "Beneficiary"]], { size: 8, gap: 12 })
+    .row([[c1, "DOE, SAMPLE"], [c3, noticeName(o.name)]], { gap: 12 })
+    .row([[c3, o.aNumber ? `A# ${formatA(o.aNumber)}` : ""]], { gap: 20 })
+    .line(`Notice Type: ${o.noticeType}`)
     .space(14);
 }
 
@@ -179,20 +241,21 @@ export async function buildSampleMailPdf(db: Database): Promise<Uint8Array> {
       receipt,
       formType: form.formType!,
       noticeType: "Receipt Notice",
-      date: "September 22, 2026",
+      date: "09/22/2026",
       name: profile.name,
       aNumber: profile.aNumber,
+      page: "1 of 2",
     });
     p1.line("We have received your form and fee. This notice confirms receipt only.")
       .line("Processing times vary. Keep this notice for your records.")
-      .space(300)
-      .line("Page 1 of 2", { size: 9 });
+      .space(250);
     page()
+      .row([[56, "Page"]], { size: 8, gap: 12 })
+      .row([[56, "2 of 2"]], { gap: 24 })
       .line("What to expect next", { bold: true, gap: 22 })
       .line("You will receive a separate notice if an appointment is required.")
       .line("Use the online account to check your case status at any time.")
-      .space(420)
-      .line("Page 2 of 2", { size: 9 });
+      .space(20);
   }
 
   // 3: approval notice for a receipt number the firm already has.
@@ -203,7 +266,7 @@ export async function buildSampleMailPdf(db: Database): Promise<Uint8Array> {
       receipt: form.receiptNo!,
       formType: form.formType!,
       noticeType: "Approval Notice",
-      date: "September 23, 2026",
+      date: "09/23/2026",
       name: profile?.name ?? form.name,
       aNumber: profile?.aNumber ?? "",
     });
@@ -218,19 +281,33 @@ export async function buildSampleMailPdf(db: Database): Promise<Uint8Array> {
       receipt: fakeReceipt(`${profile.localId}-bio`),
       formType,
       noticeType: "Biometrics Appointment",
-      date: "September 24, 2026",
+      date: "09/24/2026",
       name: profile.name,
       aNumber: profile.aNumber,
     });
     p.line("You are scheduled for a biometric services appointment.");
   }
 
-  // 5: nobody at the firm has this A-number.
+  // 5: a first-time beneficiary — no A-number on the notice, only the name.
+  if (picks.byName) {
+    const { profile, form } = picks.byName;
+    i797(page(), {
+      receipt: fakeReceipt(`${profile.localId}-name`),
+      formType: form.formType!,
+      noticeType: "Receipt Notice",
+      date: "09/24/2026",
+      received: "09/16/2026",
+      name: profile.name,
+      aNumber: "",
+    });
+  }
+
+  // 6: nobody at the firm has this A-number.
   i797(page(), {
     receipt: "MSC2690000417",
     formType: "I485",
     noticeType: "Receipt Notice",
-    date: "September 24, 2026",
+    date: "09/24/2026",
     name: "Sample Unknown Person",
     aNumber: picks.unknownA,
   });

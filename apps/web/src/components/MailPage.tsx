@@ -30,6 +30,7 @@ import { Link } from "./Link";
 import { clientPath } from "../router";
 import { Button } from "./ui/button";
 import { MailReviewModal } from "./MailReviewModal";
+import { NoticeFieldsGrid } from "./MailNoticeFields";
 import { SectionCode } from "./ScreenCode";
 
 const STATUS_META: Record<MatchStatus, { label: string; color: string; bg: string }> = {
@@ -57,36 +58,8 @@ function pageRange(pages: number[]): string {
   return `Pages ${pages[0]}–${pages[pages.length - 1]}`;
 }
 
-function formatA(a: string): string {
-  return `A-${a.slice(0, 3)}-${a.slice(3, 6)}-${a.slice(6)}`;
-}
-
-function formatDate(value: string | null): string | null {
-  if (!value) return null;
-  return new Date(`${value}T12:00:00Z`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
 const faint = { color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" } as const;
 const ink = { color: "var(--color-ink)", fontFamily: "var(--font-body)" } as const;
-
-function Field({ label, value }: { label: string; value: string | null }) {
-  if (!value) return null;
-  return (
-    <div className="flex flex-col gap-0.5 min-w-[110px]">
-      <span className="text-[10px] font-semibold uppercase tracking-wider" style={faint}>
-        {label}
-      </span>
-      <span className="text-sm" style={{ ...ink, fontVariantNumeric: "tabular-nums" }}>
-        {value}
-      </span>
-    </div>
-  );
-}
 
 /** Below this, OCR'd identifiers deserve a second look against the preview. */
 const LOW_OCR_CONFIDENCE = 75;
@@ -146,7 +119,6 @@ function DocumentRow({
   onReview: () => void;
 }) {
   const { fields, match } = doc;
-  const person = fields.people[0];
   return (
     <div
       role="button"
@@ -232,11 +204,8 @@ function DocumentRow({
         </p>
       )}
 
-      <div className="flex flex-wrap gap-5 mt-2">
-        <Field label="Receipt No." value={fields.receiptNumbers.join(", ") || null} />
-        <Field label="A-Number" value={fields.aNumbers.map(formatA).join(", ") || null} />
-        <Field label="Notice date" value={formatDate(fields.noticeDate)} />
-        <Field label={person?.role ?? "Name"} value={person?.name ?? null} />
+      <div className="mt-2">
+        <NoticeFieldsGrid fields={fields} />
       </div>
 
       {match.proposedAction && match.openForm && (
@@ -531,6 +500,17 @@ export function MailPage() {
           documentId={reviewing}
           onClose={() => setReviewing(null)}
           onResolved={(doc) => setResolved((prev) => ({ ...prev, [doc.id]: doc.reviewState }))}
+          // A correction re-matched the notice: show its new fields and match here too.
+          onUpdated={(doc) =>
+            setResult((prev) =>
+              prev && {
+                ...prev,
+                documents: prev.documents.map((d) =>
+                  d.id === doc.id ? { ...d, fields: doc.fields, match: doc.match, needsReview: doc.needsReview } : d,
+                ),
+              },
+            )
+          }
         />
       )}
     </div>

@@ -7,6 +7,11 @@
 // has no form yet, and a search for any other client. Or dismiss it, with a
 // reason.
 //
+// Everything read off the notice is shown, and editable while the notice is
+// open: a correction is saved, the notice is re-matched on it, and the
+// candidates below refresh. The original reading stays visible next to any
+// field that was changed.
+//
 // Assigning to an Open Form records the decision and then updates Monday:
 // Receipt No., Receipt Status, and the notice attached. Before the button is
 // pressed, the popup shows that exact plan (fetched from the server, which runs
@@ -22,6 +27,7 @@ import {
   fetchMailWriteBackPlan,
   retryMailWriteBack,
   resolveMailDocument,
+  updateMailFields,
   searchClients,
   type MailDocument,
   type MailWriteBackPlan,
@@ -31,6 +37,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Link } from "./Link";
+import { NoticeFieldsEditor, NoticeFieldsGrid } from "./MailNoticeFields";
 import { clientPath } from "../router";
 
 interface ClientGroup {
@@ -43,24 +50,6 @@ type Choice = { kind: "form"; formLocalId: string; profileLocalId: string } | { 
 
 const faint = { color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" } as const;
 const ink = { color: "var(--color-ink)", fontFamily: "var(--font-body)" } as const;
-
-function Field({ label, value }: { label: string; value: string | null | undefined }) {
-  if (!value) return null;
-  return (
-    <div className="flex flex-col gap-0.5 min-w-[110px]">
-      <span className="text-[10px] font-semibold uppercase tracking-wider" style={faint}>
-        {label}
-      </span>
-      <span className="text-sm" style={{ ...ink, fontVariantNumeric: "tabular-nums" }}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function formatA(a: string): string {
-  return `A-${a.slice(0, 3)}-${a.slice(3, 6)}-${a.slice(6)}`;
-}
 
 function sameChoice(a: Choice | null, b: Choice): boolean {
   if (!a || a.kind !== b.kind) return false;
@@ -184,10 +173,13 @@ export function MailReviewModal({
   documentId,
   onClose,
   onResolved,
+  onUpdated,
 }: {
   documentId: number;
   onClose: () => void;
   onResolved?: (doc: MailDocument) => void;
+  /** Fields were corrected and the notice re-matched (still open). */
+  onUpdated?: (doc: MailDocument) => void;
 }) {
   const [doc, setDoc] = useState<MailDocument | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -202,6 +194,8 @@ export function MailReviewModal({
   const [plan, setPlan] = useState<MailWriteBackPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // The notice, then its pages.
   useEffect(() => {
@@ -239,6 +233,9 @@ export function MailReviewModal({
   // one is often a form the matcher ruled out on type.
   useEffect(() => {
     if (!doc) return;
+    // A re-match (after a correction) brings new candidates: start over.
+    setGroups([]);
+    setChoice(null);
     const m = doc.match;
     const seen = new Map<string, string>();
     const add = (id: string | null | undefined, name: string | null | undefined) => {
@@ -339,6 +336,31 @@ export function MailReviewModal({
     }
   };
 
+  const saveFields = async (edits: Parameters<typeof updateMailFields>[1]) => {
+    if (!doc) return;
+    if (Object.keys(edits).length === 0) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    setFieldErrors({});
+    setError(null);
+    try {
+      const r = await updateMailFields(doc.id, edits);
+      if ("fieldErrors" in r) {
+        setFieldErrors(r.fieldErrors);
+        return;
+      }
+      setDoc(r.doc);
+      setEditing(false);
+      onUpdated?.(r.doc);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const f = doc?.fields;
   const title = f ? `${f.noticeType ?? "Unknown document"}${f.formType ? ` · ${f.formType}` : ""}` : "Loading…";
 
@@ -389,14 +411,33 @@ export function MailReviewModal({
                   {doc.uncertainPages.length > 0 && ` Page ${doc.uncertainPages.join(", ")} may belong to another notice.`}
                 </p>
 
-                <div className="flex flex-wrap gap-4">
-                  <Field label="Receipt No." value={f!.receiptNumbers.join(", ")} />
-                  <Field label="A-Number" value={f!.aNumbers.map(formatA).join(", ")} />
-                  <Field label="Notice date" value={f!.noticeDate} />
-                  {f!.people.map((p) => (
-                    <Field key={`${p.role}-${p.name}`} label={p.role} value={p.name} />
-                  ))}
-                </div>
+                <section className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider" style={faint}>
+                      Read from the notice
+                      {doc.fieldsEditedByName ? ` · corrected by ${doc.fieldsEditedByName}` : ""}
+                    </span>
+                    {open && !editing && (
+                      <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}>
+                        Edit
+                      </Button>
+                    )}
+                  </div>
+                  {editing ? (
+                    <NoticeFieldsEditor
+                      fields={f!}
+                      saving={saving}
+                      errors={fieldErrors}
+                      onSave={(edits) => void saveFields(edits)}
+                      onCancel={() => {
+                        setEditing(false);
+                        setFieldErrors({});
+                      }}
+                    />
+                  ) : (
+                    <NoticeFieldsGrid fields={f!} original={doc.originalFields} showEmpty />
+                  )}
+                </section>
 
                 {!open ? (
                   <div

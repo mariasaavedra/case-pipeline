@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -17,7 +17,7 @@ export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from 
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
-export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail, MailWriteBackPlan, StepOutcome, WriteBackState } from "@case-pipeline/query";
+export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail, MailWriteBackPlan, StepOutcome, WriteBackState, NoticeFields, FieldEdits } from "@case-pipeline/query";
 
 /** A saved notice as the API returns it: the server keeps the file path to itself. */
 export type MailDocument = Omit<MailDocumentDetail, "pdfPath"> & { hasPdf: boolean };
@@ -980,4 +980,23 @@ export function fetchMailWriteBackPlan(id: number, openFormLocalId: string): Pro
 /** Retry a failed or partial write-back; steps that already landed aren't redone. */
 export function retryMailWriteBack(id: number): Promise<MailDocument> {
   return apiFetch<MailDocument>(`/api/mail/documents/${id}/writeback`, { method: "POST" });
+}
+
+/**
+ * Correct what was read off a notice; the server re-matches on the result.
+ * Validation problems come back per field rather than as one error.
+ */
+export async function updateMailFields(
+  id: number,
+  edits: FieldEdits,
+): Promise<{ doc: MailDocument } | { fieldErrors: Record<string, string>; error: string }> {
+  const res = await fetch(`/api/mail/documents/${id}/fields`, {
+    method: "PATCH",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify(edits),
+  });
+  const body = (await res.json().catch(() => ({}))) as { data?: MailDocument; error?: string; fieldErrors?: Record<string, string> };
+  if (res.ok && body.data) return { doc: body.data };
+  if (body.fieldErrors) return { fieldErrors: body.fieldErrors, error: body.error ?? "Some fields aren't valid" };
+  throw new Error(body.error ?? `HTTP ${res.status}`);
 }

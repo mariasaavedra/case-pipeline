@@ -27,7 +27,16 @@ import type {
   NoticeMatch,
   SplitReason,
 } from "./mail";
-import { findFormsForProfile } from "./mail";
+import {
+  findFormsForProfile,
+  normalizeFields,
+  normalizeANumber,
+  normalizeFormType,
+  parseNoticeDate,
+  matchNotice,
+  needsReview as needsReviewRule,
+  emptyFields,
+} from "./mail";
 import type { StepOutcome, WriteBackState } from "./mail-writeback";
 
 const SAMPLE_TTL_HOURS = 24;
@@ -68,6 +77,10 @@ export interface MailDocumentDetail {
   writebackSteps: StepOutcome[];
   writebackError: string | null;
   writebackAt: string | null;
+  /** What was READ, when a person has since corrected the fields (v26). */
+  originalFields: NoticeFields | null;
+  fieldsEditedByName: string | null;
+  fieldsEditedAt: string | null;
   /** What the review settled on (or the matcher, if it never needed review). */
   profile: MatchedProfile | null;
   openForm: MatchedOpenForm | null;
@@ -163,6 +176,9 @@ interface DocRow {
   writebackSteps: string | null;
   writebackError: string | null;
   writebackAt: string | null;
+  originalFields: string | null;
+  fieldsEditedByName: string | null;
+  fieldsEditedAt: string | null;
 }
 
 const DOC_SELECT = `
@@ -174,7 +190,9 @@ const DOC_SELECT = `
          d.needs_review AS needsReview, d.review_state AS reviewState,
          d.resolved_by_name AS resolvedByName, d.resolved_at AS resolvedAt, d.resolution_note AS resolutionNote,
          d.writeback_state AS writebackState, d.writeback_steps AS writebackSteps,
-         d.writeback_error AS writebackError, d.writeback_at AS writebackAt
+         d.writeback_error AS writebackError, d.writeback_at AS writebackAt,
+         d.original_fields AS originalFields, d.fields_edited_by_name AS fieldsEditedByName,
+         d.fields_edited_at AS fieldsEditedAt
   FROM mail_documents d JOIN mail_scans s ON s.id = d.scan_id`;
 
 /** Open, needs a person, and not an expired sample. */
@@ -216,7 +234,8 @@ function toDetail(db: Database, r: DocRow): MailDocumentDetail {
     splitReason: r.splitReason,
     uncertainPages: JSON.parse(r.uncertainPages) as number[],
     ocrConfidence: r.ocrConfidence,
-    fields: JSON.parse(r.fields) as NoticeFields,
+    // Rows saved before a field existed read as blank for it.
+    fields: normalizeFields(JSON.parse(r.fields) as Partial<NoticeFields>),
     match: JSON.parse(r.match) as NoticeMatch,
     status: r.status,
     needsReview: r.needsReview === 1,
@@ -228,6 +247,9 @@ function toDetail(db: Database, r: DocRow): MailDocumentDetail {
     writebackSteps: r.writebackSteps ? (JSON.parse(r.writebackSteps) as StepOutcome[]) : [],
     writebackError: r.writebackError,
     writebackAt: r.writebackAt,
+    originalFields: r.originalFields ? normalizeFields(JSON.parse(r.originalFields) as Partial<NoticeFields>) : null,
+    fieldsEditedByName: r.fieldsEditedByName,
+    fieldsEditedAt: r.fieldsEditedAt,
     profile: getProfile(db, r.profileLocalId),
     openForm: getOpenForm(db, r.openFormLocalId, r.profileLocalId),
   };
@@ -253,6 +275,8 @@ const REASON_LABEL: Record<AttentionReason, string> = {
   receipt_already_filled: "Receipt already filled",
   identifier_mismatch: "Numbers disagree",
   several_receipts: "Two notices?",
+  name_mismatch: "Names disagree",
+  name_uncertain: "Name only close",
 };
 
 function statusLabel(d: MailDocumentDetail): string {
@@ -369,4 +393,130 @@ export function resolveMailDocument(
     id,
   );
   return { ok: true, document: getMailDocument(db, id)! };
+}
+
+// -----------------------------------------------------------------------------
+// Correcting what was read
+// -----------------------------------------------------------------------------
+// A person fixes a misread field in M15; the notice is then re-matched on the
+// corrected fields. The first correction keeps the original reading beside
+// it, so what OCR said is never lost.
+
+/** What M15 sends: any subset, as the person typed it. */
+export interface FieldEdits {
+  receiptNumbers?: string[] | string;
+  aNumbers?: string[] | string;
+  caseType?: string | null;
+  noticeType?: string | null;
+  noticeDate?: string | null;
+  receivedDate?: string | null;
+  priorityDate?: string | null;
+  petitioner?: string | null;
+  beneficiary?: string | null;
+  applicant?: string | null;
+  dateOfBirth?: string | null;
+  section?: string | null;
+}
+
+const DATE_KEYS = ["noticeDate", "receivedDate", "priorityDate", "dateOfBirth"] as const;
+const TEXT_KEYS = ["noticeType", "petitioner", "beneficiary", "applicant", "section"] as const;
+
+const listOf = (v: string[] | string | undefined) =>
+  (Array.isArray(v) ? v : (v ?? "").split(/[,;\n]/)).map((x) => x.trim()).filter(Boolean);
+
+/** Validate and normalize edits onto `current`. Errors name the field and say what's wrong. */
+export function applyFieldEdits(
+  current: NoticeFields,
+  edits: FieldEdits,
+): { ok: true; fields: NoticeFields; changed: string[] } | { ok: false; errors: Record<string, string> } {
+  const next: NoticeFields = { ...emptyFields(), ...current };
+  const errors: Record<string, string> = {};
+
+  if (edits.receiptNumbers !== undefined) {
+    const list = listOf(edits.receiptNumbers).map((r) => r.replace(/[\s-]/g, "").toUpperCase());
+    const bad = list.filter((r) => !/^[A-Z]{3}\d{10}$/.test(r));
+    if (bad.length) errors.receiptNumbers = `Not a receipt number (3 letters + 10 digits): ${bad.join(", ")}`;
+    else next.receiptNumbers = [...new Set(list)];
+  }
+  if (edits.aNumbers !== undefined) {
+    const raw = listOf(edits.aNumbers);
+    const norm = raw.map((a) => normalizeANumber(a));
+    const bad = raw.filter((_, i) => !norm[i]);
+    if (bad.length) errors.aNumbers = `Not an A-number (8 or 9 digits): ${bad.join(", ")}`;
+    else next.aNumbers = [...new Set(norm as string[])];
+  }
+  if (edits.caseType !== undefined) {
+    const v = edits.caseType?.trim() || null;
+    const form = normalizeFormType(v);
+    if (v && !form) errors.caseType = "Start the case type with the form, e.g. I-130 or N-400";
+    else {
+      next.caseType = v;
+      next.formType = form;
+    }
+  }
+  for (const key of DATE_KEYS) {
+    if (edits[key] === undefined) continue;
+    const v = edits[key]?.trim() || null;
+    const iso = v ? parseNoticeDate(v) : null;
+    if (v && !iso) errors[key] = `Not a date: ${v}`;
+    else next[key] = iso;
+  }
+  for (const key of TEXT_KEYS) {
+    if (edits[key] === undefined) continue;
+    next[key] = edits[key]?.replace(/\s+/g, " ").trim() || null;
+  }
+
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  const fields = normalizeFields(next);
+  const changed = (Object.keys(emptyFields()) as Array<keyof NoticeFields>).filter(
+    (k) => k !== "people" && JSON.stringify(fields[k]) !== JSON.stringify(current[k]),
+  );
+  return { ok: true, fields, changed };
+}
+
+export type EditFieldsResult =
+  | { ok: true; document: MailDocumentDetail; changed: string[] }
+  | { ok: false; status: number; error: string; fieldErrors?: Record<string, string> };
+
+export function updateMailDocumentFields(
+  db: Database,
+  id: number,
+  edits: FieldEdits,
+  by: { userId: number | null; userName: string | null },
+): EditFieldsResult {
+  const doc = getMailDocument(db, id);
+  if (!doc) return { ok: false, status: 404, error: "Mail document not found" };
+  if (doc.reviewState !== "open") {
+    return { ok: false, status: 409, error: `Already ${doc.reviewState} — its fields can no longer change` };
+  }
+  const applied = applyFieldEdits(doc.fields, edits);
+  if (!applied.ok) return { ok: false, status: 400, error: "Some fields aren't valid", fieldErrors: applied.errors };
+  if (applied.changed.length === 0) return { ok: true, document: doc, changed: [] };
+
+  const match = matchNotice(db, applied.fields);
+  // A person has now checked the reading, so a low OCR score no longer
+  // sends it to review on its own; an unsettled match or split still does.
+  const review = needsReviewRule({ match, ocrConfidence: null, uncertainPages: doc.uncertainPages });
+
+  db.prepare(
+    `UPDATE mail_documents
+        SET original_fields = COALESCE(original_fields, fields),
+            fields = ?, match = ?, status = ?, reason = ?, message = ?,
+            profile_local_id = ?, open_form_local_id = ?, needs_review = ?,
+            fields_edited_by = ?, fields_edited_by_name = ?, fields_edited_at = datetime('now')
+      WHERE id = ? AND review_state = 'open'`,
+  ).run(
+    JSON.stringify(applied.fields),
+    JSON.stringify(match),
+    match.status,
+    match.reason,
+    match.message,
+    match.profile?.localId ?? null,
+    match.openForm?.localId ?? null,
+    review ? 1 : 0,
+    by.userId,
+    by.userName,
+    id,
+  );
+  return { ok: true, document: getMailDocument(db, id)!, changed: applied.changed };
 }
