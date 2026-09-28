@@ -56,6 +56,12 @@ describe("preferences validation", () => {
     expect((patch as Record<string, unknown>).injected).toBeUndefined();
   });
 
+  it("keeps showScreenCodes only as a boolean, defaulting to on", () => {
+    expect(sanitizePreferencesPatch({ showScreenCodes: false }).showScreenCodes).toBe(false);
+    expect(sanitizePreferencesPatch({ showScreenCodes: "no" }).showScreenCodes).toBeUndefined();
+    expect(parsePreferences('{"theme":"light"}').showScreenCodes).toBe(true);
+  });
+
   it("rejects invalid enum values", () => {
     const patch = sanitizePreferencesPatch({ theme: "neon", defaultPage: "/etc/passwd" });
     expect(patch.theme).toBeUndefined();

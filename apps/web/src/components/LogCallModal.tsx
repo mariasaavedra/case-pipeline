@@ -625,7 +625,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                     <SelectTrigger aria-label="Status" size="sm" className="w-full border-border-light bg-surface">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="w-[var(--anchor-width)]">
+                    <SelectContent code="D16" className="w-[var(--anchor-width)]">
                       {statusDef.options.map((o) => <SelectItem key={o.index} value={o.label}>{o.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -650,7 +650,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                       <SelectTrigger aria-label="Language" size="sm" className="w-full border-border-light bg-surface">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="w-[var(--anchor-width)]">
+                      <SelectContent code="D17" className="w-[var(--anchor-width)]">
                         {languageItems.map((l) => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -661,7 +661,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                       <SelectTrigger aria-label="Taken by" size="sm" className="w-full border-border-light bg-surface">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="w-[var(--anchor-width)]">
+                      <SelectContent code="D18" className="w-[var(--anchor-width)]">
                         {staffItems.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -672,7 +672,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                       <SelectTrigger aria-label="Highlight for" size="sm" className="w-full border-border-light bg-surface">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="w-[var(--anchor-width)]">
+                      <SelectContent code="D19" className="w-[var(--anchor-width)]">
                         {staffItems.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                       </SelectContent>
                     </Select>

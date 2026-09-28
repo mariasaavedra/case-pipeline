@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { navigate, matchRoute } from "../router";
 import { useViewport } from "../hooks/useViewport";
 import type { AuthUser } from "../auth/AuthProvider";
+import { SectionCode } from "./ScreenCode";
 
 const COLLAPSED_KEY = "sidebar-collapsed";
 
@@ -223,6 +224,11 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
             );
           })}
         </nav>
+
+        {/* G1 — the sidebar itself (docs/ui-map.md) */}
+        <div style={{ padding: "0 10px" }}>
+          <SectionCode code="G1" />
+        </div>
 
         {/* Settings */}
         <button

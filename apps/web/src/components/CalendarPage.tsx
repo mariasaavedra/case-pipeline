@@ -8,6 +8,7 @@ import type { CalendarResult, CalendarEvent, CalendarCategory } from "../api";
 import { Link } from "./Link";
 import { clientPath } from "../router";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { SectionCode } from "./ScreenCode";
 
 type ViewMode = "month" | "agenda";
 
@@ -435,6 +436,7 @@ export function CalendarPage() {
       </div>
 
       {/* Controls */}
+      <SectionCode code="P7.1" />
       <div
         className="flex items-center gap-4 flex-wrap mb-5 px-4 py-3 rounded-xl"
         style={{ backgroundColor: "var(--color-surface-warm)", border: "1px solid var(--color-border-light)" }}
@@ -567,6 +569,7 @@ export function CalendarPage() {
       )}
 
       {/* Month grid */}
+      {!loading && data && viewMode === "month" && <SectionCode code="P7.2" />}
       {!loading && data && viewMode === "month" && (
         <div>
           <div className="grid grid-cols-7 gap-1.5 mb-1.5">
@@ -636,6 +639,7 @@ export function CalendarPage() {
       )}
 
       {/* Agenda view */}
+      {!loading && data && viewMode === "agenda" && <SectionCode code="P7.3" />}
       {!loading && data && viewMode === "agenda" && (
         <div className="space-y-5">
           {[...eventsByDate.keys()].sort().length === 0 ? (

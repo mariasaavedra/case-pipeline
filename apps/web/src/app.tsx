@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { Sidebar } from "./components/Sidebar";
 import { LoginPage } from "./pages/LoginPage";
 import { LogCallModal } from "./components/LogCallModal";
-import { PageCode } from "./components/ScreenCode";
+import { PageCode, SectionCode } from "./components/ScreenCode";
 import { Button } from "./components/ui/button";
 
 // Route-level code splitting. These used to be static imports, which meant one
@@ -258,7 +258,10 @@ function App() {
               </button>
             ) : null}
 
-            <div style={{ marginLeft: "auto" }}>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center" }}>
+              {/* G2 — the top bar itself (docs/ui-map.md) */}
+              <SectionCode code="G2" inline />
+              <span style={{ width: 10 }} />
               <Button type="button" size="sm" onClick={() => setShowLogCallModal(true)}>+ Log call</Button>
             </div>
           </div>
