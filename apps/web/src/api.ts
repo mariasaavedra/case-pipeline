@@ -603,6 +603,8 @@ export async function deleteAttorneyBoard(boardKey: string): Promise<AttorneyBoa
 // =============================================================================
 
 export interface MondayConnectionStatus {
+  /** False when the server has no Monday OAuth app credentials — Connect can't work. */
+  oauthConfigured?: boolean;
   connected: boolean;
   mondayName?: string;
   /** Monday refused this token (revoked, or missing a scope granted later).
