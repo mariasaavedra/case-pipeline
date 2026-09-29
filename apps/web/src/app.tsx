@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { Sidebar } from "./components/Sidebar";
 import { LoginPage } from "./pages/LoginPage";
 import { LogCallModal } from "./components/LogCallModal";
+import { MondayConnectPrompt } from "./components/MondayConnectPrompt";
 import { PageCode, SectionCode } from "./components/ScreenCode";
 import { Button } from "./components/ui/button";
 
@@ -321,6 +322,8 @@ function App() {
       </div>
 
       {showLogCallModal && <LogCallModal onClose={() => setShowLogCallModal(false)} />}
+      {/* Not on Settings, which has its own Monday section (P11.4) and reads ?monday= itself. */}
+      {user && <MondayConnectPrompt />}
       {/* Client 360 renders its own code, since its Debug tab has no URL of its own. */}
       {PAGE_CODES[route.page] && <PageCode code={PAGE_CODES[route.page]!} />}
     </div>

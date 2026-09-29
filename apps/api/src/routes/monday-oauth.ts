@@ -25,16 +25,28 @@ const REDIRECT_URI  = `${API_URL}/api/auth/monday/callback`;
 
 // ---------------------------------------------------------------------------
 // State parameter — stateless HMAC so we avoid a session table
-// State = `${azure_oid}:${ts}` signed with CLIENT_SECRET
+// State = `${azure_oid}:${ts}:${returnTo}` signed with CLIENT_SECRET.
+// returnTo is URI-encoded so it never contains the ":" separator; states
+// issued before it existed have no third part and fall back to /settings.
 // ---------------------------------------------------------------------------
 
-function signState(azureOid: string): string {
-  const payload = `${azureOid}:${Date.now()}`;
+const DEFAULT_RETURN = "/settings";
+
+/** Only same-origin paths — never "//evil.com" or "/\\evil.com", which browsers read as another host. */
+export function safeReturnPath(raw: unknown): string {
+  if (typeof raw !== "string" || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) {
+    return DEFAULT_RETURN;
+  }
+  return raw;
+}
+
+function signState(azureOid: string, returnTo: string): string {
+  const payload = `${azureOid}:${Date.now()}:${encodeURIComponent(returnTo)}`;
   const sig = createHmac("sha256", CLIENT_SECRET).update(payload).digest("hex");
   return Buffer.from(`${payload}:${sig}`).toString("base64url");
 }
 
-function verifyState(state: string): string | null {
+function verifyState(state: string): { azureOid: string; returnTo: string } | null {
   try {
     const decoded = Buffer.from(state, "base64url").toString();
     const lastColon = decoded.lastIndexOf(":");
@@ -42,21 +54,28 @@ function verifyState(state: string): string | null {
     const sig = decoded.slice(lastColon + 1);
     const expected = createHmac("sha256", CLIENT_SECRET).update(payload).digest("hex");
     if (sig !== expected) return null;
+    const [azureOid = "", tsRaw = "0", returnRaw] = payload.split(":");
     // Expire after 10 minutes
-    const ts = parseInt(payload.split(":")[1] ?? "0", 10);
-    if (Date.now() - ts > 10 * 60 * 1000) return null;
-    return payload.split(":")[0] ?? null; // azure_oid
+    if (Date.now() - parseInt(tsRaw, 10) > 10 * 60 * 1000) return null;
+    return { azureOid, returnTo: safeReturnPath(returnRaw ? decodeURIComponent(returnRaw) : undefined) };
   } catch {
     return null;
   }
+}
+
+/** FRONTEND_URL + path, with ?monday=connected added to whatever query it already has. */
+function frontendUrl(path: string, status: string): string {
+  const url = new URL(path, FRONTEND_URL);
+  url.searchParams.set("monday", status);
+  return url.toString();
 }
 
 // ---------------------------------------------------------------------------
 // Route handlers
 // ---------------------------------------------------------------------------
 
-function buildOAuthUrl(azureOid: string): string {
-  const state = signState(azureOid);
+function buildOAuthUrl(azureOid: string, returnTo: string): string {
+  const state = signState(azureOid, returnTo);
   // Build manually to avoid encoding colons in scope (me:read not me%3Aread).
   // boards:write is required for change_simple_column_value (status write-back);
   // updates:write covers posting notes. Users must re-connect Monday to grant a
@@ -85,7 +104,7 @@ async function handleRedirect(req: Request, res: Response): Promise<void> {
     }
   }
 
-  res.redirect(buildOAuthUrl(azureOid));
+  res.redirect(buildOAuthUrl(azureOid, safeReturnPath(req.query.return_to)));
 }
 
 async function handleCallback(req: Request, res: Response): Promise<void> {
@@ -96,8 +115,8 @@ async function handleCallback(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const azureOid = verifyState(state ?? "");
-  if (!azureOid) {
+  const verified = verifyState(state ?? "");
+  if (!verified) {
     res.redirect(`${FRONTEND_URL}/settings?monday=error&reason=invalid_state`);
     return;
   }
@@ -152,9 +171,9 @@ async function handleCallback(req: Request, res: Response): Promise<void> {
                 monday_token_rejected_at = NULL, monday_token_error = NULL
           WHERE azure_oid = ?`,
       )
-      .run(protect(access_token), mondayName, azureOid);
+      .run(protect(access_token), mondayName, verified.azureOid);
 
-    res.redirect(`${FRONTEND_URL}/settings?monday=connected`);
+    res.redirect(frontendUrl(verified.returnTo, "connected"));
   } catch (err) {
     console.error("[monday-oauth] callback error:", err);
     res.redirect(`${FRONTEND_URL}/settings?monday=error&reason=server`);
@@ -178,6 +197,9 @@ function handleStatus(req: Request, res: Response): void {
   const connected = !!row?.monday_access_token;
   res.json({
     data: {
+      // Without the OAuth app credentials the Connect button can only 503, so
+      // the sign-in prompt stays quiet (dev, seed-only setups).
+      oauthConfigured: !!CLIENT_ID && !!CLIENT_SECRET,
       connected,
       mondayName: row?.monday_name ?? undefined,
       // A connected-but-rejected token still writes (the shared token covers

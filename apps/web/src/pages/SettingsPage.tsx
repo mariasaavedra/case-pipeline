@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../auth/useAuth";
 import { usePreferences } from "../hooks/usePreferences";
 import type { Theme, DefaultPage, DateFormat } from "../hooks/usePreferences";
-import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, getAzureToken, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser, fetchAuditLog } from "../api";
+import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser, fetchAuditLog } from "../api";
 import type { AttorneyBoard, PublicUser, AuditEntry, MondayConnectionStatus } from "../api";
 import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
 import { SectionCode } from "../components/ScreenCode";
+import { useMondayConnect } from "../hooks/useMondayConnect";
 
 // =============================================================================
 // User management (admin section)
@@ -601,8 +602,7 @@ function AttorneyBoardsSection() {
 function MondayConnectionSection() {
   const [status, setStatus] = useState<MondayConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
-  const [connectError, setConnectError] = useState<string | null>(null);
+  const { connect, connecting, error: connectError } = useMondayConnect();
 
   useEffect(() => {
     fetchMondayStatus()
@@ -655,19 +655,7 @@ function MondayConnectionSection() {
             )}
           </div>
           <button
-            onClick={() => {
-              setConnecting(true);
-              setConnectError(null);
-              getAzureToken()
-                .then((token) => {
-                  const qs = token ? `?az_token=${encodeURIComponent(token)}` : "";
-                  window.location.href = `/api/auth/monday${qs}`;
-                })
-                .catch((err: unknown) => {
-                  setConnecting(false);
-                  setConnectError(err instanceof Error ? err.message : String(err));
-                });
-            }}
+            onClick={() => connect()}
             disabled={connecting}
             style={{
               padding: "7px 16px",

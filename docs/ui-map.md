@@ -192,6 +192,7 @@ Top to bottom. Sections marked *admin* only show for admins.
 | M13 | Entry editor | The entry's name | P3.8 (admin) | `EntryEditorModal.tsx` |
 | M14 | What's new | Changelog | Version badge on P1 Home / P0 Sign in | `VersionBadge.tsx` |
 | M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
+| M16 | Connect Monday.com | "Connect your Monday.com account" / "Reconnect…" / "Monday.com connected" | Opens by itself after sign-in when Monday isn't connected (any page but P11); **Not now** hides it for 12 h | `MondayConnectPrompt.tsx` |
 
 ## Dropdowns
 
