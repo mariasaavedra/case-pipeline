@@ -461,12 +461,29 @@ describe("v24 → v25 mail write-back tracking", () => {
   });
 });
 
-describe("→ v27 email participants", () => {
-  test("adds email_participants to an existing client_updates, keeping rows", () => {
+describe("v25 → v26 mail field corrections", () => {
+  test("adds the correction columns, keeping rows", () => {
     const db = new Database(":memory:");
     db.exec(`
       CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
       INSERT INTO schema_version (version) VALUES (25);
+      CREATE TABLE mail_documents (id INTEGER PRIMARY KEY, fields TEXT);
+      INSERT INTO mail_documents (fields) VALUES ('{}');
+    `);
+    initializeSchema(db);
+    const cols = (db.prepare("SELECT name FROM pragma_table_info('mail_documents')").all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toEqual(expect.arrayContaining(["original_fields", "fields_edited_by", "fields_edited_by_name", "fields_edited_at"]));
+    expect(db.prepare("SELECT fields, original_fields FROM mail_documents").get()).toEqual({ fields: "{}", original_fields: null });
+  });
+});
+
+describe("v26 → v27 email participants", () => {
+  // Production is at v26 (mail field corrections) when this ships.
+  test("adds email_participants to an existing client_updates, keeping rows", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (26);
       CREATE TABLE client_updates (id INTEGER PRIMARY KEY, local_id TEXT, text_body TEXT);
       INSERT INTO client_updates (local_id, text_body) VALUES ('u1', 'kept');
     `);
@@ -479,7 +496,6 @@ describe("→ v27 email participants", () => {
     expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
   });
 
-  // feat/mail-fields ships v26; a DB already carrying the column must not fail.
   test("is a no-op when the column already exists", () => {
     const db = new Database(":memory:");
     db.exec(`

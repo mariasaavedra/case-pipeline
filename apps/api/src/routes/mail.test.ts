@@ -204,3 +204,39 @@ describe("write-back routes (server without a Monday token)", () => {
     expect((await fetch(`${base}/api/mail/documents/999/writeback`, { method: "POST" })).status).toBe(404);
   });
 });
+
+describe("PATCH fields", () => {
+  const patch = (id: number, body: unknown) =>
+    fetch(`${base}/api/mail/documents/${id}/fields`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  test("a corrected A-number re-matches, and the edit is audited by field name", async () => {
+    const sample = await (await fetch(`${base}/api/mail/sample.pdf`)).arrayBuffer();
+    const data = await scan(sample);
+    const noMatch = data.documents.find((d) => d.match.status === "no_match")!;
+    const res = await patch(noMatch.id!, { aNumbers: "123-456-789", caseType: "I-130" });
+    expect(res.status).toBe(200);
+    const doc = (await res.json()).data;
+    expect(doc.fields.aNumbers).toEqual(["123456789"]);
+    expect(doc.originalFields.aNumbers).not.toEqual(["123456789"]);
+    expect(doc.status).not.toBe("no_match");
+    const entry = audits.find((a) => a.action === "mail.fields_edited");
+    expect(entry?.targetId).toBe(String(noMatch.id));
+  });
+
+  test("invalid values come back per field", async () => {
+    const sample = await (await fetch(`${base}/api/mail/sample.pdf`)).arrayBuffer();
+    const data = await scan(sample);
+    const res = await patch(data.documents[0]!.id!, { receiptNumbers: "nope", noticeDate: "tomorrow" });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(Object.keys(body.fieldErrors).sort()).toEqual(["noticeDate", "receiptNumbers"]);
+  });
+
+  test("non-text values are refused", async () => {
+    expect((await patch(1, { aNumbers: 123 })).status).toBe(400);
+  });
+});

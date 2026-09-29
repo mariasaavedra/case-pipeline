@@ -9,7 +9,9 @@
 // Three stages, each usable on its own:
 //   0. repairOcrText(text)        — undo OCR's letter/digit swaps, where a
 //                                   field's format says which one it must be
-//   1. extractNoticeFields(text)  — one page's text → identifiers
+//   1. extractNoticeFields(text)  — one page → every field it prints (receipt,
+//                                   case type, dates, petitioner/beneficiary…),
+//                                   read by position (mail-layout.ts)
 //   2. splitIntoDocuments(pages)  — one big scan → separate notices
 //   3. matchNotice(db, fields)    — identifiers → profile + Open Form
 //
@@ -23,6 +25,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import { LOW_OCR_CONFIDENCE } from "./types";
+import { readLayout, type LayoutValues, type Word } from "./mail-layout";
 
 const OPEN_FORMS_BOARD = "_cd_open_forms";
 
@@ -35,13 +38,65 @@ export interface NoticePerson {
   name: string;
 }
 
+/**
+ * Everything read off a notice. Dates are ISO (YYYY-MM-DD); names are as
+ * printed ("LOPEZ, MARIA"). `people` is derived from the three name fields and
+ * kept for rows saved before they existed.
+ */
 export interface NoticeFields {
   receiptNumbers: string[];
   aNumbers: string[];
+  /** Normalized form, for matching: "I130". */
   formType: string | null;
+  /** As printed: "I130 - PETITION FOR ALIEN RELATIVE". */
+  caseType: string | null;
   noticeType: string | null;
   noticeDate: string | null;
+  receivedDate: string | null;
+  priorityDate: string | null;
+  petitioner: string | null;
+  beneficiary: string | null;
+  applicant: string | null;
+  dateOfBirth: string | null;
+  /** Classification line, e.g. "Husband or wife of U.S. citizen, 201(b) INA". */
+  section: string | null;
   people: NoticePerson[];
+}
+
+export const NAME_ROLES = ["petitioner", "beneficiary", "applicant"] as const;
+const ROLE_LABEL = { petitioner: "Petitioner", beneficiary: "Beneficiary", applicant: "Applicant" } as const;
+
+export function emptyFields(): NoticeFields {
+  return {
+    receiptNumbers: [],
+    aNumbers: [],
+    formType: null,
+    caseType: null,
+    noticeType: null,
+    noticeDate: null,
+    receivedDate: null,
+    priorityDate: null,
+    petitioner: null,
+    beneficiary: null,
+    applicant: null,
+    dateOfBirth: null,
+    section: null,
+    people: [],
+  };
+}
+
+/**
+ * Fill in anything missing (rows saved before a field existed) and re-derive
+ * `people`. Older rows only had `people`; their names move into the fields.
+ */
+export function normalizeFields(raw: Partial<NoticeFields> | null | undefined): NoticeFields {
+  const f: NoticeFields = { ...emptyFields(), ...(raw ?? {}) };
+  for (const p of f.people ?? []) {
+    const role = p.role.toLowerCase() as (typeof NAME_ROLES)[number];
+    if ((NAME_ROLES as readonly string[]).includes(role) && !f[role]) f[role] = p.name;
+  }
+  f.people = NAME_ROLES.filter((r) => f[r]).map((r) => ({ role: ROLE_LABEL[r], name: f[r]! }));
+  return f;
 }
 
 /** One page as the PDF reader produced it. */
@@ -51,6 +106,8 @@ export interface MailPageInput {
   ocr?: boolean;
   /** Tesseract's 0-100 page confidence, when OCR'd. */
   ocrConfidence?: number | null;
+  /** Word boxes (text layer or OCR), so labelled fields can be read by position. */
+  words?: Word[] | null;
 }
 
 export interface PageInfo {
@@ -91,7 +148,9 @@ export type AttentionReason =
   | "no_open_form"
   | "receipt_already_filled"
   | "identifier_mismatch"
-  | "several_receipts";
+  | "several_receipts"
+  | "name_mismatch"
+  | "name_uncertain";
 
 export interface MatchedProfile {
   localId: string;
@@ -106,6 +165,8 @@ export interface MatchedOpenForm {
   status: string | null;
   formType: string | null;
   receiptNo: string | null;
+  /** The form's "Received/Priority Date" column, ISO. */
+  receivedDate: string | null;
   profileLocalId: string | null;
   profileName: string | null;
 }
@@ -114,7 +175,7 @@ export interface NoticeMatch {
   status: MatchStatus;
   reason: AttentionReason | null;
   message: string;
-  matchedBy: "receipt_number" | "a_number" | null;
+  matchedBy: "receipt_number" | "a_number" | "name" | null;
   profile: MatchedProfile | null;
   openForm: MatchedOpenForm | null;
   /** What the write-back would do. Never executed by the prototype. */
@@ -194,49 +255,115 @@ export function normalizeFormType(raw: string | null | undefined): string | null
   return m ? `${m[1]!.toUpperCase()}${m[2]}${(m[3] ?? "").toUpperCase()}` : null;
 }
 
-function isoDate(raw: string): string | null {
-  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw);
-  if (slash) return `${slash[3]}-${slash[1]!.padStart(2, "0")}-${slash[2]!.padStart(2, "0")}`;
-  const d = new Date(`${raw} 12:00 UTC`);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+const MONTH_RE = new RegExp(`^(${MONTHS})\\s+(\\d{1,2}),?\\s+(\\d{4})$`, "i");
+
+/** ISO date from "08/14/2026", "August 14, 2026" or "2026-08-14"; null for blank, "N/A" and nonsense. */
+export function parseNoticeDate(raw: string | null | undefined, ocr = false): string | null {
+  if (!raw) return null;
+  let v = raw.trim().replace(/\s+/g, " ");
+  // OCR swaps inside the numeric parts only: "O8/14/2O26" → "08/14/2026".
+  if (ocr) v = v.replace(/[0-9OoDQIl|SsBZzG]+(?=[/.-])|(?<=[/.-])[0-9OoDQIl|SsBZzG]+/g, digitsOf);
+  let y: number, m: number, d: number;
+  const slash = /(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})/.exec(v);
+  const iso = /(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  const named = MONTH_RE.exec(v.replace(/[^\w ,]/g, "").trim());
+  if (iso) [y, m, d] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  else if (slash) [y, m, d] = [Number(slash[3]), Number(slash[1]), Number(slash[2])];
+  else if (named) {
+    y = Number(named[3]);
+    m = MONTHS.split("|").findIndex((x) => x.toLowerCase() === named[1]!.toLowerCase()) + 1;
+    d = Number(named[2]);
+  } else return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31 || y < 1900 || y > 2100) return null;
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
-export function extractNoticeFields(text: string): NoticeFields {
+/** A name as printed, minus what shares its line: A-numbers, digits, stray labels. */
+export function cleanName(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const v = raw
+    .replace(/\bA\s*[#:-]?\s*\d[\d\s-]{6,}/gi, " ")
+    .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ ,.'-]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[ ,.-]+|[ ,.-]+$/g, "")
+    .trim();
+  return v.length >= 2 && /[A-Za-z]{2}/.test(v) ? v : null;
+}
+
+function canonicalNoticeType(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const known = NOTICE_TYPES.find(([re]) => re.test(raw))?.[1];
+  const v = raw.replace(/\s+/g, " ").trim();
+  return known ?? (v || null);
+}
+
+/**
+ * Every field on one page. Labelled fields are read by position first (a
+ * grid-layout I-797 puts values under their labels), then the text-wide rules
+ * fill whatever the labels didn't give: receipt and A-numbers anywhere, the
+ * first form number, notice-type wording, "Label: value" people.
+ */
+export function extractNoticeFields(text: string, words?: Word[] | null, ocr = false): NoticeFields {
+  return fieldsFromLayout(text, readLayout(text, words), ocr);
+}
+
+function fieldsFromLayout(text: string, layout: LayoutValues, ocr: boolean): NoticeFields {
+  const fix = (v: string | undefined) => (v && ocr ? repairOcrText(v) : v);
+
   const receiptNumbers = new Set<string>();
+  const labelledReceipt = fix(layout.receiptNumber);
+  if (labelledReceipt) for (const m of labelledReceipt.matchAll(RECEIPT_RE)) receiptNumbers.add(`${m[1]}${m[2]}`);
   for (const m of text.matchAll(RECEIPT_RE)) receiptNumbers.add(`${m[1]}${m[2]}`);
 
   const aNumbers = new Set<string>();
+  if (layout.aNumber) {
+    const n = normalizeANumber(ocr ? digitsOf(layout.aNumber) : layout.aNumber);
+    if (n) aNumbers.add(n);
+  }
   for (const m of text.matchAll(A_NUMBER_RE)) {
     const n = normalizeANumber(`${m[1]}${m[2]}${m[3]}`);
     if (n) aNumbers.add(n);
   }
 
-  let formType: string | null = null;
-  for (const m of text.matchAll(FORM_RE)) {
-    const f = `${m[1]}${m[2]}${m[3] ?? ""}`;
-    if (!NOTICE_FORMS.has(f) && !f.startsWith("I797")) {
-      formType = f;
-      break;
+  // A case type always names a form; anything else under that label is noise.
+  let rawCaseType = fix(layout.caseType)?.replace(/\s+/g, " ").trim() || null;
+  // Under the Case Type label, one glyph before three digits can only be the I
+  // of an I-form: OCR reads "I765" as "1765", "[765", "l765", "|765"…
+  if (rawCaseType && ocr) rawCaseType = rawCaseType.replace(/^[1lIi|![\]L](?=-?\d{3}[A-Z]?\b)/, "I");
+  const caseType = normalizeFormType(rawCaseType) ? rawCaseType : null;
+  let formType = normalizeFormType(caseType);
+  if (!formType) {
+    for (const m of text.matchAll(FORM_RE)) {
+      const f = `${m[1]}${m[2]}${m[3] ?? ""}`;
+      if (!NOTICE_FORMS.has(f) && !f.startsWith("I797")) {
+        formType = f;
+        break;
+      }
     }
   }
 
-  const noticeType = NOTICE_TYPES.find(([re]) => re.test(text))?.[1] ?? null;
-  const dateMatch = NOTICE_DATE_RE.exec(text);
-
-  const people: NoticePerson[] = [];
+  const inline: Partial<Record<(typeof NAME_ROLES)[number], string>> = {};
   for (const m of text.matchAll(PERSON_RE)) {
-    const name = m[2]!.trim();
-    if (!people.some((p) => p.role === m[1] && p.name === name)) people.push({ role: m[1]!, name });
+    const role = m[1]!.toLowerCase() as (typeof NAME_ROLES)[number];
+    if ((NAME_ROLES as readonly string[]).includes(role) && !inline[role]) inline[role] = m[2]!.trim();
   }
+  const noticeDateMatch = NOTICE_DATE_RE.exec(text);
 
-  return {
+  return normalizeFields({
     receiptNumbers: [...receiptNumbers],
     aNumbers: [...aNumbers],
     formType,
-    noticeType,
-    noticeDate: dateMatch ? isoDate(dateMatch[1]!) : null,
-    people,
-  };
+    caseType,
+    noticeType: canonicalNoticeType(layout.noticeType) ?? NOTICE_TYPES.find(([re]) => re.test(text))?.[1] ?? null,
+    noticeDate: parseNoticeDate(layout.noticeDate, ocr) ?? (noticeDateMatch ? parseNoticeDate(noticeDateMatch[1]) : null),
+    receivedDate: parseNoticeDate(layout.receivedDate, ocr),
+    priorityDate: parseNoticeDate(layout.priorityDate, ocr),
+    petitioner: cleanName(layout.petitioner) ?? cleanName(inline.petitioner),
+    beneficiary: cleanName(layout.beneficiary) ?? cleanName(inline.beneficiary),
+    applicant: cleanName(layout.applicant) ?? cleanName(inline.applicant),
+    dateOfBirth: parseNoticeDate(layout.dateOfBirth, ocr),
+    section: layout.section?.replace(/\s+/g, " ").trim() || null,
+  });
 }
 
 // -----------------------------------------------------------------------------
@@ -278,17 +405,22 @@ export function repairOcrText(text: string): string {
 }
 
 export function analyzePage(page: number, input: string | MailPageInput): PageInfo {
-  const { text: raw, ocr = false, ocrConfidence = null } = typeof input === "string" ? { text: input } : input;
+  const { text: raw, ocr = false, ocrConfidence = null, words = null } =
+    typeof input === "string" ? { text: input } : input;
   const text = ocr ? repairOcrText(raw) : raw;
-  const marker = PAGE_MARKER_RE.exec(text);
+  const layout = readLayout(text, words);
+  // "Page 1 of 2" inline, or a grid "Page" label with "1 of 2" under it.
+  // OCR turns "2 of 2" into "20f2", hence the loose "of".
+  const marker =
+    PAGE_MARKER_RE.exec(text) ?? /^(\d{1,2})\s*[oO0]\s*f\s*(\d{1,2})$/i.exec(layout.page?.trim() ?? "");
   return {
     page,
     text,
     ocr,
     ocrConfidence: ocr ? ocrConfidence : null,
-    fields: extractNoticeFields(text),
+    fields: fieldsFromLayout(text, layout, ocr),
     // A scanner's blank separator sheet still yields a few stray characters.
-    blank: text.replace(/\s/g, "").length < 15,
+    blank: Math.max(text.replace(/\s/g, "").length, (words ?? []).reduce((n, w) => n + w.text.length, 0)) < 15,
     pageMarker: marker ? { index: Number(marker[1]), total: Number(marker[2]) } : null,
     hasNoticeHeader: NOTICE_HEADER_RE.test(text),
   };
@@ -298,17 +430,14 @@ export function analyzePage(page: number, input: string | MailPageInput): PageIn
 // 2. Splitting one scan into documents
 // -----------------------------------------------------------------------------
 
+/** A notice's fields across its pages: lists unite, and the first page to print a value wins. */
 function mergeFields(a: NoticeFields, b: NoticeFields): NoticeFields {
-  const people = [...a.people];
-  for (const p of b.people) if (!people.some((q) => q.role === p.role && q.name === p.name)) people.push(p);
-  return {
-    receiptNumbers: [...new Set([...a.receiptNumbers, ...b.receiptNumbers])],
-    aNumbers: [...new Set([...a.aNumbers, ...b.aNumbers])],
-    formType: a.formType ?? b.formType,
-    noticeType: a.noticeType ?? b.noticeType,
-    noticeDate: a.noticeDate ?? b.noticeDate,
-    people,
-  };
+  const merged = { ...a } as NoticeFields;
+  for (const key of Object.keys(emptyFields()) as Array<keyof NoticeFields>) {
+    if (key === "receiptNumbers" || key === "aNumbers") merged[key] = [...new Set([...a[key], ...b[key]])];
+    else if (key !== "people") (merged as unknown as Record<string, unknown>)[key] = a[key] ?? b[key];
+  }
+  return normalizeFields(merged);
 }
 
 function sharesNone(a: string[], b: string[]): boolean {
@@ -398,6 +527,11 @@ function readReceipt(cv: Record<string, unknown>): string | null {
   return typeof raw === "string" && raw.trim() ? raw.replace(/[\s-]/g, "").toUpperCase() : null;
 }
 
+function readDate(v: unknown): string | null {
+  const raw = v && typeof v === "object" ? (v as { date?: unknown }).date : v;
+  return typeof raw === "string" && /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : null;
+}
+
 /** Live rows carry a `forms` label column; seed rows only have "Name - I-485 (…)". */
 function readFormType(cv: Record<string, unknown>, name: string): string | null {
   const forms = cv.forms as { labels?: unknown } | undefined;
@@ -423,6 +557,7 @@ function toOpenForm(row: OpenFormRow): MatchedOpenForm {
     status: row.status,
     formType: readFormType(cv, row.name),
     receiptNo: readReceipt(cv),
+    receivedDate: readDate(cv.received_priority_date),
     profileLocalId: row.profileLocalId || null,
     profileName: row.profileName,
   };
@@ -488,11 +623,96 @@ function result(partial: Partial<NoticeMatch> & Pick<NoticeMatch, "status" | "me
   };
 }
 
+// --- Names -------------------------------------------------------------------
+// Notices print "LOPEZ GARCIA, MARIA"; profiles hold "Maria Lopez" or
+// "Ms. Maria LOPEZ GARCIA". Compare as sets of words, accents and titles
+// dropped. "Strong" = every word of the shorter name is in the longer one and
+// there are at least two; that tolerates a missing second surname but never
+// matches on a surname alone.
+
+const TITLES = new Set(["mr", "mrs", "ms", "miss", "dr", "md", "jr", "sr", "ii", "iii", "iv", "phd", "esq", "dds", "dvm"]);
+
+export function nameTokens(name: string | null | undefined): string[] {
+  if (!name) return [];
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z]+/g, " ")
+    .split(" ")
+    .filter((t) => t.length >= 2 && !TITLES.has(t));
+}
+
+export type NameMatch = "strong" | "partial" | "none";
+
+export function compareNames(a: string | null | undefined, b: string | null | undefined): NameMatch {
+  const A = new Set(nameTokens(a));
+  const B = new Set(nameTokens(b));
+  const [small, big] = A.size <= B.size ? [A, B] : [B, A];
+  const overlap = [...small].filter((t) => big.has(t)).length;
+  if (small.size >= 2 && overlap === small.size) return "strong";
+  if (overlap >= 2) return "partial";
+  return "none";
+}
+
+/** Any word in common at all — the bar for "these can't be the same person" checks. */
+function sharesAWord(a: string | null | undefined, b: string | null | undefined): boolean {
+  const A = new Set(nameTokens(a));
+  return nameTokens(b).some((t) => A.has(t));
+}
+
+interface ProfileIndexEntry extends MatchedProfile {
+  tokens: string[];
+}
+
+// All profiles, tokenised once per few seconds rather than per notice.
+const profileIndexCache = new WeakMap<Database, { at: number; entries: ProfileIndexEntry[] }>();
+
+function profileIndex(db: Database): ProfileIndexEntry[] {
+  const hit = profileIndexCache.get(db);
+  if (hit && Date.now() - hit.at < 5_000) return hit.entries;
+  const rows = db
+    .prepare(`SELECT local_id AS localId, name, a_number AS aNumber FROM profiles WHERE deleted_at IS NULL`)
+    .all() as MatchedProfile[];
+  const entries = rows.map((r) => ({ ...r, tokens: nameTokens(r.name) }));
+  profileIndexCache.set(db, { at: Date.now(), entries });
+  return entries;
+}
+
+function findProfilesByName(db: Database, name: string): { strong: MatchedProfile[]; partial: MatchedProfile[] } {
+  const strong: MatchedProfile[] = [];
+  const partial: MatchedProfile[] = [];
+  if (nameTokens(name).length < 2) return { strong, partial };
+  for (const e of profileIndex(db)) {
+    const m = compareNames(name, e.name);
+    const p = { localId: e.localId, name: e.name, aNumber: e.aNumber };
+    if (m === "strong") strong.push(p);
+    else if (m === "partial") partial.push(p);
+  }
+  return { strong, partial };
+}
+
+const uniqueBy = <T extends { localId: string }>(xs: T[]) => [...new Map(xs.map((x) => [x.localId, x])).values()];
+
+/** "petitioner LOPEZ, MARIA and beneficiary LOPEZ, JUAN" */
+function namesPhrase(names: Array<{ role: string; name: string }>): string {
+  return names.map((n) => `${n.role} ${n.name}`).join(" and ");
+}
+
+/** Among forms, the one whose Received/Priority Date is a date this notice prints. */
+function pickByDate(forms: MatchedOpenForm[], fields: NoticeFields): MatchedOpenForm | null {
+  const dates = [fields.receivedDate, fields.priorityDate].filter(Boolean);
+  if (dates.length === 0) return null;
+  const hits = forms.filter((f) => f.receivedDate && dates.includes(f.receivedDate));
+  return hits.length === 1 ? hits[0]! : null;
+}
+
 export function matchNotice(db: Database, fields: NoticeFields): NoticeMatch {
   const { receiptNumbers, aNumbers, formType } = fields;
+  const names = NAME_ROLES.filter((r) => fields[r]).map((r) => ({ role: r, name: fields[r]! }));
 
-  if (receiptNumbers.length === 0 && aNumbers.length === 0) {
-    return result({ status: "unreadable", message: "No receipt number or A-number found on these pages." });
+  if (receiptNumbers.length === 0 && aNumbers.length === 0 && names.length === 0) {
+    return result({ status: "unreadable", message: "No receipt number, A-number or name found on these pages." });
   }
   if (receiptNumbers.length > 1) {
     return result({
@@ -503,21 +723,38 @@ export function matchNotice(db: Database, fields: NoticeFields): NoticeMatch {
   }
 
   const receipt = receiptNumbers[0] ?? null;
-  const profilesByA = aNumbers.flatMap((a) => findProfilesByANumber(db, a));
-  const uniqueProfiles = [...new Map(profilesByA.map((p) => [p.localId, p])).values()];
+  const byA = uniqueBy(aNumbers.flatMap((a) => findProfilesByANumber(db, a)));
+  const nameHits = names.map((n) => ({ ...n, ...findProfilesByName(db, n.name) }));
+  const strongByName = uniqueBy(nameHits.flatMap((h) => h.strong));
+  /** Does any name on the notice plausibly belong to this client? */
+  const namesFit = (p: MatchedProfile) => names.length === 0 || names.some((n) => sharesAWord(n.name, p.name));
 
-  // Strongest key first: a receipt number already on an Open Form.
+  // 1. Strongest key: a receipt number already on an Open Form.
   if (receipt) {
-    const forms = findFormsByReceipt(db, receipt);
+    let forms = findFormsByReceipt(db, receipt);
+    if (forms.length > 1 && names.length > 0) {
+      // The same number copied onto two clients' forms: the names decide.
+      const owned = forms.filter((f) => strongByName.some((p) => p.localId === f.profileLocalId));
+      if (owned.length === 1) forms = owned;
+    }
     if (forms.length === 1) {
       const form = forms[0]!;
       const owner = form.profileLocalId ? getProfile(db, form.profileLocalId) : null;
-      if (owner && uniqueProfiles.length > 0 && !uniqueProfiles.some((p) => p.localId === owner.localId)) {
+      if (owner && byA.length > 0 && !byA.some((p) => p.localId === owner.localId)) {
         return result({
           status: "needs_attention",
           reason: "identifier_mismatch",
-          message: `Receipt ${receipt} belongs to ${owner.name}, but the A-number points to ${uniqueProfiles[0]!.name}.`,
-          candidateProfiles: [owner, ...uniqueProfiles],
+          message: `Receipt ${receipt} belongs to ${owner.name}, but the A-number points to ${byA[0]!.name}.`,
+          candidateProfiles: [owner, ...byA],
+          candidateForms: forms,
+        });
+      }
+      if (owner && !namesFit(owner)) {
+        return result({
+          status: "needs_attention",
+          reason: "name_mismatch",
+          message: `Receipt ${receipt} is on ${owner.name}'s Open Form, but the notice names ${namesPhrase(names)}.`,
+          candidateProfiles: uniqueBy([owner, ...strongByName]),
           candidateForms: forms,
         });
       }
@@ -540,25 +777,66 @@ export function matchNotice(db: Database, fields: NoticeFields): NoticeMatch {
     }
   }
 
-  // No receipt on file — fall back to the client's A-number.
-  if (uniqueProfiles.length === 0) {
-    return result({
-      status: "no_match",
-      message: aNumbers.length
-        ? `No client has A-number ${aNumbers.join(", ")}${receipt ? ` and no Open Form has receipt ${receipt}` : ""}.`
-        : `No Open Form has receipt ${receipt}, and the notice shows no A-number.`,
-    });
-  }
-  if (uniqueProfiles.length > 1) {
+  // 2. The client: by A-number, checked against the names; else by name.
+  let profile: MatchedProfile | null = null;
+  let matchedBy: NoticeMatch["matchedBy"] = null;
+
+  if (byA.length > 0) {
+    const fitting = byA.filter(namesFit);
+    if (byA.length > 1) {
+      const narrowed = byA.filter((p) => strongByName.some((s) => s.localId === p.localId));
+      if (narrowed.length !== 1) {
+        return result({
+          status: "needs_attention",
+          reason: "several_profiles",
+          message: `${byA.length} clients share this A-number.`,
+          candidateProfiles: byA,
+        });
+      }
+      profile = narrowed[0]!;
+    } else if (fitting.length === 0) {
+      // One wrong OCR digit in an A-number is a different client; the names catch it.
+      return result({
+        status: "needs_attention",
+        reason: "name_mismatch",
+        message: `The A-number points to ${byA[0]!.name}, but the notice names ${namesPhrase(names)}.`,
+        candidateProfiles: uniqueBy([...byA, ...strongByName]),
+      });
+    } else {
+      profile = byA[0]!;
+    }
+    matchedBy = "a_number";
+  } else if (strongByName.length === 1) {
+    profile = strongByName[0]!;
+    matchedBy = "name";
+  } else if (strongByName.length > 1) {
     return result({
       status: "needs_attention",
       reason: "several_profiles",
-      message: `${uniqueProfiles.length} clients share this A-number.`,
-      candidateProfiles: uniqueProfiles,
+      message: `${strongByName.length} clients match the names on the notice (${namesPhrase(names)}).`,
+      candidateProfiles: strongByName,
+    });
+  } else {
+    const partial = uniqueBy(nameHits.flatMap((h) => h.partial));
+    const noA = aNumbers.length ? `No client has A-number ${aNumbers.join(", ")}` : "The notice shows no A-number";
+    const noR = receipt ? ` and no Open Form has receipt ${receipt}` : "";
+    if (partial.length > 0) {
+      return result({
+        status: "needs_attention",
+        reason: "name_uncertain",
+        message: `${noA}${noR}. ${partial.length === 1 ? "One client's name is" : `${partial.length} clients' names are`} close to ${namesPhrase(names)}.`,
+        candidateProfiles: partial.slice(0, 10),
+      });
+    }
+    return result({
+      status: "no_match",
+      message: `${noA}${noR}${names.length ? `, and no client is named ${names.map((n) => n.name).join(" or ")}` : ""}.`,
     });
   }
 
-  const profile = uniqueProfiles[0]!;
+  const how = matchedBy === "name" ? ` (matched by name${aNumbers.length ? `; A-number ${aNumbers.join(", ")} is not on file` : ""})` : "";
+
+  // 3. The Open Form: same form type; a date the notice prints breaks ties.
   const forms = findFormsForProfile(db, profile.localId);
   const sameType = formType ? forms.filter((f) => f.formType === formType) : forms;
   const label = formType ?? "any form";
@@ -567,62 +845,64 @@ export function matchNotice(db: Database, fields: NoticeFields): NoticeMatch {
     return result({
       status: "needs_attention",
       reason: "no_open_form",
-      matchedBy: "a_number",
+      matchedBy,
       profile,
-      message: `${profile.name} has no Open Form for ${label}${forms.length ? ` (has ${forms.length} other)` : ""}.`,
+      message: `${profile.name} has no Open Form for ${label}${forms.length ? ` (has ${forms.length} other)` : ""}${how}.`,
       candidateForms: forms,
     });
   }
 
   if (!receipt) {
-    if (sameType.length === 1) {
+    const one = sameType.length === 1 ? sameType[0]! : pickByDate(sameType, fields);
+    if (one) {
       return result({
         status: "matched",
-        matchedBy: "a_number",
+        matchedBy,
         profile,
-        openForm: sameType[0]!,
+        openForm: one,
         proposedAction: "attach_only",
-        message: `Only ${label} Open Form for ${profile.name} — attach the notice.`,
+        message: `${sameType.length === 1 ? "Only" : "The date-matching"} ${label} Open Form for ${profile.name} — attach the notice${how}.`,
       });
     }
     return result({
       status: "needs_attention",
       reason: "several_forms",
-      matchedBy: "a_number",
+      matchedBy,
       profile,
-      message: `${profile.name} has ${sameType.length} Open Forms for ${label} — pick one.`,
+      message: `${profile.name} has ${sameType.length} Open Forms for ${label} — pick one${how}.`,
       candidateForms: sameType,
     });
   }
 
   // A new receipt number: it belongs on the one matching form that has none yet.
   const empty = sameType.filter((f) => !f.receiptNo);
-  if (empty.length === 1) {
+  const target = empty.length === 1 ? empty[0]! : empty.length > 1 ? pickByDate(empty, fields) : null;
+  if (target) {
     return result({
       status: "matched",
-      matchedBy: "a_number",
+      matchedBy,
       profile,
-      openForm: empty[0]!,
+      openForm: target,
       proposedAction: "fill_receipt",
-      message: `New receipt ${receipt} → fill Receipt No. on ${profile.name}'s ${label} Open Form.`,
+      message: `New receipt ${receipt} → fill Receipt No. on ${profile.name}'s ${label} Open Form${empty.length > 1 ? " (picked by date)" : ""}${how}.`,
     });
   }
   if (empty.length > 1) {
     return result({
       status: "needs_attention",
       reason: "several_forms",
-      matchedBy: "a_number",
+      matchedBy,
       profile,
-      message: `${profile.name} has ${empty.length} ${label} Open Forms without a receipt number — pick one.`,
+      message: `${profile.name} has ${empty.length} ${label} Open Forms without a receipt number — pick one${how}.`,
       candidateForms: empty,
     });
   }
   return result({
     status: "needs_attention",
     reason: "receipt_already_filled",
-    matchedBy: "a_number",
+    matchedBy,
     profile,
-    message: `${profile.name}'s ${label} Open Form already has receipt ${sameType.map((f) => f.receiptNo).join(", ")}, not ${receipt}.`,
+    message: `${profile.name}'s ${label} Open Form already has receipt ${sameType.map((f) => f.receiptNo).join(", ")}, not ${receipt}${how}.`,
     candidateForms: sameType,
   });
 }

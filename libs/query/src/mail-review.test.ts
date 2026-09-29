@@ -17,7 +17,10 @@ import {
   getMailReviewAlertGroup,
   countMailToReview,
   resolveMailDocument,
+  applyFieldEdits,
+  updateMailDocumentFields,
 } from "./mail-review";
+import { emptyFields } from "./mail";
 import { getAlerts, getAlertsTotalCount } from "./alerts";
 
 function freshDb(): DatabaseInstance {
@@ -149,5 +152,69 @@ describe("resolveMailDocument", () => {
     scanAndSave(db);
     expect(resolveMailDocument(db, 99, { action: "dismiss", note: "x" }, USER)).toMatchObject({ status: 404 });
     expect(resolveMailDocument(db, 2, { action: "assign" }, USER)).toMatchObject({ status: 400 });
+  });
+});
+
+describe("correcting what was read", () => {
+  test("applyFieldEdits normalizes what people type", () => {
+    const r = applyFieldEdits(emptyFields(), {
+      receiptNumbers: "ioe-0912345678, MSC2290000001",
+      aNumbers: ["A 098-170-274"],
+      caseType: "I-130 Petition for Alien Relative",
+      receivedDate: "08/14/2026",
+      beneficiary: "  LOPEZ,   JUAN ",
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.fields).toMatchObject({
+      receiptNumbers: ["IOE0912345678", "MSC2290000001"],
+      aNumbers: ["098170274"],
+      formType: "I130",
+      receivedDate: "2026-08-14",
+      beneficiary: "LOPEZ, JUAN",
+    });
+    expect(r.fields.people).toEqual([{ role: "Beneficiary", name: "LOPEZ, JUAN" }]);
+    expect(r.changed).toEqual(expect.arrayContaining(["receiptNumbers", "aNumbers", "caseType", "formType", "receivedDate", "beneficiary"]));
+  });
+
+  test("every bad field is reported, and nothing is applied", () => {
+    const r = applyFieldEdits(emptyFields(), { receiptNumbers: "IOE123", aNumbers: "12", caseType: "Petition", noticeDate: "soon" });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(Object.keys(r.errors).sort()).toEqual(["aNumbers", "caseType", "noticeDate", "receiptNumbers"]);
+  });
+
+  test("clearing a field is allowed", () => {
+    const r = applyFieldEdits({ ...emptyFields(), priorityDate: "2026-01-01" }, { priorityDate: "" });
+    expect(r.ok && r.fields.priorityDate).toBeNull();
+  });
+
+  test("a corrected A-number re-matches the notice; the original reading is kept", () => {
+    const db = freshDb();
+    scanAndSave(db); // doc 3 read A# 555-555-555 → no match
+    const r = updateMailDocumentFields(db, 3, { aNumbers: "987654321" }, USER);
+    expect(r.ok).toBe(true);
+    const doc = getMailDocument(db, 3)!;
+    expect(doc.fields.aNumbers).toEqual(["987654321"]);
+    expect(doc.originalFields?.aNumbers).toEqual(["555555555"]);
+    expect(doc).toMatchObject({ status: "matched", needsReview: false, fieldsEditedByName: "Front Desk" });
+    expect(doc.profile?.localId).toBe("p2");
+    expect(countMailToReview(db)).toBe(1);
+
+    // A second edit keeps the FIRST reading as the original.
+    updateMailDocumentFields(db, 3, { noticeType: "Receipt Notice" }, USER);
+    expect(getMailDocument(db, 3)!.originalFields?.aNumbers).toEqual(["555555555"]);
+  });
+
+  test("no change is a no-op; settled notices can't be edited", () => {
+    const db = freshDb();
+    scanAndSave(db);
+    const same = updateMailDocumentFields(db, 3, { aNumbers: "555-555-555" }, USER);
+    expect(same).toMatchObject({ ok: true, changed: [] });
+    expect(getMailDocument(db, 3)!.originalFields).toBeNull();
+
+    resolveMailDocument(db, 3, { action: "dismiss", note: "junk" }, USER);
+    expect(updateMailDocumentFields(db, 3, { aNumbers: "987654321" }, USER)).toMatchObject({ ok: false, status: 409 });
+    expect(updateMailDocumentFields(db, 99, {}, USER)).toMatchObject({ ok: false, status: 404 });
   });
 });
