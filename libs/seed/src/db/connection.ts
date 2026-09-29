@@ -35,11 +35,15 @@ export interface DatabaseOptions {
  * journal mode of a DB they only opened for reading).
  */
 export function applyPragmas(db: DatabaseInstance, readonly = false, durable = false): void {
+  // busy_timeout goes first: switching to WAL takes a lock, and without a
+  // timeout already set, a second connection opening the file at the same
+  // moment fails with SQLITE_BUSY instead of waiting. Parallel CI test workers
+  // creating data/users.db hit exactly this (PR #53).
+  db.pragma("busy_timeout = 5000");
   if (!readonly) {
     db.pragma("journal_mode = WAL");
     db.pragma(durable ? "synchronous = FULL" : "synchronous = NORMAL");
   }
-  db.pragma("busy_timeout = 5000");
   db.pragma("foreign_keys = ON");
   db.pragma("cache_size = -32000");
   db.pragma("temp_store = MEMORY");
