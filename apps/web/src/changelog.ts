@@ -15,6 +15,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-09-29",
+    title: "Dropdowns on the last row open fully",
+    items: [
+      "On the Call Log, the Status and Highlighted For dropdowns on the bottom rows were cut off. They now open upward when there's no room below, so every option is visible.",
+    ],
+  },
+  {
+    date: "2026-09-29",
     title: "Settings, reorganized",
     items: [
       "Settings now has four tabs on the left: My account, Preferences, and, for admins, Firm setup and Admin. Each tab has its own link, so you can send someone straight to it.",
