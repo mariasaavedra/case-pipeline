@@ -110,6 +110,16 @@ export interface MondayTimelineItem {
   /** Set when type=custom; resolve to a name via the custom_activity map. */
   custom_activity_id: string | null;
   user: MondayTimelineUser | null;
+  /** An email's addresses (API 2026-07+); null for every other kind. */
+  metadata?: MondayEmailMetadata | null;
+}
+
+/** `EmailTimelineItemMetadata`. Monday returns null, not [], for an empty list. */
+export interface MondayEmailMetadata {
+  from: string | null;
+  to: string[] | null;
+  cc: string[] | null;
+  bcc: string[] | null;
 }
 
 /** A custom activity type defined in the account (Consult note, Deadline, …). */

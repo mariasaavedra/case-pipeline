@@ -105,6 +105,7 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       parentLocalId: null,
       // A queued note has no Monday update id yet, so nothing to reply under.
       canReply: !pending,
+      emailParticipants: null,
       pending,
     });
 
@@ -208,6 +209,7 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       mondayBoardId,
       parentLocalId: root.local_id,
       canReply: false,
+      emailParticipants: null,
       pending,
     });
 

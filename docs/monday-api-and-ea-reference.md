@@ -200,12 +200,16 @@ rediscover it. Sequence-sent mail shows in E&A as `sequencesEmail`.
 
 ### 2.9 What E&A does *not* give us
 
-- **No recipient / sender addresses as structured fields.** `TimelineItem` has
-  no to/from/cc. Monday's own example embeds them as HTML inside `content`
-  ("From: … <br> To: …"). There is an open community thread on exactly this.
-  If the feature needs "which client address did this go to", it must be parsed
-  out of `content` — brittle, and worth designing around rather than into.
-- **No thread/conversation id**, no message-id, no attachment list on the type.
+- ~~No recipient / sender addresses as structured fields.~~ **Corrected
+  2026-09-29:** from `2026-07`, `TimelineItem.metadata` is a union whose one
+  member, `EmailTimelineItemMetadata`, carries `from: String`, `to/cc/bcc:
+  [String!]` (null, not `[]`, when empty; null metadata on non-email entries).
+  Live check: 646 of 657 emails across 12 busy profiles had it, the oldest from
+  2025-06. We fetch it on every timeline read (`TIMELINE_API_VERSION`) and
+  store it in `client_updates.email_participants` (schema v27).
+- **No thread/conversation id**, no message-id, no attachment list on the type
+  (re-checked on `2026-04`, `2026-07`, `2026-10` on 2026-09-29: still no asset
+  field, so email attachments are only viewable in Monday itself).
 - **No update mutation**, and no webhook event for timeline items — the
   `WebhookEventType` list covers column/item/update events only
   (`libs/monday/src/api.ts:1064-1076`). E&A changes cannot be pushed to us; they
@@ -319,7 +323,7 @@ Notes:
 | Concern | Where | Notes |
 |---|---|---|
 | Version header | `libs/monday/src/api.ts:83,271` | Pinned `2024-10` → **actually served `2026-04`** |
-| Read a timeline | `fetchTimelineBatch`, `api.ts:1190+` | Aliased `timeline(id:)` per item, batches ≤15, `pageLimit` 50, follows cursors per item. **Does not pass `skipConnectedItems`.** |
+| Read a timeline | `fetchTimelineBatch`, `api.ts:1190+` | Aliased `timeline(id:)` per item, batches ≤15, `pageLimit` 50, follows cursors per item. **Does not pass `skipConnectedItems`.** Sent on `API-Version: 2026-07` (not the pinned default) so `metadata` resolves. |
 | Timeline fields read | `TIMELINE_ITEM_FIELDS`, `api.ts:1097` | `id type title content created_at custom_activity_id user{id name}` |
 | Custom activities | `fetchCustomActivities`, `api.ts:1134` | id→name map for labeling `custom` rows |
 | Write a timeline item | `createTimelineItem`, `api.ts:1000` | Sends `summary/content/phone/user_id`; **`user_id` is not a documented argument** — see §7 |

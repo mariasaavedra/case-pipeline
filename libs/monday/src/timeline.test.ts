@@ -3,7 +3,24 @@
 // =============================================================================
 
 import { test, expect, describe, beforeEach, afterEach, vi } from "vitest";
-import { fetchTimelineBatch, fetchCustomActivities, timelineAlias, setApiToken } from "./api";
+import { fetchTimelineBatch, fetchCustomActivities, timelineAlias, setApiToken, normalizeEmailMetadata } from "./api";
+
+describe("normalizeEmailMetadata", () => {
+  test("turns Monday's null lists into empty ones and trims addresses", () => {
+    expect(normalizeEmailMetadata({ from: " a@x.com ", to: ["b@x.com", " "], cc: null, bcc: null })).toEqual({
+      from: "a@x.com",
+      to: ["b@x.com"],
+      cc: [],
+      bcc: [],
+    });
+  });
+
+  test("is null for a non-email entry or an empty record", () => {
+    expect(normalizeEmailMetadata(null)).toBeNull();
+    expect(normalizeEmailMetadata(undefined)).toBeNull();
+    expect(normalizeEmailMetadata({ from: "", to: null, cc: [], bcc: null })).toBeNull();
+  });
+});
 
 function mockResponse(body: unknown): Response {
   return {
@@ -68,6 +85,32 @@ describe("fetchTimelineBatch", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(map.get("111")!.map((i) => i.id)).toEqual(["p1", "p2"]);
+  });
+
+  // metadata is an unknown field on the pinned version, which fails the whole query.
+  test("asks for email metadata on an API version that has it, on every page", async () => {
+    const headers: string[] = [];
+    const bodies: string[] = [];
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async (_url: string, opts: { body: string; headers: Record<string, string> }) => {
+        headers.push(opts.headers["API-Version"]!);
+        bodies.push(opts.body);
+        return mockResponse({
+          data: { [timelineAlias("111")]: { timeline_items_page: { cursor: "C1", timeline_items: [] } } },
+        });
+      })
+      .mockImplementationOnce(async (_url: string, opts: { body: string; headers: Record<string, string> }) => {
+        headers.push(opts.headers["API-Version"]!);
+        bodies.push(opts.body);
+        return mockResponse({ data: { timeline: { timeline_items_page: { cursor: null, timeline_items: [] } } } });
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchTimelineBatch(["111"], 1);
+
+    expect(headers).toEqual(["2026-07", "2026-07"]);
+    for (const b of bodies) expect(b).toContain("EmailTimelineItemMetadata");
   });
 
   test("missing alias node yields an empty list for that item", async () => {

@@ -23,6 +23,7 @@ function entry(o: Partial<ClientUpdate> & { localId: string }): ClientUpdate {
     mondayBoardId: null,
     parentLocalId: null,
     canReply: false,
+    emailParticipants: null,
     ...o,
   };
 }
@@ -70,6 +71,21 @@ describe("UpdatesTimeline", () => {
     expect(html([entry({ localId: "u1", canReply: true })], true)).toContain("Reply");
     expect(html([entry({ localId: "u1", canReply: true })], false)).not.toContain("Reply");
     expect(html([entry({ localId: "u1", canReply: false })], true)).not.toContain("Reply");
+  });
+
+  it("shows an email's sender and recipients, collapsing a long list", () => {
+    const out = html([
+      entry({
+        localId: "e1",
+        sourceType: "email",
+        emailParticipants: { from: "client@gmail.com", to: ["a@firm.com", "b@firm.com", "c@firm.com"], cc: ["d@firm.com"], bcc: [] },
+      }),
+    ]);
+    expect(out).toContain("client@gmail.com");
+    expect(out).toContain("a@firm.com, b@firm.com");
+    expect(out).toContain("+1 more");
+    expect(out).toContain("d@firm.com");
+    expect(out).not.toContain("Bcc");
   });
 
   it("renders a note's formatting instead of flattened text", () => {

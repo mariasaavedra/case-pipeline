@@ -46,6 +46,7 @@ export type {
   ClientCaseSummary,
   ClientUpdate,
   ClientUpdateAttachment,
+  EmailParticipants,
   BoardStatusOptions,
   StatusColumnOption,
   BoardColumns,

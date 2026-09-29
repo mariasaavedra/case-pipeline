@@ -476,3 +476,33 @@ describe("v25 → v26 mail field corrections", () => {
     expect(db.prepare("SELECT fields, original_fields FROM mail_documents").get()).toEqual({ fields: "{}", original_fields: null });
   });
 });
+
+describe("v26 → v27 email participants", () => {
+  // Production is at v26 (mail field corrections) when this ships.
+  test("adds email_participants to an existing client_updates, keeping rows", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (26);
+      CREATE TABLE client_updates (id INTEGER PRIMARY KEY, local_id TEXT, text_body TEXT);
+      INSERT INTO client_updates (local_id, text_body) VALUES ('u1', 'kept');
+    `);
+    initializeSchema(db);
+    expect(db.prepare("SELECT local_id, text_body, email_participants FROM client_updates").get()).toEqual({
+      local_id: "u1",
+      text_body: "kept",
+      email_participants: null,
+    });
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+  });
+
+  test("is a no-op when the column already exists", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (26);
+      CREATE TABLE client_updates (id INTEGER PRIMARY KEY, email_participants TEXT);
+    `);
+    expect(() => initializeSchema(db)).not.toThrow();
+  });
+});
