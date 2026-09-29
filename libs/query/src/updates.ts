@@ -7,6 +7,7 @@ type Database = BetterSqlite3.Database;
 import type {
   ClientUpdate,
   ClientUpdateAttachment,
+  EmailParticipants,
   TimelineSourceType,
   TimelineCategory,
   TimelineDateRange,
@@ -27,6 +28,7 @@ interface UpdateRow {
   reply_to_update_id: string | null;
   created_at_source: string;
   attachments: string | null;
+  email_participants: string | null;
   monday_update_id: string | null;
   monday_timeline_id: string | null;
   board_item_monday_id: string | null;
@@ -44,7 +46,7 @@ interface UpdateRow {
 const SELECT_COLUMNS = `local_id, profile_local_id, board_item_local_id, board_key,
               author_name, author_email, title, text_body, body_html,
               source_type, activity_type_name, reply_to_update_id, created_at_source, attachments,
-              monday_update_id, monday_timeline_id,
+              email_participants, monday_update_id, monday_timeline_id,
               (SELECT bi.monday_item_id FROM board_items bi
                 WHERE bi.local_id = client_updates.board_item_local_id) AS board_item_monday_id,
               (SELECT bc.monday_board_id FROM board_columns bc
@@ -94,7 +96,21 @@ function mapRow(row: UpdateRow): ClientUpdate {
     // A sub-note needs a Monday id to hang off; a note still queued for Monday
     // has neither yet.
     canReply: row.monday_update_id != null || row.monday_timeline_id != null,
+    emailParticipants: parseEmailParticipants(row.email_participants),
   };
+}
+
+/** Parse the stored participants JSON; anything malformed reads as unknown. */
+function parseEmailParticipants(raw: string | null): EmailParticipants | null {
+  if (!raw) return null;
+  try {
+    const p = JSON.parse(raw) as Partial<EmailParticipants> | null;
+    if (!p || typeof p !== "object") return null;
+    const list = (v: unknown) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : []);
+    return { from: typeof p.from === "string" ? p.from : null, to: list(p.to), cc: list(p.cc), bcc: list(p.bcc) };
+  } catch {
+    return null;
+  }
 }
 
 /** Parse the stored attachments JSON, tolerating null/legacy/corrupt values. */

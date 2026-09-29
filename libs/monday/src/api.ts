@@ -11,6 +11,7 @@ import type {
   MondayUpdate,
   MondayTimelineItem,
   MondayCustomActivity,
+  MondayEmailMetadata,
 } from "./types";
 
 // =============================================================================
@@ -1159,7 +1160,39 @@ const TIMELINE_ITEM_FIELDS = `
   created_at
   custom_activity_id
   user { id name }
+  metadata { ... on EmailTimelineItemMetadata { from to cc bcc } }
 `;
+
+// `TimelineItem.metadata` (an email's from/to/cc/bcc) exists from 2026-07; on
+// the pinned version it's an unknown field and the whole query fails. So every
+// timeline read goes out on this version. Verified live 2026-09-29: emails from
+// 2025 onward carry it; non-email entries return null.
+const TIMELINE_API_VERSION = "2026-07";
+
+/** An email's addresses as stored in `client_updates.email_participants`. */
+export interface EmailParticipants {
+  from: string | null;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+}
+
+/**
+ * Normalize Monday's email metadata: nulls become empty lists, addresses are
+ * trimmed, blanks dropped. Returns null when there is nothing to show, so a
+ * non-email entry (metadata null) or an empty record stores NULL.
+ */
+export function normalizeEmailMetadata(meta: MondayEmailMetadata | null | undefined): EmailParticipants | null {
+  if (!meta) return null;
+  const list = (v: string[] | null | undefined) => (v ?? []).map((s) => s.trim()).filter(Boolean);
+  const out: EmailParticipants = {
+    from: meta.from?.trim() || null,
+    to: list(meta.to),
+    cc: list(meta.cc),
+    bcc: list(meta.bcc),
+  };
+  return out.from || out.to.length || out.cc.length || out.bcc.length ? out : null;
+}
 
 /**
  * GraphQL alias for an item's timeline in a batched request. Aliases must be
@@ -1211,7 +1244,8 @@ async function fetchTimelineTail(
          }
        }`,
       { id: itemId, cursor, limit: pageLimit },
-      tokenOverride
+      tokenOverride,
+      TIMELINE_API_VERSION
     );
     const page = result.data.timeline?.timeline_items_page;
     if (!page) break;
@@ -1258,7 +1292,8 @@ export async function fetchTimelineBatch(
   const result = await mondayRequest<{ data: Record<string, TimelineNode> }>(
     `query { ${aliases} }`,
     undefined,
-    tokenOverride
+    tokenOverride,
+    TIMELINE_API_VERSION
   );
 
   for (const id of itemIds) {

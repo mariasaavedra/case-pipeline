@@ -311,6 +311,16 @@ describe("Monday location + threading", () => {
     expect(rows.get("u1")!.parentLocalId).toBeNull();
   });
 
+  test("email participants parse from JSON, and bad JSON reads as unknown", () => {
+    const set = db.prepare("UPDATE client_updates SET email_participants = ? WHERE local_id = ?");
+    set.run(JSON.stringify({ from: "a@x.com", to: ["b@x.com"], cc: [], bcc: [] }), "m1");
+    set.run("{not json", "a1");
+    const rows = byId();
+    expect(rows.get("m1")!.emailParticipants).toEqual({ from: "a@x.com", to: ["b@x.com"], cc: [], bcc: [] });
+    expect(rows.get("a1")!.emailParticipants).toBeNull();
+    expect(rows.get("u1")!.emailParticipants).toBeNull();
+  });
+
   test("only entries with a Monday id can take a sub-note", () => {
     const rows = byId();
     expect(rows.get("u1")!.canReply).toBe(true);

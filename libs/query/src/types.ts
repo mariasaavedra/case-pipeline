@@ -147,6 +147,14 @@ export interface BoardColumns {
   columns: BoardColumn[];
 }
 
+/** An E&A email's sender and recipients, as Monday records them. */
+export interface EmailParticipants {
+  from: string | null;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+}
+
 /** A file attached to a Monday update. `url` opens the asset in Monday. */
 export interface ClientUpdateAttachment {
   name: string;
@@ -182,6 +190,8 @@ export interface ClientUpdate {
   parentLocalId: string | null;
   /** Whether a sub-note can be added (the entry has a Monday id to attach to). */
   canReply: boolean;
+  /** Emails only: who sent it and to whom; null until a sync records it. */
+  emailParticipants: EmailParticipants | null;
 }
 
 export interface ClientCaseSummary {

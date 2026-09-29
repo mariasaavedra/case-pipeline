@@ -5,7 +5,8 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 25;
+// 27, not 26: feat/mail-fields claims v26 (mail_documents correction columns).
+export const SCHEMA_VERSION = 27;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -141,6 +142,7 @@ CREATE TABLE IF NOT EXISTS client_updates (
     activity_type_name TEXT,                       -- E&A custom activity name (e.g. "Consult note")
     content_sig TEXT,                              -- E&A content signature for dedup (NULL for update/reply)
     attachments TEXT,                              -- JSON array of Monday update assets (NULL if none)
+    email_participants TEXT,                       -- E&A email {from,to,cc,bcc} JSON (v27+; NULL otherwise)
     reply_to_update_id TEXT,
     created_at_source TEXT NOT NULL,
     raw_json TEXT,
@@ -1191,6 +1193,23 @@ export function initializeSchema(db: Database): void {
       ];
       for (const [name, type] of add) {
         if (!cols.has(name)) db.exec(`ALTER TABLE mail_documents ADD COLUMN ${name} ${type}`);
+      }
+    }
+
+    // Migration → v27: an E&A email's sender and recipients (Monday's
+    // EmailTimelineItemMetadata). Additive; existing rows stay NULL until the
+    // next full sync re-walks the timelines and fills them in.
+    if (fromVersion < 27) {
+      const hasUpdates = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='client_updates'")
+        .get();
+      if (hasUpdates) {
+        const hasCol = db
+          .prepare("SELECT COUNT(*) AS cnt FROM pragma_table_info('client_updates') WHERE name='email_participants'")
+          .get() as { cnt: number };
+        if (hasCol.cnt === 0) {
+          db.exec("ALTER TABLE client_updates ADD COLUMN email_participants TEXT");
+        }
       }
     }
 

@@ -46,6 +46,7 @@ import {
   fetchItemUpdatesBatch,
   fetchTimelineBatch,
   fetchCustomActivities,
+  normalizeEmailMetadata,
   resolveAllColumns,
   parseStatusOptions,
 } from "@case-pipeline/monday";
@@ -856,6 +857,12 @@ async function main() {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
       `);
 
+      // An email's sender/recipients (TimelineItem.metadata, API 2026-07+).
+      const setEmailParticipants = db.prepare(`
+        UPDATE client_updates SET email_participants = ?
+        WHERE profile_local_id = ? AND content_sig = ?
+      `);
+
       // Content signature (must match the SQL backfill in schema migration v14):
       // created_at + author + first 300 chars of the stripped body, \x1f-joined.
       const US = "\x1f";
@@ -949,6 +956,16 @@ async function main() {
                 item.created_at, JSON.stringify(item),
               );
               if (res.changes > 0) totalTimeline++;
+              // Written by UPDATE, not in the INSERT: INSERT OR IGNORE skips the
+              // rows already mirrored, and those are exactly the ones a full
+              // sync must backfill. Keyed like the dedup index, so it lands on
+              // whichever surface's row survived.
+              const participants = normalizeEmailMetadata(item.metadata);
+              if (participants) {
+                setEmailParticipants.run(
+                  JSON.stringify(participants), meta.profile_local_id, contentSig(item.created_at, author, stripped),
+                );
+              }
             }
           }
         });

@@ -22,6 +22,7 @@ function makeUpdate(overrides: Partial<ClientUpdate> = {}): ClientUpdate {
     mondayBoardId: null,
     parentLocalId: null,
     canReply: false,
+    emailParticipants: null,
     ...overrides,
   };
 }

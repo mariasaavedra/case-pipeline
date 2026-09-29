@@ -460,3 +460,33 @@ describe("v24 → v25 mail write-back tracking", () => {
     });
   });
 });
+
+describe("→ v27 email participants", () => {
+  test("adds email_participants to an existing client_updates, keeping rows", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (25);
+      CREATE TABLE client_updates (id INTEGER PRIMARY KEY, local_id TEXT, text_body TEXT);
+      INSERT INTO client_updates (local_id, text_body) VALUES ('u1', 'kept');
+    `);
+    initializeSchema(db);
+    expect(db.prepare("SELECT local_id, text_body, email_participants FROM client_updates").get()).toEqual({
+      local_id: "u1",
+      text_body: "kept",
+      email_participants: null,
+    });
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+  });
+
+  // feat/mail-fields ships v26; a DB already carrying the column must not fail.
+  test("is a no-op when the column already exists", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (26);
+      CREATE TABLE client_updates (id INTEGER PRIMARY KEY, email_participants TEXT);
+    `);
+    expect(() => initializeSchema(db)).not.toThrow();
+  });
+});

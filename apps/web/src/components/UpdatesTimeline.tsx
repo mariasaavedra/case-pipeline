@@ -237,6 +237,37 @@ function NoteBody({ u }: { u: ClientUpdate }) {
   );
 }
 
+// How many addresses a recipient list shows before collapsing to "+N more".
+const MAX_ADDRESSES = 2;
+
+function AddressList({ label, addresses }: { label: string; addresses: string[] }) {
+  if (addresses.length === 0) return null;
+  const shown = addresses.slice(0, MAX_ADDRESSES);
+  const hidden = addresses.length - shown.length;
+  return (
+    <span title={addresses.join(", ")}>
+      <span style={{ color: "var(--color-ink-faint)" }}>{label} </span>
+      {shown.join(", ")}
+      {hidden > 0 && <span style={{ color: "var(--color-ink-faint)" }}> +{hidden} more</span>}
+    </span>
+  );
+}
+
+/** "From … · To … · Cc …" under an email's subject, when the sync recorded it. */
+function EmailParticipantsLine({ p }: { p: NonNullable<ClientUpdate["emailParticipants"]> }) {
+  return (
+    <p
+      className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs mb-1"
+      style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)", overflowWrap: "anywhere" }}
+    >
+      {p.from && <AddressList label="From" addresses={[p.from]} />}
+      <AddressList label="To" addresses={p.to} />
+      <AddressList label="Cc" addresses={p.cc} />
+      <AddressList label="Bcc" addresses={p.bcc} />
+    </p>
+  );
+}
+
 function mondayLinkFor(u: ClientUpdate): string | null {
   if (!u.mondayItemId) return null;
   return mondayItemUrl(u.mondayBoardId ?? MONDAY_PROFILES_BOARD_ID, u.mondayItemId);
@@ -299,6 +330,7 @@ function TimelineEntry({ u, replies, onReplyPosted }: EntryProps) {
               {u.title}
             </p>
           )}
+          {u.sourceType === "email" && u.emailParticipants && <EmailParticipantsLine p={u.emailParticipants} />}
           <NoteBody u={u} />
           <Attachments items={u.attachments} />
 
