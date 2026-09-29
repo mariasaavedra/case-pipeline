@@ -195,6 +195,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
                 updates={timelineUpdates}
                 filter={timelineFilter}
                 loading={timelineLoading}
+                onReplyPosted={(reply) => setPendingUpdates((prev) => [reply, ...prev])}
               />
             </div>
           )}

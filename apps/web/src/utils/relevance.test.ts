@@ -18,6 +18,10 @@ function makeUpdate(overrides: Partial<ClientUpdate> = {}): ClientUpdate {
     replyToUpdateId: null,
     createdAtSource: "2026-01-15T10:00:00Z",
     attachments: [],
+    mondayItemId: null,
+    mondayBoardId: null,
+    parentLocalId: null,
+    canReply: false,
     ...overrides,
   };
 }

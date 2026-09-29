@@ -162,6 +162,7 @@ Writes and user/account routes:
 | Route | Description |
 |---|---|
 | `POST /api/profiles/:id/updates` | Post a note to Monday.com (falls back to the write queue on outage) |
+| `POST /api/updates/:localId/replies` | Sub-note under a timeline entry: a real Monday reply under an update, or — for an E&A entry, which Monday can't thread — a `Re: <entry> (<date>) —` update on the same item. Stored as a `reply` row threaded by `reply_to_update_id` (plan = `routes/note-replies.ts`). Queues on outage |
 | `POST /api/profiles/:id/render` | Generate a DOCX for a profile from live Monday.com data (default template `client_letter_docx`) |
 | `GET /api/auth/me` | Validate token, upsert user (first user becomes admin) |
 | `GET/PUT /api/preferences`, `PATCH /api/me/profile` | Per-user preferences and profile |

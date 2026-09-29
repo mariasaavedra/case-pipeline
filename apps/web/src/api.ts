@@ -640,6 +640,22 @@ export async function postProfileUpdate(
   });
 }
 
+/**
+ * Add a sub-note under a timeline entry. A Monday update gets a real reply; an
+ * E&A entry gets a "Re: …" update on the same item (see routes/profile-write.ts).
+ */
+export async function postTimelineReply(
+  parentLocalId: string,
+  text: string,
+  mentionedUserIds?: string[],
+): Promise<ClientUpdate> {
+  return apiFetch<ClientUpdate>(`/api/updates/${encodeURIComponent(parentLocalId)}/replies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, mentionedUserIds }),
+  });
+}
+
 export async function fetchDashboard(hearingRange?: string): Promise<KpiCard[]> {
   const params = hearingRange ? `?hearingRange=${encodeURIComponent(hearingRange)}` : "";
   const res = await fetch(`/api/dashboard${params}`, { headers: await authHeaders() });

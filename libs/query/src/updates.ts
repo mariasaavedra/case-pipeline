@@ -27,11 +27,50 @@ interface UpdateRow {
   reply_to_update_id: string | null;
   created_at_source: string;
   attachments: string | null;
+  monday_update_id: string | null;
+  monday_timeline_id: string | null;
+  board_item_monday_id: string | null;
+  board_monday_id: string | null;
+  profile_monday_id: string | null;
+  parent_local_id: string | null;
 }
 
+// The subqueries resolve, per row: the Monday item the entry lives on (its
+// board item, else the profile), that board's id for a deep link, and — for a
+// reply — the local id of the entry it threads under. A reply points at its
+// parent by Monday id: `monday_update_id` for a Monday reply, or
+// `monday_timeline_id` for a sub-note on an E&A entry (see routes/note-replies).
+// All four hit a unique or primary-key index.
 const SELECT_COLUMNS = `local_id, profile_local_id, board_item_local_id, board_key,
               author_name, author_email, title, text_body, body_html,
-              source_type, activity_type_name, reply_to_update_id, created_at_source, attachments`;
+              source_type, activity_type_name, reply_to_update_id, created_at_source, attachments,
+              monday_update_id, monday_timeline_id,
+              (SELECT bi.monday_item_id FROM board_items bi
+                WHERE bi.local_id = client_updates.board_item_local_id) AS board_item_monday_id,
+              (SELECT bc.monday_board_id FROM board_columns bc
+                WHERE bc.board_key = client_updates.board_key LIMIT 1) AS board_monday_id,
+              (SELECT p.monday_item_id FROM profiles p
+                WHERE p.local_id = client_updates.profile_local_id) AS profile_monday_id,
+              CASE WHEN client_updates.reply_to_update_id IS NULL THEN NULL ELSE
+                (SELECT par.local_id FROM client_updates par
+                  WHERE par.profile_local_id = client_updates.profile_local_id
+                    AND (par.monday_update_id = client_updates.reply_to_update_id
+                         OR par.monday_timeline_id = client_updates.reply_to_update_id)
+                  LIMIT 1)
+              END AS parent_local_id`;
+
+/**
+ * Where to open an entry in Monday. A board-item entry links to that item when
+ * its board id is known; otherwise (profile entries, or a board whose schema
+ * hasn't synced) it falls back to the profile, with `boardId: null` meaning the
+ * Profiles board.
+ */
+function mondayLocation(row: UpdateRow): { itemId: string | null; boardId: string | null } {
+  if (row.board_item_monday_id && row.board_monday_id) {
+    return { itemId: row.board_item_monday_id, boardId: row.board_monday_id };
+  }
+  return { itemId: row.profile_monday_id, boardId: null };
+}
 
 function mapRow(row: UpdateRow): ClientUpdate {
   return {
@@ -49,6 +88,12 @@ function mapRow(row: UpdateRow): ClientUpdate {
     replyToUpdateId: row.reply_to_update_id,
     createdAtSource: row.created_at_source,
     attachments: parseAttachments(row.attachments),
+    mondayItemId: mondayLocation(row).itemId,
+    mondayBoardId: mondayLocation(row).boardId,
+    parentLocalId: row.parent_local_id,
+    // A sub-note needs a Monday id to hang off; a note still queued for Monday
+    // has neither yet.
+    canReply: row.monday_update_id != null || row.monday_timeline_id != null,
   };
 }
 

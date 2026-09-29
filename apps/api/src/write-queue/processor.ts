@@ -127,7 +127,8 @@ function readMentions(value: unknown): UpdateMention[] | undefined {
  * is implemented (notes); `change_column` and `reschedule` land with the
  * write-back feature (they need change_simple_column_value mutations).
  *
- * Returns the new Monday item id for `create_item`, so a caller that inserted
+ * Returns the new Monday update id for `create_update` (a queued sub-note
+ * attaches it to its local row) and the new Monday item id for `create_item`, so a caller that inserted
  * a placeholder local row (no monday_item_id yet, created while Monday was
  * down) can attach the real id once the retry succeeds — otherwise that row
  * stays orphaned forever and the next full sync inserts it again as a
@@ -141,8 +142,7 @@ async function dispatch(row: QueueRow, token?: string): Promise<string | undefin
       const body = String(payload.body ?? payload.text ?? "");
       if (!body) throw new Error("create_update requires a non-empty body");
       const parentId = payload.parentId ? String(payload.parentId) : undefined;
-      await createUpdate(row.monday_item_id, body, token, parentId, readMentions(payload.mentions));
-      return undefined;
+      return createUpdate(row.monday_item_id, body, token, parentId, readMentions(payload.mentions));
     }
     case "change_column": {
       if (!row.monday_item_id) throw new Error("change_column requires monday_item_id");
@@ -299,6 +299,21 @@ export async function drainWriteQueue(
             }
           } else {
             console.warn(`[write-queue] op ${row.id}: unrecognized target_table "${row.target_table}", skipped reconciliation`);
+          }
+        }
+        // A queued sub-note (routes/profile-write.ts) was stored locally with no
+        // Monday update id. Attach it, so the row can be replied to and the next
+        // sync's INSERT OR IGNORE recognizes it instead of adding a second,
+        // unthreaded copy.
+        if (row.op_type === "create_update" && outcome.result && row.target_table === "client_updates" && row.target_local_id) {
+          // Never let this throw: the write already landed in Monday, and an
+          // error here would send the op back for a retry that posts it twice.
+          try {
+            db.prepare(
+              `UPDATE client_updates SET monday_update_id = ?, sync_status = 'synced' WHERE local_id = ? AND monday_update_id IS NULL`,
+            ).run(outcome.result, row.target_local_id);
+          } catch (err) {
+            console.warn(`[write-queue] op ${row.id}: could not attach update id to ${row.target_local_id}:`, err);
           }
         }
         settleMailStep(db, row, "done");
