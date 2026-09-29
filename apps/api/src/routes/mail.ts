@@ -61,6 +61,39 @@ function cleanFileName(raw: unknown): string {
   return (name || "scan.pdf").slice(0, 120);
 }
 
+interface StoredScan {
+  id: number;
+  uploadedAt: string;
+  uploadedByName: string | null;
+}
+
+/**
+ * An earlier (non-sample) scan of these exact bytes with notices still waiting
+ * in Alerts → Mail to review. Once they're all resolved the file may be scanned again —
+ * that is how a notice misread by an older reader gets a fresh reading. Files
+ * are compared by size first, so only a same-size scan is ever read.
+ */
+export function findStoredScan(db: DatabaseInstance, dataDir: string, body: Buffer): StoredScan | null {
+  const rows = db
+    .prepare(
+      `SELECT id, pdf_path AS pdfPath, uploaded_at AS uploadedAt, uploaded_by_name AS uploadedByName
+       FROM mail_scans s WHERE is_sample = 0 AND pdf_path IS NOT NULL
+         AND EXISTS (SELECT 1 FROM mail_documents d
+                     WHERE d.scan_id = s.id AND d.needs_review = 1 AND d.review_state = 'open')
+       ORDER BY id`,
+    )
+    .all() as Array<StoredScan & { pdfPath: string }>;
+  for (const { pdfPath, ...scan } of rows) {
+    const file = path.join(dataDir, pdfPath);
+    try {
+      if (fs.statSync(file).size === body.length && fs.readFileSync(file).equals(body)) return scan;
+    } catch {
+      // a missing file just isn't a duplicate
+    }
+  }
+  return null;
+}
+
 function parseId(raw: unknown): number | null {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : null;
@@ -130,6 +163,16 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
         res.status(400).json({ error: "That file is not a PDF" });
         return;
       }
+      const isSample = req.query.sample === "1";
+      // The same file scanned again would put every notice in Alerts twice.
+      const earlier = isSample ? null : findStoredScan(db, dataDir, body);
+      if (earlier) {
+        res.status(409).json({
+          error: `This file was already scanned on ${earlier.uploadedAt.slice(0, 10)}${earlier.uploadedByName ? ` by ${earlier.uploadedByName}` : ""} — its notices are in Alerts → Mail to review.`,
+          scanId: earlier.id,
+        });
+        return;
+      }
       let pages: MailPageInput[];
       try {
         pages = await readPdfPages(new Uint8Array(body));
@@ -141,7 +184,6 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
 
       const user = currentUser(req);
       const fileName = cleanFileName(req.query.name);
-      const isSample = req.query.sample === "1";
       const result = saveMailScan(
         db,
         { fileName, pdfPath: null, isSample, uploadedBy: user?.id ?? null, uploadedByName: user?.name ?? null },

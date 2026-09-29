@@ -67,6 +67,24 @@ describe("readLayout", () => {
     expect(readLayout("", I797).petitioner).toBe("LOPEZ, MARIA");
   });
 
+  test("an A-number beside a name label is not the name — the name is below it", () => {
+    // Real I-485 approval: "Applicant  A235 370 586", name on the next row.
+    const v = readLayout("", [
+      ...at("Received Date", 50, 0),
+      ...at("Applicant A235 370 586", 300, 0),
+      ...at("12/20/2024", 50, 16),
+      ...at("VALENZUELA CASTRO, CARLOS", 300, 16),
+    ]);
+    expect(v.applicant).toBe("VALENZUELA CASTRO, CARLOS");
+    expect(v.aNumber).toBe("235 370 586");
+  });
+
+  test("a stray quote glued to a label still reads as the label", () => {
+    expect(readLayout("‘Case Type: I918A - PETITION FOR U NONIMMIGRANT STATUS").caseType).toBe(
+      "I918A - PETITION FOR U NONIMMIGRANT STATUS",
+    );
+  });
+
   test("inline 'Label: value' works from plain text", () => {
     const v = readLayout("Receipt Number: IOE0912345678 Case Type: I-485\nApplicant: ANA RUIZ\nNotice Date: 09/01/2026");
     expect(v).toMatchObject({ receiptNumber: "IOE0912345678", caseType: "I-485", applicant: "ANA RUIZ", noticeDate: "09/01/2026" });

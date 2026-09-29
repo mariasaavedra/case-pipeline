@@ -206,6 +206,7 @@ Run with `tsx scripts/<name>.ts`:
 | `sample-real-data.ts` | Pull sample profile + linked item data from Monday.com → `data/samples/`. |
 | `fetch-profile.ts` | Fetch a single profile by ID and dump it to stdout. |
 | `mail-sample.ts` | Write the fake scanned-mail PDF (every page stamped SAMPLE) to `data/samples/sample-mail.pdf`. `npm run mail:sample` (`-- --db=live` builds it from live.db, `-- --scanned` makes it image-only for OCR). |
+| `mail-probe.ts` | What the mail reader makes of real PDFs, page by page (fields, split), with no DB. `npm run mail:probe -- scan.pdf [--text]`. Keep real scans out of the repo. |
 | `setup-webhooks.ts` | Register/list/remove Monday.com webhooks for all tracked boards. `npm run webhooks:setup -- --url=https://<host>` (requires the API deployed with `MONDAY_WEBHOOK_SECRET` first). |
 | `sync-config/` | Internal sync logic called by `npm run dev:cli -- sync`. |
 | `preflight.sh` | Checks Node 22+, npm, and data directory writability. |

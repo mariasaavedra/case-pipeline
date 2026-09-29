@@ -88,7 +88,12 @@ const LABELS: Array<[string[], LayoutKey]> = (
   ] as Array<[string[], LayoutKey]>
 ).sort((a, b) => b[0].length - a[0].length);
 
-const norm = (w: string) => w.toLowerCase().replace(/[:.,]+$/g, "");
+// Scanner OCR often glues a stray quote onto a label ("‘Case Type").
+const norm = (w: string) => w.toLowerCase().replace(/^[‘’'"“”`]+/, "").replace(/[:.,]+$/g, "");
+
+const NAME_KEYS = new Set<LayoutKey>(["petitioner", "beneficiary", "applicant"]);
+// The I-797 grid prints "Applicant  A123 456 789" with the name on the row below.
+const A_NUMBER_ONLY_RE = /^A\s*[#:-]?\s*[\dOoIl|]{2,3}[\s-]?[\dOoIl|]{3}[\s-]?[\dOoIl|]{3}$/i;
 
 interface LabelHit {
   key: LayoutKey;
@@ -189,7 +194,10 @@ export function readLayout(text: string, words?: Word[] | null): LayoutValues {
         .join(" ")
         .replace(/^[:#\s-]+/, "")
         .trim();
-      if (inline) {
+      if (inline && NAME_KEYS.has(label.key) && A_NUMBER_ONLY_RE.test(inline)) {
+        // Not the name — the A-number beside it. Keep it and look below for the name.
+        out.aNumber ??= inline.replace(/^A\s*[#:-]?\s*/i, "");
+      } else if (inline) {
         out[label.key] = inline;
         return;
       }
