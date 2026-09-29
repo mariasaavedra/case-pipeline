@@ -110,6 +110,10 @@ describe("repairOcrText", () => {
     expect(repairOcrText("Receipt Number: I0E09l2345S78")).toBe("Receipt Number: IOE0912345578");
     expect(repairOcrText("Receipt Number: MSC229OOO0001")).toBe("Receipt Number: MSC2290000001");
     expect(repairOcrText("Receipt Number: 1OE0912345678")).toBe("Receipt Number: IOE0912345678");
+    // Two of three prefix letters misread — trusted only because IOE is a real prefix (seen on real scans).
+    expect(repairOcrText("10E0929554021 1485 - APPLICATION")).toBe("IOE0929554021 1485 - APPLICATION");
+    expect(repairOcrText("RECEIPT # |0E9319415852")).toBe("RECEIPT # IOE9319415852");
+    expect(repairOcrText("phone 100 1234567890")).toBe("phone 100 1234567890");
   });
 
   test("form numbers read as 1-130 become I-130, phone numbers are left alone", () => {
@@ -135,12 +139,31 @@ describe("repairOcrText", () => {
     expect(ocr.ocrConfidence).toBe(88);
   });
 
-  test("a document reports its OCR pages and lowest confidence", () => {
+  test("a document reports its OCR pages and the lowest confidence among its notice pages", () => {
     const { documents } = splitIntoDocuments([
-      analyzePage(1, { text: "Notice of Action A# 123-456-789 Page 1 of 2", ocr: true, ocrConfidence: 91 }),
-      analyzePage(2, { text: "More of the same notice, Page 2 of 2", ocr: true, ocrConfidence: 64 }),
+      analyzePage(1, { text: "Notice of Action A# 123-456-789 Page 1 of 3", ocr: true, ocrConfidence: 91 }),
+      analyzePage(2, { text: "Notice Date: 09/01/2026 Page 2 of 3", ocr: true, ocrConfidence: 64 }),
+      // A smudged envelope says nothing about how well the notice was read.
+      analyzePage(3, { text: "US POSTAGE smudge smudge smudge", ocr: true, ocrConfidence: 22 }),
     ]);
-    expect(documents[0]).toMatchObject({ ocrPages: [1, 2], ocrConfidence: 64 });
+    expect(documents[0]).toMatchObject({ ocrPages: [1, 2, 3], ocrConfidence: 64 });
+  });
+
+  test("OCR repairs seen on real scans", () => {
+    const f = (text: string) => analyzePage(1, { text, ocr: true, ocrConfidence: 90 }).fields;
+    // A stray I between prefix and number.
+    expect(f("Receipt Number\nEACI1809750382 1765 - APPLICATION FOR EMPLOYMENT AUTHORIZATION").receiptNumbers).toEqual([
+      "EAC1809750382",
+    ]);
+    // The Case Type label unreadable ("“use Type"), the I of I-485 read as 1.
+    const g = f("Receipt Number “use Type\n10E0929554021 1485 - APPLICATION TO REGISTER PERMANENT RESIDENCE");
+    expect(g.formType).toBe("I485");
+    expect(g.caseType).toBe("I485 - APPLICATION TO REGISTER PERMANENT RESIDENCE");
+    expect(g.receiptNumbers).toEqual(["IOE0929554021"]);
+  });
+
+  test("'lofl' under the Page label is 1 of 1", () => {
+    expect(analyzePage(1, { text: "Notice Date Page\n01/31/2023 lofl", ocr: true }).pageMarker).toEqual({ index: 1, total: 1 });
   });
 });
 
@@ -181,10 +204,27 @@ describe("splitIntoDocuments", () => {
     ]);
   });
 
-  test("a page with nothing to go on joins, flagged uncertain", () => {
-    const { documents } = split(["A# 123-456-789 letter", "More text with no identifiers at all."]);
+  test("a notice-like page with no identifiers joins, flagged uncertain", () => {
+    const { documents } = split(["A# 123-456-789 letter", "Receipt Number: (smudged)  Notice Date: 09/01/2026"]);
     expect(documents).toHaveLength(1);
     expect(documents[0]!.uncertainPages).toEqual([2]);
+  });
+
+  test("a page that isn't a notice (back, envelope) joins quietly and lends no fields", () => {
+    const { documents } = split([
+      "Notice of Action Receipt Number: IOE0912345678 Case Type: I765 - APPLICATION",
+      // The real back of an I-797 names forms and "Notice of Action" in its boilerplate.
+      "ADDITIONAL INFORMATION Please save this Form I-797, Notice of Action. If you filed Form I-907, Request for Premium Processing…",
+      "US POSTAGE PAID KANSAS CITY MO",
+    ]);
+    expect(documents.map((d) => d.pages)).toEqual([[1, 2, 3]]);
+    expect(documents[0]!.uncertainPages).toEqual([]);
+    expect(documents[0]!.fields.formType).toBe("I765");
+  });
+
+  test("an envelope scanned first belongs with the notice after it", () => {
+    const { documents } = split(["US POSTAGE PAID KANSAS CITY MO", "Notice of Action Receipt Number: IOE0912345678 Page 1 of 1"]);
+    expect(documents.map((d) => [d.pages, d.fields.receiptNumbers])).toEqual([[[1, 2], ["IOE0912345678"]]]);
   });
 });
 

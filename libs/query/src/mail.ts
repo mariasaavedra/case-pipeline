@@ -119,7 +119,14 @@ export interface PageInfo {
   blank: boolean;
   /** "Page 2 of 3" → { index: 2, total: 3 } */
   pageMarker: { index: number; total: number } | null;
+  /** The front of a notice: its header AND something only a front carries. */
   hasNoticeHeader: boolean;
+  /**
+   * Carries notice fields (identifiers, or the Receipt Number / Case Type /
+   * Notice Date labels). False for a notice's boilerplate back, an envelope, a
+   * card photo — pages that can join a notice without anyone checking them.
+   */
+  looksLikeNotice: boolean;
 }
 
 export type SplitReason =
@@ -218,6 +225,9 @@ const A_NUMBER_RE =
 
 // "I-130", "I130", "N-400", "I-601A". I-797 is the notice itself, never the case.
 const FORM_RE = /\b([IN])-?(\d{3})([A-Z])?\b/g;
+// A case type as printed: "I130 - PETITION FOR ALIEN RELATIVE". The first
+// glyph is loose because OCR reads the I as 1, l, |, [ or !.
+const CASE_TYPE_TEXT_RE = /(?<![\w-])([IN1l|[!])-?(\d{3}[A-Z]?)[ \t]*[-–][ \t\n]*((?:PETITION|APPLICATION|REQUEST|NOTICE)\b[^\n]*)/;
 const NOTICE_FORMS = new Set(["I797", "I797C", "I797A", "I797B", "I797D", "I797E"]);
 
 const NOTICE_TYPES: Array<[RegExp, string]> = [
@@ -330,6 +340,12 @@ function fieldsFromLayout(text: string, layout: LayoutValues, ocr: boolean): Not
   // Under the Case Type label, one glyph before three digits can only be the I
   // of an I-form: OCR reads "I765" as "1765", "[765", "l765", "|765"…
   if (rawCaseType && ocr) rawCaseType = rawCaseType.replace(/^[1lIi|![\]L](?=-?\d{3}[A-Z]?\b)/, "I");
+  // No (readable) Case Type label: the value itself is distinctive enough —
+  // "1485 - APPLICATION TO REGISTER…", where the form's I is often misread.
+  if (!normalizeFormType(rawCaseType)) {
+    const m = CASE_TYPE_TEXT_RE.exec(text);
+    if (m) rawCaseType = `${m[1] === "N" ? "N" : "I"}${m[2]} - ${m[3]!.replace(/\s+/g, " ").trim()}`;
+  }
   const caseType = normalizeFormType(rawCaseType) ? rawCaseType : null;
   let formType = normalizeFormType(caseType);
   if (!formType) {
@@ -376,24 +392,35 @@ function fieldsFromLayout(text: string, layout: LayoutValues, ocr: boolean): Not
 // its label is all digits.
 
 const TO_DIGIT: Record<string, string> = { O: "0", o: "0", D: "0", Q: "0", I: "1", l: "1", "|": "1", i: "1", S: "5", s: "5", B: "8", Z: "2", z: "2", G: "6" };
-const TO_LETTER: Record<string, string> = { "0": "O", "1": "I", "5": "S", "8": "B", "2": "Z", "6": "G" };
+const TO_LETTER: Record<string, string> = { "0": "O", "1": "I", "|": "I", l: "I", "5": "S", "8": "B", "2": "Z", "6": "G" };
 
 const digitsOf = (s: string) => s.replace(/./g, (c) => TO_DIGIT[c] ?? c);
 const lettersOf = (s: string) => s.replace(/./g, (c) => TO_LETTER[c] ?? c);
 
+// Receipt prefixes USCIS actually issues (service centers, field offices, the
+// online filing system). A prefix that repairs to one of these is trusted even
+// when OCR got two of its three letters wrong — "10E" and "|0E" are IOE.
+const KNOWN_RECEIPT_PREFIXES = new Set([
+  "IOE", "EAC", "VSC", "WAC", "CSC", "LIN", "NSC", "SRC", "TSC", "NBC", "MSC", "YSC", "PSC",
+]);
+
 // Loose shapes. Each requires most characters already be the right kind, so a
 // word is never turned into a number.
-const LOOSE_RECEIPT_RE = /\b([A-Z0-9]{3})([\s-]?)([0-9OoDQIl|iSsBZzG]{10})\b/g;
+const LOOSE_RECEIPT_RE = /(?<![A-Za-z0-9])([A-Z0-9|l]{3})([\s-]?)([0-9OoDQIl|iSsBZzG]{10})\b/g;
 const LOOSE_FORM_RE = /\b([1l|])-(\d{3}[A-Z]?)\b(?![-\d])/g;
 const LOOSE_A_NUMBER_RE = /(\bA\s*[#:]\s*|\bA-?\s*Number\s*:?\s*|\bAlien\s+Number\s*:?\s*)([0-9OoDQIl|iSsBZzG]{2,3}[-\s]?[0-9OoDQIl|iSsBZzG]{3}[-\s]?[0-9OoDQIl|iSsBZzG]{3})(?![0-9A-Za-z])/gi;
 
+// OCR sometimes inserts a stray I between prefix and number: "EACI1809750382".
+const STRAY_I_RECEIPT_RE = new RegExp(`(?<![A-Za-z0-9])(${[...KNOWN_RECEIPT_PREFIXES].join("|")})[Il|1](\\d{10})\\b`, "g");
+
 export function repairOcrText(text: string): string {
   return text
+    .replace(STRAY_I_RECEIPT_RE, "$1$2")
     .replace(LOOSE_RECEIPT_RE, (whole, prefix: string, sep: string, num: string) => {
       const realDigits = num.replace(/\D/g, "").length;
       const realLetters = prefix.replace(/[^A-Z]/g, "").length;
-      if (realDigits < 7 || realLetters < 2) return whole;
       const fixedPrefix = lettersOf(prefix);
+      if (realDigits < 7 || (realLetters < 2 && !KNOWN_RECEIPT_PREFIXES.has(fixedPrefix))) return whole;
       const fixedNum = digitsOf(num);
       return /^[A-Z]{3}$/.test(fixedPrefix) && /^\d{10}$/.test(fixedNum) ? `${fixedPrefix}${sep}${fixedNum}` : whole;
     })
@@ -410,19 +437,30 @@ export function analyzePage(page: number, input: string | MailPageInput): PageIn
   const text = ocr ? repairOcrText(raw) : raw;
   const layout = readLayout(text, words);
   // "Page 1 of 2" inline, or a grid "Page" label with "1 of 2" under it.
-  // OCR turns "2 of 2" into "20f2", hence the loose "of".
-  const marker =
-    PAGE_MARKER_RE.exec(text) ?? /^(\d{1,2})\s*[oO0]\s*f\s*(\d{1,2})$/i.exec(layout.page?.trim() ?? "");
+  // OCR turns "2 of 2" into "20f2" and "1 of 1" into "lofl", hence the loose
+  // "of" and digits.
+  const gridPage = /^([\dlI|]{1,2})\s*[oO0]\s*f\s*([\dlI|]{1,2})$/i.exec(layout.page?.trim() ?? "");
+  const marker = PAGE_MARKER_RE.exec(text) ?? (gridPage && [gridPage[0], digitsOf(gridPage[1]!), digitsOf(gridPage[2]!)]);
+  const fields = fieldsFromLayout(text, layout, ocr);
+  const looksLikeNotice =
+    fields.receiptNumbers.length > 0 ||
+    fields.aNumbers.length > 0 ||
+    layout.receiptNumber != null ||
+    layout.caseType != null ||
+    layout.noticeDate != null;
   return {
     page,
     text,
     ocr,
     ocrConfidence: ocr ? ocrConfidence : null,
-    fields: fieldsFromLayout(text, layout, ocr),
+    fields,
     // A scanner's blank separator sheet still yields a few stray characters.
     blank: Math.max(text.replace(/\s/g, "").length, (words ?? []).reduce((n, w) => n + w.text.length, 0)) < 15,
     pageMarker: marker ? { index: Number(marker[1]), total: Number(marker[2]) } : null,
-    hasNoticeHeader: NOTICE_HEADER_RE.test(text),
+    // The back of an I-797 says "Form I-797, Notice of Action" in its
+    // boilerplate — that is not a new notice.
+    hasNoticeHeader: NOTICE_HEADER_RE.test(text) && looksLikeNotice,
+    looksLikeNotice,
   };
 }
 
@@ -450,13 +488,18 @@ function sharesNone(a: string[], b: string[]): boolean {
  *   - "Page 1 of N" (and "Page 2 of N" keeps it attached, whatever else it says)
  *   - an I-797 "Notice of Action" header
  *   - identifiers that don't overlap the current document's
- * A page with none of these joins the current document, flagged as uncertain —
- * that is the one case a person should check.
+ * A page with none of these joins the current document. If it looks like a
+ * notice (labels, but no identifiers read) it is flagged as uncertain — that is
+ * the one case a person should check. A page that doesn't (a notice's back, an
+ * envelope, a card photo) just joins, and lends the notice none of its fields.
  */
 export function splitIntoDocuments(pages: PageInfo[]): { documents: SplitDocument[]; separatorPages: number[] } {
   const documents: SplitDocument[] = [];
   const separatorPages: number[] = [];
   let current: SplitDocument | null = null;
+  // False while the current document is only an envelope or loose back pages:
+  // the notice that follows belongs with them rather than starting its own.
+  let currentHasNotice = false;
   let afterSeparator = false;
 
   for (const p of pages) {
@@ -471,6 +514,8 @@ export function splitIntoDocuments(pages: PageInfo[]): { documents: SplitDocumen
     let uncertain = false;
     if (!current) {
       reason = afterSeparator ? "after_separator" : "first_page";
+    } else if (!currentHasNotice) {
+      reason = null;
     } else if (p.pageMarker && p.pageMarker.index > 1) {
       reason = null; // explicit continuation
     } else if (p.pageMarker?.index === 1) {
@@ -484,21 +529,26 @@ export function splitIntoDocuments(pages: PageInfo[]): { documents: SplitDocumen
       reason = "new_identifiers";
     } else {
       const hasIds = p.fields.receiptNumbers.length > 0 || p.fields.aNumbers.length > 0;
-      uncertain = !hasIds && !p.pageMarker;
+      uncertain = !hasIds && !p.pageMarker && p.looksLikeNotice;
     }
     afterSeparator = false;
 
     if (reason) {
-      current = { pages: [], splitReason: reason, uncertainPages: [], ocrPages: [], ocrConfidence: null, fields: p.fields };
+      current = { pages: [], splitReason: reason, uncertainPages: [], ocrPages: [], ocrConfidence: null, fields: emptyFields() };
       documents.push(current);
-    } else {
+      currentHasNotice = false;
+    } else if (uncertain) {
+      current!.uncertainPages.push(p.page);
+    }
+    if (p.looksLikeNotice) {
       current!.fields = mergeFields(current!.fields, p.fields);
-      if (uncertain) current!.uncertainPages.push(p.page);
+      currentHasNotice = true;
     }
     current!.pages.push(p.page);
     if (p.ocr) {
       current!.ocrPages.push(p.page);
-      if (p.ocrConfidence != null) {
+      // A smudged envelope reads at 20%; that says nothing about the notice.
+      if (p.ocrConfidence != null && p.looksLikeNotice) {
         current!.ocrConfidence = Math.min(current!.ocrConfidence ?? 100, p.ocrConfidence);
       }
     }

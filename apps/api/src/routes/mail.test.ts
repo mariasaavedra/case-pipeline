@@ -63,11 +63,15 @@ afterAll(async () => {
   fs.rmSync(dataDir, { recursive: true, force: true });
 });
 
+let nonce = 0;
 async function scan(pdf: ArrayBuffer, query = ""): Promise<MailScanResult> {
+  // Tests reuse the sample; a trailing comment keeps each upload a distinct
+  // file so the duplicate check doesn't refuse it.
+  const body = Buffer.concat([Buffer.from(pdf), Buffer.from(`\n%test-${++nonce}\n`)]);
   const res = await fetch(`${base}/api/mail/scan${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/pdf" },
-    body: pdf,
+    body,
   });
   expect(res.status).toBe(200);
   return ((await res.json()) as { data: MailScanResult }).data;
@@ -103,6 +107,23 @@ describe("mail routes", () => {
     expect(first.match).toMatchObject({ status: "matched", proposedAction: "fill_receipt" });
     expect(first.ocrConfidence).toBeGreaterThan(80);
     expect(data.summary).toMatchObject({ matched: 1, no_match: 1, unreadable: 1 });
+  });
+
+  test("the same file scanned twice is refused the second time; samples never are", async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage().drawText("Notice of Action Receipt Number: IOE0955555555", { x: 50, y: 700 });
+    const bytes = Buffer.from(await doc.save());
+    const post = () =>
+      fetch(`${base}/api/mail/scan`, { method: "POST", headers: { "Content-Type": "application/pdf" }, body: bytes });
+
+    expect((await post()).status).toBe(200);
+    const again = await post();
+    expect(again.status).toBe(409);
+    expect(((await again.json()) as { error: string }).error).toMatch(/already scanned on \d{4}-\d{2}-\d{2} by Front Desk/);
+
+    const sample = await (await fetch(`${base}/api/mail/sample.pdf`)).arrayBuffer();
+    await scan(sample, "?sample=1");
+    await scan(sample, "?sample=1");
   });
 
   test("rejects a body that is not a PDF", async () => {
