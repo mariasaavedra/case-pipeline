@@ -9,10 +9,12 @@
 // options (or `disabled`), it renders as a plain, non-clickable chip.
 // =============================================================================
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useBoardStatusOptions } from "../StatusOptionsProvider";
 import { changeBoardItemStatus, type StatusColumnOption } from "../api";
 import { MenuCode } from "./ScreenCode";
+import { menuBoxStyle, useAnchoredMenu } from "./anchored-menu";
 
 interface Props {
   boardKey: string | null | undefined;
@@ -41,24 +43,9 @@ export function StatusEditor({ boardKey, boardItemLocalId, status, onChanged, di
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const { rootRef, menuRef, menuPos } = useAnchoredMenu(open, setOpen);
 
   useEffect(() => setCurrent(status), [status]);
-
-  // Close the menu on an outside click or Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
 
   const options = def?.options ?? [];
   const editable = !disabled && options.length > 0;
@@ -113,24 +100,8 @@ export function StatusEditor({ boardKey, boardItemLocalId, status, onChanged, di
         )}
       </button>
 
-      {open && (
-        <div
-          role="listbox"
-          className="status-menu"
-          style={{
-            position: "absolute",
-            zIndex: 40,
-            marginTop: 4,
-            maxHeight: 280,
-            overflowY: "auto",
-            minWidth: 180,
-            backgroundColor: "var(--color-surface)",
-            border: "1px solid var(--color-border-light)",
-            borderRadius: 8,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-            padding: 4,
-          }}
-        >
+      {open && menuPos && createPortal(
+        <div ref={menuRef} role="listbox" className="status-menu" style={menuBoxStyle(menuPos)}>
           {options.map((o) => (
             <button
               key={o.index}
@@ -170,7 +141,8 @@ export function StatusEditor({ boardKey, boardItemLocalId, status, onChanged, di
             </button>
           ))}
           <MenuCode code="D6" />
-        </div>
+        </div>,
+        document.body,
       )}
 
       {error && (
