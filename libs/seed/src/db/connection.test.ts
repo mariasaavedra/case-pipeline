@@ -27,6 +27,23 @@ describe("durability pragma", () => {
   });
 });
 
+describe("pragma order", () => {
+  // The WAL switch takes a lock. With busy_timeout still 0 it throws SQLITE_BUSY
+  // the instant another connection holds the file, instead of waiting.
+  test("sets busy_timeout before switching to WAL", () => {
+    const db = new Database(":memory:");
+    const calls: string[] = [];
+    const real = db.pragma.bind(db);
+    vi.spyOn(db, "pragma").mockImplementation(((source: string, opts?: { simple?: boolean }) => {
+      calls.push(source);
+      return real(source, opts);
+    }) as typeof db.pragma);
+    applyPragmas(db);
+    expect(calls.indexOf("busy_timeout = 5000")).toBeLessThan(calls.indexOf("journal_mode = WAL"));
+    db.close();
+  });
+});
+
 describe("isDatabaseHealthy", () => {
   test("returns true for a sound database", () => {
     const p = tmpFile("good.db");
