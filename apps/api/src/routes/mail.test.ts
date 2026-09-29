@@ -109,17 +109,30 @@ describe("mail routes", () => {
     expect(data.summary).toMatchObject({ matched: 1, no_match: 1, unreadable: 1 });
   });
 
-  test("the same file scanned twice is refused the second time; samples never are", async () => {
+  test("the same file is refused while its notices wait in review, allowed once they're resolved; samples always", async () => {
     const doc = await PDFDocument.create();
     doc.addPage().drawText("Notice of Action Receipt Number: IOE0955555555", { x: 50, y: 700 });
     const bytes = Buffer.from(await doc.save());
     const post = () =>
       fetch(`${base}/api/mail/scan`, { method: "POST", headers: { "Content-Type": "application/pdf" }, body: bytes });
 
-    expect((await post()).status).toBe(200);
+    const first = await post();
+    expect(first.status).toBe(200);
     const again = await post();
     expect(again.status).toBe(409);
     expect(((await again.json()) as { error: string }).error).toMatch(/already scanned on \d{4}-\d{2}-\d{2} by Front Desk/);
+
+    // Dismissing the old reading lets the file be read afresh.
+    const { data } = (await first.json()) as { data: MailScanResult };
+    for (const d of data.documents) {
+      const r = await fetch(`${base}/api/mail/documents/${d.id}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss", note: "rescanning" }),
+      });
+      expect(r.status).toBe(200);
+    }
+    expect((await post()).status).toBe(200);
 
     const sample = await (await fetch(`${base}/api/mail/sample.pdf`)).arrayBuffer();
     await scan(sample, "?sample=1");

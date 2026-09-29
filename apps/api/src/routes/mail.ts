@@ -68,14 +68,19 @@ interface StoredScan {
 }
 
 /**
- * An earlier (non-sample) scan of these exact bytes, if one is stored. Files
+ * An earlier (non-sample) scan of these exact bytes with notices still waiting
+ * in Alerts → Mail to review. Once they're all resolved the file may be scanned again —
+ * that is how a notice misread by an older reader gets a fresh reading. Files
  * are compared by size first, so only a same-size scan is ever read.
  */
 export function findStoredScan(db: DatabaseInstance, dataDir: string, body: Buffer): StoredScan | null {
   const rows = db
     .prepare(
       `SELECT id, pdf_path AS pdfPath, uploaded_at AS uploadedAt, uploaded_by_name AS uploadedByName
-       FROM mail_scans WHERE is_sample = 0 AND pdf_path IS NOT NULL ORDER BY id`,
+       FROM mail_scans s WHERE is_sample = 0 AND pdf_path IS NOT NULL
+         AND EXISTS (SELECT 1 FROM mail_documents d
+                     WHERE d.scan_id = s.id AND d.needs_review = 1 AND d.review_state = 'open')
+       ORDER BY id`,
     )
     .all() as Array<StoredScan & { pdfPath: string }>;
   for (const { pdfPath, ...scan } of rows) {
