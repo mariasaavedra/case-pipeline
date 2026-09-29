@@ -1,4 +1,6 @@
 import type { Request, Response } from "express";
+import type BetterSqlite3 from "better-sqlite3";
+import { resolveAuditTargets, type AuditTarget } from "./audit-targets.js";
 import { usersDb, type UserRow } from "../db/users-db.js";
 import { toPublicUser, type AuditLogRow } from "../db/users-types.js";
 import { auditFromReq } from "../audit/log.js";
@@ -130,7 +132,7 @@ export function handleAdminUpdateUser(req: Request, res: Response): void {
  * that ever happened to this case" meant pulling the newest 500 rows and
  * filtering by hand, which silently lies as soon as the log outgrows the page.
  */
-export function handleAdminAudit(req: Request, res: Response): void {
+export function handleAdminAudit(req: Request, res: Response, caseDb?: BetterSqlite3.Database): void {
   const limit = Math.min(Math.max(Number(req.query.limit ?? 100) || 100, 1), 500);
   const offset = Math.max(Number(req.query.offset ?? 0) || 0, 0);
 
@@ -144,6 +146,10 @@ export function handleAdminAudit(req: Request, res: Response): void {
     usersDb.prepare(`SELECT COUNT(*) AS n FROM audit_log${clause}`).get(...params) as { n: number }
   ).n;
 
+  const targets = caseDb
+    ? resolveAuditTargets(caseDb, rows.flatMap((r) => (r.target_monday_id ? [r.target_monday_id] : [])))
+    : new Map<string, AuditTarget>();
+
   res.json({
     data: rows.map((r) => ({
       id: r.id,
@@ -154,6 +160,7 @@ export function handleAdminAudit(req: Request, res: Response): void {
       targetId: r.target_id,
       targetMondayId: r.target_monday_id,
       metadata: r.metadata_json ? safeParse(r.metadata_json) : null,
+      target: (r.target_monday_id && targets.get(r.target_monday_id)) || null,
       createdAt: r.created_at,
     })),
     meta: { total, limit, offset },

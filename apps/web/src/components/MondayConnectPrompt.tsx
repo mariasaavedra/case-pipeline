@@ -3,7 +3,7 @@
 // =============================================================================
 // Without a personal connection, notes and status changes are written under
 // the firm's shared Monday account instead of the person who made them. The
-// Settings page has the same button (P11.4), but nobody visits Settings, so
+// Settings page has the same button (P11.1.3), but nobody visits Settings, so
 // this asks once after sign-in. "Not now" snoozes it (see lib/monday-prompt.ts).
 //
 // After Monday's consent screen the API sends the user back to the page they

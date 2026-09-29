@@ -250,7 +250,7 @@ registerMondayWebhook(app, db);
 app.get("/api/admin/users", requireAuth, requireAdmin, handleAdminListUsers);
 app.patch("/api/admin/users/:id/role", requireAuth, requireAdmin, handleAdminUpdateRole);
 app.patch("/api/admin/users/:id", requireAuth, requireAdmin, handleAdminUpdateUser);
-app.get("/api/admin/audit", requireAuth, requireAdmin, handleAdminAudit);
+app.get("/api/admin/audit", requireAuth, requireAdmin, (req, res) => handleAdminAudit(req, res, db));
 
 // Sync health + the archive of reconciled-away rows (admin-only). Turns "I hope
 // it synced" into visible per-board coverage, and makes archived rows restorable.

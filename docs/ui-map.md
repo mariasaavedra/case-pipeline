@@ -53,7 +53,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P8 | Alerts | `/alerts` | Sidebar → Alerts | `components/AlertsPage.tsx` |
 | P9 | Jail Intakes | `/jail-intakes` | Sidebar → Jail Intakes | `components/JailIntakesPage.tsx` |
 | P10 | Call Log | `/call-log` | Sidebar → Call Log | `components/CallLogPage.tsx` |
-| P11 | Settings | `/settings` | Sidebar → Settings (bottom) | `pages/SettingsPage.tsx` |
+| P11 | Settings | `/settings/<tab>` | Sidebar → Settings (bottom) | `pages/SettingsPage.tsx` |
 | P12 | Mail | `/mail` | Sidebar → Mail | `components/MailPage.tsx` |
 
 ### Global
@@ -150,20 +150,27 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 ### Inside P11 Settings
 
-Top to bottom. Sections marked *admin* only show for admins.
+Four tabs, each with its own URL (`/settings/<tab>`); `/settings` opens My account. The tabs are a column on the left (a row across the top on phones). Tabs marked *admin* only show for admins. A non-admin who opens an admin tab's link lands on My account.
 
-| Code | Name |
-|---|---|
-| P11.1 | Profile |
-| P11.2 | Preferences |
-| P11.3 | My board identity |
-| P11.4 | Monday.com account |
-| P11.5 | Attorney appointment boards |
-| P11.6 | Status tags *(admin)* |
-| P11.7 | Urgency *(admin)* |
-| P11.8 | Sync health *(admin)* |
-| P11.9 | Users *(admin)* |
-| P11.10 | Audit log *(admin)* |
+| Code | Name | Where |
+|---|---|---|
+| P11.1 | **My account** tab | `/settings/account` |
+| P11.1.1 | Profile | |
+| P11.1.2 | Board identity (I am…) | |
+| P11.1.3 | Monday.com connection | |
+| P11.2 | **Preferences** tab | `/settings/preferences` |
+| P11.2.1 | Appearance: theme, date format, sidebar, screen codes | |
+| P11.2.2 | Language & start page | |
+| P11.3 | **Firm setup** tab *(admin)* | `/settings/firm` |
+| P11.3.1 | Attorney appointment boards | |
+| P11.3.2 | Status tags | |
+| P11.3.3 | Urgency | |
+| P11.4 | **Admin** tab *(admin)* | `/settings/admin` |
+| P11.4.1 | Users | |
+| P11.4.2 | Sync health | |
+| P11.4.3 | Audit log: filter by what / who / dates, grouped by day, client names link to their page | |
+
+Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P11.2.1 (Language moved to P11.2.2), P11.3 → P11.1.2, P11.4 → P11.1.3, P11.5 → P11.3.1, P11.6 → P11.3.2, P11.7 → P11.3.3, P11.8 → P11.4.2, P11.9 → P11.4.1, P11.10 → P11.4.3.
 
 ### Inside P12 Mail
 
@@ -209,7 +216,7 @@ Top to bottom. Sections marked *admin* only show for admins.
 | D9 | Attorney filter | P2.3 | `FilterBar.tsx` |
 | D10 | Board type filter | P2.3 | `FilterBar.tsx` |
 | D11 | Search type | P2.1 | `SearchBar.tsx` |
-| D12 | Urgency picker | P11.6, a status row | `StatusTagsSection.tsx` |
+| D12 | Urgency picker | P11.3.2, a status row | `StatusTagsSection.tsx` |
 | D13 | Intake field picker | Any choice field on an intake form: M8, M2 | `JailIntakeFields.tsx` |
 | D14 | Attorney picker | M10 | `NewAppointmentModal.tsx` |
 | D15 | Case type picker | M11 | `NewContractModal.tsx` |

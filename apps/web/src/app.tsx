@@ -213,7 +213,7 @@ function App() {
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} user={user} onLogout={logout} />
         <div className="app-content" style={{ marginLeft: sidebarWidth }}>
           <Suspense fallback={<PageLoading />}>
-            <SettingsPage />
+            <SettingsPage tab={route.params.tab ?? "account"} />
           </Suspense>
         </div>
         <PageCode code="P11" />
@@ -322,7 +322,7 @@ function App() {
       </div>
 
       {showLogCallModal && <LogCallModal onClose={() => setShowLogCallModal(false)} />}
-      {/* Not on Settings, which has its own Monday section (P11.4) and reads ?monday= itself. */}
+      {/* Not on Settings, which has its own Monday section (P11.1.3) and reads ?monday= itself. */}
       {user && <MondayConnectPrompt />}
       {/* Client 360 renders its own code, since its Debug tab has no URL of its own. */}
       {PAGE_CODES[route.page] && <PageCode code={PAGE_CODES[route.page]!} />}

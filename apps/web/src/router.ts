@@ -10,6 +10,7 @@ export interface Route {
 }
 
 const VALID_TABS = new Set<string>(["overview", "appointments", "contracts", "active_cases", "court_cases", "documents", "relations"]);
+const SETTINGS_TABS = new Set<string>(["account", "preferences", "firm", "admin"]);
 
 /**
  * Match a pathname to a route definition.
@@ -22,8 +23,12 @@ export function matchRoute(pathname: string): Route {
     return { page: "login", params: {} };
   }
 
-  if (path === "/settings") {
-    return { page: "settings", params: {} };
+  // /settings or /settings/:tab — unknown tabs fall back to the first one.
+  // Whether the user may see an admin tab is decided by the page, not here.
+  const settings = path.match(/^\/settings(?:\/([^/]+))?$/);
+  if (settings) {
+    const tab = settings[1] ?? "";
+    return { page: "settings", params: { tab: SETTINGS_TABS.has(tab) ? tab : "account" } };
   }
 
   // Legacy /admin → redirect handled in app.tsx
