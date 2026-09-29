@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useLayoutEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import type { ClientUpdate, ClientUpdateAttachment } from "../api";
 import {
@@ -9,6 +9,9 @@ import {
 } from "@case-pipeline/query/types";
 import type { TimelineFilter } from "./TimelineFilters";
 import { Button } from "./ui/button";
+import { ReplyComposer } from "./ReplyComposer";
+import { renderNoteHtml } from "../utils/note-html";
+import { mondayItemUrl, MONDAY_PROFILES_BOARD_ID } from "../config";
 
 function formatDateTime(iso: string): { date: string; time: string } {
   const d = new Date(iso);
@@ -148,6 +151,230 @@ function getEventBadge(u: ClientUpdate): { label: string; bg: string; text: stri
   return { label: "Note", bg: "var(--color-surface-warm)", text: "var(--color-ink-muted)" };
 }
 
+// Collapsed height of a long note: about six lines of body text.
+const COLLAPSED_PX = 140;
+
+const linkButtonStyle: React.CSSProperties = {
+  color: "var(--color-status-blue)",
+  fontFamily: "var(--font-body)",
+  background: "none",
+  border: "none",
+  padding: 0,
+  cursor: "pointer",
+};
+
+/**
+ * The note body: formatted HTML when Monday gave us some (sanitized), else the
+ * plain text. Long notes clamp to ~6 lines behind "Show full note"; an email's
+ * quoted earlier messages fold behind their own toggle.
+ */
+function NoteBody({ u }: { u: ClientUpdate }) {
+  const [expanded, setExpanded] = useState(false);
+  const [showQuoted, setShowQuoted] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const html = useMemo(
+    () => (u.bodyHtml ? renderNoteHtml(u.bodyHtml, { splitQuoted: u.sourceType === "email" }) : null),
+    [u.bodyHtml, u.sourceType],
+  );
+
+  // Measured while collapsed only: once expanded the toggle must stay visible.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && !expanded) setOverflows(el.scrollHeight > COLLAPSED_PX + 8 || !!html?.quoted);
+  }, [html, u.textBody, expanded]);
+
+  const clamped = !expanded && overflows;
+  const fade = clamped ? "linear-gradient(to bottom, black 70%, transparent)" : undefined;
+
+  return (
+    <div>
+      <div
+        ref={ref}
+        className="text-sm leading-relaxed"
+        style={{
+          color: "var(--color-ink-muted)",
+          fontFamily: "var(--font-body)",
+          fontWeight: 300,
+          maxHeight: clamped ? COLLAPSED_PX : undefined,
+          overflow: clamped ? "hidden" : undefined,
+          maskImage: fade,
+          WebkitMaskImage: fade,
+        }}
+      >
+        {html ? (
+          <div className="note-html" dangerouslySetInnerHTML={{ __html: html.main }} />
+        ) : (
+          <p className="whitespace-pre-wrap">{renderTextWithLinks(u.textBody)}</p>
+        )}
+        {expanded && html?.quoted && (
+          <div className="mt-2">
+            <button type="button" className="text-xs" style={linkButtonStyle} onClick={() => setShowQuoted((v) => !v)}>
+              {showQuoted ? "Hide earlier messages" : "Show earlier messages in this thread"}
+            </button>
+            {showQuoted && (
+              <div className="note-html note-quoted mt-2" dangerouslySetInnerHTML={{ __html: html.quoted }} />
+            )}
+          </div>
+        )}
+      </div>
+      {overflows && (
+        <button
+          type="button"
+          className="text-xs font-medium mt-1"
+          style={linkButtonStyle}
+          aria-expanded={expanded}
+          onClick={() => {
+            setExpanded((v) => !v);
+            setShowQuoted(false);
+          }}
+        >
+          {expanded ? "Show less" : "Show full note"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function mondayLinkFor(u: ClientUpdate): string | null {
+  if (!u.mondayItemId) return null;
+  return mondayItemUrl(u.mondayBoardId ?? MONDAY_PROFILES_BOARD_ID, u.mondayItemId);
+}
+
+interface EntryProps {
+  u: ClientUpdate;
+  replies: ClientUpdate[];
+  onReplyPosted?: (reply: ClientUpdate) => void;
+}
+
+function TimelineEntry({ u, replies, onReplyPosted }: EntryProps) {
+  const [replying, setReplying] = useState(false);
+  const { time } = formatDateTime(u.createdAtSource);
+  const initials = getInitials(u.authorName);
+  const avatarColor = getAvatarColor(u.authorName);
+  const isReply = u.sourceType === "reply";
+  const badge = getEventBadge(u);
+  const mondayUrl = mondayLinkFor(u);
+  const canReply = !!onReplyPosted && u.canReply;
+
+  return (
+    <div>
+      <div className="flex gap-3">
+        {/* Avatar */}
+        <div
+          className="author-avatar"
+          style={{
+            backgroundColor: isReply ? "transparent" : avatarColor.bg,
+            color: isReply ? "var(--color-ink-faint)" : avatarColor.text,
+            border: isReply ? "1.5px solid var(--color-border)" : "none",
+            fontSize: isReply ? 10 : 11,
+            width: isReply ? 24 : 28,
+            height: isReply ? 24 : 28,
+            marginTop: 2,
+          }}
+        >
+          {initials}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-1">
+            <span className="event-badge" style={{ backgroundColor: badge.bg, color: badge.text }}>
+              {badge.label}
+            </span>
+            <span className="text-sm font-medium" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
+              {u.authorName}
+            </span>
+            <span
+              className="text-[11px]"
+              style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
+            >
+              {time}
+            </span>
+            {u.boardKey && <span className="board-tag">{BOARD_DISPLAY_NAMES[u.boardKey] ?? u.boardKey}</span>}
+          </div>
+          {u.title && (
+            <p className="text-sm font-medium mb-0.5" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
+              {u.title}
+            </p>
+          )}
+          <NoteBody u={u} />
+          <Attachments items={u.attachments} />
+
+          {(canReply || mondayUrl) && (
+            <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs">
+              {canReply && !replying && (
+                <button
+                  type="button"
+                  style={{ ...linkButtonStyle, color: "var(--color-ink-muted)" }}
+                  onClick={() => setReplying(true)}
+                >
+                  ↳ Reply
+                </button>
+              )}
+              {mondayUrl && (
+                // Monday's API doesn't expose E&A email attachments, so the item page is the only place to see them.
+                <a
+                  href={mondayUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+                  title={u.sourceType === "email" ? "Email attachments are only visible in Monday.com" : "Open this item in Monday.com"}
+                >
+                  {u.sourceType === "email" ? "Open in Monday for attachments ↗" : "Open in Monday ↗"}
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {(replies.length > 0 || replying) && (
+        <div className="space-y-3 mt-3" style={{ paddingLeft: 36 }}>
+          {replies.map((r) => (
+            <TimelineEntry key={r.localId} u={r} replies={[]} onReplyPosted={onReplyPosted} />
+          ))}
+          {replying && onReplyPosted && (
+            <ReplyComposer
+              parent={u}
+              onCancel={() => setReplying(false)}
+              onPosted={(reply) => {
+                setReplying(false);
+                onReplyPosted(reply);
+              }}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Group replies under their parent. A reply whose parent isn't in this list
+ * (filtered out, or older than the loaded page) stays in the main stream.
+ * Replies read oldest-first under the parent, like a conversation.
+ */
+export function threadEntries(entries: ClientUpdate[]): { roots: ClientUpdate[]; replies: Map<string, ClientUpdate[]> } {
+  const present = new Set(entries.map((e) => e.localId));
+  const replies = new Map<string, ClientUpdate[]>();
+  const roots: ClientUpdate[] = [];
+  for (const e of entries) {
+    if (e.parentLocalId && e.parentLocalId !== e.localId && present.has(e.parentLocalId)) {
+      const list = replies.get(e.parentLocalId) ?? [];
+      list.push(e);
+      replies.set(e.parentLocalId, list);
+    } else {
+      roots.push(e);
+    }
+  }
+  for (const list of replies.values()) {
+    list.sort((a, b) => a.createdAtSource.localeCompare(b.createdAtSource));
+  }
+  return { roots, replies };
+}
+
 const PAGE_SIZE = 30;
 
 interface Props {
@@ -155,9 +382,11 @@ interface Props {
   filter?: TimelineFilter;
   last30Days?: boolean;
   loading?: boolean;
+  /** Enables sub-notes: called with the new reply once it's posted. */
+  onReplyPosted?: (reply: ClientUpdate) => void;
 }
 
-export function UpdatesTimeline({ updates, filter = "all", last30Days = false, loading = false }: Props) {
+export function UpdatesTimeline({ updates, filter = "all", last30Days = false, loading = false, onReplyPosted }: Props) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // Reset the display window when the underlying feed changes (e.g. the filter
@@ -179,8 +408,11 @@ export function UpdatesTimeline({ updates, filter = "all", last30Days = false, l
     return result;
   }, [updates, filter, last30Days]);
 
-  const paginated = filtered.slice(0, visibleCount);
-  const hasMore = filtered.length > visibleCount;
+  // Pagination counts threads, so a reply never shows without its parent.
+  const { roots, replies } = useMemo(() => threadEntries(filtered), [filtered]);
+
+  const paginated = roots.slice(0, visibleCount);
+  const hasMore = roots.length > visibleCount;
 
   if (filtered.length === 0) {
     return (
@@ -216,86 +448,14 @@ export function UpdatesTimeline({ updates, filter = "all", last30Days = false, l
 
           {/* Updates for this date */}
           <div className="space-y-3">
-            {grouped[date]!.map((u) => {
-              const { time } = formatDateTime(u.createdAtSource);
-              const initials = getInitials(u.authorName);
-              const avatarColor = getAvatarColor(u.authorName);
-              const isReply = u.sourceType === "reply";
-              const badge = getEventBadge(u);
-
-              return (
-                <div
-                  key={u.localId}
-                  className="flex gap-3"
-                  style={{ paddingLeft: isReply ? 36 : 0 }}
-                >
-                  {/* Avatar */}
-                  <div
-                    className="author-avatar"
-                    style={{
-                      backgroundColor: isReply ? "transparent" : avatarColor.bg,
-                      color: isReply ? "var(--color-ink-faint)" : avatarColor.text,
-                      border: isReply ? "1.5px solid var(--color-border)" : "none",
-                      fontSize: isReply ? 10 : 11,
-                      width: isReply ? 24 : 28,
-                      height: isReply ? 24 : 28,
-                      marginTop: 2,
-                    }}
-                  >
-                    {initials}
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-1">
-                      {/* Event badge */}
-                      <span
-                        className="event-badge"
-                        style={{ backgroundColor: badge.bg, color: badge.text }}
-                      >
-                        {badge.label}
-                      </span>
-                      <span
-                        className="text-sm font-medium"
-                        style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
-                      >
-                        {u.authorName}
-                      </span>
-                      <span
-                        className="text-[11px]"
-                        style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
-                      >
-                        {time}
-                      </span>
-                      {u.boardKey && (
-                        <span className="board-tag">
-                          {BOARD_DISPLAY_NAMES[u.boardKey] ?? u.boardKey}
-                        </span>
-                      )}
-                    </div>
-                    {u.title && (
-                      <p
-                        className="text-sm font-medium mb-0.5"
-                        style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}
-                      >
-                        {u.title}
-                      </p>
-                    )}
-                    <p
-                      className="text-sm whitespace-pre-wrap leading-relaxed"
-                      style={{
-                        color: "var(--color-ink-muted)",
-                        fontFamily: "var(--font-body)",
-                        fontWeight: 300,
-                      }}
-                    >
-                      {renderTextWithLinks(u.textBody)}
-                    </p>
-                    <Attachments items={u.attachments} />
-                  </div>
-                </div>
-              );
-            })}
+            {grouped[date]!.map((u) => (
+              <TimelineEntry
+                key={u.localId}
+                u={u}
+                replies={replies.get(u.localId) ?? []}
+                onReplyPosted={onReplyPosted}
+              />
+            ))}
           </div>
         </div>
       ))}
@@ -308,7 +468,7 @@ export function UpdatesTimeline({ updates, filter = "all", last30Days = false, l
             className="bg-accent px-4 text-primary hover:bg-accent/70"
             onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
           >
-            Load more ({filtered.length - visibleCount} remaining)
+            Load more ({roots.length - visibleCount} remaining)
           </Button>
         </div>
       )}

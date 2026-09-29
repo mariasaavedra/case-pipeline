@@ -28,6 +28,7 @@ import { fetchItem, resolveAllColumns, fetchBoardStructure } from "@case-pipelin
 import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
 import { parseNoteBody } from "./note-write.js";
+import { planReply } from "./note-replies.js";
 
 export interface ProfileWriteDeps {
   db: DatabaseInstance;
@@ -99,6 +100,11 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       replyToUpdateId: null,
       createdAtSource: now,
       attachments: [],
+      mondayItemId,
+      mondayBoardId: null,
+      parentLocalId: null,
+      // A queued note has no Monday update id yet, so nothing to reply under.
+      canReply: !pending,
       pending,
     });
 
@@ -135,6 +141,108 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
         authorOid: req.user?.oid ?? null,
         payload: { body: text, mentions },
       });
+      res.status(202).json({ data: responseData(true) });
+    }
+  });
+
+  // =============================================================================
+  // Sub-notes — reply under an existing timeline entry
+  // =============================================================================
+  // Where the reply goes in Monday is decided by planReply (note-replies.ts).
+  // The sync's INSERT OR IGNORE keeps this row, not a fresh top-level copy,
+  // once the update comes back from Monday.
+
+  app.post("/api/updates/:localId/replies", requireAuth, async (req, res) => {
+    if (!MONDAY_API_TOKEN) {
+      res.status(503).json({ error: "Monday.com write-back not configured (MONDAY_API_TOKEN missing)" });
+      return;
+    }
+
+    const { text, mentions } = parseNoteBody(req.body, "text");
+    if (!text) {
+      res.status(400).json({ error: "text is required" });
+      return;
+    }
+
+    const plan = planReply(db, String(req.params.localId), text);
+    if (!plan.ok) {
+      res.status(plan.status).json({ error: plan.error });
+      return;
+    }
+    const { root, rootMondayId, mondayItemId, mondayBoardId, parentId, body, isEa } = plan;
+
+    const newLocalId = randomUUID();
+    const now = new Date().toISOString();
+    const authorName = req.user?.name ?? req.user?.preferred_username ?? "Staff";
+    const authorEmail = req.user?.email ?? req.user?.preferred_username ?? null;
+
+    const insertReply = (mondayUpdateId: string | null, syncStatus: "synced" | "pending") =>
+      db.prepare(`
+        INSERT INTO client_updates
+          (batch_id, local_id, monday_update_id, profile_local_id, board_item_local_id,
+           board_key, author_name, author_email, text_body, body_html, source_type,
+           reply_to_update_id, created_at_source, sync_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'reply', ?, ?, ?)
+      `).run(
+        root.batch_id, newLocalId, mondayUpdateId, root.profile_local_id, root.board_item_local_id,
+        root.board_key, authorName, authorEmail, body, rootMondayId, now, syncStatus,
+      );
+
+    const responseData = (pending: boolean) => ({
+      localId: newLocalId,
+      profileLocalId: root.profile_local_id,
+      boardItemLocalId: root.board_item_local_id,
+      boardKey: root.board_key,
+      authorName,
+      authorEmail,
+      textBody: body,
+      bodyHtml: null,
+      sourceType: "reply" as const,
+      title: null,
+      activityTypeName: null,
+      replyToUpdateId: rootMondayId,
+      createdAtSource: now,
+      attachments: [],
+      // A board item whose board id isn't synced can't be deep-linked; hide the link.
+      mondayItemId: mondayBoardId || !root.board_item_local_id ? mondayItemId : null,
+      mondayBoardId,
+      parentLocalId: root.local_id,
+      canReply: false,
+      pending,
+    });
+
+    const audit = (metadata: Record<string, unknown>) =>
+      auditFromReq(req, "monday.reply_posted", {
+        targetType: "profile",
+        targetId: root.profile_local_id,
+        targetMondayId: mondayItemId,
+        metadata: { parentLocalId: root.local_id, parentKind: isEa ? root.source_type : "update", ...metadata },
+      });
+
+    try {
+      const outcome = await withTokenFallback(
+        (token) => dataSource.postUpdate(mondayItemId, body, token, parentId, mentions),
+        writeTokenOptions(req),
+      );
+      insertReply(outcome.result, "synced");
+      audit({
+        mondayUpdateId: outcome.result,
+        usedPersonalToken: outcome.usedPersonalToken,
+        fellBackToSharedToken: outcome.fellBackToSharedToken,
+      });
+      res.json({ data: responseData(false) });
+    } catch (err) {
+      console.error("[write-back] reply failed; queueing for retry:", err);
+      insertReply(null, "pending");
+      enqueueWrite(db, {
+        opType: "create_update",
+        targetTable: "client_updates",
+        targetLocalId: newLocalId,
+        mondayItemId,
+        authorOid: req.user?.oid ?? null,
+        payload: { body, parentId, mentions },
+      });
+      audit({ queued: true });
       res.status(202).json({ data: responseData(true) });
     }
   });

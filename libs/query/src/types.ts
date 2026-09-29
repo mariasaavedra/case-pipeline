@@ -174,6 +174,14 @@ export interface ClientUpdate {
   createdAtSource: string;
   /** Files attached to a Monday update; empty when none. */
   attachments: ClientUpdateAttachment[];
+  /** Monday item the entry lives on (its board item, else the profile). */
+  mondayItemId: string | null;
+  /** Board of `mondayItemId`; null means the Profiles board. */
+  mondayBoardId: string | null;
+  /** For a reply/sub-note: the local id of the entry it threads under, when mirrored. */
+  parentLocalId: string | null;
+  /** Whether a sub-note can be added (the entry has a Monday id to attach to). */
+  canReply: boolean;
 }
 
 export interface ClientCaseSummary {

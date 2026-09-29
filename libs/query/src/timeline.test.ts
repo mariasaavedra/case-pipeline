@@ -262,3 +262,59 @@ describe("E&A dedup", () => {
     expect(other.changes).toBe(1);
   });
 });
+
+describe("Monday location + threading", () => {
+  let db: DatabaseInstance;
+  beforeEach(() => {
+    db = freshDb();
+    const b = batchId(db);
+    db.prepare("INSERT INTO profiles (batch_id, local_id, name, monday_item_id) VALUES (?, 'p1', 'Juan', 'PROFILE-1')").run(b);
+    db.prepare(
+      `INSERT INTO board_items (batch_id, local_id, monday_item_id, board_key, name, profile_local_id, column_values)
+       VALUES (?, 'bi1', 'COURT-1', 'court_cases', 'c', 'p1', '{}'), (?, 'bi2', 'MOTION-1', 'motions', 'm', 'p1', '{}')`,
+    ).run(b, b);
+    db.prepare(
+      "INSERT INTO board_columns (board_key, monday_board_id, column_id, title, type) VALUES ('court_cases', 'BOARD-C', 'x', 'X', 'text')",
+    ).run();
+    const ins = db.prepare(
+      `INSERT INTO client_updates
+         (batch_id, local_id, monday_update_id, monday_timeline_id, profile_local_id, board_item_local_id, board_key,
+          author_name, text_body, source_type, reply_to_update_id, created_at_source, sync_status)
+       VALUES (?, ?, ?, ?, 'p1', ?, ?, 'A', 'b', ?, ?, ?, 'synced')`,
+    );
+    ins.run(b, "u1", "UPD-1", null, null, null, "update", null, "2026-01-01T10:00:00Z");
+    ins.run(b, "r1", "REP-1", null, null, null, "reply", "UPD-1", "2026-01-02T10:00:00Z");
+    ins.run(b, "a1", null, "TL-1", "bi1", "court_cases", "custom", null, "2026-01-03T10:00:00Z");
+    ins.run(b, "s1", "UPD-2", null, "bi1", "court_cases", "reply", "TL-1", "2026-01-04T10:00:00Z");
+    ins.run(b, "m1", null, "TL-2", "bi2", "motions", "note", null, "2026-01-05T10:00:00Z");
+    ins.run(b, "q1", null, null, null, null, "update", null, "2026-01-06T10:00:00Z");
+  });
+  const byId = () => new Map(getClientUpdates(db, "p1").map((u) => [u.localId, u]));
+
+  test("profile entries point at the profile item on the Profiles board", () => {
+    expect(byId().get("u1")).toMatchObject({ mondayItemId: "PROFILE-1", mondayBoardId: null });
+  });
+
+  test("board-item entries point at their item and board", () => {
+    expect(byId().get("a1")).toMatchObject({ mondayItemId: "COURT-1", mondayBoardId: "BOARD-C" });
+  });
+
+  // No synced schema for the board means no board id — link the profile rather than a broken URL.
+  test("a board without a known board id falls back to the profile", () => {
+    expect(byId().get("m1")).toMatchObject({ mondayItemId: "PROFILE-1", mondayBoardId: null });
+  });
+
+  test("replies resolve their parent by update id or timeline id", () => {
+    const rows = byId();
+    expect(rows.get("r1")!.parentLocalId).toBe("u1");
+    expect(rows.get("s1")!.parentLocalId).toBe("a1");
+    expect(rows.get("u1")!.parentLocalId).toBeNull();
+  });
+
+  test("only entries with a Monday id can take a sub-note", () => {
+    const rows = byId();
+    expect(rows.get("u1")!.canReply).toBe(true);
+    expect(rows.get("a1")!.canReply).toBe(true);
+    expect(rows.get("q1")!.canReply).toBe(false);
+  });
+});

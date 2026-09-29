@@ -1103,3 +1103,31 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Timeline note bodies rendered from Monday HTML (utils/note-html.ts). Tailwind's
+   preflight strips list and heading styles, so the formatting a note was written
+   with is restored here. Presentation attributes are removed at sanitize time. */
+.note-html { overflow-wrap: anywhere; }
+.note-html p,
+.note-html div { margin: 0; }
+.note-html p + p { margin-top: 0.4em; }
+.note-html ul,
+.note-html ol { margin: 0.3em 0; padding-left: 1.4em; }
+.note-html ul { list-style: disc; }
+.note-html ol { list-style: decimal; }
+.note-html strong,
+.note-html b { font-weight: 600; color: var(--color-ink); }
+.note-html a { color: var(--color-status-blue); text-decoration: underline; }
+.note-html img { max-width: 100%; height: auto; }
+.note-html table { border-collapse: collapse; max-width: 100%; display: block; overflow-x: auto; }
+.note-html td,
+.note-html th { padding: 2px 6px; vertical-align: top; }
+.note-html blockquote { border-left: 2px solid var(--color-border); padding-left: 0.75em; margin: 0.4em 0; }
+.note-html h1,
+.note-html h2,
+.note-html h3 { font-weight: 600; color: var(--color-ink); margin: 0.4em 0 0.2em; }
+.note-quoted {
+  border-left: 2px solid var(--color-border-light);
+  padding-left: 0.75em;
+  color: var(--color-ink-faint);
+}
