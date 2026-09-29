@@ -244,7 +244,7 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
         {/* Settings */}
         <button
           onClick={() => { navigate("/settings"); onMobileClose(); }}
-          className={`sidebar-item ${pathname === "/settings" ? "sidebar-item-active" : ""}`}
+          className={`sidebar-item ${pathname.startsWith("/settings") ? "sidebar-item-active" : ""}`}
           title={rail ? "Settings" : undefined}
           style={{ justifyContent: rail ? "center" : "flex-start" }}
         >

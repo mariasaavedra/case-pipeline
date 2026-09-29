@@ -54,6 +54,22 @@ import { useAuth } from "./auth/useAuth";
 import { usePreferences } from "./hooks/usePreferences";
 import { useViewport } from "./hooks/useViewport";
 
+// ☰ that opens the off-canvas sidebar; only visible on phones (styles.css).
+function MobileMenuButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      className="mobile-menu-btn items-center justify-center p-1"
+      onClick={onOpen}
+      aria-label="Open menu"
+      style={{ color: "rgba(255,255,255,0.6)", background: "none", border: "none", cursor: "pointer" }}
+    >
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M3 5h14M3 10h14M3 15h14" />
+      </svg>
+    </button>
+  );
+}
+
 // Shared loading indicator: used both for in-flight data and as the Suspense
 // fallback while a route chunk downloads, so the two states look identical.
 function PageLoading() {
@@ -212,8 +228,17 @@ function App() {
       <div className="app-layout">
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} user={user} onLogout={logout} />
         <div className="app-content" style={{ marginLeft: sidebarWidth }}>
+          {/* Settings has no page header, so on phones it needs its own bar for the ☰ button. */}
+          <header
+            className="mobile-top-bar sticky top-0 z-50"
+            style={{ backgroundColor: "var(--color-navy)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+          >
+            <div className="px-4 py-3 flex items-center">
+              <MobileMenuButton onOpen={() => setMobileMenuOpen(true)} />
+            </div>
+          </header>
           <Suspense fallback={<PageLoading />}>
-            <SettingsPage />
+            <SettingsPage tab={route.params.tab ?? "account"} />
           </Suspense>
         </div>
         <PageCode code="P11" />
@@ -235,16 +260,7 @@ function App() {
           }}
         >
           <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-5">
-            {/* Mobile hamburger */}
-            <button
-              className="mobile-menu-btn items-center justify-center p-1"
-              onClick={() => setMobileMenuOpen(true)}
-              style={{ color: "rgba(255,255,255,0.6)", background: "none", border: "none", cursor: "pointer" }}
-            >
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 5h14M3 10h14M3 15h14" />
-              </svg>
-            </button>
+            <MobileMenuButton onOpen={() => setMobileMenuOpen(true)} />
 
             {client ? (
               <button
@@ -322,7 +338,7 @@ function App() {
       </div>
 
       {showLogCallModal && <LogCallModal onClose={() => setShowLogCallModal(false)} />}
-      {/* Not on Settings, which has its own Monday section (P11.4) and reads ?monday= itself. */}
+      {/* Not on Settings, which has its own Monday section (P11.1.3) and reads ?monday= itself. */}
       {user && <MondayConnectPrompt />}
       {/* Client 360 renders its own code, since its Debug tab has no URL of its own. */}
       {PAGE_CODES[route.page] && <PageCode code={PAGE_CODES[route.page]!} />}

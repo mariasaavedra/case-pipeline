@@ -992,6 +992,12 @@ body {
   display: none;
 }
 
+/* Bar that holds the hamburger on pages without a header (Settings) — shown
+   exactly where the hamburger is. */
+.mobile-top-bar {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .sidebar {
     transform: translateX(-100%);
@@ -1020,6 +1026,9 @@ body {
 
   .mobile-menu-btn {
     display: flex;
+  }
+  .mobile-top-bar {
+    display: block;
   }
 }
 /* =============================================================================
@@ -1051,7 +1060,8 @@ body {
        `margin-left: 0 !important` rule if your styles.css still scopes it to 768px. */
     margin-left: 60px !important;
   }
-  .mobile-menu-btn {
+  .mobile-menu-btn,
+  .mobile-top-bar {
     display: none !important;
   }
   .sidebar-backdrop {

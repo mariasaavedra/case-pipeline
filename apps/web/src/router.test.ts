@@ -6,6 +6,13 @@ describe("matchRoute", () => {
     expect(matchRoute("/jail-intakes")).toEqual({ page: "jail-intakes", params: {} });
   });
 
+  test("/settings → the account tab; /settings/:tab → that tab; unknown → account", () => {
+    expect(matchRoute("/settings")).toEqual({ page: "settings", params: { tab: "account" } });
+    expect(matchRoute("/settings/admin")).toEqual({ page: "settings", params: { tab: "admin" } });
+    expect(matchRoute("/settings/firm/")).toEqual({ page: "settings", params: { tab: "firm" } });
+    expect(matchRoute("/settings/bogus")).toEqual({ page: "settings", params: { tab: "account" } });
+  });
+
   test("root path → landing", () => {
     expect(matchRoute("/")).toEqual({ page: "landing", params: {} });
   });

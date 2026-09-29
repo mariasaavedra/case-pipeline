@@ -829,6 +829,8 @@ export interface AuditEntry {
   /** Stable Monday item id — what still resolves months later. */
   targetMondayId: string | null;
   metadata: unknown;
+  /** What targetMondayId resolves to today; null when it doesn't (or there is none). */
+  target: { name: string; boardKey: string | null; profileLocalId: string | null } | null;
   createdAt: string;
 }
 

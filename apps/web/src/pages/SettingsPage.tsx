@@ -1,14 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../auth/useAuth";
 import { usePreferences } from "../hooks/usePreferences";
 import type { Theme, DefaultPage, DateFormat } from "../hooks/usePreferences";
-import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser, fetchAuditLog } from "../api";
-import type { AttorneyBoard, PublicUser, AuditEntry, MondayConnectionStatus } from "../api";
+import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser } from "../api";
+import type { AttorneyBoard, PublicUser, MondayConnectionStatus } from "../api";
 import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
+import { AuditLogSection } from "../components/AuditLogSection";
 import { SectionCode } from "../components/ScreenCode";
+import { settingsSectionTitle } from "../components/settingsStyles";
 import { useMondayConnect } from "../hooks/useMondayConnect";
+import { useViewport } from "../hooks/useViewport";
+import { navigate } from "../router";
 
 // =============================================================================
 // User management (admin section)
@@ -63,8 +67,8 @@ function UsersSection() {
   }
 
   return (
-    <section>
-      <h2 style={styles.sectionTitle}>Users<SectionCode code="P11.9" inline /></h2>
+    <section style={{ marginBottom: "40px" }}>
+      <h2 style={styles.sectionTitle}>Users<SectionCode code="P11.4.1" inline /></h2>
       <p style={styles.sectionDesc}>
         Users sign in with their firm Microsoft account (created as a regular user on first login).
         Promote to admin, link them to their board name for “My Cases”, or disable access here.
@@ -161,7 +165,6 @@ function BoardIdentitySection() {
   const { user } = useAuth();
   const [people, setPeople] = useState<string[]>([]);
   const [link, setLink] = useState<string>(user?.paralegal_link ?? "");
-  const [locale, setLocale] = useState<string>(user?.locale ?? "es");
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -169,7 +172,7 @@ function BoardIdentitySection() {
     getParalegals().then(setPeople).catch(() => {});
   }, []);
 
-  async function save(patch: { paralegal_link?: string | null; locale?: string }) {
+  async function save(patch: { paralegal_link?: string | null }) {
     setStatus("saving");
     setError(null);
     try {
@@ -183,7 +186,7 @@ function BoardIdentitySection() {
 
   return (
     <section style={{ marginBottom: "40px" }}>
-      <h2 style={styles.sectionTitle}>My board identity<SectionCode code="P11.3" inline /></h2>
+      <h2 style={styles.sectionTitle}>Board identity<SectionCode code="P11.1.2" inline /></h2>
       <p style={styles.sectionDesc}>
         Link your account to your name on the Monday.com boards so “My Cases” shows your workload.
       </p>
@@ -210,24 +213,6 @@ function BoardIdentitySection() {
             {link && !people.includes(link) && <option value={link}>{link}</option>}
           </select>
         </div>
-        <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
-          <div>
-            <div style={styles.prefLabel}>Language</div>
-            <div style={styles.prefHint}>Preferred language for your account</div>
-          </div>
-          <select
-            value={locale}
-            onChange={(e) => {
-              const v = e.target.value;
-              setLocale(v);
-              save({ locale: v });
-            }}
-            style={styles.select}
-          >
-            <option value="es">Español</option>
-            <option value="en">English</option>
-          </select>
-        </div>
         {status !== "idle" && (
           <div style={{ padding: "8px 20px", fontSize: 12, fontFamily: "var(--font-body)", color: "var(--color-ink-faint)" }}>
             {status === "saving" ? "Saving…" : "Saved ✓"}
@@ -238,61 +223,32 @@ function BoardIdentitySection() {
   );
 }
 
-function AuditLogSection() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+/** Language lives with the other preferences, but is stored on the user profile. */
+function LanguageRow() {
+  const { user } = useAuth();
+  const [locale, setLocale] = useState<string>(user?.locale ?? "es");
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchAuditLog(50, 0)
-      .then(setEntries)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
   return (
-    <section style={{ marginBottom: "40px" }}>
-      <h2 style={styles.sectionTitle}>Audit log<SectionCode code="P11.10" inline /></h2>
-      <p style={styles.sectionDesc}>
-        Recent sensitive actions — role changes, Monday.com writes, and board/profile edits.
-      </p>
-      {error && <div style={styles.errorBox}>{error}</div>}
-      {loading ? (
-        <div style={styles.faint}>Loading…</div>
-      ) : entries.length === 0 ? (
-        <div style={styles.card}>
-          <div style={styles.fieldRow}>
-            <span style={styles.faint}>No audit entries yet.</span>
-          </div>
-        </div>
-      ) : (
-        <div style={styles.card}>
-          {entries.map((e, i) => (
-            <div
-              key={e.id}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 2,
-                padding: "12px 20px",
-                borderTop: i === 0 ? "none" : `1px solid var(--color-border)`,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-ink)" }}>{e.action}</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-ink-faint)", flexShrink: 0 }}>
-                  {new Date(e.createdAt + "Z").toLocaleString()}
-                </span>
-              </div>
-              <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--color-ink-faint)" }}>
-                {e.actorEmail ?? "system"}
-                {e.targetType ? ` → ${e.targetType} ${e.targetId ?? ""}` : ""}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
+    <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
+      <div>
+        <div style={styles.prefLabel}>Language</div>
+        <div style={styles.prefHint}>{error ?? "Preferred language for your account"}</div>
+      </div>
+      <select
+        value={locale}
+        onChange={(e) => {
+          const v = e.target.value;
+          setLocale(v);
+          setError(null);
+          updateMyProfile({ locale: v }).catch((err: Error) => setError(err.message));
+        }}
+        style={styles.select}
+      >
+        <option value="es">Español</option>
+        <option value="en">English</option>
+      </select>
+    </div>
   );
 }
 
@@ -371,7 +327,7 @@ function AttorneyBoardsSection() {
 
   return (
     <section style={{ marginBottom: "40px" }}>
-      <h2 style={styles.sectionTitle}>Attorney Appointment Boards<SectionCode code="P11.5" inline /></h2>
+      <h2 style={styles.sectionTitle}>Attorney appointment boards<SectionCode code="P11.3.1" inline /></h2>
       <p style={styles.sectionDesc}>
         Each attorney has a dedicated Monday.com appointments board. Add or remove boards here —
         the board will appear as a column in the Appointments view immediately, and the next sync
@@ -622,7 +578,7 @@ function MondayConnectionSection() {
 
   return (
     <section style={{ marginBottom: "40px" }}>
-      <h2 style={styles.sectionTitle}>Monday.com Account<SectionCode code="P11.4" inline /></h2>
+      <h2 style={styles.sectionTitle}>Monday.com connection<SectionCode code="P11.1.3" inline /></h2>
       <p style={styles.sectionDesc}>
         Connect your personal Monday.com account so notes you post are attributed to you.
       </p>
@@ -689,53 +645,65 @@ function MondayConnectionSection() {
 }
 
 // =============================================================================
-// Main Settings page
+// Profile + preferences
 // =============================================================================
 
-export function SettingsPage() {
+function ProfileSection() {
   const { user } = useAuth();
-  const { prefs, update } = usePreferences();
-
   return (
-    <div style={{ maxWidth: "640px", margin: "0 auto", padding: "40px 24px 80px" }}>
-      <h1 style={styles.pageTitle}>Settings</h1>
-
-      {/* Profile */}
-      <section style={{ marginBottom: "40px" }}>
-        <h2 style={styles.sectionTitle}>Profile<SectionCode code="P11.1" inline /></h2>
-        <div style={styles.card}>
-          <div style={styles.fieldRow}>
-            <span style={styles.fieldLabel}>Name</span>
-            <span style={styles.fieldValue}>{user?.name}</span>
-          </div>
-          <div style={{ ...styles.fieldRow, borderTop: `1px solid var(--color-border)` }}>
-            <span style={styles.fieldLabel}>Email</span>
-            <span style={styles.fieldValue}>{user?.email}</span>
-          </div>
-          <div style={{ ...styles.fieldRow, borderTop: `1px solid var(--color-border)` }}>
-            <span style={styles.fieldLabel}>Role</span>
-            <span
-              style={{
-                ...styles.roleBadge,
-                backgroundColor: user?.role === "admin" ? "rgba(180,83,9,0.1)" : "var(--color-surface)",
-                borderColor: user?.role === "admin" ? "rgba(180,83,9,0.35)" : "var(--color-border)",
-                color: user?.role === "admin" ? "var(--color-amber)" : "var(--color-ink-faint)",
-                cursor: "default",
-              }}
-            >
-              {user?.role}
-            </span>
-          </div>
+    <section style={{ marginBottom: "40px" }}>
+      <h2 style={styles.sectionTitle}>Profile<SectionCode code="P11.1.1" inline /></h2>
+      <p style={styles.sectionDesc}>From your firm Microsoft account. An admin changes roles under Admin → Users.</p>
+      <div style={styles.card}>
+        <div style={styles.fieldRow}>
+          <span style={styles.fieldLabel}>Name</span>
+          <span style={styles.fieldValue}>{user?.name}</span>
         </div>
-      </section>
+        <div style={{ ...styles.fieldRow, borderTop: `1px solid var(--color-border)` }}>
+          <span style={styles.fieldLabel}>Email</span>
+          <span style={styles.fieldValue}>{user?.email}</span>
+        </div>
+        <div style={{ ...styles.fieldRow, borderTop: `1px solid var(--color-border)` }}>
+          <span style={styles.fieldLabel}>Role</span>
+          <span
+            style={{
+              ...styles.roleBadge,
+              backgroundColor: user?.role === "admin" ? "rgba(180,83,9,0.1)" : "var(--color-surface)",
+              borderColor: user?.role === "admin" ? "rgba(180,83,9,0.35)" : "var(--color-border)",
+              color: user?.role === "admin" ? "var(--color-amber)" : "var(--color-ink-faint)",
+              cursor: "default",
+            }}
+          >
+            {user?.role}
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
 
-      {/* Preferences */}
+function Toggle({ on, onChange, label }: { on: boolean; onChange: (next: boolean) => void; label: string }) {
+  return (
+    <button
+      onClick={() => onChange(!on)}
+      style={{ ...styles.toggle, backgroundColor: on ? "var(--color-amber)" : "var(--color-border)" }}
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+    >
+      <span style={{ ...styles.toggleKnob, transform: on ? "translateX(18px)" : "translateX(2px)" }} />
+    </button>
+  );
+}
+
+function PreferencesSections() {
+  const { prefs, update } = usePreferences();
+  return (
+    <>
       <section style={{ marginBottom: "40px" }}>
-        <h2 style={styles.sectionTitle}>Preferences<SectionCode code="P11.2" inline /></h2>
+        <h2 style={styles.sectionTitle}>Appearance<SectionCode code="P11.2.1" inline /></h2>
         <p style={styles.sectionDesc}>Synced to your account, so they follow you across devices.</p>
-
         <div style={styles.card}>
-          {/* Theme */}
           <div style={styles.prefRow}>
             <div>
               <div style={styles.prefLabel}>Theme</div>
@@ -759,74 +727,6 @@ export function SettingsPage() {
             </div>
           </div>
 
-          {/* Default page */}
-          <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
-            <div>
-              <div style={styles.prefLabel}>Default page</div>
-              <div style={styles.prefHint}>Page shown after signing in</div>
-            </div>
-            <select
-              value={prefs.defaultPage}
-              onChange={(e) => update("defaultPage", e.target.value as DefaultPage)}
-              style={styles.select}
-            >
-              <option value="/">Home (Dashboard)</option>
-              <option value="/clients">Clients</option>
-              <option value="/appointments">Appointments</option>
-              <option value="/alerts">Alerts</option>
-            </select>
-          </div>
-
-          {/* Sidebar collapsed */}
-          <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
-            <div>
-              <div style={styles.prefLabel}>Sidebar collapsed by default</div>
-              <div style={styles.prefHint}>Start with the sidebar in icon-only mode</div>
-            </div>
-            <button
-              onClick={() => update("sidebarCollapsedDefault", !prefs.sidebarCollapsedDefault)}
-              style={{
-                ...styles.toggle,
-                backgroundColor: prefs.sidebarCollapsedDefault ? "var(--color-amber)" : "var(--color-border)",
-              }}
-              role="switch"
-              aria-checked={prefs.sidebarCollapsedDefault}
-            >
-              <span
-                style={{
-                  ...styles.toggleKnob,
-                  transform: prefs.sidebarCollapsedDefault ? "translateX(18px)" : "translateX(2px)",
-                }}
-              />
-            </button>
-          </div>
-
-          {/* Screen codes */}
-          <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
-            <div>
-              <div style={styles.prefLabel}>Show screen codes</div>
-              <div style={styles.prefHint}>The small grey codes (P4, M5, D6…) that name each page, section, popup and menu in a change request</div>
-            </div>
-            <button
-              onClick={() => update("showScreenCodes", !prefs.showScreenCodes)}
-              style={{
-                ...styles.toggle,
-                backgroundColor: prefs.showScreenCodes ? "var(--color-amber)" : "var(--color-border)",
-              }}
-              role="switch"
-              aria-checked={prefs.showScreenCodes}
-              aria-label="Show screen codes"
-            >
-              <span
-                style={{
-                  ...styles.toggleKnob,
-                  transform: prefs.showScreenCodes ? "translateX(18px)" : "translateX(2px)",
-                }}
-              />
-            </button>
-          </div>
-
-          {/* Date format */}
           <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
             <div>
               <div style={styles.prefLabel}>Date format</div>
@@ -843,41 +743,159 @@ export function SettingsPage() {
               <option value="relative">Relative (3d ago)</option>
             </select>
           </div>
+
+          <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
+            <div>
+              <div style={styles.prefLabel}>Sidebar collapsed by default</div>
+              <div style={styles.prefHint}>Start with the sidebar in icon-only mode</div>
+            </div>
+            <Toggle
+              on={prefs.sidebarCollapsedDefault}
+              onChange={(v) => update("sidebarCollapsedDefault", v)}
+              label="Sidebar collapsed by default"
+            />
+          </div>
+
+          <div style={{ ...styles.prefRow, borderTop: `1px solid var(--color-border)` }}>
+            <div>
+              <div style={styles.prefLabel}>Show screen codes</div>
+              <div style={styles.prefHint}>The small grey codes (P4, M5, D6…) that name each page, section, popup and menu in a change request</div>
+            </div>
+            <Toggle on={prefs.showScreenCodes} onChange={(v) => update("showScreenCodes", v)} label="Show screen codes" />
+          </div>
         </div>
       </section>
 
-      {/* My board identity (self-service link for My Cases) */}
-      <BoardIdentitySection />
+      <section style={{ marginBottom: "40px" }}>
+        <h2 style={styles.sectionTitle}>Language &amp; start page<SectionCode code="P11.2.2" inline /></h2>
+        <div style={styles.card}>
+          <div style={styles.prefRow}>
+            <div>
+              <div style={styles.prefLabel}>Default page</div>
+              <div style={styles.prefHint}>Page shown after signing in</div>
+            </div>
+            <select
+              value={prefs.defaultPage}
+              onChange={(e) => update("defaultPage", e.target.value as DefaultPage)}
+              style={styles.select}
+            >
+              <option value="/">Home (Dashboard)</option>
+              <option value="/clients">Clients</option>
+              <option value="/appointments">Appointments</option>
+              <option value="/alerts">Alerts</option>
+            </select>
+          </div>
+          <LanguageRow />
+        </div>
+      </section>
+    </>
+  );
+}
 
-      {/* Monday.com personal account */}
-      <MondayConnectionSection />
+// =============================================================================
+// Main Settings page — four tabs, each with its own URL (/settings/:tab)
+// =============================================================================
 
-      {/* Attorney Boards */}
-      <AttorneyBoardsSection />
+type SettingsTab = "account" | "preferences" | "firm" | "admin";
 
-      {/* Status tags — admin only */}
-      {user?.role === "admin" && <StatusTagsSection />}
+const TABS: { id: SettingsTab; label: string; code: string; hint: string; adminOnly?: boolean }[] = [
+  { id: "account", label: "My account", code: "P11.1", hint: "Profile, board identity, Monday.com" },
+  { id: "preferences", label: "Preferences", code: "P11.2", hint: "Theme, dates, language" },
+  { id: "firm", label: "Firm setup", code: "P11.3", hint: "Attorney boards, status tags, urgency", adminOnly: true },
+  { id: "admin", label: "Admin", code: "P11.4", hint: "Users, sync health, audit log", adminOnly: true },
+];
 
-      {/* Urgency scoring — admin only */}
-      {user?.role === "admin" && <UrgencySettingsSection />}
+export function SettingsPage({ tab }: { tab: string }) {
+  const { user } = useAuth();
+  const { isMobile } = useViewport();
+  const isAdmin = user?.role === "admin";
+  const visible = TABS.filter((t) => isAdmin || !t.adminOnly);
+  // A non-admin who follows a link to an admin tab lands on their account instead.
+  const active = visible.find((t) => t.id === tab) ?? visible[0]!;
 
-      {/* Sync health — admin only */}
-      {user?.role === "admin" && (
-        <section style={{ marginBottom: "40px" }}>
-          <h2 style={styles.sectionTitle}>Sync health<SectionCode code="P11.8" inline /></h2>
-          <p style={styles.sectionDesc}>
-            Coverage of the last Monday.com sync (per board), the write-back queue, and archived rows
-            (reconciled-away but recoverable — nothing is hard-deleted).
-          </p>
-          <SyncHealthSection />
-        </section>
-      )}
+  // On phones the tab row scrolls sideways; keep the selected tab in view.
+  const activeRef = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    if (isMobile) activeRef.current?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [isMobile, active.id]);
 
-      {/* Users — admin only */}
-      {user?.role === "admin" && <UsersSection />}
+  const nav = (
+    <nav
+      aria-label="Settings sections"
+      style={
+        isMobile
+          ? { display: "flex", gap: 4, overflowX: "auto", scrollbarWidth: "none", marginBottom: 24, borderBottom: "1px solid var(--color-border)" }
+          : { display: "flex", flexDirection: "column", gap: 2, width: 200, flexShrink: 0, position: "sticky", top: 24, alignSelf: "flex-start" }
+      }
+    >
+      {visible.map((t, i) => {
+        const on = t.id === active.id;
+        const firstAdmin = !isMobile && t.adminOnly && !visible[i - 1]?.adminOnly;
+        return (
+          <div key={t.id}>
+            {firstAdmin && <div style={styles.navGroup}>Admin only</div>}
+            <a
+              href={`/settings/${t.id}`}
+              onClick={(e) => {
+                e.preventDefault();
+                navigate(`/settings/${t.id}`);
+              }}
+              aria-current={on ? "page" : undefined}
+              ref={on ? activeRef : undefined}
+              style={isMobile ? { ...styles.tabMobile, ...(on ? styles.tabMobileOn : null) } : { ...styles.tab, ...(on ? styles.tabOn : null) }}
+            >
+              <span style={{ display: "flex", alignItems: "center" }}>
+                {t.label}
+                <SectionCode code={t.code} inline />
+              </span>
+              {!isMobile && <span style={styles.tabHint}>{t.hint}</span>}
+            </a>
+          </div>
+        );
+      })}
+    </nav>
+  );
 
-      {/* Audit log — admin only */}
-      {user?.role === "admin" && <AuditLogSection />}
+  return (
+    <div style={{ maxWidth: "1040px", margin: "0 auto", padding: isMobile ? "24px 16px 80px" : "40px 32px 80px" }}>
+      <h1 style={styles.pageTitle}>Settings</h1>
+      <div style={isMobile ? undefined : { display: "flex", gap: 40, alignItems: "flex-start" }}>
+        {nav}
+        <div style={{ flex: 1, minWidth: 0, maxWidth: active.id === "account" || active.id === "preferences" ? 640 : undefined }}>
+          {active.id === "account" && (
+            <>
+              <ProfileSection />
+              <BoardIdentitySection />
+              <MondayConnectionSection />
+            </>
+          )}
+
+          {active.id === "preferences" && <PreferencesSections />}
+
+          {active.id === "firm" && (
+            <>
+              <AttorneyBoardsSection />
+              <StatusTagsSection />
+              <UrgencySettingsSection />
+            </>
+          )}
+
+          {active.id === "admin" && (
+            <>
+              <UsersSection />
+              <section style={{ marginBottom: "40px" }}>
+                <h2 style={styles.sectionTitle}>Sync health<SectionCode code="P11.4.2" inline /></h2>
+                <p style={styles.sectionDesc}>
+                  Coverage of the last Monday.com sync (per board), the write-back queue, and archived rows
+                  (reconciled-away but recoverable — nothing is hard-deleted).
+                </p>
+                <SyncHealthSection />
+              </section>
+              <AuditLogSection />
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -895,14 +913,62 @@ const styles = {
     marginBottom: "32px",
   } as React.CSSProperties,
 
-  sectionTitle: {
+  sectionTitle: settingsSectionTitle,
+
+  // Settings sub-nav: a column on desktop, a row of tabs on phones.
+  tab: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    padding: "10px 12px",
+    borderRadius: 8,
+    textDecoration: "none",
     fontFamily: "var(--font-body)",
-    fontSize: "12px",
+    fontSize: 14,
+    fontWeight: 500,
+    color: "var(--color-ink-muted)",
+    borderLeft: "3px solid transparent",
+  } as React.CSSProperties,
+
+  tabOn: {
+    backgroundColor: "var(--color-surface-warm)",
+    color: "var(--color-ink)",
     fontWeight: 600,
-    textTransform: "uppercase" as const,
+    borderLeft: "3px solid var(--color-amber)",
+  } as React.CSSProperties,
+
+  tabHint: {
+    fontSize: 12,
+    fontWeight: 400,
+    color: "var(--color-ink-faint)",
+  } as React.CSSProperties,
+
+  tabMobile: {
+    display: "block",
+    padding: "8px 12px",
+    whiteSpace: "nowrap",
+    textDecoration: "none",
+    fontFamily: "var(--font-body)",
+    fontSize: 14,
+    color: "var(--color-ink-muted)",
+    borderBottom: "2px solid transparent",
+    marginBottom: -1,
+  } as React.CSSProperties,
+
+  tabMobileOn: {
+    color: "var(--color-ink)",
+    fontWeight: 600,
+    borderBottom: "2px solid var(--color-amber)",
+  } as React.CSSProperties,
+
+  navGroup: {
+    fontFamily: "var(--font-body)",
+    fontSize: 11,
+    fontWeight: 600,
+    textTransform: "uppercase",
     letterSpacing: "0.06em",
     color: "var(--color-ink-faint)",
-    marginBottom: "8px",
+    padding: "16px 12px 6px",
   } as React.CSSProperties,
 
   sectionDesc: {

@@ -28,6 +28,7 @@ import { useStatusOverridesAdmin } from "../StatusOverridesProvider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 import { SectionCode } from "./ScreenCode";
+import { settingsSectionTitle } from "./settingsStyles";
 
 const TONE_DOT: Record<StatusTone, string> = {
   green: "var(--color-status-green)",
@@ -118,10 +119,10 @@ export function StatusTagsSection() {
 
   return (
     <section style={{ marginBottom: "40px" }}>
-      <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--color-ink)", marginBottom: 4 }}>
-        Status Tags
-      <SectionCode code="P11.6" inline /></h2>
-      <p style={{ fontSize: 13, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginBottom: 16, maxWidth: 620 }}>
+      <h2 style={settingsSectionTitle}>
+        Status tags
+      <SectionCode code="P11.3.2" inline /></h2>
+      <p style={{ fontSize: 13, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginBottom: 12, lineHeight: 1.5 }}>
         How each Monday status reads across the dashboard. Rename a status or change its color; the
         change applies everywhere for everyone. Statuses you don't touch keep a sensible default.
       </p>

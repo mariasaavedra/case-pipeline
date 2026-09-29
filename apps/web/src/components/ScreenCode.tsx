@@ -8,7 +8,7 @@
 //   PageCode  pinned to the bottom-right of the window, one per screen
 //   MenuCode  a last line at the bottom-right of a dropdown menu, in flow so it
 //             never sits on top of an option
-//   SectionCode  a section inside a page (P2.3, P11.6…): after its heading
+//   SectionCode  a section inside a page (P2.3, P11.3.2…): after its heading
 //             when it has one (`inline`), else a small line above its right edge
 // =============================================================================
 

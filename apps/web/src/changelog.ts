@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-09-29",
+    title: "Settings, reorganized",
+    items: [
+      "Settings now has four tabs on the left: My account, Preferences, and, for admins, Firm setup and Admin. Each tab has its own link, so you can send someone straight to it.",
+      "Language moved from My account to Preferences, next to the start page.",
+      "The audit log (Admin tab) reads in plain English, such as “Changed status to Received · Ana Ruiz”. You can filter it by what happened, who did it and dates, it's grouped by day, and a client's name opens their page.",
+      "Settings codes changed to match the tabs: Users is now P11.4.1 and the audit log P11.4.3. The UI map lists every old code next to its new one.",
+    ],
+  },
+  {
     date: "2026-09-28",
     title: "Mail reads the whole notice, and you can correct it",
     items: [
