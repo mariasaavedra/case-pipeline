@@ -19,6 +19,10 @@ import {
   normalizeFormType,
   scanMailPages,
   repairOcrText,
+  emptyFields,
+  compareNames,
+  nameTokens,
+  normalizeFields,
 } from "./mail";
 
 function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
@@ -38,11 +42,12 @@ function insertProfile(db: DatabaseInstance, localId: string, name: string, aNum
 
 function insertOpenForm(
   db: DatabaseInstance,
-  opts: { localId: string; profile: string; name: string; forms?: string; receipt?: string },
+  opts: { localId: string; profile: string; name: string; forms?: string; receipt?: string; received?: string },
 ): void {
   const cv: Record<string, unknown> = {};
   if (opts.forms) cv.forms = { labels: [opts.forms] };
   if (opts.receipt) cv.receipt_no = opts.receipt;
+  if (opts.received) cv.received_priority_date = { date: opts.received };
   run(
     db,
     `INSERT INTO board_items (batch_id, local_id, board_key, name, status, profile_local_id, column_values)
@@ -51,15 +56,7 @@ function insertOpenForm(
   );
 }
 
-const fields = (over: Partial<ReturnType<typeof extractNoticeFields>>) => ({
-  receiptNumbers: [],
-  aNumbers: [],
-  formType: null,
-  noticeType: null,
-  noticeDate: null,
-  people: [],
-  ...over,
-});
+const fields = (over: Partial<ReturnType<typeof extractNoticeFields>>) => ({ ...emptyFields(), ...over });
 
 describe("extractNoticeFields", () => {
   const notice = [
@@ -289,5 +286,108 @@ describe("matchNotice", () => {
     ]);
     expect(r.summary).toEqual({ matched: 1, needs_attention: 0, no_match: 1, unreadable: 1 });
     expect(r.separatorPages).toEqual([3]);
+  });
+});
+
+describe("names", () => {
+  test("nameTokens drops accents, titles and punctuation", () => {
+    expect(nameTokens("Ms. MARTÍNEZ ANDRÉS, Sarahí")).toEqual(["martinez", "andres", "sarahi"]);
+  });
+
+  test("compareNames: order and a missing second surname don't matter; a shared surname alone isn't enough", () => {
+    expect(compareNames("MARTINEZ ANDRES, SARAHI", "Sarahi MARTINEZ ANDRES")).toBe("strong");
+    expect(compareNames("MARTINEZ ANDRES, SARAHI", "Sarahi Martinez")).toBe("strong");
+    expect(compareNames("LOPEZ, MARIA ELENA", "Maria Lopez Garcia")).toBe("partial");
+    expect(compareNames("LOPEZ, MARIA", "Juan Lopez")).toBe("none");
+  });
+
+  test("normalizeFields moves old rows' people into the name fields", () => {
+    const f = normalizeFields({ people: [{ role: "Beneficiary", name: "JUAN LOPEZ" }] } as never);
+    expect(f.beneficiary).toBe("JUAN LOPEZ");
+    expect(f.receivedDate).toBeNull();
+    expect(f.people).toEqual([{ role: "Beneficiary", name: "JUAN LOPEZ" }]);
+  });
+});
+
+describe("matchNotice with names and dates", () => {
+  test("no A-number (first-time beneficiary): the name finds the client", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Sarahi Martinez Andres", null);
+    insertProfile(db, "p2", "Juan Lopez", null);
+    insertOpenForm(db, { localId: "f1", profile: "p1", name: "Sarahi", forms: "I130" });
+    const m = matchNotice(db, fields({ receiptNumbers: ["IOE0912345678"], formType: "I130", beneficiary: "MARTINEZ ANDRES, SARAHI" }));
+    expect(m).toMatchObject({ status: "matched", matchedBy: "name", proposedAction: "fill_receipt" });
+    expect(m.openForm?.localId).toBe("f1");
+    expect(m.message).toMatch(/matched by name/);
+  });
+
+  test("an A-number whose client shares no name with the notice is flagged", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Juan Lopez", "123456789");
+    insertProfile(db, "p2", "Ana Ruiz", null);
+    insertOpenForm(db, { localId: "f1", profile: "p1", name: "Juan", forms: "I130" });
+    const m = matchNotice(db, fields({ aNumbers: ["123456789"], formType: "I130", beneficiary: "RUIZ, ANA" }));
+    expect(m).toMatchObject({ status: "needs_attention", reason: "name_mismatch" });
+    expect(m.candidateProfiles.map((p) => p.localId)).toEqual(["p1", "p2"]);
+  });
+
+  test("the petitioner's name is enough to confirm an A-number match", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Juan Lopez", "123456789");
+    insertOpenForm(db, { localId: "f1", profile: "p1", name: "Juan", forms: "I130" });
+    const m = matchNotice(db, fields({ aNumbers: ["123456789"], formType: "I130", petitioner: "LOPEZ, MARIA", beneficiary: "LOPEZ, JUAN" }));
+    expect(m).toMatchObject({ status: "matched", matchedBy: "a_number" });
+  });
+
+  test("a receipt on file whose owner shares no name with the notice is flagged", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Juan Lopez", null);
+    insertOpenForm(db, { localId: "f1", profile: "p1", name: "Juan", forms: "I130", receipt: "IOE0912345678" });
+    const m = matchNotice(db, fields({ receiptNumbers: ["IOE0912345678"], applicant: "RUIZ, ANA" }));
+    expect(m).toMatchObject({ status: "needs_attention", reason: "name_mismatch" });
+  });
+
+  test("a receipt copied onto two clients' forms: the name decides", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Juan Lopez", null);
+    insertProfile(db, "p2", "Ana Ruiz", null);
+    insertOpenForm(db, { localId: "f1", profile: "p1", name: "Juan", forms: "I130", receipt: "IOE0912345678" });
+    insertOpenForm(db, { localId: "f2", profile: "p2", name: "Ana", forms: "I130", receipt: "IOE0912345678" });
+    const m = matchNotice(db, fields({ receiptNumbers: ["IOE0912345678"], beneficiary: "RUIZ, ANA" }));
+    expect(m).toMatchObject({ status: "matched", matchedBy: "receipt_number" });
+    expect(m.openForm?.localId).toBe("f2");
+  });
+
+  test("two empty same-type forms: the received date picks one", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Juan Lopez", "123456789");
+    insertOpenForm(db, { localId: "f1", profile: "p1", name: "Juan", forms: "I130", received: "2026-06-01" });
+    insertOpenForm(db, { localId: "f2", profile: "p1", name: "Juan", forms: "I130", received: "2026-08-14" });
+    const m = matchNotice(db, fields({ receiptNumbers: ["IOE0912345678"], aNumbers: ["123456789"], formType: "I130", receivedDate: "2026-08-14" }));
+    expect(m).toMatchObject({ status: "matched", proposedAction: "fill_receipt" });
+    expect(m.openForm?.localId).toBe("f2");
+    expect(m.message).toMatch(/picked by date/);
+  });
+
+  test("only a close name: needs a person, with the candidates", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Maria Lopez Garcia", null);
+    const m = matchNotice(db, fields({ receiptNumbers: ["IOE0912345678"], beneficiary: "LOPEZ, MARIA ELENA" }));
+    expect(m).toMatchObject({ status: "needs_attention", reason: "name_uncertain" });
+    expect(m.candidateProfiles.map((p) => p.localId)).toEqual(["p1"]);
+  });
+
+  test("two clients with the same full name: pick one", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Juan Lopez", null);
+    insertProfile(db, "p2", "Juan Lopez", null);
+    const m = matchNotice(db, fields({ beneficiary: "LOPEZ, JUAN" }));
+    expect(m).toMatchObject({ status: "needs_attention", reason: "several_profiles" });
+  });
+
+  test("a name alone is enough to try; nothing at all is unreadable", () => {
+    const db = freshDb();
+    expect(matchNotice(db, fields({ beneficiary: "NOBODY, KNOWN" })).status).toBe("no_match");
+    expect(matchNotice(db, fields({})).status).toBe("unreadable");
   });
 });
