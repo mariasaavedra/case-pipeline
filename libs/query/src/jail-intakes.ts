@@ -51,6 +51,8 @@ interface IntakeColumnValues {
   poc_phone?: string;
   intake_created_on?: { date?: string };
   last_interaction_date?: { date?: string };
+  consult_date?: { date?: string; time?: string };
+  appt_with?: { label?: string };
   x_appointments?: { linked_item_ids?: string[] };
 }
 
@@ -195,6 +197,9 @@ export function getJailIntakes(
       pocPhone: cv.poc_phone ?? null,
       intakeCreatedOn: cv.intake_created_on?.date ?? null,
       lastInteractionDate: cv.last_interaction_date?.date ?? null,
+      consultDate: cv.consult_date?.date ?? null,
+      consultTime: cv.consult_date?.time?.slice(0, 5) ?? null,
+      apptWith: cv.appt_with?.label ?? null,
       convertedTo: linked
         ? {
             appointmentLocalId: linked.localId,

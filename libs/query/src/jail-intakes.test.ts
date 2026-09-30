@@ -200,6 +200,8 @@ describe("getJailIntakes — fields and filters", () => {
         poc_name_and_relationship_with_detained: "Maria, sister",
         poc_phone: "316-869-3861",
         last_interaction_date: { date: "2026-09-24" },
+        consult_date: { date: "2026-10-01", time: "15:00" },
+        appt_with: { label: "M" },
       },
     });
     const [i] = getJailIntakes(db, {}, TODAY).intakes;
@@ -210,6 +212,9 @@ describe("getJailIntakes — fields and filters", () => {
       pocName: "Maria, sister",
       pocPhone: "316-869-3861",
       lastInteractionDate: "2026-09-24",
+      consultDate: "2026-10-01",
+      consultTime: "15:00",
+      apptWith: "M",
     });
   });
 

@@ -213,7 +213,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M6 | Client notes | The client's name | P4 → "Open in modal" under a row's notes | `NotesModal.tsx` |
 | M7 | Day agenda | The date | P7 → click a day | `CalendarPage.tsx` (`DayModal`) |
 | M8 | New jail intake | "New jail intake" | P9 → **+ New intake** | `NewJailIntakeModal.tsx` |
-| M9 | Jail intake detail | The detainee's name | P9 → click an intake | `JailIntakeDetailModal.tsx` |
+| M9 | Jail intake detail | The detainee's name | P9 → click an intake. A paid intake ("Needs to be scheduled") shows **Book consult**: attorney + date + time → saved to Monday, then a link to press Create Appt there | `JailIntakeDetailModal.tsx` |
 | M10 | Book a consult | "Book a consult" | P3.2 | `NewAppointmentModal.tsx` |
 | M11 | New contract | "New contract (Fee K)" | P3.3; P14.1 (starts with a client search) | `NewContractModal.tsx` |
 | M12 | File preview | The file name | P3.6; the documents section of M5 | `FilePreviewModal.tsx` |
@@ -240,7 +240,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D11 | Search type | P2.1 | `SearchBar.tsx` |
 | D12 | Urgency picker | P11.3.2, a status row | `StatusTagsSection.tsx` |
 | D13 | Intake field picker | Any choice field on an intake form: M8, M2 | `JailIntakeFields.tsx` |
-| D14 | Attorney picker | M10 | `NewAppointmentModal.tsx` |
+| D14 | Attorney picker | M10; M9 Book consult | `NewAppointmentModal.tsx`, `JailIntakeDetailModal.tsx` |
 | D15 | Case type picker | M11 | `NewContractModal.tsx` |
 | D16 | Call status | M2 | `LogCallModal.tsx` |
 | D17 | Language | M2 → more fields | `LogCallModal.tsx` |

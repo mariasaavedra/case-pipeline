@@ -490,3 +490,15 @@ The daily series held **thirteen** backups where `BACKUP_KEEP` defaults to 4. De
 **Decision**: Created a new custom activity type via `create_custom_activity(name: "Call Summary", icon_id: HEADPHONES, color: VIVID_CERULEAN)` → id `eac83484-1fd4-432c-b9eb-755abb48efe7` (hardcoded in `apps/api/src/server.ts` next to the Call Log group id, same rationale as `CALL_LOG_GROUP_ID`: a one-time, account-specific magic value). Every call logged with a note and a linked profile creates a timeline item on the profile under this type.
 
 **Known tradeoff, accepted**: staff will see two entries labeled "Call Summary" in Monday's activity-type picker — the original built-in Essentials one, and this new custom one. They are not the same underlying type and are not merged. This was surfaced and accepted before creating the type.
+
+## 2026-09-30 — Book Consult from a Jail Intake: Fill the Fields, Press the Button in Monday
+
+**Context**: A paid jail intake ("Needs to be scheduled") is booked on Monday by setting **Consult Date** and **Appt with:** (the attorney's badge: M, LB, R, WH) and pressing the **Create Appt** button. The ask was to do this from M9.
+
+**Finding**: The button runs a chain of Monday automations. The activity logs for one real booking (intake 13150690830, 2026-09-28) show, within ~20 s of the click, all by the automation user: intake Status → Scheduled and moved to the Scheduled group; an appointment created on the attorney's board with the intake's fields copied (date, language, A#, DOB, POC phone/email, description) and the intake linked; a profile created and linked to the appointment. Monday's API has no mutation that presses a button column.
+
+**Decision**: M9 writes only the two fields (`POST /api/jail-intakes/:localId/consult`, `planIntakeConsult` in `routes/jail-intake-write.ts`) and then links staff to the intake in Monday to press Create Appt. Recreating the chain in our API was rejected for now: our item creation and Monday's automations could both fire, leaving a duplicate profile, and the copy rules live in Monday where staff maintain them.
+
+**Rules**: offered only on "Needs to be scheduled" intakes with no linked appointment. The attorney must be both an "Appt with:" label and a bookable board's badge (`data/attorney-boards.json`), so a workflow label like "Appt requested. Waiting on date" is never written. The date is today or later (Central); the time is optional and written the same way M10 writes one.
+
+**Revisit if**: staff forget the second step often enough to matter. The full chain would then need a test on a throwaway intake first, to see which automations fire on an API-created appointment.
