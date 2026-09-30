@@ -212,7 +212,7 @@ export async function changeBoardItemColumn(
 /** Create a Fee K (contract) for a client on Monday. pending=queued. */
 export async function createContract(
   profileLocalId: string,
-  input: { caseType: string; af?: number | null; ff?: number | null; pf?: number | null },
+  input: { caseType: string; af?: number | null; ff?: number | null; pf?: number | null; description?: string },
 ): Promise<{ name: string; feeKItemId?: string; pending: boolean }> {
   return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/contracts`, {
     method: "POST",
