@@ -6,8 +6,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 
-const { createUpdateMock, changeSimpleColumnValueMock, changeColumnValueMock, createItemMock, addFileToColumnMock } = vi.hoisted(() => ({
+const { createUpdateMock, changeSimpleColumnValueMock, changeColumnValueMock, createItemMock, addFileToColumnMock, createTimelineItemMock } = vi.hoisted(() => ({
   addFileToColumnMock: vi.fn(),
+  createTimelineItemMock: vi.fn(),
   createUpdateMock: vi.fn(),
   changeSimpleColumnValueMock: vi.fn(),
   changeColumnValueMock: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("@case-pipeline/monday", async (importOriginal) => ({
   changeColumnValue: changeColumnValueMock,
   createItem: createItemMock,
   addFileToColumn: addFileToColumnMock,
+  createTimelineItem: createTimelineItemMock,
 }));
 
 import { AuthError, MondayApiError } from "@case-pipeline/monday";
@@ -382,6 +384,26 @@ describe("write-queue processor", () => {
       monday_item_id: string | null;
     };
     expect(row.monday_item_id).toBe("existing-profile-item");
+    db.close();
+  });
+
+  it("logs a queued Fee K's Contract note on the new item once it exists, without failing the op if that step fails", async () => {
+    const db = freshDb();
+    createItemMock.mockResolvedValue("new-fee-k-3");
+    createUpdateMock.mockResolvedValue("upd-1");
+    createTimelineItemMock.mockRejectedValue(new Error("monday hiccup"));
+
+    const activity = { title: "New contract — U-Visa", customActivityId: "act-1", content: "For: U-Visa" };
+    enqueueWrite(db, {
+      opType: "create_item",
+      payload: { boardId: "board-9", itemName: "John Roe — U-Visa", note: "For: U-Visa", activity },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    expect(createItemMock).toHaveBeenCalledOnce();
+    expect(createTimelineItemMock).toHaveBeenCalledWith({ ...activity, itemId: "new-fee-k-3" }, "tok");
+    expect(queueRow(db).status).toBe("synced");
     db.close();
   });
 

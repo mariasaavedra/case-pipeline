@@ -187,6 +187,16 @@ async function dispatch(row: QueueRow, token?: string): Promise<string | undefin
           console.error(`[write-queue] post-create note failed for new item ${newItemId}:`, err);
         }
       }
+      // Same idea for an E&A entry on the new item (e.g. a Fee K's Contract
+      // note): the item id is only known now. Same best-effort rule.
+      const activity = payload.activity as Omit<CreateTimelineItemInput, "itemId"> | undefined;
+      if (activity?.title && activity.customActivityId) {
+        try {
+          await createTimelineItem({ ...activity, itemId: newItemId }, token);
+        } catch (err) {
+          console.error(`[write-queue] post-create activity failed for new item ${newItemId}:`, err);
+        }
+      }
       return newItemId;
     }
     case "create_timeline_item": {

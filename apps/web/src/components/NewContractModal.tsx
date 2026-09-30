@@ -4,8 +4,9 @@
 // Case type (the Fee Ks "Contract for..." dropdown, real options) + AF/FF/PF
 // amounts. Creates the item on Monday via createContract, named "<client> —
 // <case type>", auto-linked to the profile. Surcharges are NOT here (post-signing).
-// The optional description becomes an update on the new Fee K and a "Contract
-// note" in the profile's Emails & Activities.
+// The new Fee K gets a note — a For/Fees header (previewed here) plus the
+// optional description — as an update and as a "Contract note" in its own
+// Emails & Activities. Header format lives in the API's contractNoteText.
 // =============================================================================
 
 import { useState } from "react";
@@ -14,6 +15,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 import { useBoardColumns } from "../BoardColumnsProvider";
+
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+/** A fee field as the note will print it — blank reads $0.00, same as the API. */
+const money = (v: string) => usd.format(v === "" || !Number.isFinite(Number(v)) ? 0 : Number(v));
 
 interface Props {
   profileLocalId: string;
@@ -110,13 +115,17 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
                 </div>
 
                 <label style={{ display: "block", marginBottom: 12 }}>
-                  <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)", marginBottom: 4, fontFamily: "var(--font-body)" }}>Description</span>
+                  <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)", marginBottom: 4, fontFamily: "var(--font-body)" }}>Contract note</span>
+                  {/* The fixed header the note starts with — filled from the fields above. */}
+                  <div aria-label="Note header" style={{ fontSize: 12, lineHeight: 1.5, color: "var(--color-ink-muted)", fontFamily: "var(--font-mono, monospace)", background: "var(--color-surface-alt, var(--color-surface))", border: "1px dashed var(--color-border-light)", borderRadius: 6, padding: "6px 8px", marginBottom: 6, whiteSpace: "pre-wrap" }}>
+                    {`For: ${caseType || "___"}\nFees: ${money(af)} AF ${money(ff)} FF`}
+                  </div>
                   <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} maxLength={5000}
                     placeholder="Scope, payment plan, anything the team should know…"
                     className="w-full rounded-md px-2 py-1.5 text-sm"
                     style={{ border: "1px solid var(--color-border-light)", background: "var(--color-surface)", color: "var(--color-ink)", fontFamily: "var(--font-body)", resize: "vertical" }} />
                   <span style={{ display: "block", fontSize: 11, color: "var(--color-ink-faint)", marginTop: 2, fontFamily: "var(--font-body)" }}>
-                    Posted as an update on the Fee K and a Contract note in the client's Emails &amp; Activities.
+                    Posted on the new Fee K as an update and as a Contract note in its Emails &amp; Activities.
                   </span>
                 </label>
 
