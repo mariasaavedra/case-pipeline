@@ -39,12 +39,18 @@ interface BoardItemOpts {
   paralegals?: string;
   profileLocalId?: string;
   northPoleUntil?: string;
+  attorney?: string;
+  urgent?: string;
+  forms?: string[];
 }
 
 function insertBoardItem(db: DatabaseInstance, batchId: number, opts: BoardItemOpts) {
-  const columnValues = opts.northPoleUntil
-    ? JSON.stringify({ north_pole_until: { date: opts.northPoleUntil } })
-    : "{}";
+  const columnValues = JSON.stringify({
+    ...(opts.northPoleUntil ? { north_pole_until: { date: opts.northPoleUntil } } : {}),
+    ...(opts.attorney ? { attorney: { label: opts.attorney } } : {}),
+    ...(opts.urgent ? { urgent: { label: opts.urgent } } : {}),
+    ...(opts.forms ? { forms: { labels: opts.forms } } : {}),
+  });
   db.prepare(`
     INSERT INTO board_items
       (batch_id, local_id, board_key, name, group_title, status, next_date, paralegals, profile_local_id, column_values)
@@ -504,6 +510,41 @@ describe("getActiveCases — urgency config", () => {
     // Overdue by date, status only "soon" → overdue wins.
     const c = getActiveCases(db, { statusUrgency: { Denied: "soon" }, statusUrgencyAffectsBoard: true }).assignees[0]!.cases[0]!;
     expect(c.urgency).toBe("overdue");
+    db.close();
+  });
+  test("cases lists a shared case once, sorted by urgency", () => {
+    const db = freshDb();
+    const b = insertBatch(db);
+    insertBoardItem(db, b, { localId: "later", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Ana", nextDate: daysFromToday(30) });
+    insertBoardItem(db, b, { localId: "shared", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Ana, Bo", nextDate: daysFromToday(-1) });
+    insertBoardItem(db, b, { localId: "nodate", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Bo" });
+    const { cases, assignees } = getActiveCases(db);
+    expect(cases.map((c) => c.localId)).toEqual(["shared", "later", "nodate"]);
+    // Lanes still fan the shared case out to both people.
+    expect(assignees.map((a) => a.cases.length)).toEqual([2, 2]);
+    db.close();
+  });
+
+  test("attorney, Urgent flag and form types come from the Open Forms columns", () => {
+    const db = freshDb();
+    const b = insertBatch(db);
+    insertBoardItem(db, b, { localId: "c1", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Ana", attorney: "Lucy Betteridge", urgent: "Yes", forms: ["I485", "I130"] });
+    insertBoardItem(db, b, { localId: "c2", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Ana", urgent: "No" });
+    const [c1, c2] = getActiveCases(db).cases;
+    expect(c1).toMatchObject({ attorney: "Lucy Betteridge", urgent: true, forms: ["I485", "I130"] });
+    expect(c2).toMatchObject({ attorney: null, urgent: false, forms: [] });
+    db.close();
+  });
+  test("parked is set for every North Pole case, whatever its return date", () => {
+    const db = freshDb();
+    const b = insertBatch(db);
+    insertBoardItem(db, b, { localId: "past", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Ana", status: "Send to North Pole", northPoleUntil: daysFromToday(-5) });
+    insertBoardItem(db, b, { localId: "nodate", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Ana", status: "Send to North Pole" });
+    insertBoardItem(db, b, { localId: "back", boardKey: "_cd_open_forms", name: "Form", groupTitle: "Open Forms", paralegals: "Ana", status: "Back from North Pole" });
+    const byId = Object.fromEntries(getActiveCases(db).cases.map((c) => [c.localId, c]));
+    expect(byId.past).toMatchObject({ parked: true, snoozed: false });
+    expect(byId.nodate).toMatchObject({ parked: true, snoozed: false });
+    expect(byId.back).toMatchObject({ parked: false });
     db.close();
   });
 });

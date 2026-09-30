@@ -30,10 +30,18 @@ export interface ActiveCase {
   /** All paralegals assigned to this case. Empty when unassigned. */
   assignees: string[];
   priority: null;
+  /** Form types from the "Forms" column (e.g. I485, I130). Empty when not set. */
+  forms: string[];
+  /** Responsible attorney(s) from the Open Forms "Attorney" column, as Monday shows them. */
+  attorney: string | null;
+  /** Monday's "Urgent" Yes/No column is set to Yes. Shown as a tag; does not reorder. */
+  urgent: boolean;
   /** North Pole return date, when the case is parked. Null otherwise. */
   northPoleUntil: string | null;
   /** True when hidden by default: parked in North Pole with a future return date. */
   snoozed: boolean;
+  /** Status is North Pole, whatever the return date. P5 keeps these out of its counts. */
+  parked: boolean;
 }
 
 export interface ActiveCasesAssignee {
@@ -43,6 +51,8 @@ export interface ActiveCasesAssignee {
 
 export interface ActiveCasesResult {
   assignees: ActiveCasesAssignee[];
+  /** Every case once (shared cases are not fanned out), sorted by urgency then date. */
+  cases: ActiveCase[];
   /** Cases hidden because they are parked in North Pole with a future return date. */
   snoozedCount: number;
 }
@@ -129,6 +139,17 @@ function parseAssignees(raw: string | null): string[] {
   return names;
 }
 
+/** A dropdown column's `labels` JSON array → its non-empty labels. */
+function parseLabels(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const labels: unknown = JSON.parse(raw);
+    return Array.isArray(labels) ? labels.filter((l): l is string => typeof l === "string" && l.trim() !== "") : [];
+  } catch {
+    return [];
+  }
+}
+
 // =============================================================================
 // Query
 // =============================================================================
@@ -141,6 +162,9 @@ interface RawActiveCaseRow {
   paralegals: string | null;
   groupTitle: string | null;
   northPoleUntil: string | null;
+  attorney: string | null;
+  urgent: string | null;
+  forms: string | null;
   clientLocalId: string | null;
   clientName: string | null;
 }
@@ -161,6 +185,9 @@ export function getActiveCases(db: Database, options: ActiveCasesOptions = {}): 
       bi.paralegals,
       bi.group_title AS groupTitle,
       json_extract(bi.column_values, '$.north_pole_until.date') AS northPoleUntil,
+      json_extract(bi.column_values, '$.attorney.label') AS attorney,
+      json_extract(bi.column_values, '$.urgent.label')   AS urgent,
+      json_extract(bi.column_values, '$.forms.labels')   AS forms,
       p.local_id     AS clientLocalId,
       p.name         AS clientName
     FROM board_items bi
@@ -172,6 +199,7 @@ export function getActiveCases(db: Database, options: ActiveCasesOptions = {}): 
 
   // Group by assignee
   const assigneeMap = new Map<string, ActiveCase[]>();
+  const allCases: ActiveCase[] = [];
   let snoozedCount = 0;
 
   for (const row of rows) {
@@ -207,9 +235,15 @@ export function getActiveCases(db: Database, options: ActiveCasesOptions = {}): 
       isCourtCase: row.groupTitle === "Court Forms",
       assignees,
       priority: null,
+      attorney: row.attorney?.trim() || null,
+      urgent: row.urgent?.trim().toLowerCase() === "yes",
+      forms: parseLabels(row.forms),
       northPoleUntil: row.status === NORTH_POLE_STATUS ? row.northPoleUntil : null,
       snoozed,
+      parked: row.status === NORTH_POLE_STATUS,
     };
+
+    allCases.push(activeCase);
 
     // Fan the case out into every assigned paralegal's row so each person
     // sees it on their lane. Unassigned cases land in a single "Unassigned" row.
@@ -221,10 +255,11 @@ export function getActiveCases(db: Database, options: ActiveCasesOptions = {}): 
     }
   }
 
-  // Sort cases within each assignee by urgency
-  for (const cases of assigneeMap.values()) {
-    cases.sort((a, b) => URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]);
-  }
+  // Sort cases within each assignee by urgency. Stable, so the SQL date order
+  // (soonest first, undated last) holds within a bucket.
+  const byUrgency = (a: ActiveCase, b: ActiveCase) => URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency];
+  for (const cases of assigneeMap.values()) cases.sort(byUrgency);
+  allCases.sort(byUrgency);
 
   // Sort assignees alphabetically; "Unassigned" always last
   const assignees: ActiveCasesAssignee[] = Array.from(assigneeMap.entries())
@@ -235,5 +270,5 @@ export function getActiveCases(db: Database, options: ActiveCasesOptions = {}): 
     })
     .map(([name, cases]) => ({ name, cases }));
 
-  return { assignees, snoozedCount };
+  return { assignees, cases: allCases, snoozedCount };
 }
