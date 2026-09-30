@@ -18,8 +18,7 @@ import { MONDAY_JAIL_INTAKES_BOARD_ID, mondayItemUrl } from "../config";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { StatusBadge } from "./StatusBadge";
-import { Link } from "./Link";
-import { clientPath } from "../router";
+import { ClientLink } from "./ClientPeek";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -117,8 +116,8 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
                   Consult {formatDate(intake.convertedTo.consultDate)}
                 </span>
                 {intake.convertedTo.profileLocalId && (
-                  <Link
-                    href={clientPath(intake.convertedTo.profileLocalId)}
+                  <ClientLink
+                    clientId={intake.convertedTo.profileLocalId}
                     className="text-[11px] font-medium px-2 py-1 rounded-md"
                     style={{
                       color: "var(--color-amber)",
@@ -127,7 +126,7 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
                     }}
                   >
                     {intake.convertedTo.profileName ?? "View 360"}
-                  </Link>
+                  </ClientLink>
                 )}
               </>
             ) : (

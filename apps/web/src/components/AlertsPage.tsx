@@ -5,9 +5,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { fetchAlerts } from "../api";
 import type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "../api";
-import { Link } from "./Link";
+import { ClientLink } from "./ClientPeek";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
-import { clientPath } from "../router";
 import { MailReviewModal } from "./MailReviewModal";
 import { SectionCode } from "./ScreenCode";
 
@@ -162,14 +161,14 @@ function AlertItemRow({
         {/* Client name */}
         <div className="flex items-center gap-2">
           {item.clientLocalId ? (
-            <Link
-              href={clientPath(item.clientLocalId)}
+            <ClientLink
+              clientId={item.clientLocalId}
               onClick={(e) => e.stopPropagation()}
               className="text-xs hover:underline"
               style={{ color: "var(--color-amber)", fontFamily: "var(--font-body)" }}
             >
               {item.clientName}
-            </Link>
+            </ClientLink>
           ) : (
             <span className="text-xs" style={{ color: "var(--color-ink-muted)" }}>
               {item.clientName ? `${item.clientName} (not matched)` : "Unknown client"}

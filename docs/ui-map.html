@@ -124,8 +124,17 @@ const PAGES = [
     { code:"M5", name:"Appointment detail", note:"click an appointment; has notes and documents", pops:[ { code:"M12", name:"File preview" } ] },
     { code:"M6", name:"Client notes", note:"“Open in modal” under a row’s notes" } ] },
   { code:"P5", name:"Active Cases", path:"/active-cases", items:[
-    { code:"P5.1", name:"Case count + North Pole toggle" },
-    { code:"P5.2", name:"Swim-lane board", note:"paralegal rows × urgency columns" } ] },
+    { code:"P5.1", name:"Header", note:"open / overdue / missing-date counts" },
+    { code:"P5.2", name:"Summary table", note:"paralegal rows × urgency counts; click to filter P5.3" },
+    { code:"P5.3", name:"Case list", note:"filter chips + cases grouped by urgency" } ] },
+  { code:"P13", name:"Prescheduling", path:"/prescheduling", items:[
+    { code:"P13.1", name:"Header", note:"paid / waiting 60+ days / not cooperating" },
+    { code:"P13.2", name:"Summary table", note:"paralegal × PS Stage, colour = longest wait" },
+    { code:"P13.3", name:"Case list", note:"filter chips + cases by days since hire" } ] },
+  { code:"P14", name:"Contracts", path:"/contracts", items:[
+    { code:"P14.1", name:"Header", note:"pending / older than 60 days / not sent yet" },
+    { code:"P14.2", name:"Summary table", note:"attorney × Contract Stage, colour = oldest contract" },
+    { code:"P14.3", name:"Contract list", note:"grouped by Contract Stage" } ] },
   { code:"P6", name:"My Cases", path:"/my-cases", items:[
     { code:"P6.1", name:"Case list", note:"also the “link your identity” and “no cases” states" } ] },
   { code:"P7", name:"Calendar", path:"/calendar", items:[

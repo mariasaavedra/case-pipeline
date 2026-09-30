@@ -106,8 +106,10 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 
 | Module | Responsibility |
 |---|---|
-| `active-cases.ts` | Swim-lane board data (paralegal rows × urgency columns) |
+| `active-cases.ts` | P5 Active Cases: de-duplicated case list + per-paralegal lanes, urgency buckets |
 | `alerts.ts` | Overdue deadlines, stale cases, idle contracts |
+| `prescheduling.ts` | P13 Prescheduling: Paid Fee Ks by PS Stage, days since hire (30/60), "not cooperating" (reminder 14+ days, no evidence since), North Pole parked |
+| `pending-contracts.ts` | P14 Contracts: Pending Fee Ks by Contract Stage, aged from sent (else added) date, 30/60 days |
 | `board-columns.ts` | Per-board column schema for the in-place field editors |
 | `board-items.ts` | Per-profile board item queries + `batchGetClientBoardItems` |
 | `case-summary.ts` | Full 360° client summary + `batchGetClientCaseSummaries` |
@@ -145,7 +147,9 @@ Data reads:
 | `GET /api/dashboard` | 6 KPI cards (open forms, pending contracts, paid fee Ks, deadlines, hearings, alerts). Open Forms excludes `Send to North Pole` cases |
 | `GET /api/dashboard/:key/items` | Every row behind one KPI card + the display-column options (`?column=` previews one) |
 | `GET /api/appointments` | Daily appointments with enriched profiles, snapshots, updates, case summaries |
-| `GET /api/active-cases` | Swim-lane board data (paralegal rows × urgency). `?includeSnoozed=1` reveals North-Pole-parked cases |
+| `GET /api/active-cases` | P5 data: `cases` (each once, by urgency, with attorney/forms/Urgent flag) + `assignees` lanes (used by My Cases). `?includeSnoozed=1` reveals North-Pole-parked cases |
+| `GET /api/prescheduling` | P13 data: Paid Fee Ks waiting for documents, with wait level, not-cooperating flag, PS Stages in workflow order |
+| `GET /api/pending-contracts` | P14 data: Pending Fee Ks with age level, payment link, AF/FF, stages in pipeline order |
 | `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Mail to review" |
 | `GET /api/search` | Cross-type search: profiles, contracts, court cases, etc. |
 | `GET /api/filter-options` | Distinct values for filter dropdowns (priorities, statuses, attorneys, board types) |
@@ -164,6 +168,7 @@ Writes and user/account routes:
 |---|---|
 | `POST /api/profiles/:id/updates` | Post a note to Monday.com (falls back to the write queue on outage) |
 | `POST /api/updates/:localId/replies` | Sub-note under a timeline entry: a real Monday reply under an update, or — for an E&A entry, which Monday can't thread — a `Re: <entry> (<date>) —` update on the same item. Stored as a `reply` row threaded by `reply_to_update_id` (plan = `routes/note-replies.ts`). Queues on outage |
+| `POST /api/profiles/:id/release` | Mark a detained client released (M17): clears Det. Facility on their open court case(s) in Monday and logs a "Casenote" E&A entry on the profile (note required, release date optional). Queues on outage. Plan = `routes/detention-write.ts` |
 | `POST /api/profiles/:id/render` | Generate a DOCX for a profile from live Monday.com data (default template `client_letter_docx`) |
 | `GET /api/auth/me` | Validate token, upsert user (first user becomes admin) |
 | `GET/PUT /api/preferences`, `PATCH /api/me/profile` | Per-user preferences and profile |
@@ -206,6 +211,8 @@ Run with `tsx scripts/<name>.ts`:
 | `sample-real-data.ts` | Pull sample profile + linked item data from Monday.com → `data/samples/`. |
 | `fetch-profile.ts` | Fetch a single profile by ID and dump it to stdout. |
 | `mail-sample.ts` | Write the fake scanned-mail PDF (every page stamped SAMPLE) to `data/samples/sample-mail.pdf`. `npm run mail:sample` (`-- --db=live` builds it from live.db, `-- --scanned` makes it image-only for OCR). |
+| `mail-probe.ts` | What the mail reader makes of real PDFs, page by page (fields, split), with no DB. `npm run mail:probe -- scan.pdf [--text]`. Keep real scans out of the repo. |
+| `sharepoint-links.ts` | Index every client folder in SCAL Consults / E-Files / Closed into `sp_folders` (schema v28), then propose a folder for each profile with an empty E-File / Consult File (case no. + surname, name + consult year, name). `npm run sharepoint:links -- --db=live` is read-only and writes a plan CSV to `output/`; `--apply` writes **high**-confidence links only (`--include-medium` adds medium, `--limit=N` for a trial), empty columns only, re-checked against Monday first, with a receipt CSV. Rules: `scripts/sharepoint/profile-links.ts`. See `docs/features/sharepoint-catalog.md`. |
 | `setup-webhooks.ts` | Register/list/remove Monday.com webhooks for all tracked boards. `npm run webhooks:setup -- --url=https://<host>` (requires the API deployed with `MONDAY_WEBHOOK_SECRET` first). |
 | `sync-config/` | Internal sync logic called by `npm run dev:cli -- sync`. |
 | `preflight.sh` | Checks Node 22+, npm, and data directory writability. |

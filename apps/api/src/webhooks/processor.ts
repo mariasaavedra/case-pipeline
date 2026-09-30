@@ -109,6 +109,21 @@ interface EventRow {
   payload: string;
 }
 
+/**
+ * The event's item id: the column the receiver filled, or — for events stored
+ * before the receiver read `itemId` (delete / archive events) — the payload.
+ */
+function itemIdOf(row: EventRow): string | null {
+  if (row.monday_item_id) return row.monday_item_id;
+  try {
+    const event = (JSON.parse(row.payload) as { event?: { pulseId?: unknown; itemId?: unknown } }).event;
+    const id = event?.pulseId ?? event?.itemId;
+    return id != null ? String(id) : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface DrainStats {
   processed: number;
   skipped: number;
@@ -390,6 +405,7 @@ export async function processWebhookEvents(db: Database, deps: WebhookProcessorD
   const noteDeletions: EventRow[] = [];
   const refreshByBoard = new Map<string, EventRow[]>(); // board key → events
   for (const row of rows) {
+    row.monday_item_id = itemIdOf(row);
     if (DELETE_EVENTS.has(row.event_type) && row.monday_item_id) {
       deletions.push(row);
     } else if (NOTE_DELETE_EVENTS.has(row.event_type)) {

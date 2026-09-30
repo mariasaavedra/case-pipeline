@@ -8,9 +8,11 @@
 // path StatusEditor uses).
 // =============================================================================
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { fetchCallLogStaffDirectory, updateCallLogEntry, type MondayStaffUser } from "../api";
 import { MenuCode } from "./ScreenCode";
+import { menuBoxStyle, useAnchoredMenu } from "./anchored-menu";
 
 interface Props {
   boardItemLocalId: string;
@@ -27,7 +29,7 @@ export function HighlightedForEditor({ boardItemLocalId, highlightedFor, onChang
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const { rootRef, menuRef, menuPos } = useAnchoredMenu(open, setOpen);
 
   useEffect(() => setCurrent(highlightedFor), [highlightedFor]);
 
@@ -37,20 +39,6 @@ export function HighlightedForEditor({ boardItemLocalId, highlightedFor, onChang
       .then(setStaff)
       .catch(() => setStaff([]));
   }, [open, staff.length]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
 
   const select = useCallback(
     async (user: MondayStaffUser | null) => {
@@ -103,16 +91,8 @@ export function HighlightedForEditor({ boardItemLocalId, highlightedFor, onChang
         )}
       </button>
 
-      {open && (
-        <div
-          role="listbox"
-          className="status-menu"
-          style={{
-            position: "absolute", zIndex: 40, marginTop: 4, maxHeight: 280, overflowY: "auto",
-            minWidth: 180, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border-light)",
-            borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", padding: 4,
-          }}
-        >
+      {open && menuPos && createPortal(
+        <div ref={menuRef} role="listbox" className="status-menu" style={menuBoxStyle(menuPos)}>
           <button
             type="button"
             role="option"
@@ -144,7 +124,8 @@ export function HighlightedForEditor({ boardItemLocalId, highlightedFor, onChang
             </button>
           ))}
           <MenuCode code="D7" />
-        </div>
+        </div>,
+        document.body,
       )}
 
       {error && (

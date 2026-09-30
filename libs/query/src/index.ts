@@ -2,7 +2,7 @@
 // Query Layer — Public API
 // =============================================================================
 
-export { searchClients, getClientProfile, getClientByName, listProfiles, listProfilesFiltered, getFilterOptions } from "./client";
+export { searchClients, getClientProfile, getOpenDetentions, getClientByName, listProfiles, listProfilesFiltered, getFilterOptions } from "./client";
 export type { ProfileFilterOptions, FilteredProfileResult, FilterOptions } from "./client";
 export { getClientContracts } from "./contracts";
 export { getClientBoardItems, getBoardItemDetail } from "./board-items";
@@ -22,6 +22,8 @@ export type { CalendarCategory, CalendarEvent, CalendarResult, CalendarOptions }
 export { searchByType } from "./search";
 export { getAlerts, getAlertsTotalCount } from "./alerts";
 export { getActiveCases } from "./active-cases";
+export { getPrescheduling } from "./prescheduling";
+export { getPendingContracts } from "./pending-contracts";
 export { getCallLogEntries, getCallLogStaffOptions } from "./call-log";
 export { getJailIntakes, getJailIntakeNotes, cutoffDate } from "./jail-intakes";
 export { scanMailPages, needsReview, extractNoticeFields, emptyFields, normalizeFields, parseNoticeDate, cleanName, compareNames, nameTokens, NAME_ROLES, splitIntoDocuments, analyzePage, repairOcrText, matchNotice, findFormsForProfile, normalizeANumber, normalizeFormType } from "./mail";
@@ -34,6 +36,8 @@ export type { Word, LayoutValues, LayoutKey } from "./mail-layout";
 export type { MailPageInput, MailScanResult, MailScanDocument, NoticeMatch, NoticeFields, MatchStatus, AttentionReason, SplitReason, MatchedProfile, MatchedOpenForm } from "./mail";
 export type { CallLogEntry, CallLogFilters, CallLogListResult } from "./types";
 export type { ActiveCase, ActiveCasesAssignee, ActiveCasesResult, ActiveCasesOptions, Urgency } from "./active-cases";
+export type { PreschedulingCase, PreschedulingResult, PreschedulingOptions, WaitLevel } from "./prescheduling";
+export type { PendingContract, PendingContractsResult, PendingContractsOptions } from "./pending-contracts";
 export type {
   ProfileSummary,
   ContractSummary,

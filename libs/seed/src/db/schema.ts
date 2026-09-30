@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 27;
+export const SCHEMA_VERSION = 28;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -410,6 +410,26 @@ CREATE TRIGGER IF NOT EXISTS profiles_au AFTER UPDATE ON profiles BEGIN
     INSERT INTO profiles_fts(rowid, name, email, phone, address)
     VALUES (new.id, new.name, new.email, new.phone, new.address);
 END;
+
+-- SharePoint client folders (v28+): one row per client folder in SCAL
+-- Consults / E-Files / Closed, refreshed by \`npm run sharepoint:links\`.
+-- Derived data — safe to drop and rescan.
+CREATE TABLE IF NOT EXISTS sp_folders (
+    item_id            TEXT PRIMARY KEY,      -- Graph driveItem id
+    site               TEXT NOT NULL,         -- scalconsults | scalefiles | SCALClosed
+    drive_id           TEXT NOT NULL,
+    name               TEXT NOT NULL,
+    path               TEXT NOT NULL,         -- under the library: '2024 Consults/G/GARCIA, Ana'
+    web_url            TEXT NOT NULL,
+    year               INTEGER,               -- Consults year folder
+    case_no            TEXT,                  -- from the name: 'YY-NNN' or legacy 4-digit
+    modified_at_source TEXT,
+    first_seen_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    missing_since      TEXT                   -- set when a full scan of its site no longer finds it
+);
+CREATE INDEX IF NOT EXISTS idx_sp_folders_case_no ON sp_folders(case_no);
+CREATE INDEX IF NOT EXISTS idx_sp_folders_site ON sp_folders(site);
 
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_profiles_batch ON profiles(batch_id);
@@ -1233,6 +1253,28 @@ export function initializeSchema(db: Database): void {
           db.exec("ALTER TABLE client_updates ADD COLUMN email_participants TEXT");
         }
       }
+    }
+
+    // Migration v27 → v28: the SharePoint client-folder index. New table only.
+    if (fromVersion < 28) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sp_folders (
+            item_id            TEXT PRIMARY KEY,      -- Graph driveItem id
+            site               TEXT NOT NULL,         -- scalconsults | scalefiles | SCALClosed
+            drive_id           TEXT NOT NULL,
+            name               TEXT NOT NULL,
+            path               TEXT NOT NULL,         -- under the library: '2024 Consults/G/GARCIA, Ana'
+            web_url            TEXT NOT NULL,
+            year               INTEGER,               -- Consults year folder
+            case_no            TEXT,                  -- from the name: 'YY-NNN' or legacy 4-digit
+            modified_at_source TEXT,
+            first_seen_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            last_seen_at       TEXT NOT NULL DEFAULT (datetime('now')),
+            missing_since      TEXT                   -- set when a full scan of its site no longer finds it
+        );
+        CREATE INDEX IF NOT EXISTS idx_sp_folders_case_no ON sp_folders(case_no);
+        CREATE INDEX IF NOT EXISTS idx_sp_folders_site ON sp_folders(site);
+      `);
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

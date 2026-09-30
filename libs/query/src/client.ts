@@ -138,7 +138,64 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
   if (!row) return null;
 
   const { rawColumnValues, ...profile } = row;
-  return { ...profile, ...readSharePointLinks(rawColumnValues) };
+  return {
+    ...profile,
+    ...readSharePointLinks(rawColumnValues),
+    displayName: readDisplayName(rawColumnValues),
+    detainedAt: getDetainedAt(db, localId),
+  };
+}
+
+/**
+ * "First Last" from the Profiles board's name columns. Staff park notes in them
+ * — "Ventura Corado [A221-455-213] (Det In Core Civic)", "Pedraza (Detained At
+ * Greene County Jail)" — so anything in brackets or parentheses goes, including
+ * an unclosed "( det in Chase County Jail" at the end.
+ */
+export function readDisplayName(rawColumnValues: string | null | undefined): string | null {
+  const cvs = safeParseJson(rawColumnValues);
+  const clean = (v: unknown): string =>
+    (asNonEmptyString(v) ?? "")
+      .replace(/\[[^\]]*\]?|\([^)]*\)?/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const full = [clean(cvs.first_name), clean(cvs.last_name)].filter(Boolean).join(" ");
+  return full || null;
+}
+
+/** An open court case whose Det. Facility says where the client is held. */
+export interface OpenDetention {
+  courtCaseLocalId: string;
+  mondayItemId: string | null;
+  facility: string;
+}
+
+/**
+ * Where the client is detained, per the Det. Facility on their open court
+ * cases, newest first. Only the "Court Case" group counts: the other groups
+ * (Withdrew, Ordered Removed/VD, Granted, Inactive) are finished cases, and the
+ * facility on those is where they were, not where they are. Releasing a client
+ * clears the facility on every row returned here.
+ */
+export function getOpenDetentions(db: Database, profileLocalId: string): OpenDetention[] {
+  return db
+    .prepare(`
+      SELECT local_id AS courtCaseLocalId,
+             monday_item_id AS mondayItemId,
+             json_extract(column_values, '$.det_facility.label') AS facility
+      FROM board_items
+      WHERE profile_local_id = ?
+        AND board_key = 'court_cases'
+        AND group_title = 'Court Case'
+        AND deleted_at IS NULL
+        AND COALESCE(json_extract(column_values, '$.det_facility.label'), '') <> ''
+      ORDER BY COALESCE(updated_at_source, created_at) DESC
+    `)
+    .all(profileLocalId) as OpenDetention[];
+}
+
+export function getDetainedAt(db: Database, profileLocalId: string): string | null {
+  return getOpenDetentions(db, profileLocalId)[0]?.facility ?? null;
 }
 
 /**

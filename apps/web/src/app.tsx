@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { Sidebar, UNDER_CONSTRUCTION_PAGES } from "./components/Sidebar";
 import { LoginPage } from "./pages/LoginPage";
 import { LogCallModal } from "./components/LogCallModal";
+import { ClientPeekHost } from "./components/ClientPeek";
 import { MondayConnectPrompt } from "./components/MondayConnectPrompt";
 import { PageCode, SectionCode } from "./components/ScreenCode";
 import { Button } from "./components/ui/button";
@@ -18,6 +19,8 @@ const LandingPage = lazy(() => import("./components/LandingPage").then((m) => ({
 const AppointmentsPage = lazy(() => import("./components/AppointmentsPage").then((m) => ({ default: m.AppointmentsPage })));
 const ClientsPage = lazy(() => import("./components/ClientsPage").then((m) => ({ default: m.ClientsPage })));
 const AlertsPage = lazy(() => import("./components/AlertsPage").then((m) => ({ default: m.AlertsPage })));
+const ContractsPage = lazy(() => import("./components/ContractsPage").then((m) => ({ default: m.ContractsPage })));
+const PreschedulingPage = lazy(() => import("./components/PreschedulingPage").then((m) => ({ default: m.PreschedulingPage })));
 const ActiveCasesPage = lazy(() => import("./components/ActiveCasesPage").then((m) => ({ default: m.ActiveCasesPage })));
 const MyCasesPage = lazy(() => import("./components/MyCasesPage").then((m) => ({ default: m.MyCasesPage })));
 const CalendarPage = lazy(() => import("./components/CalendarPage").then((m) => ({ default: m.CalendarPage })));
@@ -35,6 +38,8 @@ const PAGE_CODES: Partial<Record<Route["page"], string>> = {
   landing: "P1",
   clients: "P2",
   appointments: "P4",
+  contracts: "P14",
+  prescheduling: "P13",
   "active-cases": "P5",
   "my-cases": "P6",
   calendar: "P7",
@@ -43,8 +48,8 @@ const PAGE_CODES: Partial<Record<Route["page"], string>> = {
   "call-log": "P10",
   settings: "P11",
   mail: "P12",
-  "court-cases": "P13",
-  map: "P14",
+  "court-cases": "P15",
+  map: "P16",
 };
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
@@ -263,6 +268,7 @@ function App() {
           </Suspense>
         </div>
         <PageCode code="P11" />
+        <ClientPeekHost />
       </div>
     );
   }
@@ -337,6 +343,8 @@ function App() {
 
             {/* Appointments page */}
             {route.page === "appointments" && !loading && <AppointmentsPage />}
+            {route.page === "contracts" && !loading && <ContractsPage />}
+            {route.page === "prescheduling" && !loading && <PreschedulingPage />}
             {route.page === "active-cases" && !loading && <ActiveCasesPage />}
             {route.page === "my-cases" && !loading && <MyCasesPage />}
             {route.page === "calendar" && !loading && <CalendarPage />}
@@ -361,7 +369,8 @@ function App() {
       </div>
 
       {showLogCallModal && <LogCallModal onClose={() => setShowLogCallModal(false)} />}
-      {/* Not on Settings, which has its own Monday section (P11.1.3) and reads ?monday= itself. */}
+      {/* M3 over the current page when ?client= names someone — see ClientPeek.tsx. */}
+      <ClientPeekHost />      {/* Not on Settings, which has its own Monday section (P11.1.3) and reads ?monday= itself. */}
       {user && <MondayConnectPrompt />}
       {/* Client 360 renders its own code, since its Debug tab has no URL of its own. */}
       {PAGE_CODES[route.page] && <PageCode code={PAGE_CODES[route.page]!} />}

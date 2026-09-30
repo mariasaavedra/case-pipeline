@@ -53,6 +53,28 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    id: "contracts",
+    label: "Contracts",
+    path: "/contracts",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M5 2h7l4 4v11a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1z" />
+        <path d="M12 2v4h4M7 10h6M7 13h6M7 16h3" />
+      </svg>
+    ),
+  },
+  {
+    id: "prescheduling",
+    label: "Prescheduling",
+    path: "/prescheduling",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M5 2h10M5 18h10" />
+        <path d="M6 2c0 4 8 4 8 8s-8 4-8 8M14 2c0 4-8 4-8 8s8 4 8 8" />
+      </svg>
+    ),
+  },
+  {
     id: "active-cases",
     label: "Active Cases",
     path: "/active-cases",

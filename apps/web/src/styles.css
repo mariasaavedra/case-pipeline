@@ -100,12 +100,42 @@
      above) — the light-mode amber-dark (#92400e) is too low-contrast against
      it here, so lighten it for this theme only. */
   --color-amber-dark: #fbbf24;
+  /* Status text: the light-mode shades (#065f46, #991b1b…) are unreadable on
+     the translucent dark backgrounds below, so lift them for this theme. */
+  --color-status-green: #34d399;
+  --color-status-blue: #93c5fd;
+  --color-status-yellow: #fcd34d;
+  --color-status-red: #fca5a5;
+  --color-status-gray: #a1a1aa;
+  --color-status-purple: #c4b5fd;
   --color-status-green-bg: rgba(6, 95, 70, 0.15);
   --color-status-blue-bg: rgba(30, 64, 175, 0.15);
   --color-status-yellow-bg: rgba(146, 64, 14, 0.15);
   --color-status-red-bg: rgba(153, 27, 27, 0.15);
   --color-status-gray-bg: rgba(107, 114, 128, 0.15);
   --color-status-purple-bg: rgba(107, 33, 168, 0.15);
+}
+
+/* Urgency colours for P5 Active Cases (ActiveCasesPage.tsx): one text colour +
+   one tint per bucket, plus the court and North Pole tags. Separate from the
+   status-* palette because those text colours are too dark on the dark theme. */
+:root {
+  --urgency-overdue: #b91c1c;   --urgency-overdue-bg: #fef2f2;
+  --urgency-missing: #b45309;   --urgency-missing-bg: #fffbeb;
+  --urgency-critical: #c2410c;  --urgency-critical-bg: #fff7ed;
+  --urgency-soon: #1d4ed8;      --urgency-soon-bg: #eff6ff;
+  --urgency-later: #15803d;     --urgency-later-bg: #f0fdf4;
+  --urgency-court: #6d28d9;     --urgency-court-bg: #f5f3ff;
+  --urgency-snooze: #0369a1;    --urgency-snooze-bg: #e0f2fe;
+}
+[data-theme="dark"] {
+  --urgency-overdue: #f87171;   --urgency-overdue-bg: rgba(248, 113, 113, 0.14);
+  --urgency-missing: #fbbf24;   --urgency-missing-bg: rgba(251, 191, 36, 0.13);
+  --urgency-critical: #fb923c;  --urgency-critical-bg: rgba(251, 146, 60, 0.14);
+  --urgency-soon: #60a5fa;      --urgency-soon-bg: rgba(96, 165, 250, 0.13);
+  --urgency-later: #4ade80;     --urgency-later-bg: rgba(74, 222, 128, 0.11);
+  --urgency-court: #a78bfa;     --urgency-court-bg: rgba(167, 139, 250, 0.15);
+  --urgency-snooze: #38bdf8;    --urgency-snooze-bg: rgba(56, 189, 248, 0.14);
 }
 
 /* Base */
@@ -179,6 +209,9 @@ body {
 
 .card:hover {
   border-color: #d4d0c8;
+}
+[data-theme="dark"] .card:hover {
+  border-color: #353a4e;
 }
 
 .card-elevated {

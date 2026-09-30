@@ -18,6 +18,7 @@
     "jose": "^6.2.3",
     "node-cron": "^4.5.0",
     "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "6.1.200",
     "tesseract.js": "^7.0.0",
     "unpdf": "^1.8.1"
   },

@@ -19,7 +19,7 @@
 // happened per step, with Retry for anything that failed.
 // =============================================================================
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchMailDocument,
   fetchMailDocumentPdf,
@@ -36,9 +36,8 @@ import {
 } from "../api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { Link } from "./Link";
+import { ClientLink } from "./ClientPeek";
 import { NoticeFieldsEditor, NoticeFieldsGrid } from "./MailNoticeFields";
-import { clientPath } from "../router";
 
 interface ClientGroup {
   localId: string;
@@ -187,6 +186,10 @@ export function MailReviewModal({
   const [groups, setGroups] = useState<ClientGroup[]>([]);
   const [choice, setChoice] = useState<Choice | null>(null);
   const [note, setNote] = useState("");
+  // Dismiss needs a note. The button stays clickable and points at the note
+  // box instead: a disabled button with only a hover tooltip read as broken.
+  const [noteMissing, setNoteMissing] = useState(false);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [saving, setSaving] = useState(false);
@@ -451,9 +454,9 @@ export function MailReviewModal({
                       <>
                         {" → "}
                         {doc.profile ? (
-                          <Link href={clientPath(doc.profile.localId)} style={{ color: "inherit", fontWeight: 600 }}>
+                          <ClientLink clientId={doc.profile.localId} style={{ color: "inherit", fontWeight: 600 }}>
                             {doc.profile.name}
-                          </Link>
+                          </ClientLink>
                         ) : null}
                         {doc.openForm ? ` · ${doc.openForm.formType ?? doc.openForm.name}` : " (client only)"}
                       </>
@@ -483,9 +486,9 @@ export function MailReviewModal({
 
                     {groups.map((g) => (
                       <div key={g.localId} className="flex flex-col gap-1.5">
-                        <Link href={clientPath(g.localId)} className="text-sm font-semibold" style={{ color: "var(--color-amber)" }}>
+                        <ClientLink clientId={g.localId} className="text-sm font-semibold" style={{ color: "var(--color-amber)" }}>
                           {g.name}
-                        </Link>
+                        </ClientLink>
                         {g.forms === null ? (
                           <span className="text-xs" style={faint}>
                             Loading Open Forms…
@@ -561,13 +564,27 @@ export function MailReviewModal({
                     </div>
 
                     <textarea
+                      ref={noteRef}
                       value={note}
-                      onChange={(e) => setNote(e.target.value)}
+                      onChange={(e) => {
+                        setNote(e.target.value);
+                        if (e.target.value.trim()) setNoteMissing(false);
+                      }}
                       rows={2}
                       placeholder="Note (required to dismiss) — e.g. “duplicate of yesterday’s scan”"
+                      aria-invalid={noteMissing || undefined}
                       className="rounded-md px-2 py-1.5 text-sm"
-                      style={{ border: "1px solid var(--color-border-light)", background: "var(--color-surface)", ...ink }}
+                      style={{
+                        border: `1px solid ${noteMissing ? "var(--color-status-red)" : "var(--color-border-light)"}`,
+                        background: "var(--color-surface)",
+                        ...ink,
+                      }}
                     />
+                    {noteMissing && (
+                      <p className="text-xs -mt-2" style={{ color: "var(--color-status-red)", fontFamily: "var(--font-body)" }}>
+                        Add a short note saying why it’s being dismissed.
+                      </p>
+                    )}
 
                     {choice?.kind === "form" && <PlanPreview plan={plan} loading={planLoading} />}
                     {choice?.kind === "client" && (
@@ -586,9 +603,16 @@ export function MailReviewModal({
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={saving || !note.trim()}
-                        title={note.trim() ? undefined : "Add a note saying why"}
-                        onClick={() => void submit("dismiss")}
+                        disabled={saving}
+                        onClick={() => {
+                          if (!note.trim()) {
+                            setNoteMissing(true);
+                            noteRef.current?.focus();
+                            noteRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+                            return;
+                          }
+                          void submit("dismiss");
+                        }}
                       >
                         Dismiss
                       </Button>

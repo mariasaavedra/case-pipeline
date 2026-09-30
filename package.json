@@ -28,8 +28,10 @@
     "stats": "tsx scripts/export-stats.ts",
     "stats:live": "tsx scripts/export-stats.ts --db=live",
     "mail:sample": "tsx scripts/mail-sample.ts",
+    "mail:probe": "tsx scripts/mail-probe.ts",
     "lint:strict": "eslint . --max-warnings=0",
     "sharepoint:folders": "tsx --env-file-if-exists=.env scripts/sharepoint-folders.ts",
+    "sharepoint:links": "tsx --env-file-if-exists=.env scripts/sharepoint-links.ts",
     "consult:folders": "tsx --env-file-if-exists=.env scripts/consult-folders.ts",
     "consult:sweep": "tsx --env-file-if-exists=.env scripts/consult-sweep.ts"
   },

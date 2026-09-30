@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, PreschedulingResult, PendingContractsResult, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -15,6 +15,8 @@ export type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "@case-pipeline/query/appointments";
 export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
+export type { PreschedulingResult, PreschedulingCase, WaitLevel } from "@case-pipeline/query";
+export type { PendingContractsResult, PendingContract } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
 export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail, MailWriteBackPlan, StepOutcome, WriteBackState, NoticeFields, FieldEdits } from "@case-pipeline/query";
@@ -212,9 +214,24 @@ export async function changeBoardItemColumn(
 /** Create a Fee K (contract) for a client on Monday. pending=queued. */
 export async function createContract(
   profileLocalId: string,
-  input: { caseType: string; af?: number | null; ff?: number | null; pf?: number | null },
+  input: { caseType: string; af?: number | null; ff?: number | null; pf?: number | null; description?: string },
 ): Promise<{ name: string; feeKItemId?: string; pending: boolean }> {
   return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/contracts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Mark a detained client released: clears Det. Facility on their open court
+ * case(s) in Monday and logs a Casenote in the profile's E&A. pending=queued.
+ */
+export async function releaseClient(
+  profileLocalId: string,
+  input: { note: string; releasedOn?: string },
+): Promise<{ released: boolean; pending: boolean }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/release`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -542,6 +559,14 @@ export async function renderProfileDoc(
   const disposition = res.headers.get("content-disposition") ?? "";
   const match = /filename="([^"]+)"/.exec(disposition);
   return { blob, filename: match?.[1] ?? "document.docx" };
+}
+
+export async function fetchPendingContracts(): Promise<PendingContractsResult> {
+  return apiFetch<PendingContractsResult>("/api/pending-contracts");
+}
+
+export async function fetchPrescheduling(): Promise<PreschedulingResult> {
+  return apiFetch<PreschedulingResult>("/api/prescheduling");
 }
 
 export async function fetchActiveCases(includeSnoozed = false): Promise<ActiveCasesResult> {

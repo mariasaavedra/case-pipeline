@@ -45,7 +45,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P0 | Sign in | `/login` | Opening the app signed out | `pages/LoginPage.tsx` |
 | P1 | Home | `/` | Sidebar → Home | `components/LandingPage.tsx` |
 | P2 | Clients | `/clients` | Sidebar → Clients | `components/ClientsPage.tsx` |
-| P3 | Client 360 | `/clients/:id` | Any client name anywhere | `components/ClientView.tsx` |
+| P3 | Client 360 | `/clients/:id` | A client in P2 or the top-bar search; "View 360" buttons; M3 → "Open full 360 view" | `components/ClientView.tsx` |
 | P4 | Appointments | `/appointments` | Sidebar → Appointments | `components/AppointmentsPage.tsx` |
 | P5 | Active Cases | `/active-cases` | Sidebar → Active Cases | `components/ActiveCasesPage.tsx` |
 | P6 | My Cases | `/my-cases` | Sidebar → My Cases | `components/MyCasesPage.tsx` |
@@ -55,8 +55,10 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P10 | Call Log | `/call-log` | Sidebar → Call Log | `components/CallLogPage.tsx` |
 | P11 | Settings | `/settings/<tab>` | Sidebar → Settings (bottom) | `pages/SettingsPage.tsx` |
 | P12 | Mail | `/mail` | Sidebar → Mail | `components/MailPage.tsx` |
-| P13 | Court Cases | `/court-cases` | Sidebar → Court Cases | placeholder in `app.tsx` (not built yet) |
-| P14 | Map | `/map` | Sidebar → Map | placeholder in `app.tsx` (not built yet) |
+| P13 | Prescheduling | `/prescheduling` | Sidebar → Prescheduling (above Active Cases) | `components/PreschedulingPage.tsx` |
+| P14 | Contracts | `/contracts` | Sidebar → Contracts (above Prescheduling) | `components/ContractsPage.tsx` |
+| P15 | Court Cases | `/court-cases` | Sidebar → Court Cases | placeholder in `app.tsx` (not built yet) |
+| P16 | Map | `/map` | Sidebar → Map | placeholder in `app.tsx` (not built yet) |
 
 ### Global
 
@@ -90,7 +92,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Address | Notes |
 |---|---|---|---|
-| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
+| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
 | P3.1 | Overview tab | `/clients/:id` | Timeline of notes + note composer; date range → D5 |
 | P3.2 | Appointments tab | `/clients/:id/appointments` | **+ Book a consult** → M10 |
 | P3.3 | Contracts tab | `/clients/:id/contracts` | **+ New contract** → M11 |
@@ -112,8 +114,25 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Notes |
 |---|---|---|
-| P5.1 | Case count + North Pole toggle | |
-| P5.2 | Swim-lane board | Paralegal rows × urgency columns |
+| P5.1 | Header | Open / overdue / missing-date counts |
+| P5.2 | Summary table | Paralegal rows × urgency counts; click a number or a name to filter P5.3 |
+| P5.3 | Case list | Filter chips (person, bucket, Only court, North Pole) + cases grouped by urgency |
+
+### Inside P13 Prescheduling
+
+| Code | Name | Notes |
+|---|---|---|
+| P13.1 | Header | Paid count, waiting 60+ days, not cooperating; colour legend |
+| P13.2 | Summary table | Paralegal rows × PS Stage; cell colour = longest wait since hire; click to filter P13.3 |
+| P13.3 | Case list | Filter chips (person, stage, not cooperating, North Pole) + cases grouped by days since hire |
+
+### Inside P14 Contracts
+
+| Code | Name | Notes |
+|---|---|---|
+| P14.1 | Header | Pending count, older than 60 days, not sent yet; colour legend; **+ New contract** → M11 (pick the client first) |
+| P14.2 | Summary table | Attorney rows × Contract Stage; cell colour = oldest contract (days since sent, else added); click to filter P14.3 |
+| P14.3 | Contract list | Grouped by Contract Stage: age, payment link, AF/FF, attorneys, assistant |
 
 ### Inside P6 My Cases
 
@@ -188,7 +207,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 |---|---|---|---|---|
 | M1 | KPI detail | The card's name | P1 → click a KPI card | `KpiDetailModal.tsx` |
 | M2 | Log a call | "Log a call" / "Edit call" | Top bar **+ Log call** (every page); P10 → pencil on a row | `LogCallModal.tsx` |
-| M3 | Client case | The client's name (360 header) | Inside M2 → "View profile" after picking a linked client (opens on top of M2); P10 → a row's client | `ClientCaseModal.tsx` |
+| M3 | Client case | The client's name (360 header) | Any client name outside P2 — opens over the current page as `?client=<id>`, Back closes it (`ClientPeek.tsx`); inside M2 → "View profile" after picking a linked client (opens on top of M2); P10 → a row's client | `ClientCaseModal.tsx` |
 | M4 | Call notes | "Notes — *name*" | P10 → notes on a row | `CallNotesModal.tsx` |
 | M5 | Appointment detail | The client's name | P4 → click an appointment | `AppointmentModal.tsx` |
 | M6 | Client notes | The client's name | P4 → "Open in modal" under a row's notes | `NotesModal.tsx` |
@@ -196,12 +215,13 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M8 | New jail intake | "New jail intake" | P9 → **+ New intake** | `NewJailIntakeModal.tsx` |
 | M9 | Jail intake detail | The detainee's name | P9 → click an intake | `JailIntakeDetailModal.tsx` |
 | M10 | Book a consult | "Book a consult" | P3.2 | `NewAppointmentModal.tsx` |
-| M11 | New contract | "New contract (Fee K)" | P3.3 | `NewContractModal.tsx` |
+| M11 | New contract | "New contract (Fee K)" | P3.3; P14.1 (starts with a client search) | `NewContractModal.tsx` |
 | M12 | File preview | The file name | P3.6; the documents section of M5 | `FilePreviewModal.tsx` |
 | M13 | Entry editor | The entry's name | P3.8 (admin) | `EntryEditorModal.tsx` |
 | M14 | What's new | Changelog | Version badge on P1 Home / P0 Sign in | `VersionBadge.tsx` |
 | M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
 | M16 | Connect Monday.com | "Connect your Monday.com account" / "Reconnect…" / "Monday.com connected" | Opens by itself after sign-in when Monday isn't connected (any page but P11); **Not now** hides it for 12 h | `MondayConnectPrompt.tsx` |
+| M17 | Released from detention | "Released from detention" | P3.0 → **Released?** on the "Detained at …" pill | `ReleaseDetentionModal.tsx` |
 
 ## Dropdowns
 

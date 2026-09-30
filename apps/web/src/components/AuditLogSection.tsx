@@ -12,7 +12,7 @@ import type { AuditEntry, AuditFilters, PublicUser } from "../api";
 import { SectionCode } from "./ScreenCode";
 import { settingsSectionTitle } from "./settingsStyles";
 import { AUDIT_FAMILIES, describeAudit, localDayKey, ymd } from "../utils/audit-labels";
-import { clientPath, navigate } from "../router";
+import { ClientLink } from "./ClientPeek";
 
 const PAGE = 50;
 
@@ -164,16 +164,9 @@ export function AuditLogSection() {
                             <>
                               {" · "}
                               {e.target.profileLocalId ? (
-                                <a
-                                  href={clientPath(e.target.profileLocalId)}
-                                  onClick={(ev) => {
-                                    ev.preventDefault();
-                                    navigate(clientPath(e.target!.profileLocalId!));
-                                  }}
-                                  style={s.link}
-                                >
+                                <ClientLink clientId={e.target.profileLocalId} style={s.link}>
                                   {e.target.name}
-                                </a>
+                                </ClientLink>
                               ) : (
                                 <span>{e.target.name}</span>
                               )}

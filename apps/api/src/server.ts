@@ -29,7 +29,7 @@ import {
   handleCallLog,
   handleJailIntakes,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
 import { setApiToken } from "@case-pipeline/monday";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
@@ -65,6 +65,7 @@ import { registerCallLogRoutes } from "./routes/call-log.js";
 import { registerMailRoutes } from "./routes/mail.js";
 import { registerBoardItemWriteRoutes } from "./routes/board-item-write.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
+import { registerDetentionWriteRoutes } from "./routes/detention-write.js";
 import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
 import { registerJailIntakeWriteRoutes } from "./routes/jail-intake-write.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
@@ -385,6 +386,15 @@ app.get("/api/active-cases", (req, res) => {
     }),
   });
 });
+// Prescheduling — Paid Fee Ks waiting for the client's documents. Thresholds
+// are the query defaults (30 / 60 days since hire, 14 days after a reminder).
+app.get("/api/prescheduling", (_req, res) => {
+  res.json({ data: getPrescheduling(db) });
+});
+// Contracts — Pending Fee Ks by Contract Stage, aged from the sent date (30 / 60 days).
+app.get("/api/pending-contracts", (_req, res) => {
+  res.json({ data: getPendingContracts(db) });
+});
 // Calendar — hearings, court/USCIS deadlines, interviews, and appointments
 // unified across boards. See libs/query/src/calendar.ts.
 const VALID_CALENDAR_CATEGORIES = new Set<CalendarCategory>([
@@ -445,6 +455,7 @@ app.get("/api/jail-intakes", adapt(handleJailIntakes));
 registerProfileWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerAppointmentWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerJailIntakeWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerDetentionWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 
 // =============================================================================
 // Board item write-back (status + columns) — see routes/board-item-write.ts
