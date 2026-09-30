@@ -56,6 +56,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P11 | Settings | `/settings/<tab>` | Sidebar → Settings (bottom) | `pages/SettingsPage.tsx` |
 | P12 | Mail | `/mail` | Sidebar → Mail | `components/MailPage.tsx` |
 | P13 | Prescheduling | `/prescheduling` | Sidebar → Prescheduling (above Active Cases) | `components/PreschedulingPage.tsx` |
+| P14 | Contracts | `/contracts` | Sidebar → Contracts (above Prescheduling) | `components/ContractsPage.tsx` |
 
 ### Global
 
@@ -122,6 +123,14 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 | P13.1 | Header | Paid count, waiting 60+ days, not cooperating; colour legend |
 | P13.2 | Summary table | Paralegal rows × PS Stage; cell colour = longest wait since hire; click to filter P13.3 |
 | P13.3 | Case list | Filter chips (person, stage, not cooperating, North Pole) + cases grouped by days since hire |
+
+### Inside P14 Contracts
+
+| Code | Name | Notes |
+|---|---|---|
+| P14.1 | Header | Pending count, older than 60 days, not sent yet; colour legend |
+| P14.2 | Summary table | Attorney rows × Contract Stage; cell colour = oldest contract (days since sent, else added); click to filter P14.3 |
+| P14.3 | Contract list | Grouped by Contract Stage: age, payment link, AF/FF, attorneys, assistant |
 
 ### Inside P6 My Cases
 
