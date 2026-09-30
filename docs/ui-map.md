@@ -57,6 +57,8 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P12 | Mail | `/mail` | Sidebar → Mail | `components/MailPage.tsx` |
 | P13 | Prescheduling | `/prescheduling` | Sidebar → Prescheduling (above Active Cases) | `components/PreschedulingPage.tsx` |
 | P14 | Contracts | `/contracts` | Sidebar → Contracts (above Prescheduling) | `components/ContractsPage.tsx` |
+| P15 | Court Cases | `/court-cases` | Sidebar → Court Cases | placeholder in `app.tsx` (not built yet) |
+| P16 | Map | `/map` | Sidebar → Map | placeholder in `app.tsx` (not built yet) |
 
 ### Global
 

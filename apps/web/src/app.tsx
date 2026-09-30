@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Component, lazy, Suspense } from "react";
 import type { ReactNode, ErrorInfo } from "react";
 import { createRoot } from "react-dom/client";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, UNDER_CONSTRUCTION_PAGES } from "./components/Sidebar";
 import { LoginPage } from "./pages/LoginPage";
 import { LogCallModal } from "./components/LogCallModal";
 import { ClientPeekHost } from "./components/ClientPeek";
@@ -48,6 +48,8 @@ const PAGE_CODES: Partial<Record<Route["page"], string>> = {
   "call-log": "P10",
   settings: "P11",
   mail: "P12",
+  "court-cases": "P15",
+  map: "P16",
 };
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
@@ -77,6 +79,24 @@ function MobileMenuButton({ onOpen }: { onOpen: () => void }) {
 
 // Shared loading indicator: used both for in-flight data and as the Suspense
 // fallback while a route chunk downloads, so the two states look identical.
+// Shown to non-admins on pages still being built (Alerts, Mail) — the sidebar
+// greys them out, this covers a typed-in or bookmarked URL.
+// Court Cases and Map have no page yet, so admins get a "planned" note instead.
+function UnderConstruction({ label, planned = false }: { label: string; planned?: boolean }) {
+  return (
+    <div className="py-20 flex flex-col items-center gap-2 animate-in" style={{ fontFamily: "var(--font-body)" }}>
+      <div className="text-lg font-semibold" style={{ color: "var(--color-ink)" }}>
+        {planned ? `${label} — coming next` : `${label} is under construction`}
+      </div>
+      <div className="text-sm" style={{ color: "var(--color-ink-muted)" }}>
+        {planned
+          ? "We will work on this. Nothing to see here yet, but it has a place in the sidebar."
+          : "This page isn't ready yet. It will open for everyone once it is."}
+      </div>
+    </div>
+  );
+}
+
 function PageLoading() {
   return (
     <div className="py-20 flex flex-col items-center gap-3 animate-in">
@@ -188,6 +208,7 @@ function App() {
 
   const route = matchRoute(pathname);
   const isClientDetail = route.page === "client-detail";
+  const underConstruction = UNDER_CONSTRUCTION_PAGES.has(route.page) && user?.role !== "admin";
   // Phones: drawer is off-canvas, content takes the full width.
   // Tablets (641–1024px): sidebar is a forced 60px icon rail.
   // Desktop: honour the manual collapse toggle (60 vs 220).
@@ -329,12 +350,14 @@ function App() {
             {route.page === "calendar" && !loading && <CalendarPage />}
 
             {/* Alerts page */}
-            {route.page === "alerts" && !loading && <AlertsPage />}
+            {route.page === "alerts" && !loading && (underConstruction ? <UnderConstruction label="Alerts" /> : <AlertsPage />)}
 
             {/* Call Log page */}
             {route.page === "call-log" && !loading && <CallLogPage />}
             {route.page === "jail-intakes" && !loading && <JailIntakesPage />}
-            {route.page === "mail" && !loading && <MailPage />}
+            {route.page === "mail" && !loading && (underConstruction ? <UnderConstruction label="Mail" /> : <MailPage />)}
+            {route.page === "court-cases" && !loading && <UnderConstruction label="Court Cases" planned={!underConstruction} />}
+            {route.page === "map" && !loading && <UnderConstruction label="Map" planned={!underConstruction} />}
 
             {/* Clients page — search + filtered browse */}
             {route.page === "clients" && !loading && !client && <ClientsPage />}

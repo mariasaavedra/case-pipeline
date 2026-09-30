@@ -14,6 +14,10 @@ interface NavItem {
   disabled?: boolean;
 }
 
+/** Pages still being built: admins use them, everyone else sees them greyed
+ *  out here and a notice on the page itself (app.tsx). Remove an id to open it. */
+export const UNDER_CONSTRUCTION_PAGES = new Set(["alerts", "mail", "court-cases", "map"]);
+
 const NAV_ITEMS: NavItem[] = [
   {
     id: "home",
@@ -111,7 +115,6 @@ const NAV_ITEMS: NavItem[] = [
     id: "alerts",
     label: "Alerts",
     path: "/alerts",
-    disabled: false,
     icon: (
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M10 2L2 18h16L10 2z" />
@@ -148,6 +151,29 @@ const NAV_ITEMS: NavItem[] = [
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
         <rect x="2.5" y="4.5" width="15" height="11" rx="1.5" />
         <path d="M3 5.5l7 5 7-5" />
+      </svg>
+    ),
+  },
+  {
+    id: "court-cases",
+    label: "Court Cases",
+    path: "/court-cases",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M3 7.5L10 3l7 4.5" />
+        <path d="M4.5 8.5v6M8 8.5v6M12 8.5v6M15.5 8.5v6" />
+        <path d="M3 17h14" />
+      </svg>
+    ),
+  },
+  {
+    id: "map",
+    label: "Map",
+    path: "/map",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M2.5 5l5-2 5 2 5-2v12l-5 2-5-2-5 2V5z" />
+        <path d="M7.5 3v12M12.5 5v12" />
       </svg>
     ),
   },
@@ -190,8 +216,12 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
     } catch {}
   };
 
+  const isAdmin = user?.role === "admin";
+  const isBuilding = (item: NavItem) => !isAdmin && UNDER_CONSTRUCTION_PAGES.has(item.id);
+  const isLocked = (item: NavItem) => item.disabled || isBuilding(item);
+
   const handleNav = (item: NavItem) => {
-    if (item.disabled) return;
+    if (isLocked(item)) return;
     navigate(item.path);
     onMobileClose();
   };
@@ -239,20 +269,24 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
         <nav className="sidebar-nav">
           {NAV_ITEMS.map((item) => {
             const active = isActiveItem(item, pathname);
+            const locked = isLocked(item);
+            const building = isBuilding(item);
             return (
               <button
                 key={item.id}
                 onClick={() => handleNav(item)}
-                disabled={item.disabled}
+                disabled={locked}
                 className={`sidebar-item ${active ? "sidebar-item-active" : ""}`}
-                title={rail ? item.label : undefined}
+                title={building ? `${item.label} — under construction` : rail ? item.label : undefined}
                 style={{ justifyContent: rail ? "center" : "flex-start" }}
               >
                 <span className="sidebar-icon">{item.icon}</span>
                 {!rail && <span className="sidebar-label">{item.label}</span>}
-                {item.disabled && !rail && (
+                {building && !rail ? (
+                  <span className="sidebar-soon">Building</span>
+                ) : item.disabled && !rail ? (
                   <span className="sidebar-soon">Soon</span>
-                )}
+                ) : null}
               </button>
             );
           })}
