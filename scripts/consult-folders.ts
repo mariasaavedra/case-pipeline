@@ -26,21 +26,16 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import { consultFolderName, consultFolderPath, type NameRefusal } from "./sharepoint/consult-naming.js";
 import { graphAuthFromEnv } from "./sharepoint/auth.js";
-import { resolveSiteDrive, listChildren, getItemByPath, ensureFolderPath } from "./sharepoint/folders.js";
+import { resolveSiteDrive, getItemByPath, ensureFolderPath } from "./sharepoint/folders.js";
+import { scanSite, HOST, CONSULTS_SITE, EFILES_SITE, CLOSED_SITE } from "./sharepoint/scan.js";
 import { buildFolderIndex, findMatch, looseCandidates, type FolderRef } from "./sharepoint/match.js";
-import { GraphError, type GraphAuth } from "./sharepoint/graph-client.js";
+import type { GraphAuth } from "./sharepoint/graph-client.js";
 import { linkTargetForSite, CONSULT_FILE, type LinkTarget } from "./sharepoint/link-target.js";
 import { consultOutcome, type ConsultOutcome } from "./sharepoint/consult-status.js";
 import { changeSimpleColumnValue, setApiToken } from "@case-pipeline/monday";
 
 const APPOINTMENT_BOARDS = ["appointments_r", "appointments_lb", "appointments_m"];
 
-const HOST = "sharmacrawford.sharepoint.com";
-/** Where a consult folder can legitimately be, in lifecycle order. */
-const CONSULTS_SITE = "scalconsults";
-const EFILES_SITE = "scalefiles";
-const CLOSED_SITE = "SCALClosed";
-const INITIALS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 /** Profiles board — config/boards.yaml. */
 const PROFILES_BOARD_ID = "8025265377";
 
@@ -91,71 +86,6 @@ function loadRows(db: Database.Database): Row[] {
       ORDER BY consultDate DESC
     `)
     .all(...APPOINTMENT_BOARDS) as Row[];
-}
-
-/**
- * Collect every client folder from one site into a flat list of refs.
- *
- * Layout differs per site and is handled explicitly rather than by recursion:
- * Consults nests under {YYYY} Consults/{initial}, E-Files under {initial}, and
- * Closed is flat. A generic crawl would be slower and would wander into the
- * project folders ("EL TORO LOCO", "AIC FOIA LITIGATION") that are not clients.
- */
-async function scanSite(
-  auth: GraphAuth,
-  site: string,
-  years: number[],
-): Promise<FolderRef[]> {
-  const drive = await resolveSiteDrive(auth, HOST, site);
-  const found: FolderRef[] = [];
-
-  const collect = async (parentPath: string) => {
-    const parent = await getItemByPath(auth, drive.driveId, parentPath);
-    if (!parent?.folder) return;
-    for (const child of await listChildren(auth, drive.driveId, parent.id)) {
-      if (child.folder) {
-        found.push({ name: child.name, site, path: `${parentPath}/${child.name}`, webUrl: child.webUrl });
-      }
-    }
-  };
-
-  if (site === CLOSED_SITE) {
-    const root = await getItemByPath(auth, drive.driveId, "");
-    if (root) {
-      for (const child of await listChildren(auth, drive.driveId, root.id)) {
-        if (child.folder) found.push({ name: child.name, site, path: child.name, webUrl: child.webUrl });
-      }
-    }
-    return found;
-  }
-
-  // Every year folder that EXISTS, not the ones the plan happens to mention.
-  // The site has 24 of them going back to 2003; indexing only the planned years
-  // (2024-2026) made repeat consults look new and created 5 duplicate folders
-  // on 2026-09-03. `years` is kept only to bound the work when a caller asks.
-  let parents: string[];
-  if (site === CONSULTS_SITE) {
-    const root = await getItemByPath(auth, drive.driveId, "");
-    const yearDirs = root
-      ? (await listChildren(auth, drive.driveId, root.id))
-          .filter((c) => c.folder && /consults$/i.test(c.name))
-          .map((c) => c.name)
-      : years.map((y) => `${y} Consults`);
-    parents = yearDirs.flatMap((y) => INITIALS.map((i) => `${y}/${i}`));
-  } else {
-    parents = INITIALS.map((i) => i);
-  }
-
-  for (const parentPath of parents) {
-    try {
-      await collect(parentPath);
-    } catch (err) {
-      // A missing initial folder is normal (no 2024 consults starting with Q).
-      if (err instanceof GraphError && err.status === 404) continue;
-      throw err;
-    }
-  }
-  return found;
 }
 
 interface MatchedRow {
