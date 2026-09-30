@@ -26,9 +26,10 @@ import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { fetchBoardStructure, fetchItem } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
-import { getJailIntakeNotes } from "@case-pipeline/query";
+import { getJailIntakeNotes, getBoardColumnsFor } from "@case-pipeline/query";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { FIRM_TIMEZONE } from "../firm.js";
+import { bookableBoards } from "../attorney-boards.js";
 
 const BOARD_KEY = "_fa_jail_intakes";
 
@@ -57,7 +58,10 @@ export type IntakeColumnKey =
   // renaming a live column is not this route's business. See the note in
   // project_call_log about verifying labels before "fixing" them.
   | "have_you_even_been_removed"
-  | "what_date_did_you_get_picked_up_by_ice";
+  | "what_date_did_you_get_picked_up_by_ice"
+  // Book consult (M9): the two fields staff fill before pressing Create Appt.
+  | "appt_with"
+  | "consult_date";
 
 /** Resolved column ids, keyed by config name. Missing keys are simply not written. */
 export type IntakeColumnIds = Partial<Record<IntakeColumnKey | "first_name" | "last_name" | "link_to_call_log", string>>;
@@ -204,6 +208,92 @@ export function appendToDescription(
   const next = base ? `${base}\n\n${entry}` : entry;
   if (next.length > limit) return { next: null, full: true };
   return { next, full: false };
+}
+
+// =============================================================================
+// Book consult — fill Consult Date + Appt with, then Monday's button does the rest
+// =============================================================================
+// On Monday, booking a paid intake is: set Consult Date, set "Appt with:" to the
+// attorney's letter, press the Create Appt button. The button's automations
+// create the appointment on that attorney's board, create the profile, link the
+// three, and move the intake to Scheduled. Monday's API cannot press a button,
+// and redoing that chain here would race the automations (a second profile), so
+// this writes the two fields and the UI sends staff to Monday for the press.
+// See docs/decisions.md 2026-09-30.
+// =============================================================================
+
+/** The only status offered the button: paid, not yet booked. */
+export const BOOKABLE_INTAKE_STATUS = "Needs to be scheduled";
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export interface IntakeConsultInput {
+  date?: unknown;
+  time?: unknown;
+  apptWith?: unknown;
+}
+
+export interface IntakeConsultPlan {
+  date: string;
+  time: string | null;
+  apptWith: string;
+  /** In write order: the date first, so the attorney never shows without one. */
+  writes: Array<{ key: "consult_date" | "appt_with"; columnId: string; value: Record<string, unknown> }>;
+}
+
+/**
+ * Validate a Book consult request against the intake and the board.
+ *
+ * `apptWithLabels` is the column's own labels; `attorneyBadges` the bookable
+ * attorneys (data/attorney-boards.json). A label must be in both: the column
+ * also holds workflow labels ("Appt requested. Waiting on date"), which are not
+ * attorneys and would make the button create nothing.
+ */
+export function planIntakeConsult(
+  input: IntakeConsultInput,
+  opts: {
+    status: string | null;
+    columnIds: IntakeColumnIds;
+    apptWithLabels: string[];
+    attorneyBadges: string[];
+    today: string;
+  },
+): { plan: IntakeConsultPlan } | { rejection: JailIntakeRejection & { allowed?: string[] } } {
+  if (opts.status !== BOOKABLE_INTAKE_STATUS) {
+    return { rejection: { status: 409, error: `Only an intake in "${BOOKABLE_INTAKE_STATUS}" can book a consult` } };
+  }
+  const dateCol = opts.columnIds.consult_date;
+  const apptCol = opts.columnIds.appt_with;
+  if (!dateCol || !apptCol) {
+    return { rejection: { status: 409, error: "Consult Date / Appt with are not in config/boards.yaml" } };
+  }
+
+  const date = (input.date ?? "").toString().trim();
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (!DATE_RE_ISO.test(date) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    return { rejection: { status: 400, error: "date must be a date (YYYY-MM-DD)" } };
+  }
+  if (date < opts.today) return { rejection: { status: 400, error: "date cannot be in the past" } };
+
+  const time = (input.time ?? "").toString().trim();
+  if (time && !TIME_RE.test(time)) return { rejection: { status: 400, error: "time must be HH:MM" } };
+
+  const allowed = opts.apptWithLabels.filter((l) => opts.attorneyBadges.includes(l));
+  const apptWith = (input.apptWith ?? "").toString().trim();
+  if (!allowed.includes(apptWith)) {
+    return { rejection: { status: 400, error: "Pick an attorney", allowed } };
+  }
+
+  return {
+    plan: {
+      date, time: time || null, apptWith,
+      writes: [
+        // Same shape M10 writes a Consult Date in (appointment-write.ts).
+        { key: "consult_date", columnId: dateCol, value: time ? { date, time: `${time}:00` } : { date } },
+        { key: "appt_with", columnId: apptCol, value: { label: apptWith } },
+      ],
+    },
+  };
 }
 
 export interface JailIntakeWriteDeps {
@@ -372,6 +462,82 @@ export function registerJailIntakeWriteRoutes(app: Express, deps: JailIntakeWrit
       metadata: { name: intake.name, queued: pending, descriptionUpdated, descriptionFull },
     });
     res.status(pending ? 202 : 200).json({ data: { pending, descriptionUpdated, descriptionFull } });
+  });
+
+  /** Book consult (M9): write Consult Date + Appt with. See planIntakeConsult. */
+  app.post("/api/jail-intakes/:localId/consult", requireAuth, async (req, res) => {
+    if (!MONDAY_API_TOKEN) {
+      res.status(503).json({ error: "Monday.com write-back not configured" });
+      return;
+    }
+    const localId = String(req.params.localId);
+    const board = await intakeBoard();
+    if (!board) {
+      res.status(409).json({ error: `Board "${BOARD_KEY}" is not in config/boards.yaml` });
+      return;
+    }
+    const intake = db
+      .prepare("SELECT monday_item_id, name, status FROM board_items WHERE local_id = ? AND board_key = ?")
+      .get(localId, BOARD_KEY) as { monday_item_id: string | null; name: string; status: string | null } | undefined;
+    if (!intake) {
+      res.status(404).json({ error: "Jail intake not found" });
+      return;
+    }
+    if (!intake.monday_item_id) {
+      res.status(400).json({ error: "This intake has not synced to Monday yet — try again after the next sync" });
+      return;
+    }
+    const mondayItemId = intake.monday_item_id;
+
+    const apptWithLabels =
+      getBoardColumnsFor(db, BOARD_KEY)?.columns.find((c) => c.columnId === board.columnIds.appt_with)?.options.map((o) => o.label) ?? [];
+    const planned = planIntakeConsult(req.body as IntakeConsultInput, {
+      status: intake.status,
+      columnIds: board.columnIds,
+      apptWithLabels,
+      attorneyBadges: bookableBoards().map((b) => b.displayName),
+      today: new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TIMEZONE }),
+    });
+    if ("rejection" in planned) {
+      const { status, ...rest } = planned.rejection;
+      res.status(status).json(rest);
+      return;
+    }
+    const { plan } = planned;
+
+    let pending = false;
+    const authorOid = req.user?.oid ?? null;
+    for (const w of plan.writes) {
+      try {
+        await withTokenFallback(
+          (token) => dataSource.setColumnValueJson(board.boardId, mondayItemId, w.columnId, w.value, token),
+          writeTokenOptions(req),
+        );
+      } catch (err) {
+        console.error(`[write-back] intake ${w.key} failed; queueing for retry:`, err);
+        pending = true;
+        enqueueWrite(db, {
+          opType: "change_column_json", targetTable: "board_items", targetLocalId: localId,
+          mondayItemId, authorOid, payload: { boardId: board.boardId, columnId: w.columnId, value: w.value },
+        });
+      }
+    }
+
+    // Optimistic mirror, in the shape the sync stores (date/time, {label}).
+    db.prepare(
+      `UPDATE board_items SET column_values = json_set(COALESCE(column_values, '{}'),
+         '$.consult_date', json(?), '$.appt_with', json(?)) WHERE local_id = ?`,
+    ).run(
+      JSON.stringify(plan.time ? { date: plan.date, time: plan.time } : { date: plan.date }),
+      JSON.stringify({ label: plan.apptWith }),
+      localId,
+    );
+
+    auditFromReq(req, "monday.jail_intake_consult_set", {
+      targetType: "board_item", targetId: localId, targetMondayId: mondayItemId,
+      metadata: { name: intake.name, date: plan.date, time: plan.time, apptWith: plan.apptWith, queued: pending },
+    });
+    res.status(pending ? 202 : 200).json({ data: { pending, date: plan.date, time: plan.time, apptWith: plan.apptWith } });
   });
 
   app.post("/api/jail-intakes", requireAuth, async (req, res) => {

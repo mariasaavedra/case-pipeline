@@ -521,6 +521,11 @@ export interface JailIntake {
   /** YYYY-MM-DD, from the board's "Intake Created" column. */
   intakeCreatedOn: string | null;
   lastInteractionDate: string | null;
+  /** The intake's own Consult Date column (YYYY-MM-DD / HH:MM), set before Create Appt. */
+  consultDate: string | null;
+  consultTime: string | null;
+  /** "Appt with:" — the attorney's badge (M, LB, …) or a workflow label. */
+  apptWith: string | null;
   /** Set once the lead booked a consult — the end of the funnel. */
   convertedTo: {
     appointmentLocalId: string;

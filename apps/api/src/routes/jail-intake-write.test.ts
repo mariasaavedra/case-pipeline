@@ -8,7 +8,14 @@
 // =============================================================================
 
 import { describe, it, expect } from "vitest";
-import { planJailIntakeWrite, appendToDescription, LONG_TEXT_LIMIT, type IntakeColumnIds } from "./jail-intake-write";
+import {
+  planJailIntakeWrite,
+  appendToDescription,
+  LONG_TEXT_LIMIT,
+  planIntakeConsult,
+  BOOKABLE_INTAKE_STATUS,
+  type IntakeColumnIds,
+} from "./jail-intake-write";
 
 // The real ids from config/boards.yaml. `poc_name_and_relationship_with_detained`
 // is text_mkkgcg74 — NOT text_mm22stss, the "…: 1" column beside it.
@@ -260,5 +267,61 @@ describe("appendToDescription", () => {
   it("counts the existing text and the separator toward the limit", () => {
     const existing = "z".repeat(LONG_TEXT_LIMIT - 30);
     expect(appendToDescription(existing, "a short note", opts).full).toBe(true);
+  });
+});
+
+// =============================================================================
+// Book consult (M9) — Consult Date + Appt with, before Monday's Create Appt
+// =============================================================================
+
+describe("planIntakeConsult", () => {
+  const opts = {
+    status: BOOKABLE_INTAKE_STATUS as string | null,
+    columnIds: { consult_date: "date3__1", appt_with: "status_1_mkkghdn7" } as IntakeColumnIds,
+    // The column's real labels: attorney badges mixed with workflow labels.
+    apptWithLabels: ["PRIOR ORDER needs appt asap", "M", "LB", "WH", "R", "Appt requested. Waiting on date"],
+    attorneyBadges: ["R", "M", "LB"],
+    today: "2026-09-30",
+  };
+
+  it("writes the date (with time) first, then the attorney's badge, to the pinned ids", () => {
+    const out = planIntakeConsult({ date: "2026-10-02", time: "14:30", apptWith: "LB" }, opts);
+    expect("plan" in out && out.plan.writes).toEqual([
+      { key: "consult_date", columnId: "date3__1", value: { date: "2026-10-02", time: "14:30:00" } },
+      { key: "appt_with", columnId: "status_1_mkkghdn7", value: { label: "LB" } },
+    ]);
+  });
+
+  it("leaves the time off when none is given", () => {
+    const out = planIntakeConsult({ date: "2026-10-02", apptWith: "M" }, opts);
+    expect("plan" in out && out.plan.writes[0]!.value).toEqual({ date: "2026-10-02" });
+  });
+
+  it("refuses an intake that is not waiting to be scheduled", () => {
+    const out = planIntakeConsult({ date: "2026-10-02", apptWith: "M" }, { ...opts, status: "Payment link sent. Waiting on payment" });
+    expect("rejection" in out && out.rejection.status).toBe(409);
+  });
+
+  it("refuses a workflow label, and an attorney not taking consults", () => {
+    for (const apptWith of ["Appt requested. Waiting on date", "WH", ""]) {
+      const out = planIntakeConsult({ date: "2026-10-02", apptWith }, opts);
+      expect("rejection" in out && out.rejection).toMatchObject({ status: 400, allowed: ["M", "LB", "R"] });
+    }
+  });
+
+  it("refuses a past, malformed or impossible date, and a bad time", () => {
+    for (const input of [
+      { date: "2026-09-29", apptWith: "M" },
+      { date: "10/02/2026", apptWith: "M" },
+      { date: "2026-02-30", apptWith: "M" },
+      { date: "2026-10-02", time: "3pm", apptWith: "M" },
+    ]) {
+      const out = planIntakeConsult(input, opts);
+      expect("rejection" in out && out.rejection.status).toBe(400);
+    }
+  });
+
+  it("accepts today", () => {
+    expect("plan" in planIntakeConsult({ date: "2026-09-30", apptWith: "R" }, opts)).toBe(true);
   });
 });

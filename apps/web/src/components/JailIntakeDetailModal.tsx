@@ -10,13 +10,28 @@
 // requires a profile, an intake has none until it books a consult, and the
 // sync skips profile-less items — so there is no local history to show and
 // pretending otherwise would be worse than saying it plainly.
+//
+// Book consult shows on a paid intake ("Needs to be scheduled"). It writes the
+// two fields Monday's Create Appt button reads — Consult Date and "Appt with:" —
+// and then sends staff to Monday to press the button, because the API cannot
+// press it and the button's automations create the appointment AND the
+// profile. See docs/decisions.md 2026-09-30.
 // =============================================================================
 
 import { useCallback, useEffect, useState } from "react";
-import { addJailIntakeNote, fetchJailIntakeNotes, type JailIntake, type JailIntakeNote } from "../api";
+import {
+  addJailIntakeNote,
+  bookJailIntakeConsult,
+  fetchBookableBoards,
+  fetchJailIntakeNotes,
+  type BookableBoard,
+  type JailIntake,
+  type JailIntakeNote,
+} from "../api";
 import { MONDAY_JAIL_INTAKES_BOARD_ID, mondayItemUrl } from "../config";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { StatusBadge } from "./StatusBadge";
 import { ClientLink } from "./ClientPeek";
 
@@ -43,12 +58,148 @@ function Row({ label, value }: { label: string; value: string | null }) {
   );
 }
 
+/** The status that offers Book consult: paid, not yet booked. Mirrors the API. */
+const BOOKABLE_STATUS = "Needs to be scheduled";
+
+const fieldStyle = {
+  border: "1px solid var(--color-border-light)",
+  background: "var(--color-surface)",
+  color: "var(--color-ink)",
+  fontFamily: "var(--font-body)",
+} as const;
+
+function FieldLabel({ children }: { children: string }) {
+  return (
+    <span
+      className="block text-[10px] font-semibold uppercase tracking-wider mb-1"
+      style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function BookConsultSection({ intake, onSaved }: { intake: JailIntake; onSaved?: () => void }) {
+  const [boards, setBoards] = useState<BookableBoard[] | null>(null);
+  const [apptWith, setApptWith] = useState(intake.apptWith ?? "");
+  const [date, setDate] = useState(intake.consultDate ?? "");
+  const [time, setTime] = useState(intake.consultTime ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<{ pending: boolean } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchBookableBoards()
+      .then((b) => !cancelled && setBoards(b))
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "Could not load attorneys"));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // "Appt with:" holds the attorney's badge (M, LB, …), so the badge is the value.
+  const items = [
+    { value: "", label: "Select…" },
+    ...(boards ?? []).map((b) => ({ value: b.badge, label: b.label === b.badge ? b.badge : `${b.label} (${b.badge})` })),
+  ];
+  // Anything already on the intake that isn't an attorney ("Appt requested…") is not a pick.
+  const value = items.some((i) => i.value === apptWith) ? apptWith : "";
+
+  const submit = async () => {
+    if (!value) { setError("Pick an attorney."); return; }
+    if (!date) { setError("Pick a date."); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await bookJailIntakeConsult(intake.localId, { date, time: time || undefined, apptWith: value });
+      setSaved({ pending: res.pending });
+      onSaved?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save to Monday");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const mondayUrl = intake.mondayItemId ? mondayItemUrl(MONDAY_JAIL_INTAKES_BOARD_ID, intake.mondayItemId) : null;
+
+  return (
+    <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--color-border-light)" }}>
+      <h3
+        className="text-[11px] font-semibold uppercase tracking-wider mb-2"
+        style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+      >
+        Book consult
+      </h3>
+
+      {saved ? (
+        <div className="text-sm" style={{ fontFamily: "var(--font-body)", color: "var(--color-ink)" }}>
+          <p style={{ color: "var(--color-status-green)", marginBottom: 6 }}>
+            ✓ Consult Date and Appt with set{saved.pending ? " — queued, Monday was unreachable" : " in Monday"}.
+          </p>
+          <p style={{ marginBottom: 10 }}>
+            Last step: open the intake in Monday and press <strong>Create Appt</strong>. Monday creates the appointment
+            and the profile; they show here after the next sync.
+          </p>
+          {mondayUrl && (
+            <a href={mondayUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-block rounded-md px-3 py-1.5 text-sm font-medium"
+              style={{ background: "var(--color-amber-light)", color: "var(--color-amber)", textDecoration: "none" }}>
+              Open in Monday to press Create Appt ↗
+            </a>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-3 mb-2">
+            <div className="flex-[2] min-w-[180px]">
+              <FieldLabel>Attorney (Appt with)</FieldLabel>
+              <Select items={items} value={value} onValueChange={(v) => setApptWith(v ?? "")}>
+                <SelectTrigger aria-label="Attorney (Appt with)" size="sm" className="w-full border-border-light bg-surface">
+                  <SelectValue placeholder={boards === null ? "Loading…" : "Select…"} />
+                </SelectTrigger>
+                <SelectContent code="D14" className="w-[var(--anchor-width)]">
+                  <SelectItem value="">Select…</SelectItem>
+                  {items.slice(1).map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <label className="flex-[1.4] min-w-[140px]">
+              <FieldLabel>Consult date</FieldLabel>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                className="w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
+            </label>
+            <label className="flex-1 min-w-[110px]">
+              <FieldLabel>Time</FieldLabel>
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
+                className="w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
+            </label>
+          </div>
+          <p className="text-[11px] mb-2" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
+            Saves these two fields on the intake. You then press Create Appt in Monday, which makes the appointment and
+            the profile.
+          </p>
+          {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
+          <div className="flex justify-end">
+            <Button type="button" onClick={submit} disabled={saving || boards === null}>
+              {saving ? "Saving…" : "Save to Monday"}
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   intake: JailIntake;
   onClose: () => void;
+  /** Called after Book consult saves, so the list can reload. */
+  onChanged?: () => void;
 }
 
-export function JailIntakeDetailModal({ intake, onClose }: Props) {
+export function JailIntakeDetailModal({ intake, onClose, onChanged }: Props) {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +309,10 @@ export function JailIntakeDetailModal({ intake, onClose }: Props) {
             <Row label="Phone" value={intake.pocPhone} />
             <Row label="Last contact" value={intake.lastInteractionDate ? formatDate(intake.lastInteractionDate) : null} />
           </div>
+
+          {intake.status === BOOKABLE_STATUS && !intake.convertedTo && (
+            <BookConsultSection intake={intake} onSaved={onChanged} />
+          )}
 
           <div className="px-5 py-4">
             <h3

@@ -243,7 +243,7 @@ export function JailIntakesPage() {
 
       {creating && <NewJailIntakeModal onClose={() => setCreating(false)} onCreated={load} />}
 
-      {opened && <JailIntakeDetailModal intake={opened} onClose={() => setOpened(null)} />}
+      {opened && <JailIntakeDetailModal intake={opened} onClose={() => setOpened(null)} onChanged={load} />}
     </div>
   );
 }

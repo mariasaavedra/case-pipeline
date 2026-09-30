@@ -280,6 +280,9 @@ export interface JailIntake {
   pocPhone: string | null;
   intakeCreatedOn: string | null;
   lastInteractionDate: string | null;
+  consultDate: string | null;
+  consultTime: string | null;
+  apptWith: string | null;
   convertedTo: {
     appointmentLocalId: string;
     appointmentName: string;
@@ -326,6 +329,21 @@ export async function addJailIntakeNote(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
+  });
+}
+
+/**
+ * Book consult on a paid intake (M9): writes Consult Date + "Appt with:".
+ * Staff then press Create Appt in Monday, whose automations do the rest.
+ */
+export async function bookJailIntakeConsult(
+  localId: string,
+  input: { date: string; time?: string; apptWith: string },
+): Promise<{ pending: boolean; date: string; time: string | null; apptWith: string }> {
+  return apiFetch(`/api/jail-intakes/${encodeURIComponent(localId)}/consult`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
 }
 
