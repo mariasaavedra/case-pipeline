@@ -24,6 +24,19 @@ export interface ProfileSummary {
    */
   eFile?: string | null;
   consultFile?: string | null;
+  /**
+   * "First Last" from the Profiles board's First Name / Last Name columns, with
+   * the [A#] and (det in …) notes staff type into them stripped. Null when both
+   * are empty — show `name` then. Only the full client detail sets it.
+   */
+  displayName?: string | null;
+  /**
+   * The facility (e.g. "Greene Co. (MO)") on the client's open court case —
+   * one still in the "Court Case" group. Null when there is none: a Withdrew /
+   * Ordered Removed / Granted case's facility is history, not where they are.
+   * Only the full client detail sets it.
+   */
+  detainedAt?: string | null;
 }
 
 /**

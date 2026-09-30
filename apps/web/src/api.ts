@@ -221,6 +221,21 @@ export async function createContract(
   });
 }
 
+/**
+ * Mark a detained client released: clears Det. Facility on their open court
+ * case(s) in Monday and logs a Casenote in the profile's E&A. pending=queued.
+ */
+export async function releaseClient(
+  profileLocalId: string,
+  input: { note: string; releasedOn?: string },
+): Promise<{ released: boolean; pending: boolean }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/release`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
 export interface BookableBoard {
   boardKey: string;
   /** The attorney's name when configured, otherwise their badge initials. */

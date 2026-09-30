@@ -2,7 +2,7 @@
 // Query Layer — Public API
 // =============================================================================
 
-export { searchClients, getClientProfile, getClientByName, listProfiles, listProfilesFiltered, getFilterOptions } from "./client";
+export { searchClients, getClientProfile, getOpenDetentions, getClientByName, listProfiles, listProfilesFiltered, getFilterOptions } from "./client";
 export type { ProfileFilterOptions, FilteredProfileResult, FilterOptions } from "./client";
 export { getClientContracts } from "./contracts";
 export { getClientBoardItems, getBoardItemDetail } from "./board-items";

@@ -88,7 +88,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Address | Notes |
 |---|---|---|---|
-| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
+| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
 | P3.1 | Overview tab | `/clients/:id` | Timeline of notes + note composer; date range → D5 |
 | P3.2 | Appointments tab | `/clients/:id/appointments` | **+ Book a consult** → M10 |
 | P3.3 | Contracts tab | `/clients/:id/contracts` | **+ New contract** → M11 |
@@ -200,6 +200,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M14 | What's new | Changelog | Version badge on P1 Home / P0 Sign in | `VersionBadge.tsx` |
 | M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
 | M16 | Connect Monday.com | "Connect your Monday.com account" / "Reconnect…" / "Monday.com connected" | Opens by itself after sign-in when Monday isn't connected (any page but P11); **Not now** hides it for 12 h | `MondayConnectPrompt.tsx` |
+| M17 | Released from detention | "Released from detention" | P3.0 → **Released?** on the "Detained at …" pill | `ReleaseDetentionModal.tsx` |
 
 ## Dropdowns
 

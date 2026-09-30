@@ -293,6 +293,50 @@ describe("getClientProfile", () => {
     expect(getClientProfile(db, "nonexistent")).toBeNull();
     db.close();
   });
+
+  test("displayName is First + Last with bracketed notes stripped", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+    insertProfile(db, batchId, { localId: "p1", name: "Milton D. VENTURA CORADO [A221-455-213] (Det in Core Civic)" });
+    run(db, "UPDATE profiles SET raw_column_values = ? WHERE local_id = 'p1'", [
+      JSON.stringify({ first_name: "Milton", last_name: "Ventura Corado [A221-455-213] (Det In Core Civic)" }),
+    ]);
+    insertProfile(db, batchId, { localId: "p2", name: "Felipe PEDRAZA" });
+    run(db, "UPDATE profiles SET raw_column_values = ? WHERE local_id = 'p2'", [
+      JSON.stringify({ first_name: "Felipe", last_name: "Pedraza ( det in Chase County Jail" }),
+    ]);
+    insertProfile(db, batchId, { localId: "p3", name: "No Columns" });
+
+    expect(getClientProfile(db, "p1")!.displayName).toBe("Milton Ventura Corado");
+    expect(getClientProfile(db, "p2")!.displayName).toBe("Felipe Pedraza");
+    expect(getClientProfile(db, "p3")!.displayName).toBeNull();
+    db.close();
+  });
+
+  test("detainedAt comes from an open court case only", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+    insertProfile(db, batchId, { localId: "p1", name: "Open Case" });
+    insertProfile(db, batchId, { localId: "p2", name: "Closed Case" });
+    insertProfile(db, batchId, { localId: "p3", name: "No Facility" });
+    insertBoardItem(db, batchId, {
+      localId: "cc1", boardKey: "court_cases", name: "Open Case", profileLocalId: "p1",
+      groupTitle: "Court Case", columnValues: { det_facility: { label: "Greene Co. (MO)" } },
+    });
+    insertBoardItem(db, batchId, {
+      localId: "cc2", boardKey: "court_cases", name: "Closed Case", profileLocalId: "p2",
+      groupTitle: "Withdrew", columnValues: { det_facility: { label: "Chase Co. (KS)" } },
+    });
+    insertBoardItem(db, batchId, {
+      localId: "cc3", boardKey: "court_cases", name: "No Facility", profileLocalId: "p3",
+      groupTitle: "Court Case", columnValues: {},
+    });
+
+    expect(getClientProfile(db, "p1")!.detainedAt).toBe("Greene Co. (MO)");
+    expect(getClientProfile(db, "p2")!.detainedAt).toBeNull();
+    expect(getClientProfile(db, "p3")!.detainedAt).toBeNull();
+    db.close();
+  });
 });
 
 describe("getClientByName", () => {

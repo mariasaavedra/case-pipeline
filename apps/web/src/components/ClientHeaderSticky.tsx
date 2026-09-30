@@ -1,8 +1,10 @@
+import { useState } from "react";
 import type { ProfileSummary, ClientCaseSummary } from "../api";
 import { ActionButtons } from "./ActionButtons";
 import { WatchlistPin } from "./WatchlistPin";
 import { DialogTitle } from "./ui/dialog";
 import { SectionCode } from "./ScreenCode";
+import { ReleaseDetentionModal } from "./ReleaseDetentionModal";
 import { mondayItemUrl, MONDAY_PROFILES_BOARD_ID } from "../config";
 import { formatANumber } from "@case-pipeline/core";
 
@@ -36,6 +38,14 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
   const priority = profile.priority ? PRIORITY_STYLES[profile.priority] : null;
   const isPopup = variant === "popup";
   const Name = isPopup ? DialogTitle : "h2";
+  // First + Last from the Profiles board; the item name (often "Maria GARCIA
+  // [A123-456-789] (det in …)") only when those columns are empty.
+  const displayName = profile.displayName || profile.name;
+  const [releaseOpen, setReleaseOpen] = useState(false);
+  // Hidden as soon as a release is saved; the next load reads the cleared
+  // facility from live.db (updated optimistically by the API).
+  const [released, setReleased] = useState(false);
+  const detainedAt = released ? null : profile.detainedAt;
 
   return (
     <div className={isPopup ? "flex-shrink-0 border-b border-border" : "client-header-sticky"}>
@@ -64,7 +74,7 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
               letterSpacing: "-0.02em",
             }}
           >
-            {getInitials(profile.name)}
+            {getInitials(displayName)}
           </div>
 
           <div className="flex-1 min-w-0">
@@ -77,7 +87,7 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
                 className="client-header-name text-2xl font-semibold tracking-tight truncate"
                 style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
               >
-                {profile.name}
+                {displayName}
               </Name>
               {priority && (
                 <span
@@ -87,6 +97,37 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
                   <span className={`priority-dot ${priority.dot}`} />
                   {priority.label}
                 </span>
+              )}
+              {detainedAt && (
+                <span
+                  className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0"
+                  style={{ backgroundColor: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" }}
+                  title="From the Det. Facility on this client's open court case"
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="4" y="3" width="16" height="18" rx="1" />
+                    <path d="M9 3v18M15 3v18" />
+                  </svg>
+                  Detained at {detainedAt}
+                  <button
+                    type="button"
+                    onClick={() => setReleaseOpen(true)}
+                    className="ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                    style={{ backgroundColor: "#fff", color: "#991b1b", border: "1px solid #fecaca", cursor: "pointer" }}
+                    title="Mark this client as released"
+                  >
+                    Released?
+                  </button>
+                </span>
+              )}
+              {releaseOpen && profile.detainedAt && (
+                <ReleaseDetentionModal
+                  profileLocalId={profile.localId}
+                  clientName={displayName}
+                  facility={profile.detainedAt}
+                  onClose={() => setReleaseOpen(false)}
+                  onReleased={() => setReleased(true)}
+                />
               )}
               <div className="client-header-actions flex-shrink-0 ml-auto flex items-center gap-3">
                 {/* Pinning keys off the Monday id, so a profile without one can't be pinned. */}
