@@ -27,7 +27,7 @@ import { graphAuthFromEnv } from "./sharepoint/auth.js";
 import { scanSite, CLIENT_SITES } from "./sharepoint/scan.js";
 import type { FolderRef } from "./sharepoint/match.js";
 import {
-  proposeLinks, folderCaseNo, consultFolderYear,
+  proposeLinks, folderCaseNo, consultFolderYear, isCopyProfile,
   type LinkProposal, type ProfileInput, type LinkColumn, type LinkConfidence,
 } from "./sharepoint/profile-links.js";
 import { CONSULT_FILE, E_FILE, type LinkTarget } from "./sharepoint/link-target.js";
@@ -194,6 +194,7 @@ async function main() {
   const emptyE = profiles.filter((p) => !p.eFile).length;
   const emptyC = profiles.filter((p) => !p.consultFile).length;
   console.log(`\nProfiles ${profiles.length}   empty E-File ${emptyE}   empty Consult File ${emptyC}`);
+  console.log(`Skipped as "(copy)" duplicates: ${profiles.filter(isCopyProfile).length}`);
   console.log(`Folders indexed ${folders.length}\n`);
 
   const tally = (col: LinkColumn, conf: LinkConfidence) =>

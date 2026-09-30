@@ -148,7 +148,18 @@ function describe(f: FolderRef): string {
   return `${f.site}/${f.path}`;
 }
 
-export function proposeLinks(profiles: ProfileInput[], folders: FolderRef[]): LinkProposal[] {
+/**
+ * A duplicated Monday item: "Orfa SANCHEZ (copy)". Monday names duplicates
+ * this way, and the copy is not the client's record — linking it would leave
+ * the real profile empty, and the copy and the original would claim the same
+ * folder (which demotes BOTH to review).
+ */
+export function isCopyProfile(p: Pick<ProfileInput, "name">): boolean {
+  return /\(copy\)/i.test(p.name);
+}
+
+export function proposeLinks(allProfiles: ProfileInput[], folders: FolderRef[]): LinkProposal[] {
+  const profiles = allProfiles.filter((p) => !isCopyProfile(p));
   const efileFolders = folders.filter((f) => EFILE_SITES.has(f.site.toLowerCase()));
   const consultFolders = folders.filter((f) => f.site.toLowerCase() === CONSULTS_SITE);
 

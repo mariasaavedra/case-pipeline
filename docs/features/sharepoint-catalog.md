@@ -37,7 +37,7 @@ npm run sharepoint:links -- --db=live --apply            # every high-confidence
 ```
 
 - **Index:** `sp_folders` (schema v28) — one row per client folder in Consults (`{year}/{letter}/*`), E-Files (`{letter}/*`) and Closed (root), with URL, year and case number parsed from the name. A folder a later scan no longer finds gets `missing_since`, not deleted.
-- **Rules** (`scripts/sharepoint/profile-links.ts`): E-File by case no. + surname (**high**) or name (**medium**); Consult File by name + consult year ±1 (**high**) or name without a date (**medium**). Contradictions, look-alikes, and one folder matching two profiles → **review**, never written. Consult File is not backfilled for a client who has, or is about to get, an E-File (link-target.ts: Consult File means "consulted, not hired").
+- **Rules** (`scripts/sharepoint/profile-links.ts`): E-File by case no. + surname (**high**) or name (**medium**); Consult File by name + consult year ±1 (**high**) or name without a date (**medium**). Contradictions, look-alikes, and one folder matching two profiles → **review**, never written. Profiles named `… (copy)` (Monday duplicates) are skipped entirely. Consult File is not backfilled for a client who has, or is about to get, an E-File (link-target.ts: Consult File means "consulted, not hired").
 - **Writes:** `--apply` writes high only by default, only into empty columns, re-reading each column from Monday just before writing. Receipt CSV under `output/`.
 
 ### First dry run (2026-09-30, local snapshot of 2026-09-29 — rerun on the server)
@@ -49,7 +49,7 @@ npm run sharepoint:links -- --db=live --apply            # every high-confidence
 | E-File | 70 | 92 | 56 |
 | Consult File | 165 | 118 | 96 |
 
-Spot-checked high rows were all correct. Medium rows include common names (`RODRIGUEZ, Luis`) and old Closed folders for people with a new consult — hence not written without a human pass over the CSV. Most review rows (116) are "given name shorter/longer" look-alikes.
+Spot-checked high rows were all correct. Trial of 10 on the server (2026-09-30): all written; one landed on a `(copy)` duplicate profile, so copies are now skipped. Medium rows include common names (`RODRIGUEZ, Luis`) and old Closed folders for people with a new consult — hence not written without a human pass over the CSV. Most review rows (116) are "given name shorter/longer" look-alikes.
 
 ## Decisions already made (2026-09-30)
 
