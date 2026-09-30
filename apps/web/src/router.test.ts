@@ -1,5 +1,5 @@
-import { test, expect, describe } from "vitest";
-import { matchRoute, clientPath, clientsPath } from "./router";
+import { test, expect, describe, vi, afterEach } from "vitest";
+import { matchRoute, clientPath, clientsPath, openClientPeek, closeClientPeek, readClientPeek } from "./router";
 
 describe("matchRoute", () => {
   test("/jail-intakes → the jail intakes board", () => {
@@ -77,5 +77,67 @@ describe("URL builders", () => {
 
   test("clientsPath", () => {
     expect(clientsPath()).toBe("/clients");
+  });
+});
+
+// A just-enough window + history: a stack of { url, state } and a popstate count.
+function fakeWindow(start: string) {
+  const entries: { url: string; state: unknown }[] = [{ url: start, state: null }];
+  let index = 0;
+  let pops = 0;
+  const location = {
+    get href() { return `http://app.test${entries[index]!.url}`; },
+    get search() { return new URL(this.href).search; },
+    get pathname() { return new URL(this.href).pathname; },
+  };
+  const history = {
+    get state() { return entries[index]!.state; },
+    pushState(state: unknown, _t: string, url: string) {
+      entries.splice(index + 1);
+      entries.push({ url, state });
+      index++;
+    },
+    replaceState(state: unknown, _t: string, url: string) { entries[index] = { url, state }; },
+    back() { index--; pops++; },
+  };
+  vi.stubGlobal("window", { location, history, dispatchEvent: () => { pops++; } });
+  vi.stubGlobal("PopStateEvent", class { constructor(public type: string) {} });
+  return { url: () => entries[index]!.url, depth: () => entries.length, pops: () => pops };
+}
+
+describe("client peek", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test("open adds ?client= to the current page, keeping its filters", () => {
+    const w = fakeWindow("/alerts?severity=critical");
+    openClientPeek("p-1", "Ana Ruiz");
+    expect(w.url()).toBe("/alerts?severity=critical&client=p-1");
+    expect(readClientPeek()).toEqual({ localId: "p-1", name: "Ana Ruiz" });
+    expect(w.pops()).toBe(1);
+  });
+
+  test("close goes back over the entry it pushed", () => {
+    const w = fakeWindow("/alerts");
+    openClientPeek("p-1");
+    closeClientPeek();
+    expect(w.url()).toBe("/alerts");
+    expect(readClientPeek()).toBeNull();
+  });
+
+  test("peeking at a second client replaces the first instead of stacking", () => {
+    const w = fakeWindow("/calendar");
+    openClientPeek("p-1");
+    openClientPeek("p-2");
+    expect(w.depth()).toBe(2);
+    closeClientPeek();
+    expect(w.url()).toBe("/calendar");
+  });
+
+  test("a shared ?client= link closes by dropping the param, not leaving the page", () => {
+    const w = fakeWindow("/mail?client=p-9");
+    expect(readClientPeek()).toEqual({ localId: "p-9", name: undefined });
+    closeClientPeek();
+    expect(w.url()).toBe("/mail");
+    expect(w.depth()).toBe(1);
   });
 });

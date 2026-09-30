@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { fetchActiveCases } from "../api";
 import type { ActiveCasesResult, ActiveCase, Urgency } from "../api";
-import { Link } from "./Link";
+import { ClientLink } from "./ClientPeek";
 import { StatusBadge } from "./StatusBadge";
-import { clientPath } from "../router";
 import { SectionCode } from "./ScreenCode";
 import { UNASSIGNED, formatDue, Tag, PersonChip, FormChip } from "./caseBoardParts";
 
@@ -176,13 +175,13 @@ function CaseRow({ c, filter, onPerson }: { c: ActiveCase; filter: Filter; onPer
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           {c.clientLocalId ? (
-            <Link
-              href={clientPath(c.clientLocalId)}
+            <ClientLink
+              clientId={c.clientLocalId}
               className="font-medium hover:underline truncate"
               style={{ color: "var(--color-ink)" }}
             >
               {c.clientName}
-            </Link>
+            </ClientLink>
           ) : (
             <span className="font-medium truncate" style={{ color: "var(--color-ink)" }}>{c.clientName}</span>
           )}

@@ -27,7 +27,7 @@ import {
   type MatchedOpenForm,
 } from "../api";
 import { Link } from "./Link";
-import { clientPath } from "../router";
+import { ClientLink } from "./ClientPeek";
 import { Button } from "./ui/button";
 import { MailReviewModal } from "./MailReviewModal";
 import { NoticeFieldsGrid } from "./MailNoticeFields";
@@ -176,14 +176,14 @@ function DocumentRow({
           </Button>
         )}
         {match.profile && (
-          <Link
-            href={clientPath(match.profile.localId)}
+          <ClientLink
+            clientId={match.profile.localId}
             onClick={(e) => e.stopPropagation()}
             className="text-[11px] font-medium px-2 py-1 rounded-md"
             style={{ color: "var(--color-amber)", backgroundColor: "var(--color-amber-light)", textDecoration: "none" }}
           >
             {match.profile.name}
-          </Link>
+          </ClientLink>
         )}
         </div>
       </div>
@@ -226,9 +226,9 @@ function DocumentRow({
           <ul className="mt-1 flex flex-col gap-1">
             {match.candidateProfiles.map((p) => (
               <li key={p.localId} className="text-xs" style={ink}>
-                <Link href={clientPath(p.localId)} onClick={(e) => e.stopPropagation()} style={{ color: "var(--color-amber)" }}>
+                <ClientLink clientId={p.localId} onClick={(e) => e.stopPropagation()} style={{ color: "var(--color-amber)" }}>
                   {p.name}
-                </Link>
+                </ClientLink>
                 {p.aNumber && <span style={faint}> · A# {p.aNumber}</span>}
               </li>
             ))}

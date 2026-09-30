@@ -11,8 +11,7 @@ import type { KpiCardDetail, KpiDetailItem } from "../api";
 import { fetchKpiCardItems, fetchGlobalKpiColumns, updateGlobalKpiColumns } from "../api";
 import { formatColumnValue, isLabelValue } from "../utils/columnValue";
 import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
-import { Link } from "./Link";
-import { clientPath } from "../router";
+import { ClientLink } from "./ClientPeek";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { StatusBadge } from "./StatusBadge";
@@ -287,9 +286,9 @@ function Row({ item, columnId }: { item: KpiDetailItem; columnId: string | null 
     <tr style={{ borderBottom: "1px solid var(--color-border-light)" }}>
       <td className="px-6 py-2.5 align-top">
         {item.clientName && item.clientLocalId ? (
-          <Link href={clientPath(item.clientLocalId)} style={{ color: "var(--color-amber)", textDecoration: "none" }}>
+          <ClientLink clientId={item.clientLocalId} style={{ color: "var(--color-amber)", textDecoration: "none" }}>
             {item.clientName}
-          </Link>
+          </ClientLink>
         ) : (
           <span style={{ color: "var(--color-ink-faint)" }}>—</span>
         )}

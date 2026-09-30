@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback } from "react";
 import { fetchAppointments } from "../api";
 import type { AppointmentsResult, AppointmentEntry, ClientUpdate } from "../api";
 import { Link } from "./Link";
+import { ClientLink } from "./ClientPeek";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { NotesModal } from "./NotesModal";
 import { AppointmentModal } from "./AppointmentModal";
@@ -228,13 +229,13 @@ function AppointmentCardCompact({
 
       {/* Client name */}
       {profile ? (
-        <Link
-          href={clientPath(profile.localId)}
+        <ClientLink
+          clientId={profile.localId}
           className="block text-sm font-semibold hover:underline leading-snug"
           style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
         >
           {profile.name}
-        </Link>
+        </ClientLink>
       ) : (
         <span
           className="block text-sm font-semibold leading-snug"
@@ -467,13 +468,13 @@ function AppointmentCard({
           {/* Client name + priority */}
           <div className="flex items-center gap-2">
             {profile ? (
-              <Link
-                href={clientPath(profile.localId)}
+              <ClientLink
+                clientId={profile.localId}
                 className="text-base font-semibold hover:underline"
                 style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
               >
                 {profile.name}
-              </Link>
+              </ClientLink>
             ) : (
               <span
                 className="text-base font-semibold"

@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { Sidebar } from "./components/Sidebar";
 import { LoginPage } from "./pages/LoginPage";
 import { LogCallModal } from "./components/LogCallModal";
+import { ClientPeekHost } from "./components/ClientPeek";
 import { MondayConnectPrompt } from "./components/MondayConnectPrompt";
 import { PageCode, SectionCode } from "./components/ScreenCode";
 import { Button } from "./components/ui/button";
@@ -246,6 +247,7 @@ function App() {
           </Suspense>
         </div>
         <PageCode code="P11" />
+        <ClientPeekHost />
       </div>
     );
   }
@@ -344,7 +346,8 @@ function App() {
       </div>
 
       {showLogCallModal && <LogCallModal onClose={() => setShowLogCallModal(false)} />}
-      {/* Not on Settings, which has its own Monday section (P11.1.3) and reads ?monday= itself. */}
+      {/* M3 over the current page when ?client= names someone — see ClientPeek.tsx. */}
+      <ClientPeekHost />      {/* Not on Settings, which has its own Monday section (P11.1.3) and reads ?monday= itself. */}
       {user && <MondayConnectPrompt />}
       {/* Client 360 renders its own code, since its Debug tab has no URL of its own. */}
       {PAGE_CODES[route.page] && <PageCode code={PAGE_CODES[route.page]!} />}

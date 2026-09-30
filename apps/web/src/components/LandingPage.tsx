@@ -3,6 +3,7 @@ import { fetchDashboard, getPreferences, updatePreferences } from "../api";
 import { VersionBadge } from "./VersionBadge";
 import type { KpiCard, KpiItem } from "../api";
 import { Link } from "./Link";
+import { ClientLink } from "./ClientPeek";
 import { StatusBadge } from "./StatusBadge";
 import { QuickAccess } from "./QuickAccess";
 import { KpiDetailModal } from "./KpiDetailModal";
@@ -105,13 +106,13 @@ function KpiItemRow({ item, columnId, columnLabel }: { item: KpiItem; columnId: 
           )
         )}
         {item.clientName && item.clientLocalId && (
-          <Link
-            href={`/clients/${encodeURIComponent(item.clientLocalId)}`}
+          <ClientLink
+            clientId={item.clientLocalId}
             className="kpi-item-client"
             onClick={(e) => e.stopPropagation()}
           >
             {item.clientName}
-          </Link>
+          </ClientLink>
         )}
       </div>
     </div>

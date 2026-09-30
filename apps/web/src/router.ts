@@ -123,3 +123,64 @@ export function clientPath(localId: string, tab?: TabId): string {
 export function clientsPath(): string {
   return "/clients";
 }
+
+// -----------------------------------------------------------------------------
+// Client peek — M3 opened over the current page via ?client=<localId>
+// -----------------------------------------------------------------------------
+// A client name outside P2 opens the case in a popup instead of leaving the
+// page: people click a name to check a note or a document, then carry on with
+// the list they were working through. The peek lives in the URL so Back closes
+// it and a copied link reopens it.
+
+const PEEK_PARAM = "client";
+
+interface PeekState {
+  clientPeek?: boolean;
+  clientPeekName?: string;
+}
+
+export interface ClientPeek {
+  localId: string;
+  name?: string;
+}
+
+export function readClientPeek(): ClientPeek | null {
+  const localId = new URLSearchParams(window.location.search).get(PEEK_PARAM);
+  if (!localId) return null;
+  const state = (window.history.state ?? {}) as PeekState;
+  return { localId, name: state.clientPeekName };
+}
+
+function urlWithPeek(localId: string | null): string {
+  const url = new URL(window.location.href);
+  if (localId) url.searchParams.set(PEEK_PARAM, localId);
+  else url.searchParams.delete(PEEK_PARAM);
+  return url.pathname + url.search + url.hash;
+}
+
+/**
+ * Open a client's case over the current page. One history entry per peek, so
+ * Back closes it; peeking at another client from inside one replaces it rather
+ * than stacking.
+ */
+export function openClientPeek(localId: string, name?: string) {
+  const state: PeekState = { clientPeek: true, clientPeekName: name };
+  if (readClientPeek()) window.history.replaceState(state, "", urlWithPeek(localId));
+  else window.history.pushState(state, "", urlWithPeek(localId));
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+/**
+ * Close the peek. When we pushed its history entry, go back over it so Forward
+ * doesn't reopen it; when the page was loaded with ?client= (a shared link),
+ * there's nothing to go back to, so just drop the param.
+ */
+export function closeClientPeek() {
+  if (!readClientPeek()) return;
+  if ((window.history.state as PeekState | null)?.clientPeek) {
+    window.history.back();
+    return;
+  }
+  window.history.replaceState(null, "", urlWithPeek(null));
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
