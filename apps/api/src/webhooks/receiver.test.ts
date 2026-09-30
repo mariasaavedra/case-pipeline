@@ -66,6 +66,21 @@ describe("handleMondayWebhook", () => {
     expect(JSON.parse(row.payload).event.columnId).toBe("status");
   });
 
+  it("reads the item id from `itemId` on delete events (Monday's real delete_pulse shape)", () => {
+    handleMondayWebhook(db, SECRET, {
+      event: {
+        app: "monday",
+        type: "delete_pulse",
+        triggerTime: "2026-09-30T20:20:33.918Z",
+        boardId: 8025467270,
+        itemId: 13173984586,
+        itemName: "Test ITEM",
+      },
+    });
+    const row = db.prepare("SELECT monday_item_id FROM webhook_events").get() as { monday_item_id: string };
+    expect(row.monday_item_id).toBe("13173984586");
+  });
+
   it("acknowledges but does not store a payload without event.type", () => {
     const res = handleMondayWebhook(db, SECRET, { something: "else" });
     expect(res.status).toBe(200);

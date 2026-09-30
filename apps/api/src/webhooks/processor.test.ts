@@ -75,6 +75,24 @@ describe("processWebhookEvents", () => {
     fetchItemUpdatesBatchMock.mockReset();
   });
 
+  it("archives a delete event stored without an item id, reading it from the payload", async () => {
+    const db = freshDb();
+    insertProfile(db, "901");
+    // As stored before the receiver fix: monday_item_id NULL, id only in the payload.
+    const res = db
+      .prepare("INSERT INTO webhook_events (event_type, monday_board_id, monday_item_id, payload) VALUES (?, ?, NULL, ?)")
+      .run("delete_pulse", "111", JSON.stringify({ event: { type: "delete_pulse", boardId: 111, itemId: 901 } }));
+    const runTargetedSync = vi.fn();
+
+    const stats = await processWebhookEvents(db, { boardKeyForId: () => "profiles", runTargetedSync });
+
+    expect(stats.processed).toBe(1);
+    expect(eventRow(db, Number(res.lastInsertRowid)).status).toBe("processed");
+    expect((db.prepare("SELECT COUNT(*) AS n FROM profiles").get() as { n: number }).n).toBe(0);
+    expect(runTargetedSync).not.toHaveBeenCalled();
+    db.close();
+  });
+
   it("archives and removes a deleted item directly", async () => {
     const db = freshDb();
     insertProfile(db, "900");

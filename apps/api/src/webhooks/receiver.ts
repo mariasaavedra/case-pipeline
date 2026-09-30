@@ -26,6 +26,8 @@ interface MondayWebhookEvent {
   type?: unknown;
   boardId?: unknown;
   pulseId?: unknown;
+  /** Delete / archive events carry the item as `itemId`, not `pulseId`. */
+  itemId?: unknown;
 }
 
 export function webhookSecret(): string | null {
@@ -75,13 +77,17 @@ export function handleMondayWebhook(db: Database, token: string, body: unknown):
     return { status: 200, body: { ok: true, ignored: true } };
   }
 
+  // Most events name the item `pulseId`; delete_pulse / archive_pulse name it
+  // `itemId`. Missing it made every deletion a no-op board refresh, leaving
+  // deleted items live until the nightly full sync.
+  const itemId = event.pulseId ?? event.itemId;
   db.prepare(
     `INSERT INTO webhook_events (event_type, monday_board_id, monday_item_id, payload)
      VALUES (?, ?, ?, ?)`,
   ).run(
     event.type,
     event.boardId != null ? String(event.boardId) : null,
-    event.pulseId != null ? String(event.pulseId) : null,
+    itemId != null ? String(itemId) : null,
     JSON.stringify(payload),
   );
 
