@@ -105,6 +105,19 @@ describe("proposeLinks — E-File", () => {
   });
 });
 
+describe("proposeLinks — copies", () => {
+  test("a '(copy)' profile is never proposed, and doesn't block the original", () => {
+    const f = consult("2024 Consults/S/SANCHEZ, Orfa");
+    const orfa = { firstName: "Orfa", lastName: "SANCHEZ", consultDate: "2024-03-01" };
+    const out = proposeLinks(
+      [profile({ ...orfa, name: "Orfa SANCHEZ (copy)" }), profile({ ...orfa, localId: "p2", mondayId: "m2", name: "Orfa SANCHEZ" })],
+      [f],
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ confidence: "high", folder: f, profile: { mondayId: "m2" } });
+  });
+});
+
 describe("proposeLinks — Consult File", () => {
   test("name + matching year → high, picks that year's folder", () => {
     const old = consult("2021 Consults/A/ABADE, Mohamed");
