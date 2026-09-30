@@ -222,8 +222,14 @@ async function dispatch(row: QueueRow, token?: string): Promise<string | undefin
   }
 }
 
-/** target_table values a queued write is allowed to reconcile back into. */
-const RECONCILABLE_TABLES = new Set(["board_items", "profiles", "contracts"]);
+/**
+ * target_table values a queued write is allowed to reconcile back into.
+ * Not `profiles`: nothing queues a profile's own creation — a create_item that
+ * names a profile (Fee K, consult booking) creates a DIFFERENT item and names
+ * the profile only for context. Reconciling there would give a profile with no
+ * Monday id yet the new Fee K's or consult's id.
+ */
+const RECONCILABLE_TABLES = new Set(["board_items", "contracts"]);
 
 /** Exponential backoff: 1m, 2m, 4m, 8m, 16m … capped at 30m. */
 function backoffMs(attempts: number): number {
@@ -297,7 +303,7 @@ export async function drainWriteQueue(
             if (res.changes === 0) {
               console.warn(`[write-queue] op ${row.id}: target row already has a monday_item_id, skipped reconciliation`);
             }
-          } else {
+          } else if (row.target_table !== "profiles") { // context only — see RECONCILABLE_TABLES
             console.warn(`[write-queue] op ${row.id}: unrecognized target_table "${row.target_table}", skipped reconciliation`);
           }
         }

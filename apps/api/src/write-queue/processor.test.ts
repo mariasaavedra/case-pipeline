@@ -385,6 +385,29 @@ describe("write-queue processor", () => {
     db.close();
   });
 
+  it("never gives a profile with no monday_item_id the id of a Fee K created on its behalf", async () => {
+    const db = freshDb();
+    createItemMock.mockResolvedValue("new-fee-k-2");
+    db.prepare(
+      `INSERT INTO profiles (local_id, monday_item_id, name) VALUES ('profile-local-2', NULL, 'John Roe')`,
+    ).run();
+
+    enqueueWrite(db, {
+      opType: "create_item",
+      targetTable: "profiles",
+      targetLocalId: "profile-local-2",
+      payload: { boardId: "board-9", itemName: "John Roe — U-Visa" },
+    });
+    const synced = await drainWriteQueue(db, { token: "tok" });
+
+    expect(synced).toBe(1);
+    const row = db.prepare("SELECT monday_item_id FROM profiles WHERE local_id = 'profile-local-2'").get() as {
+      monday_item_id: string | null;
+    };
+    expect(row.monday_item_id).toBeNull();
+    db.close();
+  });
+
   it("does not drain while the sync advisory lock is held by another writer", async () => {
     const db = freshDb();
     createUpdateMock.mockResolvedValue("x");
