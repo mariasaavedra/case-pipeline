@@ -5,6 +5,7 @@ import { Link } from "./Link";
 import { StatusBadge } from "./StatusBadge";
 import { clientPath } from "../router";
 import { SectionCode } from "./ScreenCode";
+import { UNASSIGNED, formatDue, Tag, PersonChip, FormChip } from "./caseBoardParts";
 
 // =============================================================================
 // Buckets
@@ -33,60 +34,10 @@ const BUCKET_TOKEN: Record<Urgency, string> = {
 const fg = (u: Urgency) => `var(--urgency-${BUCKET_TOKEN[u]})`;
 const bg = (u: Urgency) => `var(--urgency-${BUCKET_TOKEN[u]}-bg)`;
 
-const UNASSIGNED = "Unassigned";
-
-// =============================================================================
-// Date helpers
-// =============================================================================
-
-function formatDue(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  const sameYear = d.getFullYear() === new Date().getFullYear();
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-  });
-}
-
 function countdown(days: number): string {
   if (days === 0) return "today";
   if (days > 0) return `in ${days}d`;
   return `${Math.abs(days)}d late`;
-}
-
-// =============================================================================
-// Small pieces
-// =============================================================================
-
-function Tag({ children, color, title }: { children: React.ReactNode; color: string; title?: string }) {
-  return (
-    <span
-      className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded whitespace-nowrap"
-      style={{ color: `var(--urgency-${color})`, background: `var(--urgency-${color}-bg)` }}
-      title={title}
-    >
-      {children}
-    </span>
-  );
-}
-
-function PersonChip({ name, active, onClick }: { name: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-xs px-2 py-0.5 rounded-full border whitespace-nowrap transition-colors"
-      style={{
-        borderColor: active ? "var(--color-amber)" : "var(--color-border)",
-        background: active ? "var(--color-amber-light)" : "var(--color-surface-warm)",
-        color: active ? "var(--color-amber-dark)" : "var(--color-ink-muted)",
-      }}
-      title={`Show only ${name}'s cases`}
-    >
-      {name}
-    </button>
-  );
 }
 
 // =============================================================================
@@ -242,13 +193,7 @@ function CaseRow({ c, filter, onPerson }: { c: ActiveCase; filter: Filter; onPer
         {(c.forms.length > 0 || c.formName !== c.clientName) && (
           <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
             {c.forms.map((f) => (
-              <span
-                key={f}
-                className="text-[11px] font-medium px-1.5 rounded whitespace-nowrap"
-                style={{ color: "var(--color-ink-muted)", border: "1px solid var(--color-border)" }}
-              >
-                {f}
-              </span>
+              <FormChip key={f} label={f} />
             ))}
             {/* The item name often is just the client's name; show it only when it adds something. */}
             {c.formName !== c.clientName && (

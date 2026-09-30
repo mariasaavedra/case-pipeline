@@ -108,6 +108,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 |---|---|
 | `active-cases.ts` | P5 Active Cases: de-duplicated case list + per-paralegal lanes, urgency buckets |
 | `alerts.ts` | Overdue deadlines, stale cases, idle contracts |
+| `prescheduling.ts` | P13 Prescheduling: Paid Fee Ks by PS Stage, days since hire (30/60), "not cooperating" (reminder 14+ days, no evidence since), North Pole parked |
 | `board-columns.ts` | Per-board column schema for the in-place field editors |
 | `board-items.ts` | Per-profile board item queries + `batchGetClientBoardItems` |
 | `case-summary.ts` | Full 360° client summary + `batchGetClientCaseSummaries` |
@@ -146,6 +147,7 @@ Data reads:
 | `GET /api/dashboard/:key/items` | Every row behind one KPI card + the display-column options (`?column=` previews one) |
 | `GET /api/appointments` | Daily appointments with enriched profiles, snapshots, updates, case summaries |
 | `GET /api/active-cases` | P5 data: `cases` (each once, by urgency, with attorney/forms/Urgent flag) + `assignees` lanes (used by My Cases). `?includeSnoozed=1` reveals North-Pole-parked cases |
+| `GET /api/prescheduling` | P13 data: Paid Fee Ks waiting for documents, with wait level, not-cooperating flag, PS Stages in workflow order |
 | `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Mail to review" |
 | `GET /api/search` | Cross-type search: profiles, contracts, court cases, etc. |
 | `GET /api/filter-options` | Distinct values for filter dropdowns (priorities, statuses, attorneys, board types) |

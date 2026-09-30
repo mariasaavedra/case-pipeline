@@ -49,6 +49,17 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    id: "prescheduling",
+    label: "Prescheduling",
+    path: "/prescheduling",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M5 2h10M5 18h10" />
+        <path d="M6 2c0 4 8 4 8 8s-8 4-8 8M14 2c0 4-8 4-8 8s8 4 8 8" />
+      </svg>
+    ),
+  },
+  {
     id: "active-cases",
     label: "Active Cases",
     path: "/active-cases",

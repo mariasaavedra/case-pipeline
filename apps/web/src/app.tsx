@@ -18,6 +18,7 @@ const LandingPage = lazy(() => import("./components/LandingPage").then((m) => ({
 const AppointmentsPage = lazy(() => import("./components/AppointmentsPage").then((m) => ({ default: m.AppointmentsPage })));
 const ClientsPage = lazy(() => import("./components/ClientsPage").then((m) => ({ default: m.ClientsPage })));
 const AlertsPage = lazy(() => import("./components/AlertsPage").then((m) => ({ default: m.AlertsPage })));
+const PreschedulingPage = lazy(() => import("./components/PreschedulingPage").then((m) => ({ default: m.PreschedulingPage })));
 const ActiveCasesPage = lazy(() => import("./components/ActiveCasesPage").then((m) => ({ default: m.ActiveCasesPage })));
 const MyCasesPage = lazy(() => import("./components/MyCasesPage").then((m) => ({ default: m.MyCasesPage })));
 const CalendarPage = lazy(() => import("./components/CalendarPage").then((m) => ({ default: m.CalendarPage })));
@@ -35,6 +36,7 @@ const PAGE_CODES: Partial<Record<Route["page"], string>> = {
   landing: "P1",
   clients: "P2",
   appointments: "P4",
+  prescheduling: "P13",
   "active-cases": "P5",
   "my-cases": "P6",
   calendar: "P7",
@@ -316,6 +318,7 @@ function App() {
 
             {/* Appointments page */}
             {route.page === "appointments" && !loading && <AppointmentsPage />}
+            {route.page === "prescheduling" && !loading && <PreschedulingPage />}
             {route.page === "active-cases" && !loading && <ActiveCasesPage />}
             {route.page === "my-cases" && !loading && <MyCasesPage />}
             {route.page === "calendar" && !loading && <CalendarPage />}
