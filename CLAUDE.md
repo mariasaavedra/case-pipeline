@@ -106,7 +106,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 
 | Module | Responsibility |
 |---|---|
-| `active-cases.ts` | Swim-lane board data (paralegal rows × urgency columns) |
+| `active-cases.ts` | P5 Active Cases: de-duplicated case list + per-paralegal lanes, urgency buckets |
 | `alerts.ts` | Overdue deadlines, stale cases, idle contracts |
 | `board-columns.ts` | Per-board column schema for the in-place field editors |
 | `board-items.ts` | Per-profile board item queries + `batchGetClientBoardItems` |
@@ -145,7 +145,7 @@ Data reads:
 | `GET /api/dashboard` | 6 KPI cards (open forms, pending contracts, paid fee Ks, deadlines, hearings, alerts). Open Forms excludes `Send to North Pole` cases |
 | `GET /api/dashboard/:key/items` | Every row behind one KPI card + the display-column options (`?column=` previews one) |
 | `GET /api/appointments` | Daily appointments with enriched profiles, snapshots, updates, case summaries |
-| `GET /api/active-cases` | Swim-lane board data (paralegal rows × urgency). `?includeSnoozed=1` reveals North-Pole-parked cases |
+| `GET /api/active-cases` | P5 data: `cases` (each once, by urgency, with attorney/forms/Urgent flag) + `assignees` lanes (used by My Cases). `?includeSnoozed=1` reveals North-Pole-parked cases |
 | `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Mail to review" |
 | `GET /api/search` | Cross-type search: profiles, contracts, court cases, etc. |
 | `GET /api/filter-options` | Distinct values for filter dropdowns (priorities, statuses, attorneys, board types) |

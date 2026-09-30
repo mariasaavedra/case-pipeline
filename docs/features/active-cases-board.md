@@ -1,7 +1,7 @@
 # Active Cases Board — Visual Team Operations View
 
-**Status:** Implemented — 2026-05-26  
-**Last updated:** 2026-05-26
+**Status:** Implemented — 2026-05-26. **Layout replaced 2026-09-30** by the summary table + case list in [active-cases-redesign.md](active-cases-redesign.md); the swim-lane grid below is historical.  
+**Last updated:** 2026-09-30
 
 ---
 

@@ -124,8 +124,9 @@ const PAGES = [
     { code:"M5", name:"Appointment detail", note:"click an appointment; has notes and documents", pops:[ { code:"M12", name:"File preview" } ] },
     { code:"M6", name:"Client notes", note:"“Open in modal” under a row’s notes" } ] },
   { code:"P5", name:"Active Cases", path:"/active-cases", items:[
-    { code:"P5.1", name:"Case count + North Pole toggle" },
-    { code:"P5.2", name:"Swim-lane board", note:"paralegal rows × urgency columns" } ] },
+    { code:"P5.1", name:"Header", note:"open / overdue / missing-date counts" },
+    { code:"P5.2", name:"Summary table", note:"paralegal rows × urgency counts; click to filter P5.3" },
+    { code:"P5.3", name:"Case list", note:"filter chips + cases grouped by urgency" } ] },
   { code:"P6", name:"My Cases", path:"/my-cases", items:[
     { code:"P6.1", name:"Case list", note:"also the “link your identity” and “no cases” states" } ] },
   { code:"P7", name:"Calendar", path:"/calendar", items:[

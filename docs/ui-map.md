@@ -110,8 +110,9 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Notes |
 |---|---|---|
-| P5.1 | Case count + North Pole toggle | |
-| P5.2 | Swim-lane board | Paralegal rows × urgency columns |
+| P5.1 | Header | Open / overdue / missing-date counts |
+| P5.2 | Summary table | Paralegal rows × urgency counts; click a number or a name to filter P5.3 |
+| P5.3 | Case list | Filter chips (person, bucket, Only court, North Pole) + cases grouped by urgency |
 
 ### Inside P6 My Cases
 
