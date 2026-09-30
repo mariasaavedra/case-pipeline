@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { fetchPendingContracts } from "../api";
 import type { PendingContractsResult, PendingContract } from "../api";
-import { Link } from "./Link";
-import { clientPath } from "../router";
+import { ClientLink } from "./ClientPeek";
 import { SectionCode } from "./ScreenCode";
 import { formatDue, PersonChip, FormChip, CountTable, ListSection, WAIT_TONE, worstWait, waitFg } from "./caseBoardParts";
 
@@ -36,9 +35,9 @@ function ContractRow({ c, filter, onAttorney }: { c: PendingContract; filter: Fi
       {/* Client + contract type */}
       <div className="min-w-0">
         {c.clientLocalId ? (
-          <Link href={clientPath(c.clientLocalId)} className="font-medium hover:underline truncate block" style={{ color: "var(--color-ink)" }}>
+          <ClientLink clientId={c.clientLocalId} className="font-medium hover:underline truncate block" style={{ color: "var(--color-ink)" }}>
             {c.clientName}
-          </Link>
+          </ClientLink>
         ) : (
           <span className="font-medium truncate block" style={{ color: "var(--color-ink)" }}>{c.clientName}</span>
         )}

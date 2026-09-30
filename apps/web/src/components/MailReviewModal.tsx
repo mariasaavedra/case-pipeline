@@ -36,9 +36,8 @@ import {
 } from "../api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { Link } from "./Link";
+import { ClientLink } from "./ClientPeek";
 import { NoticeFieldsEditor, NoticeFieldsGrid } from "./MailNoticeFields";
-import { clientPath } from "../router";
 
 interface ClientGroup {
   localId: string;
@@ -455,9 +454,9 @@ export function MailReviewModal({
                       <>
                         {" → "}
                         {doc.profile ? (
-                          <Link href={clientPath(doc.profile.localId)} style={{ color: "inherit", fontWeight: 600 }}>
+                          <ClientLink clientId={doc.profile.localId} style={{ color: "inherit", fontWeight: 600 }}>
                             {doc.profile.name}
-                          </Link>
+                          </ClientLink>
                         ) : null}
                         {doc.openForm ? ` · ${doc.openForm.formType ?? doc.openForm.name}` : " (client only)"}
                       </>
@@ -487,9 +486,9 @@ export function MailReviewModal({
 
                     {groups.map((g) => (
                       <div key={g.localId} className="flex flex-col gap-1.5">
-                        <Link href={clientPath(g.localId)} className="text-sm font-semibold" style={{ color: "var(--color-amber)" }}>
+                        <ClientLink clientId={g.localId} className="text-sm font-semibold" style={{ color: "var(--color-amber)" }}>
                           {g.name}
-                        </Link>
+                        </ClientLink>
                         {g.forms === null ? (
                           <span className="text-xs" style={faint}>
                             Loading Open Forms…

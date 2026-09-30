@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { getRecentlyViewed, getWatchlist } from "../api";
 import type { RecentlyViewedItem, WatchlistItem } from "../api";
-import { Link } from "./Link";
+import { ClientLink } from "./ClientPeek";
 import { SectionCode } from "./ScreenCode";
 
 const STAR = (
@@ -52,14 +52,14 @@ function MiniList({
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {items.map((it) => (
-            <Link
+            <ClientLink
               key={it.id}
-              href={`/clients/${encodeURIComponent(it.id)}`}
+              clientId={it.id}
               className="kpi-item-client"
               style={{ padding: "5px 0", fontSize: 14 }}
             >
               {it.name}
-            </Link>
+            </ClientLink>
           ))}
         </div>
       )}

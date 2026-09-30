@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { getMyCases } from "../api";
 import type { MyCasesResult } from "../api";
 import type { ActiveCase, Urgency } from "../api";
-import { navigate, clientPath } from "../router";
+import { navigate, openClientPeek } from "../router";
 import { Button } from "./ui/button";
 import { SectionCode } from "./ScreenCode";
 
@@ -19,7 +19,7 @@ function CaseRow({ c }: { c: ActiveCase }) {
   return (
     <div
       className="result-row"
-      onClick={() => c.clientLocalId && navigate(clientPath(c.clientLocalId))}
+      onClick={() => c.clientLocalId && openClientPeek(c.clientLocalId, c.clientName)}
       style={{
         display: "flex",
         alignItems: "center",

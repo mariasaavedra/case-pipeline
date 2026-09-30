@@ -14,8 +14,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchJailIntakes, type JailIntake, type JailIntakeListResult } from "../api";
-import { Link } from "./Link";
-import { clientPath } from "../router";
+import { ClientLink } from "./ClientPeek";
 import { StatusBadge } from "./StatusBadge";
 import { NewJailIntakeModal } from "./NewJailIntakeModal";
 import { JailIntakeDetailModal } from "./JailIntakeDetailModal";
@@ -101,8 +100,8 @@ function IntakeRow({ intake, onOpen }: { intake: JailIntake; onOpen: () => void 
               Consult {formatDate(intake.convertedTo.consultDate)}
             </span>
             {intake.convertedTo.profileLocalId && (
-              <Link
-                href={clientPath(intake.convertedTo.profileLocalId)}
+              <ClientLink
+                clientId={intake.convertedTo.profileLocalId}
                 // The whole row opens the detail modal, so the link has to stop
                 // the click reaching it — otherwise you get both at once.
                 onClick={(e) => e.stopPropagation()}
@@ -114,7 +113,7 @@ function IntakeRow({ intake, onOpen }: { intake: JailIntake; onOpen: () => void 
                 }}
               >
                 {intake.convertedTo.profileName ?? "View 360"}
-              </Link>
+              </ClientLink>
             )}
           </div>
         )}

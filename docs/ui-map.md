@@ -45,7 +45,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P0 | Sign in | `/login` | Opening the app signed out | `pages/LoginPage.tsx` |
 | P1 | Home | `/` | Sidebar → Home | `components/LandingPage.tsx` |
 | P2 | Clients | `/clients` | Sidebar → Clients | `components/ClientsPage.tsx` |
-| P3 | Client 360 | `/clients/:id` | Any client name anywhere | `components/ClientView.tsx` |
+| P3 | Client 360 | `/clients/:id` | A client in P2 or the top-bar search; "View 360" buttons; M3 → "Open full 360 view" | `components/ClientView.tsx` |
 | P4 | Appointments | `/appointments` | Sidebar → Appointments | `components/AppointmentsPage.tsx` |
 | P5 | Active Cases | `/active-cases` | Sidebar → Active Cases | `components/ActiveCasesPage.tsx` |
 | P6 | My Cases | `/my-cases` | Sidebar → My Cases | `components/MyCasesPage.tsx` |
@@ -205,7 +205,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 |---|---|---|---|---|
 | M1 | KPI detail | The card's name | P1 → click a KPI card | `KpiDetailModal.tsx` |
 | M2 | Log a call | "Log a call" / "Edit call" | Top bar **+ Log call** (every page); P10 → pencil on a row | `LogCallModal.tsx` |
-| M3 | Client case | The client's name (360 header) | Inside M2 → "View profile" after picking a linked client (opens on top of M2); P10 → a row's client | `ClientCaseModal.tsx` |
+| M3 | Client case | The client's name (360 header) | Any client name outside P2 — opens over the current page as `?client=<id>`, Back closes it (`ClientPeek.tsx`); inside M2 → "View profile" after picking a linked client (opens on top of M2); P10 → a row's client | `ClientCaseModal.tsx` |
 | M4 | Call notes | "Notes — *name*" | P10 → notes on a row | `CallNotesModal.tsx` |
 | M5 | Appointment detail | The client's name | P4 → click an appointment | `AppointmentModal.tsx` |
 | M6 | Client notes | The client's name | P4 → "Open in modal" under a row's notes | `NotesModal.tsx` |

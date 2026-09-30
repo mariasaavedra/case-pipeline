@@ -5,8 +5,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { fetchCalendarEvents } from "../api";
 import type { CalendarResult, CalendarEvent, CalendarCategory } from "../api";
-import { Link } from "./Link";
-import { clientPath } from "../router";
+import { ClientLink } from "./ClientPeek";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { SectionCode } from "./ScreenCode";
 
@@ -225,13 +224,13 @@ function EventRow({ event }: { event: CalendarEvent }) {
         </div>
 
         {event.clientLocalId ? (
-          <Link
-            href={clientPath(event.clientLocalId)}
+          <ClientLink
+            clientId={event.clientLocalId}
             className="text-sm font-semibold hover:underline"
             style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
           >
             {event.clientName ?? event.name}
-          </Link>
+          </ClientLink>
         ) : (
           <span
             className="text-sm font-semibold"
