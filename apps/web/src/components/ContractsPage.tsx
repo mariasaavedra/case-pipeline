@@ -3,6 +3,8 @@ import { fetchPendingContracts } from "../api";
 import type { PendingContractsResult, PendingContract } from "../api";
 import { ClientLink } from "./ClientPeek";
 import { SectionCode } from "./ScreenCode";
+import { NewContractModal } from "./NewContractModal";
+import { Button } from "./ui/button";
 import { formatDue, PersonChip, FormChip, CountTable, ListSection, WAIT_TONE, worstWait, waitFg } from "./caseBoardParts";
 
 // =============================================================================
@@ -101,6 +103,7 @@ export function ContractsPage() {
   const [data, setData] = useState<PendingContractsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>({ attorney: null, stage: null });
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     fetchPendingContracts()
@@ -132,7 +135,11 @@ export function ContractsPage() {
             · {all.filter((c) => c.agedFrom === "added").length} not sent yet
           </span>
         )}
+        <Button type="button" className="ml-auto" onClick={() => setCreating(true)}>
+          + New contract
+        </Button>
       </div>
+      {creating && <NewContractModal onClose={() => setCreating(false)} />}
       <p className="text-sm mb-5" style={{ color: "var(--color-ink-faint)" }}>
         Pending Fee Ks by Contract Stage. Colour = days since the contract was sent, or added if not sent yet
         {t && (
