@@ -48,6 +48,11 @@ Design choices, and why:
   `monday_item_id`, so the processor archives the row into `archived_rows`
   (same shape as sync reconciliation, `run_id` NULL = webhook-initiated) and
   deletes it. Restorable from Admin → Sync Health like any archived row.
+  Monday names the item `itemId` on `delete_pulse` / `archive_pulse` (every
+  other event uses `pulseId`); the receiver reads both. Until 2026-09-30 it read
+  only `pulseId`, so deletions were stored without an item id, ran as a board
+  refresh that removes nothing, and waited for the nightly full sync. The
+  processor also falls back to the payload for any event stored that way.
 - **Direct writes take the sync advisory lock** (same discipline as the
   write-queue) so they never interleave with a full sync mid-run. The spawned
   targeted sync acquires the lock itself, and rides the API's `runSync` guard,
