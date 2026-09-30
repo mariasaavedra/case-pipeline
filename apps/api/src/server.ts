@@ -29,7 +29,7 @@ import {
   handleCallLog,
   handleJailIntakes,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
 import { setApiToken } from "@case-pipeline/monday";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
@@ -390,6 +390,10 @@ app.get("/api/active-cases", (req, res) => {
 // are the query defaults (30 / 60 days since hire, 14 days after a reminder).
 app.get("/api/prescheduling", (_req, res) => {
   res.json({ data: getPrescheduling(db) });
+});
+// Contracts — Pending Fee Ks by Contract Stage, aged from the sent date (30 / 60 days).
+app.get("/api/pending-contracts", (_req, res) => {
+  res.json({ data: getPendingContracts(db) });
 });
 // Calendar — hearings, court/USCIS deadlines, interviews, and appointments
 // unified across boards. See libs/query/src/calendar.ts.

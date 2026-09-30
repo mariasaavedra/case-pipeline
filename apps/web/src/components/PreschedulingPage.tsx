@@ -5,7 +5,18 @@ import { Link } from "./Link";
 import { StatusBadge } from "./StatusBadge";
 import { clientPath } from "../router";
 import { SectionCode } from "./ScreenCode";
-import { UNASSIGNED, formatDue, Tag, PersonChip, FormChip } from "./caseBoardParts";
+import {
+  UNASSIGNED,
+  formatDue,
+  Tag,
+  PersonChip,
+  FormChip,
+  CountTable,
+  ListSection,
+  WAIT_TONE,
+  worstWait,
+  waitFg,
+} from "./caseBoardParts";
 
 // =============================================================================
 // P13 Prescheduling
@@ -16,26 +27,9 @@ import { UNASSIGNED, formatDue, Tag, PersonChip, FormChip } from "./caseBoardPar
 // the hire date. North Pole cases stay out of the counts, as on P5.
 // See docs/features/prescheduling-and-contracts.md.
 
-const WAIT_TOKEN: Record<WaitLevel, string | null> = {
-  late: "overdue",
-  waiting: "missing",
-  fresh: "later",
-  unknown: null,
-};
-
-const WAIT_ORDER: Record<WaitLevel, number> = { late: 0, waiting: 1, fresh: 2, unknown: 3 };
-
-const fg = (w: WaitLevel) => (WAIT_TOKEN[w] ? `var(--urgency-${WAIT_TOKEN[w]})` : "var(--color-ink-muted)");
-const bg = (w: WaitLevel) => (WAIT_TOKEN[w] ? `var(--urgency-${WAIT_TOKEN[w]}-bg)` : "var(--color-surface-warm)");
-
 const NO_STAGE = "No stage";
 const stageOf = (c: PreschedulingCase) => c.psStage ?? NO_STAGE;
 const peopleOf = (c: PreschedulingCase) => (c.paralegals.length > 0 ? c.paralegals : [UNASSIGNED]);
-
-/** The most overdue wait level among some cases. */
-function worstWait(cases: PreschedulingCase[]): WaitLevel {
-  return cases.reduce<WaitLevel>((w, c) => (WAIT_ORDER[c.waitLevel] < WAIT_ORDER[w] ? c.waitLevel : w), "unknown");
-}
 
 function daysAgo(n: number): string {
   if (n <= 0) return "today";
@@ -45,133 +39,6 @@ function daysAgo(n: number): string {
 interface Filter {
   person: string | null;
   stage: string | null;
-}
-
-// =============================================================================
-// Summary table (P13.2)
-// =============================================================================
-
-function SummaryTable({
-  cases,
-  stages,
-  filter,
-  onPick,
-}: {
-  cases: PreschedulingCase[];
-  stages: string[];
-  filter: Filter;
-  onPick: (f: Filter) => void;
-}) {
-  const people = [...new Set(cases.flatMap(peopleOf))].sort((a, b) =>
-    a === UNASSIGNED ? 1 : b === UNASSIGNED ? -1 : a.localeCompare(b),
-  );
-
-  // `strong` = the "All cases" row: heavier rule, bold numbers.
-  const cell = (person: string | null, stage: string | null, strong = false) => {
-    const inCell = cases.filter(
-      (c) => (person === null || peopleOf(c).includes(person)) && (stage === null || stageOf(c) === stage),
-    );
-    const n = inCell.length;
-    const wait = worstWait(inCell);
-    const tinted = stage !== null && n > 0;
-    const selected = filter.person === person && filter.stage === stage && (person !== null || stage !== null);
-    return (
-      <td
-        key={stage ?? "total"}
-        className="p-0.5"
-        style={{ borderTop: `1px solid var(${strong ? "--color-border" : "--color-border-light"})` }}
-      >
-        <button
-          type="button"
-          disabled={n === 0}
-          onClick={() => onPick(selected ? { person: null, stage: null } : { person, stage })}
-          className="w-full h-9 rounded-md text-sm tabular-nums transition-shadow disabled:cursor-default"
-          style={{
-            background: tinted ? bg(wait) : "transparent",
-            color: n === 0 ? "var(--color-ink-faint)" : tinted ? fg(wait) : "var(--color-ink)",
-            fontWeight: strong || tinted ? 600 : 400,
-            boxShadow: selected ? "inset 0 0 0 2px var(--color-amber)" : undefined,
-          }}
-          aria-pressed={selected}
-          aria-label={`${person ?? "Everyone"}, ${stage ?? "all stages"}: ${n}`}
-          title={n > 0 && tinted ? `Longest wait: ${Math.max(...inCell.map((c) => c.daysWaiting ?? 0))} days since hire` : undefined}
-        >
-          {n === 0 ? "–" : n}
-        </button>
-      </td>
-    );
-  };
-
-  const nameCell = (label: React.ReactNode, strong: boolean, extra?: React.CSSProperties) => ({
-    className: `px-2 whitespace-nowrap sticky left-0 z-10 ${strong ? "text-xs font-semibold uppercase tracking-wide" : "text-sm"}`,
-    style: {
-      borderTop: `1px solid var(${strong ? "--color-border" : "--color-border-light"})`,
-      background: "var(--color-card)",
-      ...extra,
-    },
-    children: label,
-  });
-
-  return (
-    <div className="card overflow-x-auto p-2">
-      <table className="w-full border-separate" style={{ borderSpacing: 0, minWidth: 120 + stages.length * 96 }}>
-        <thead>
-          <tr>
-            <th
-              className="text-left text-xs font-medium px-2 pb-2 sticky left-0 align-bottom"
-              style={{ color: "var(--color-ink-faint)", background: "var(--color-card)" }}
-            >
-              Paralegal
-            </th>
-            {stages.map((s) => (
-              <th
-                key={s}
-                className="text-xs font-semibold px-1 pb-2 align-bottom leading-tight"
-                style={{ color: "var(--color-ink-muted)", minWidth: 88 }}
-              >
-                {s}
-              </th>
-            ))}
-            <th className="text-xs font-medium px-1 pb-2 align-bottom" style={{ color: "var(--color-ink-faint)" }}>
-              Total
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {people.map((p) => {
-            const personActive = filter.person === p && filter.stage === null;
-            return (
-              <tr key={p}>
-                <td
-                  {...nameCell(
-                    <button
-                      type="button"
-                      onClick={() => onPick(personActive ? { person: null, stage: null } : { person: p, stage: null })}
-                      className="hover:underline text-left"
-                      style={{
-                        color: p === UNASSIGNED ? "var(--color-ink-faint)" : "var(--color-ink)",
-                        fontWeight: personActive ? 600 : 500,
-                      }}
-                    >
-                      {p}
-                    </button>,
-                    false,
-                  )}
-                />
-                {stages.map((s) => cell(p, s))}
-                {cell(p, null)}
-              </tr>
-            );
-          })}
-          <tr>
-            <td {...nameCell("All cases", true, { color: "var(--color-ink-muted)" })} title="Each case counted once, even when it is shared" />
-            {stages.map((s) => cell(null, s, true))}
-            {cell(null, null, true)}
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
 // =============================================================================
@@ -194,7 +61,7 @@ function CaseRow({ c, filter, onPerson }: { c: PreschedulingCase; filter: Filter
   return (
     <li
       className="grid gap-x-4 gap-y-1.5 px-4 py-3 items-center grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_10rem_minmax(0,1.2fr)_minmax(0,1.4fr)]"
-      style={{ borderTop: "1px solid var(--color-border-light)", boxShadow: `inset 3px 0 0 ${fg(c.waitLevel)}` }}
+      style={{ borderTop: "1px solid var(--color-border-light)", boxShadow: `inset 3px 0 0 ${waitFg(c.waitLevel)}` }}
     >
       {/* Client + contract type + tags */}
       <div className="min-w-0">
@@ -229,7 +96,7 @@ function CaseRow({ c, filter, onPerson }: { c: PreschedulingCase; filter: Filter
         {c.hireDate && c.daysWaiting !== null ? (
           <>
             <span style={{ color: "var(--color-ink-muted)" }}>Hired {formatDue(c.hireDate)}</span>
-            <span className="ml-1.5 font-semibold" style={{ color: fg(c.waitLevel) }}>{c.daysWaiting}d</span>
+            <span className="ml-1.5 font-semibold" style={{ color: waitFg(c.waitLevel) }}>{c.daysWaiting}d</span>
           </>
         ) : (
           <span style={{ color: "var(--color-ink-faint)" }}>No hire date</span>
@@ -260,49 +127,6 @@ function CaseRow({ c, filter, onPerson }: { c: PreschedulingCase; filter: Filter
         )}
       </div>
     </li>
-  );
-}
-
-function Section({
-  title,
-  note,
-  token,
-  cases,
-  filter,
-  onPerson,
-}: {
-  title: React.ReactNode;
-  note?: string;
-  token: string | null;
-  cases: PreschedulingCase[];
-  filter: Filter;
-  onPerson: (name: string) => void;
-}) {
-  return (
-    <section className="card overflow-hidden">
-      <h2
-        className="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide"
-        style={{
-          color: token ? `var(--urgency-${token})` : "var(--color-ink-muted)",
-          background: token ? `var(--urgency-${token}-bg)` : "var(--color-surface-warm)",
-        }}
-      >
-        {title}
-        <span className="font-medium" style={{ color: "var(--color-ink-muted)" }}>· {cases.length}</span>
-        {note && (
-          <span className="ml-auto normal-case tracking-normal font-normal" style={{ color: "var(--color-ink-muted)" }}>
-            {note}
-          </span>
-        )}
-      </h2>
-      {cases.length === 0 ? (
-        <p className="px-4 py-3 text-sm" style={{ color: "var(--color-ink-faint)" }}>No cases match these filters.</p>
-      ) : (
-        <ul>
-          {cases.map((c) => <CaseRow key={c.localId} c={c} filter={filter} onPerson={onPerson} />)}
-        </ul>
-      )}
-    </section>
   );
 }
 
@@ -348,6 +172,7 @@ export function PreschedulingPage() {
 
   const pickPerson = (name: string) => setFilter((f) => ({ ...f, person: f.person === name ? null : name }));
   const filtered = filter.person !== null || filter.stage !== null || notCoopOnly;
+  const row = (c: PreschedulingCase) => <CaseRow key={c.localId} c={c} filter={filter} onPerson={pickPerson} />;
 
   return (
     <div>
@@ -360,10 +185,10 @@ export function PreschedulingPage() {
         {data && t && (
           <span className="text-sm" style={{ color: "var(--color-ink-muted)" }}>
             {active.length} paid ·{" "}
-            <span style={{ color: fg("late") }}>
+            <span style={{ color: waitFg("late") }}>
               {active.filter((c) => c.waitLevel === "late").length} waiting {t.lateDays}+ days
             </span>{" "}
-            · <span style={{ color: fg("late") }}>{notCoopCount} not cooperating</span>
+            · <span style={{ color: waitFg("late") }}>{notCoopCount} not cooperating</span>
           </span>
         )}
       </div>
@@ -371,9 +196,9 @@ export function PreschedulingPage() {
         Paid Fee Ks waiting for the client's documents. Colour = longest wait since the hire date
         {t && (
           <>
-            {" "}(<span style={{ color: fg("fresh") }}>under {t.waitingDays}</span> ·{" "}
-            <span style={{ color: fg("waiting") }}>{t.waitingDays}+</span> ·{" "}
-            <span style={{ color: fg("late") }}>{t.lateDays}+ days</span>)
+            {" "}(<span style={{ color: waitFg("fresh") }}>under {t.waitingDays}</span> ·{" "}
+            <span style={{ color: waitFg("waiting") }}>{t.waitingDays}+</span> ·{" "}
+            <span style={{ color: waitFg("late") }}>{t.lateDays}+ days</span>)
           </>
         )}
         .
@@ -392,7 +217,18 @@ export function PreschedulingPage() {
       {data && data.cases.length > 0 && (
         <>
           <SectionCode code="P13.2" />
-          <SummaryTable cases={active} stages={data.stages} filter={filter} onPick={setFilter} />
+          <CountTable
+            items={active}
+            rowHeader="Paralegal"
+            rowsOf={peopleOf}
+            lastRow={UNASSIGNED}
+            columns={data.stages}
+            colOf={stageOf}
+            cellTone={(cs) => WAIT_TONE[worstWait(cs.map((c) => c.waitLevel))]}
+            cellTitle={(cs) => `Longest wait: ${Math.max(...cs.map((c) => c.daysWaiting ?? 0))} days since hire`}
+            selected={{ row: filter.person, col: filter.stage }}
+            onPick={(s) => setFilter({ person: s.row, stage: s.col })}
+          />
 
           {/* Filter bar */}
           <div className="flex items-center gap-2 flex-wrap mt-5 mb-3">
@@ -477,18 +313,20 @@ export function PreschedulingPage() {
             {groups.map((g) => {
               const inGroup = visible.filter((c) => c.waitLevel === g.level);
               return inGroup.length > 0 ? (
-                <Section key={g.level} title={g.label} token={WAIT_TOKEN[g.level]} cases={inGroup} filter={filter} onPerson={pickPerson} />
+                <ListSection key={g.level} title={g.label} count={inGroup.length} tone={WAIT_TONE[g.level]}>
+                  {inGroup.map(row)}
+                </ListSection>
               ) : null;
             })}
             {parkedView !== "hidden" && (
-              <Section
+              <ListSection
                 title={<>❄ North Pole{parkedView === "needsDate" && " — need a date"}</>}
+                count={visibleParked.length}
                 note="Out of sight for now — not in the counts above"
-                token="snooze"
-                cases={visibleParked}
-                filter={filter}
-                onPerson={pickPerson}
-              />
+                tone="snooze"
+              >
+                {visibleParked.map(row)}
+              </ListSection>
             )}
           </div>
         </>
