@@ -207,6 +207,7 @@ Run with `tsx scripts/<name>.ts`:
 | `fetch-profile.ts` | Fetch a single profile by ID and dump it to stdout. |
 | `mail-sample.ts` | Write the fake scanned-mail PDF (every page stamped SAMPLE) to `data/samples/sample-mail.pdf`. `npm run mail:sample` (`-- --db=live` builds it from live.db, `-- --scanned` makes it image-only for OCR). |
 | `mail-probe.ts` | What the mail reader makes of real PDFs, page by page (fields, split), with no DB. `npm run mail:probe -- scan.pdf [--text]`. Keep real scans out of the repo. |
+| `sharepoint-links.ts` | Index every client folder in SCAL Consults / E-Files / Closed into `sp_folders` (schema v28), then propose a folder for each profile with an empty E-File / Consult File (case no. + surname, name + consult year, name). `npm run sharepoint:links -- --db=live` is read-only and writes a plan CSV to `output/`; `--apply` writes **high**-confidence links only (`--include-medium` adds medium, `--limit=N` for a trial), empty columns only, re-checked against Monday first, with a receipt CSV. Rules: `scripts/sharepoint/profile-links.ts`. See `docs/features/sharepoint-catalog.md`. |
 | `setup-webhooks.ts` | Register/list/remove Monday.com webhooks for all tracked boards. `npm run webhooks:setup -- --url=https://<host>` (requires the API deployed with `MONDAY_WEBHOOK_SECRET` first). |
 | `sync-config/` | Internal sync logic called by `npm run dev:cli -- sync`. |
 | `preflight.sh` | Checks Node 22+, npm, and data directory writability. |

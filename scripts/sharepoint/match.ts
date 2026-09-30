@@ -25,6 +25,10 @@ export interface FolderRef {
   path: string;
   /** Graph's own webUrl — what gets recorded in Monday. */
   webUrl?: string;
+  /** Graph driveItem id and drive — set by scan.ts, stored in sp_folders. */
+  id?: string;
+  driveId?: string;
+  modified?: string;
 }
 
 export type MatchConfidence = "exact" | "normalized";
