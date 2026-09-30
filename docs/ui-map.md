@@ -55,6 +55,8 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P10 | Call Log | `/call-log` | Sidebar → Call Log | `components/CallLogPage.tsx` |
 | P11 | Settings | `/settings/<tab>` | Sidebar → Settings (bottom) | `pages/SettingsPage.tsx` |
 | P12 | Mail | `/mail` | Sidebar → Mail | `components/MailPage.tsx` |
+| P13 | Court Cases | `/court-cases` | Sidebar → Court Cases | placeholder in `app.tsx` (not built yet) |
+| P14 | Map | `/map` | Sidebar → Map | placeholder in `app.tsx` (not built yet) |
 
 ### Global
 
