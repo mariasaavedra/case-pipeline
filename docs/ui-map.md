@@ -128,7 +128,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Notes |
 |---|---|---|
-| P14.1 | Header | Pending count, older than 60 days, not sent yet; colour legend |
+| P14.1 | Header | Pending count, older than 60 days, not sent yet; colour legend; **+ New contract** → M11 (pick the client first) |
 | P14.2 | Summary table | Attorney rows × Contract Stage; cell colour = oldest contract (days since sent, else added); click to filter P14.3 |
 | P14.3 | Contract list | Grouped by Contract Stage: age, payment link, AF/FF, attorneys, assistant |
 
@@ -213,7 +213,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M8 | New jail intake | "New jail intake" | P9 → **+ New intake** | `NewJailIntakeModal.tsx` |
 | M9 | Jail intake detail | The detainee's name | P9 → click an intake | `JailIntakeDetailModal.tsx` |
 | M10 | Book a consult | "Book a consult" | P3.2 | `NewAppointmentModal.tsx` |
-| M11 | New contract | "New contract (Fee K)" | P3.3 | `NewContractModal.tsx` |
+| M11 | New contract | "New contract (Fee K)" | P3.3; P14.1 (starts with a client search) | `NewContractModal.tsx` |
 | M12 | File preview | The file name | P3.6; the documents section of M5 | `FilePreviewModal.tsx` |
 | M13 | Entry editor | The entry's name | P3.8 (admin) | `EntryEditorModal.tsx` |
 | M14 | What's new | Changelog | Version badge on P1 Home / P0 Sign in | `VersionBadge.tsx` |
