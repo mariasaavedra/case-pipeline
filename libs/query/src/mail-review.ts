@@ -416,6 +416,8 @@ export interface FieldEdits {
   applicant?: string | null;
   dateOfBirth?: string | null;
   section?: string | null;
+  /** Clients named on it. Separated by ";" or new lines — a name may hold a comma. */
+  names?: string[] | string;
 }
 
 const DATE_KEYS = ["noticeDate", "receivedDate", "priorityDate", "dateOfBirth"] as const;
@@ -460,6 +462,12 @@ export function applyFieldEdits(
     const iso = v ? parseNoticeDate(v) : null;
     if (v && !iso) errors[key] = `Not a date: ${v}`;
     else next[key] = iso;
+  }
+  if (edits.names !== undefined) {
+    const list = (Array.isArray(edits.names) ? edits.names : (edits.names ?? "").split(/[;\n]/))
+      .map((n) => n.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    next.names = [...new Set(list)];
   }
   for (const key of TEXT_KEYS) {
     if (edits[key] === undefined) continue;

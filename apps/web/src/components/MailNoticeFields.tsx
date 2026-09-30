@@ -23,6 +23,8 @@ interface FieldDef {
   placeholder?: string;
   /** Wider cell in the grid. */
   wide?: boolean;
+  /** How a list's items are joined — names use ";" since a name may hold a comma. */
+  separator?: string;
 }
 
 export const NOTICE_FIELDS: FieldDef[] = [
@@ -36,6 +38,9 @@ export const NOTICE_FIELDS: FieldDef[] = [
   { key: "beneficiary", label: "Beneficiary", kind: "text", placeholder: "LAST, FIRST" },
   { key: "applicant", label: "Applicant", kind: "text", placeholder: "LAST, FIRST" },
   { key: "aNumbers", label: "A-Number", kind: "list", placeholder: "123-456-789" },
+  // Found by looking every client up in the page text, so it's filled on any
+  // document — a court notice, a letter — not only where an I-797 labels names.
+  { key: "names", label: "Clients named", kind: "list", placeholder: "Norma X. ZAVALA LEIVA", wide: true, separator: "; " },
   { key: "dateOfBirth", label: "Date of birth", kind: "date" },
   { key: "section", label: "Section", kind: "text", wide: true },
 ];
@@ -61,7 +66,7 @@ function formatA(a: string): string {
 export function displayValue(fields: NoticeFields, def: FieldDef): string | null {
   const v = fields[def.key as keyof NoticeFields];
   if (def.key === "aNumbers") return (v as string[]).map(formatA).join(", ") || null;
-  if (Array.isArray(v)) return (v as string[]).join(", ") || null;
+  if (Array.isArray(v)) return (v as string[]).join(def.separator ?? ", ") || null;
   if (def.kind === "date") return formatDate(v as string | null);
   return (v as string | null) || null;
 }
@@ -112,7 +117,7 @@ export function NoticeFieldsGrid({
 
 function initialValue(fields: NoticeFields, def: FieldDef): string {
   const v = fields[def.key as keyof NoticeFields];
-  if (Array.isArray(v)) return (v as string[]).join(", ");
+  if (Array.isArray(v)) return (v as string[]).join(def.separator ?? ", ");
   return (v as string | null) ?? "";
 }
 
@@ -158,7 +163,7 @@ export function NoticeFieldsEditor({
             <label key={def.key} className="flex flex-col gap-1 min-w-0" style={def.wide ? { gridColumn: "1 / -1" } : undefined}>
               <span className="text-[10px] font-semibold uppercase tracking-wider" style={faint}>
                 {def.label}
-                {def.kind === "list" ? " (comma-separated)" : ""}
+                {def.kind === "list" ? (def.separator === "; " ? " (separate with ;)" : " (comma-separated)") : ""}
               </span>
               <input
                 type={def.kind === "date" ? "date" : "text"}
