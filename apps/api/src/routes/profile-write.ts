@@ -25,10 +25,36 @@ import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { getBoardColumnsFor } from "@case-pipeline/query";
 import { fetchItem, resolveAllColumns, fetchBoardStructure } from "@case-pipeline/monday";
+import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
 import { parseNoteBody } from "./note-write.js";
 import { planReply } from "./note-replies.js";
+
+/**
+ * "Contract note" — the firm's existing E&A activity type (queried from the
+ * account, not invented; ~3.9k entries already use it). Reused rather than
+ * created — see docs/decisions.md, 2026-08-25.
+ */
+export const CONTRACT_NOTE_ACTIVITY_ID = "89e0ea14-1f47-45ba-81ab-1f276b958f9c";
+
+/** Longest description M11 accepts. */
+export const CONTRACT_DESCRIPTION_MAX = 5000;
+
+/** Read the optional description off a create-contract body: trimmed, "" when absent. */
+export function parseContractDescription(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+/** The E&A entry a new contract's description becomes on the client's profile. */
+export function contractActivity(profileMondayItemId: string, caseType: string, description: string): CreateTimelineItemInput {
+  return {
+    itemId: profileMondayItemId,
+    title: `New contract — ${caseType}`,
+    customActivityId: CONTRACT_NOTE_ACTIVITY_ID,
+    content: description,
+  };
+}
 
 export interface ProfileWriteDeps {
   db: DatabaseInstance;
@@ -257,6 +283,11 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
   // Open Forms entries when present). Columns are resolved by title from the synced
   // schema (no hardcoded ids). Surcharges are intentionally NOT set here — they're
   // a post-signing decision. Same rails: personal token, queue fallback, audit.
+  //
+  // An optional description goes two places: an update on the new Fee K item,
+  // and a "Contract note" E&A activity on the client's profile. Both are
+  // best-effort — the contract already exists by then, so a Monday hiccup
+  // queues them rather than failing the request.
 
   app.post("/api/profiles/:localId/contracts", requireAuth, async (req, res) => {
     if (!MONDAY_API_TOKEN) {
@@ -264,8 +295,9 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       return;
     }
     const localId = String(req.params.localId);
-    const body = req.body as { caseType?: unknown; af?: unknown; ff?: unknown; pf?: unknown };
+    const body = req.body as { caseType?: unknown; af?: unknown; ff?: unknown; pf?: unknown; description?: unknown };
     const caseType = (body.caseType ?? "").toString().trim();
+    const description = parseContractDescription(body.description);
     const num = (v: unknown): number | null => {
       if (v === "" || v == null) return null;
       const n = Number(v);
@@ -274,6 +306,10 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
     const af = num(body.af), ff = num(body.ff), pf = num(body.pf);
     if (!caseType) {
       res.status(400).json({ error: "caseType is required" });
+      return;
+    }
+    if (description.length > CONTRACT_DESCRIPTION_MAX) {
+      res.status(400).json({ error: `description is too long (max ${CONTRACT_DESCRIPTION_MAX} characters)` });
       return;
     }
 
@@ -322,15 +358,45 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
 
     const itemName = `${profile.name} — ${caseType}`;
 
+    const postFeeKUpdate = async (feeKItemId: string) => {
+      if (!description) return;
+      try {
+        await withTokenFallback((token) => dataSource.postUpdate(feeKItemId, description, token), writeTokenOptions(req));
+      } catch (err) {
+        console.error("[write-back] contract description update failed; queueing for retry:", err);
+        enqueueWrite(db, {
+          opType: "create_update", mondayItemId: feeKItemId, authorOid: req.user?.oid ?? null,
+          payload: { body: description },
+        });
+      }
+    };
+
+    // Lands on the profile, not the Fee K, so it doesn't wait for the item —
+    // it runs on the queued path too.
+    const postProfileActivity = async () => {
+      if (!description || !profile.monday_item_id) return;
+      const activity = contractActivity(profile.monday_item_id, caseType, description);
+      try {
+        await withTokenFallback((token) => dataSource.createTimelineItem(activity, token), writeTokenOptions(req));
+      } catch (err) {
+        console.error("[write-back] contract activity failed; queueing for retry:", err);
+        enqueueWrite(db, {
+          opType: "create_timeline_item", targetTable: "profiles", targetLocalId: localId,
+          mondayItemId: profile.monday_item_id, authorOid: req.user?.oid ?? null, payload: { ...activity },
+        });
+      }
+    };
+
     try {
       const outcome = await withTokenFallback(
         (token) => dataSource.createItem(schema.mondayBoardId, itemName, columnValues, token),
         writeTokenOptions(req),
       );
+      await Promise.all([postFeeKUpdate(outcome.result), postProfileActivity()]);
       auditFromReq(req, "monday.contract_created", {
         targetType: "profile", targetId: localId, targetMondayId: profile.monday_item_id,
         metadata: {
-          feeKItemId: outcome.result, caseType, af, ff, pf, name: itemName,
+          feeKItemId: outcome.result, caseType, af, ff, pf, name: itemName, hasDescription: !!description,
           usedPersonalToken: outcome.usedPersonalToken, fellBackToSharedToken: outcome.fellBackToSharedToken,
         },
       });
@@ -340,11 +406,14 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       enqueueWrite(db, {
         opType: "create_item", targetTable: "profiles", targetLocalId: localId,
         mondayItemId: profile.monday_item_id, authorOid: req.user?.oid ?? null,
-        payload: { boardId: schema.mondayBoardId, itemName, columnValues },
+        // The Fee K update can't be posted until the item exists — the queue
+        // posts `note` right after the retried create_item succeeds.
+        payload: { boardId: schema.mondayBoardId, itemName, columnValues, ...(description ? { note: description } : {}) },
       });
+      await postProfileActivity();
       auditFromReq(req, "monday.contract_created", {
         targetType: "profile", targetId: localId, targetMondayId: profile.monday_item_id,
-        metadata: { caseType, af, ff, pf, name: itemName, queued: true },
+        metadata: { caseType, af, ff, pf, name: itemName, hasDescription: !!description, queued: true },
       });
       res.status(202).json({ data: { name: itemName, pending: true } });
     }

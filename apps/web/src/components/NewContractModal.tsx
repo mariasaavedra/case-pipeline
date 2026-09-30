@@ -4,6 +4,8 @@
 // Case type (the Fee Ks "Contract for..." dropdown, real options) + AF/FF/PF
 // amounts. Creates the item on Monday via createContract, named "<client> —
 // <case type>", auto-linked to the profile. Surcharges are NOT here (post-signing).
+// The optional description becomes an update on the new Fee K and a "Contract
+// note" in the profile's Emails & Activities.
 // =============================================================================
 
 import { useState } from "react";
@@ -33,6 +35,7 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
   const [af, setAf] = useState("");
   const [ff, setFf] = useState("");
   const [pf, setPf] = useState("");
+  const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ name: string; pending: boolean } | null>(null);
@@ -47,6 +50,7 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
         af: af === "" ? null : Number(af),
         ff: ff === "" ? null : Number(ff),
         pf: pf === "" ? null : Number(pf),
+        description: description.trim() || undefined,
       });
       setDone({ name: res.name, pending: res.pending });
     } catch (e) {
@@ -104,6 +108,17 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
                   <div style={{ flex: 1 }}>{numInput("Filing fees (FF)", ff, setFf)}</div>
                   <div style={{ flex: 1 }}>{numInput("Postage (PF)", pf, setPf)}</div>
                 </div>
+
+                <label style={{ display: "block", marginBottom: 12 }}>
+                  <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)", marginBottom: 4, fontFamily: "var(--font-body)" }}>Description</span>
+                  <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} maxLength={5000}
+                    placeholder="Scope, payment plan, anything the team should know…"
+                    className="w-full rounded-md px-2 py-1.5 text-sm"
+                    style={{ border: "1px solid var(--color-border-light)", background: "var(--color-surface)", color: "var(--color-ink)", fontFamily: "var(--font-body)", resize: "vertical" }} />
+                  <span style={{ display: "block", fontSize: 11, color: "var(--color-ink-faint)", marginTop: 2, fontFamily: "var(--font-body)" }}>
+                    Posted as an update on the Fee K and a Contract note in the client's Emails &amp; Activities.
+                  </span>
+                </label>
 
                 {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
 
