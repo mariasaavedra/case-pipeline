@@ -60,6 +60,12 @@ export interface NoticeFields {
   dateOfBirth: string | null;
   /** Classification line, e.g. "Husband or wife of U.S. citizen, 201(b) INA". */
   section: string | null;
+  /**
+   * Our clients whose names appear anywhere on the pages, as they're on file.
+   * Found by looking every client up in the text, so it works on any document
+   * (court notices, letters, EOIR forms) — not only where an I-797 labels them.
+   */
+  names: string[];
   people: NoticePerson[];
 }
 
@@ -81,6 +87,7 @@ export function emptyFields(): NoticeFields {
     applicant: null,
     dateOfBirth: null,
     section: null,
+    names: [],
     people: [],
   };
 }
@@ -472,7 +479,7 @@ export function analyzePage(page: number, input: string | MailPageInput): PageIn
 function mergeFields(a: NoticeFields, b: NoticeFields): NoticeFields {
   const merged = { ...a } as NoticeFields;
   for (const key of Object.keys(emptyFields()) as Array<keyof NoticeFields>) {
-    if (key === "receiptNumbers" || key === "aNumbers") merged[key] = [...new Set([...a[key], ...b[key]])];
+    if (key === "receiptNumbers" || key === "aNumbers" || key === "names") merged[key] = [...new Set([...a[key], ...b[key]])];
     else if (key !== "people") (merged as unknown as Record<string, unknown>)[key] = a[key] ?? b[key];
   }
   return normalizeFields(merged);
@@ -540,10 +547,10 @@ export function splitIntoDocuments(pages: PageInfo[]): { documents: SplitDocumen
     } else if (uncertain) {
       current!.uncertainPages.push(p.page);
     }
-    if (p.looksLikeNotice) {
-      current!.fields = mergeFields(current!.fields, p.fields);
-      currentHasNotice = true;
-    }
+    // The page that starts a document always counts — a court notice or a
+    // letter has none of the I-797 labels but is still the document.
+    if (p.looksLikeNotice || reason) current!.fields = mergeFields(current!.fields, p.fields);
+    if (p.looksLikeNotice) currentHasNotice = true;
     current!.pages.push(p.page);
     if (p.ocr) {
       current!.ocrPages.push(p.page);
@@ -757,9 +764,48 @@ function pickByDate(forms: MatchedOpenForm[], fields: NoticeFields): MatchedOpen
   return hits.length === 1 ? hits[0]! : null;
 }
 
+/**
+ * Clients named anywhere in `text`, by their name on file. Every one of a
+ * client's name words (initials aside) must appear, close together, so
+ * "Norma X. ZAVALA LEIVA" is found in "Norma Xiomara Zavala Leiva v. …" but not
+ * in a page that says "Norma" in one paragraph and "Leiva" three paragraphs on.
+ */
+export function findNamedClients(db: Database, text: string): MatchedProfile[] {
+  const words = nameTokens(text);
+  const at = new Map<string, number[]>();
+  words.forEach((w, i) => at.set(w, [...(at.get(w) ?? []), i]));
+  const namedHere = (tokens: string[]) => {
+    if (tokens.length < 2 || !tokens.every((t) => at.has(t))) return false;
+    // Some occurrence of the first word with every other word nearby.
+    const window = tokens.length + 3;
+    return at.get(tokens[0]!)!.some((i) =>
+      tokens.slice(1).every((t) => at.get(t)!.some((j) => Math.abs(j - i) <= window)),
+    );
+  };
+  const found: MatchedProfile[] = [];
+  for (const e of profileIndex(db)) {
+    // Names on file carry notes and couples: "Carlos VALENZUELA CASTRO (Maria
+    // PRIETO USC)", "Juan LOPEZ & Ana RUIZ". A document names one person.
+    const people = e.name.replace(/\([^)]*\)|\[[^\]]*\]/g, " ").split(/\s+(?:&|and|y)\s+|\//i);
+    if (people.some((person) => namedHere([...new Set(nameTokens(person))]))) {
+      found.push({ localId: e.localId, name: e.name, aNumber: e.aNumber });
+    }
+  }
+  // A client whose whole name sits inside another found client's name is that
+  // other client read twice ("ANA LOPEZ" inside "ANA MARIA LOPEZ PEREZ").
+  return found.filter(
+    (p) => !found.some((q) => q !== p && q.name.length > p.name.length && compareNames(p.name, q.name) === "strong"),
+  );
+}
+
 export function matchNotice(db: Database, fields: NoticeFields): NoticeMatch {
   const { receiptNumbers, aNumbers, formType } = fields;
-  const names = NAME_ROLES.filter((r) => fields[r]).map((r) => ({ role: r, name: fields[r]! }));
+  const names: Array<{ role: string; name: string }> = [
+    ...NAME_ROLES.filter((r) => fields[r]).map((r) => ({ role: r, name: fields[r]! })),
+    ...fields.names
+      .filter((n) => !NAME_ROLES.some((r) => compareNames(fields[r], n) === "strong"))
+      .map((name) => ({ role: "client", name })),
+  ];
 
   if (receiptNumbers.length === 0 && aNumbers.length === 0 && names.length === 0) {
     return result({ status: "unreadable", message: "No receipt number, A-number or name found on these pages." });
@@ -978,6 +1024,9 @@ export function scanMailPages(db: Database, pageInputs: Array<string | MailPageI
   const pages = pageInputs.map((t, i) => analyzePage(i + 1, t));
   const { documents, separatorPages } = splitIntoDocuments(pages);
   const scanned = documents.map((d) => {
+    const text = d.pages.map((n) => pages[n - 1]!.text).join("\n");
+    const named = findNamedClients(db, text).map((p) => p.name);
+    d.fields = normalizeFields({ ...d.fields, names: [...new Set([...d.fields.names, ...named])] });
     const match = matchNotice(db, d.fields);
     return { ...d, match, needsReview: needsReview({ ...d, match }) };
   });

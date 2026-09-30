@@ -330,7 +330,7 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
     const edits: FieldEdits = {};
     const EDITABLE = [
       "receiptNumbers", "aNumbers", "caseType", "noticeType", "noticeDate", "receivedDate",
-      "priorityDate", "petitioner", "beneficiary", "applicant", "dateOfBirth", "section",
+      "priorityDate", "petitioner", "beneficiary", "applicant", "dateOfBirth", "section", "names",
     ] as const;
     for (const key of EDITABLE) {
       const v = body[key];

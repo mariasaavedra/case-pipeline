@@ -329,6 +329,54 @@ describe("matchNotice", () => {
   });
 });
 
+describe("clients named anywhere (any document type)", () => {
+  // Shaped like a real federal-court Notice of Hearing: no receipt, no
+  // A-number, no I-797 labels — just the client's name in the caption.
+  const COURT_NOTICE = [
+    "NOTICE OF HEARING",
+    "UNITED STATES DISTRICT COURT FOR THE DISTRICT OF VERMONT",
+    "Norma Xiomara Zavala Leiva",
+    "v. Case No. 2:26-cv-253",
+    "TAKE NOTICE that the above-entitled case has been scheduled at 03:00 p.m. on Friday, October 09, 2026.",
+  ].join("\n");
+
+  test("a court notice finds the client by name and matches her", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Norma X. ZAVALA LEIVA", "094926977");
+    insertOpenForm(db, { localId: "f1", profile: "p1", name: "Norma", forms: "I589" });
+    const [doc] = scanMailPages(db, [COURT_NOTICE]).documents;
+    expect(doc!.fields.names).toEqual(["Norma X. ZAVALA LEIVA"]);
+    expect(doc!.match).toMatchObject({ status: "matched", matchedBy: "name" });
+    expect(doc!.match.profile?.localId).toBe("p1");
+  });
+
+  test("names on file with notes or couples are still found", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Carlos VALENZUELA CASTRO (Maria PRIETO USC)", null);
+    insertProfile(db, "p2", "Juan LOPEZ & Ana RUIZ", null);
+    const r = scanMailPages(db, ["Applicant: VALENZUELA CASTRO, CARLOS", " ", "Dear Ana Ruiz, your hearing is set."]);
+    expect(r.documents.map((d) => d.fields.names)).toEqual([
+      ["Carlos VALENZUELA CASTRO (Maria PRIETO USC)"],
+      ["Juan LOPEZ & Ana RUIZ"],
+    ]);
+  });
+
+  test("every name word must be there, close together — scattered words are not a name", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Maria LOPEZ", null);
+    const far = `Maria ${"filler word ".repeat(20)} Lopez`;
+    expect(scanMailPages(db, [far]).documents[0]!.fields.names).toEqual([]);
+    expect(scanMailPages(db, ["Maria Elena Lopez"]).documents[0]!.fields.names).toEqual(["Maria LOPEZ"]);
+  });
+
+  test("a client whose name sits inside another found client's is that client read twice", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", "Ana LOPEZ", null);
+    insertProfile(db, "p2", "Ana Maria LOPEZ PEREZ", null);
+    expect(scanMailPages(db, ["Ana Maria Lopez Perez"]).documents[0]!.fields.names).toEqual(["Ana Maria LOPEZ PEREZ"]);
+  });
+});
+
 describe("names", () => {
   test("nameTokens drops accents, titles and punctuation", () => {
     expect(nameTokens("Ms. MARTÍNEZ ANDRÉS, Sarahí")).toEqual(["martinez", "andres", "sarahi"]);
