@@ -29,7 +29,7 @@ import {
   handleCallLog,
   handleJailIntakes,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
 import { setApiToken } from "@case-pipeline/monday";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
@@ -385,6 +385,11 @@ app.get("/api/active-cases", (req, res) => {
       statusUrgencyAffectsBoard: u.statusUrgencyAffectsBoard,
     }),
   });
+});
+// Prescheduling — Paid Fee Ks waiting for the client's documents. Thresholds
+// are the query defaults (30 / 60 days since hire, 14 days after a reminder).
+app.get("/api/prescheduling", (_req, res) => {
+  res.json({ data: getPrescheduling(db) });
 });
 // Calendar — hearings, court/USCIS deadlines, interviews, and appointments
 // unified across boards. See libs/query/src/calendar.ts.

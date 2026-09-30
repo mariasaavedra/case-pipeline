@@ -55,6 +55,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P10 | Call Log | `/call-log` | Sidebar → Call Log | `components/CallLogPage.tsx` |
 | P11 | Settings | `/settings/<tab>` | Sidebar → Settings (bottom) | `pages/SettingsPage.tsx` |
 | P12 | Mail | `/mail` | Sidebar → Mail | `components/MailPage.tsx` |
+| P13 | Prescheduling | `/prescheduling` | Sidebar → Prescheduling (above Active Cases) | `components/PreschedulingPage.tsx` |
 
 ### Global
 
@@ -113,6 +114,14 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 | P5.1 | Header | Open / overdue / missing-date counts |
 | P5.2 | Summary table | Paralegal rows × urgency counts; click a number or a name to filter P5.3 |
 | P5.3 | Case list | Filter chips (person, bucket, Only court, North Pole) + cases grouped by urgency |
+
+### Inside P13 Prescheduling
+
+| Code | Name | Notes |
+|---|---|---|
+| P13.1 | Header | Paid count, waiting 60+ days, not cooperating; colour legend |
+| P13.2 | Summary table | Paralegal rows × PS Stage; cell colour = longest wait since hire; click to filter P13.3 |
+| P13.3 | Case list | Filter chips (person, stage, not cooperating, North Pole) + cases grouped by days since hire |
 
 ### Inside P6 My Cases
 
