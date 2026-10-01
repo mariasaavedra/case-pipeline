@@ -72,6 +72,33 @@ Columns grouped by job, with how many of the 216 active cases have each one fill
 | 8 | Motions / BIA appeals / litigation views | Separate boards, smaller volume | later |
 | 9 | ECAS: ECAS PDFs into Mail intake (EOIR notice parser), then notification-email parsing | No public API; see 2026-10-01 notes | 1–3 days |
 
+## 6. What people actually edit (Monday activity log, last 90 days)
+
+This was read from Monday's activity log on 2026-10-01 (read-only), rather than worked out from the columns. There were 9,529 events, 7,219 of them column edits.
+
+**One person runs the board.** Mayra Ruiz makes about 90% of all edits. David Arterburn edits the exhibit TOC, attorney notes and I-200/I-213. Laura Torres edits filings.
+
+**The board is still being rebuilt.** In 90 days: 47 columns created, 23 deleted, 62 renamed, 417 column-setting changes. Our `config/boards.yaml` has already drifted. For example, court `ij` points at `text6__1`, which no longer exists; the judge is now **IJ - Dropdown** (`dropdown_mm5y9sgr`, 263 edits), so we sync an empty value.
+
+120 of the 232 columns were edited. Of the 112 that weren't, about 55 are mirrors (computed values, which are never edited directly). That leaves **about 57 input columns nobody touched**. They include Para Action, Client Action, Client Notification, the fees-owed amounts, TP #1–#3 dates, To-Do Assignee/DONE, Discuss w Atty, Question for Atty, APP/RN Due, Translations and Det. Facility (only M17 writes it).
+
+**Her actual workflow: the columns edited most (edits / cases):**
+
+| Job | Columns |
+|---|---|
+| Hearing | MONTH 372/229 · Next Hearing Date 330/127 · CURRENT HEARING link 317/110 · IJ - Dropdown 263/207 · Hearing type 236/177 · Hearing Status 161/127 · HEARINGS link 169/96 · Year 107/86 · Method 78/63 |
+| Scheduling orders | Judge/Sched Order file 183/99 · SCHED ORDER link (Deadlines board) 173/104 · Sched. Order Type 167/100 · Ordered 158/67 · ISSUED 97/85 · MET 37 · Pending ORDER? 32 |
+| Tasks | Court Tasks link 366/138 |
+| Prep | Case Prep Status 203/150 · Deadline Type 202/144 · Filings Overview 195/70 · NEEDS 321/96 · Prep Time Stage 132/105 · PENDINGS? 82 · Deadline Status 67 |
+| Fees | Hearing Fees 154/100 · Fee K Status 91/66 · Fees Deadline - Client 29 |
+| Court prep appts | Appointments 117 · COURT PREP APPTS 65 · TP #1–#4 / Initial TP links 37–53 each |
+| Filings (detail) | WPs 68 · App for Relief 27 · RN 25 · I-213/I-200 Issued 25–30 · fingerprints 10 · witness list 6 |
+
+What this tells us:
+- **Scheduling orders and Court Tasks are her two biggest jobs after hearings, and both live on boards we don't sync** (Deadlines and Due Dates, Court Tasks).
+- The per-filing detail columns (WPs, APP, RN…) get only light use. The summary dropdowns **Filings Overview** and **NEEDS** are where filing status is really kept.
+- Case Prep Status (203 edits) and Prep Time Stage (132) are both in active use, so neither is dead.
+
 Questions to settle with the court team:
 - Which of the three "where is it" columns is the real one: Case Prep Status, Prep Time Stage or Deadline Status?
 - Are Para Action / Client Action still in use?
