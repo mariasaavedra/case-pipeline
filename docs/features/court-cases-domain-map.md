@@ -10,7 +10,7 @@ The **Court Cases** board (`court_cases`, 8025546360) is the hub. It has 250 col
 | Board | Items | What it holds for court work | Synced? |
 |---|---|---|---|
 | **Calendaring** | 980 | One entry per hearing (current and past), plus court deadlines and fee due dates. Each active case links to its CURRENT HEARING entry; older hearings stay as RESCHEDULED / ATTENDED | ✅ |
-| **Deadlines and Due Dates** | 412 | Scheduling orders: what was ordered, written/due/warning dates, completed | ❌ **not synced** |
+| **Deadlines and Due Dates** | 412 | Scheduling orders: what was ordered, written/due/warning dates, completed | ✅ since 2026-10-01 (`deadlines_due_dates`) |
 | **Court Tasks** | 797 | Paralegal to-dos per case (assigned to, due, status). TRIAL PREP tasks too | ❌ **not synced** (only mirrors on the case) |
 | **Subitems of Court Cases** | 366 | Subitems | ❌ |
 | Motions | 323 | Motions (bond, MTC, MTR, MTT…). 135 Filed/waiting for IJ; 87 active cases link to one | ✅ |
@@ -52,20 +52,35 @@ Columns grouped by job, with how many of the 216 active cases have each one fill
 | Search | `type=court_cases` |
 | Mail intake | USCIS notices only; EOIR notices are not parsed |
 
-## 4. Problems found
+## 4. Problems found, and what was fixed (2026-10-01)
 
-1. **Six relation columns point to the wrong Monday column.** In `config/boards.yaml`, `hearings`, `court_prep_appts`, `link_to_litigation`, `link_to_court_tasks`, `link_to_address_changes` and `link_to_address_changes_1` use `resolve: by_type`. They all pick up the first relation column (Profile), so every one of them holds the client's profile link. Fix: pin each one `by_id` (`board_relation_mm39s7e1`, `board_relation_mm3trf3w`, `board_relation_mm3cxpjk`, `board_relation_mm4njwkc`, `board_relation_mm40b1b9`, `board_relation_mm40qj01`), then re-sync.
-2. **Calendaring status is ignored.** 13 upcoming "current hearings" are marked "RECHED/ CONT/ AC/ WD – NOT HAPPENING", and P15's Docket still lists them.
-3. **Two boards court work depends on aren't synced:** Court Tasks and Deadlines and Due Dates.
+1. **Ambiguous relation resolvers — FIXED.** 21 `resolve: by_type, type: board_relation` keys across 11 boards all picked up each board's *first* relation column (usually Profiles). Every one is now pinned `by_id` to the right column (read from each column's linked boards on live Monday):
+   - **court_cases:** `hearings`, `court_prep_appts`, `link_to_litigation`, `link_to_court_tasks`, `link_to_address_changes`(`_1`), `profile_profile_link_for_court_cases`
+   - **calendaring:** `connect_boards`, `court_cases` (= CURRENT HEARING ONLY), `link_to_court_cases`, `link_to_subitems_of_calendaring`, `link_to_fee_ks`
+   - **other boards:** motions, appointments WH/LB/M, Open Forms, Address Changes, Profiles, Litigation
+   - `appointments_r.link_to_court_cases` was **removed**. That board has no Court Cases relation, so the resolver was silently filling it with the Profiles column.
+2. **Judge column — FIXED.** Court `ij` pointed at the deleted `text6__1`. It now reads **IJ - Dropdown** (`dropdown_mm5y9sgr`).
+3. **Scheduling orders — ADDED.**
+   - New board `deadlines_due_dates` (Deadlines and Due Dates, 18404344923, 412 items), all 31 useful columns pinned `by_id`.
+   - Each row is one deadline: status (Assigned / FILED / URGENT / MISSED DEADLINE…), deadline type, issued / warning / due / written / completed dates, the judge order, the ordering IJ, what was ordered, and links to the court case, Calendaring and Court Tasks.
+   - `next_date` = Due Date.
+   - On Court Cases: the SCHED ORDER link and its mirrors (status, type, warning / due / written / filing / completed), Sched. Order Type, MET, plus the TP-appointment and trial-prep-task links and the hearing-fee mirrors.
+   - Items carry no `profile_local_id`, same as Calendaring. Reach the client through the court case.
+4. **Still open:**
+   - Calendaring status is ignored by P15 (13 "NOT HAPPENING" hearings show on the Docket).
+   - Court Tasks isn't synced.
+   - About 25 court config keys point at columns Monday has since deleted. They resolve to nothing, so they're harmless, but should be pruned.
+
+**Deploying this config change needs a `--full` sync of the affected boards.** The incremental watermark won't re-read unchanged items, so the newly pinned keys would stay stale. It also needs `npm run webhooks:setup` so the new board gets a webhook.
 
 ## 5. Backlog, in suggested order
 
 | # | Item | Why | Size |
 |---|---|---|---|
-| 1 | Fix the 6 relation mappings + re-sync | Wrong data today; blocks hearing history, prep appts, litigation links | ~1 h + sync |
+| 1 | ~~Fix the relation mappings + re-sync~~ | DONE in config 2026-10-01; needs the full sync on deploy | — |
 | 2 | P15: drop NOT HAPPENING hearings from the Docket, add confirmation tag + next court deadline + fees due | Docket correctness; agreed 2026-10-01 | ~2–3 h |
 | 3 | Verify P15 in the browser + against the server DB, open PR | Ship what's built | ~1 h |
-| 4 | Sync **Court Tasks** and **Deadlines and Due Dates** | Unlocks per-paralegal court to-dos and scheduling-order deadlines | ~½ day each (config + sync + schema) |
+| 4 | Sync **Court Tasks** (Deadlines and Due Dates: DONE 2026-10-01) | Unlocks per-paralegal court to-dos | ~½ day |
 | 5 | **Hearing-prep checklist**: per case, filings due vs filed (WPs, App, RN, FPs, E28s, evidence, witness list, TOC) and fees owed, against the hearing date | The data is already on the board (§2); replaces the "Needs config" spec in `hearing-prep-checklist.md` | ~1–2 days |
 | 6 | Client 360 Court Cases tab: hearing, judge, prep stage, filings, fees, motions, hearing history | Today it's generic cards | ~1 day |
 | 7 | Fees-before-hearing view (MASTER/TP/TRIAL owed vs due) | 99 cases owe something | ~½ day |

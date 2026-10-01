@@ -38,6 +38,7 @@ export const NEXT_DATE_KEY: Record<string, string> = {
   appointments_lb: "consult_date",
   appointments_wh: "consult_date",
   _fa_jail_intakes: "consult_date",
+  deadlines_due_dates: "due_date",
 };
 
 /**
