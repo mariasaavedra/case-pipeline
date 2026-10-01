@@ -29,7 +29,7 @@ import {
   handleCallLog,
   handleJailIntakes,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
 import { setApiToken } from "@case-pipeline/monday";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
@@ -64,6 +64,7 @@ import { auditFromReq } from "./audit/log.js";
 import { registerCallLogRoutes } from "./routes/call-log.js";
 import { registerMailRoutes } from "./routes/mail.js";
 import { registerBoardItemWriteRoutes } from "./routes/board-item-write.js";
+import { registerCourtCaseWriteRoutes } from "./routes/court-case-write.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
 import { registerDetentionWriteRoutes } from "./routes/detention-write.js";
 import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
@@ -395,6 +396,11 @@ app.get("/api/prescheduling", (_req, res) => {
 app.get("/api/pending-contracts", (_req, res) => {
   res.json({ data: getPendingContracts(db) });
 });
+// Court Cases (P15) — active court cases for the Docket and Prep Pipeline views.
+// Readiness thresholds are the query defaults (Trial 60 / 90 days, MCH 14).
+app.get("/api/court-cases", (_req, res) => {
+  res.json({ data: getCourtCases(db) });
+});
 // Calendar — hearings, court/USCIS deadlines, interviews, and appointments
 // unified across boards. See libs/query/src/calendar.ts.
 const VALID_CALENDAR_CATEGORIES = new Set<CalendarCategory>([
@@ -461,6 +467,7 @@ registerDetentionWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeT
 // Board item write-back (status + columns) — see routes/board-item-write.ts
 // =============================================================================
 registerBoardItemWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerCourtCaseWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 
 // =============================================================================
 // Call Log — see routes/call-log.ts
