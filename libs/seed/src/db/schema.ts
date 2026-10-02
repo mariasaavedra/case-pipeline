@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 28;
+export const SCHEMA_VERSION = 29;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -430,6 +430,25 @@ CREATE TABLE IF NOT EXISTS sp_folders (
 );
 CREATE INDEX IF NOT EXISTS idx_sp_folders_case_no ON sp_folders(case_no);
 CREATE INDEX IF NOT EXISTS idx_sp_folders_site ON sp_folders(site);
+
+-- Consult preps (v29+): one row per time reception prepped an appointment
+-- (P17 → M18). What was sent to Monday is the record; this row is what lets
+-- P17 show "Prepped" without parsing notes. Local-only — NOT rebuilt by sync.
+CREATE TABLE IF NOT EXISTS consult_preps (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    appointment_local_id   TEXT NOT NULL,
+    appointment_monday_id  TEXT,
+    profile_local_id       TEXT,
+    appt_type              TEXT NOT NULL,
+    method                 TEXT NOT NULL,
+    fields                 TEXT NOT NULL,         -- the full prep body (JSON)
+    note_text              TEXT NOT NULL,
+    author_oid             TEXT,
+    author_name            TEXT,
+    pending                INTEGER NOT NULL DEFAULT 0,  -- 1 = some Monday write was queued
+    created_at             TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_consult_preps_appt ON consult_preps(appointment_local_id);
 
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_profiles_batch ON profiles(batch_id);
@@ -1274,6 +1293,27 @@ export function initializeSchema(db: Database): void {
         );
         CREATE INDEX IF NOT EXISTS idx_sp_folders_case_no ON sp_folders(case_no);
         CREATE INDEX IF NOT EXISTS idx_sp_folders_site ON sp_folders(site);
+      `);
+    }
+
+    // Migration v28 → v29: consult preps from the Receptionists page. New table only.
+    if (fromVersion < 29) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS consult_preps (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            appointment_local_id   TEXT NOT NULL,
+            appointment_monday_id  TEXT,
+            profile_local_id       TEXT,
+            appt_type              TEXT NOT NULL,
+            method                 TEXT NOT NULL,
+            fields                 TEXT NOT NULL,         -- the full prep body (JSON)
+            note_text              TEXT NOT NULL,
+            author_oid             TEXT,
+            author_name            TEXT,
+            pending                INTEGER NOT NULL DEFAULT 0,  -- 1 = some Monday write was queued
+            created_at             TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_consult_preps_appt ON consult_preps(appointment_local_id);
       `);
     }
 

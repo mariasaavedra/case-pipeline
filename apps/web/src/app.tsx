@@ -19,6 +19,7 @@ const LandingPage = lazy(() => import("./components/LandingPage").then((m) => ({
 const AppointmentsPage = lazy(() => import("./components/AppointmentsPage").then((m) => ({ default: m.AppointmentsPage })));
 const ClientsPage = lazy(() => import("./components/ClientsPage").then((m) => ({ default: m.ClientsPage })));
 const AlertsPage = lazy(() => import("./components/AlertsPage").then((m) => ({ default: m.AlertsPage })));
+const ReceptionPage = lazy(() => import("./components/ReceptionPage").then((m) => ({ default: m.ReceptionPage })));
 const ContractsPage = lazy(() => import("./components/ContractsPage").then((m) => ({ default: m.ContractsPage })));
 const PreschedulingPage = lazy(() => import("./components/PreschedulingPage").then((m) => ({ default: m.PreschedulingPage })));
 const ActiveCasesPage = lazy(() => import("./components/ActiveCasesPage").then((m) => ({ default: m.ActiveCasesPage })));
@@ -50,6 +51,7 @@ const PAGE_CODES: Partial<Record<Route["page"], string>> = {
   mail: "P12",
   "court-cases": "P15",
   map: "P16",
+  reception: "P17",
 };
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
@@ -343,6 +345,7 @@ function App() {
 
             {/* Appointments page */}
             {route.page === "appointments" && !loading && <AppointmentsPage />}
+            {route.page === "reception" && !loading && <ReceptionPage />}
             {route.page === "contracts" && !loading && <ContractsPage />}
             {route.page === "prescheduling" && !loading && <PreschedulingPage />}
             {route.page === "active-cases" && !loading && <ActiveCasesPage />}

@@ -59,6 +59,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P14 | Contracts | `/contracts` | Sidebar → Contracts (above Prescheduling) | `components/ContractsPage.tsx` |
 | P15 | Court Cases | `/court-cases` | Sidebar → Court Cases | placeholder in `app.tsx` (not built yet) |
 | P16 | Map | `/map` | Sidebar → Map | placeholder in `app.tsx` (not built yet) |
+| P17 | Receptionists | `/reception` | Sidebar → Receptionists (below Appointments) | `components/ReceptionPage.tsx` |
 
 ### Global
 
@@ -133,6 +134,13 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 | P14.1 | Header | Pending count, older than 60 days, not sent yet; colour legend; **+ New contract** → M11 (pick the client first) |
 | P14.2 | Summary table | Attorney rows × Contract Stage; cell colour = oldest contract (days since sent, else added); click to filter P14.3 |
 | P14.3 | Contract list | Grouped by Contract Stage: age, payment link, AF/FF, attorneys, assistant |
+
+### Inside P17 Receptionists
+
+| Code | Name | Notes |
+|---|---|---|
+| P17.1 | Header | Consult count, not prepped count; **+ Book Appt** → M10 (pick the client first); range (Today / Tomorrow / Next 7 days), attorney and "not prepped" filters |
+| P17.2 | Consult list | Grouped by day: time, client (→ M3), Calendly / language tags, attorney board, description, Prepped / Not prepped; **Focus** → M5; **Prep** → M18 |
 
 ### Inside P6 My Cases
 
@@ -209,12 +217,12 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M2 | Log a call | "Log a call" / "Edit call" | Top bar **+ Log call** (every page); P10 → pencil on a row | `LogCallModal.tsx` |
 | M3 | Client case | The client's name (360 header) | Any client name outside P2 — opens over the current page as `?client=<id>`, Back closes it (`ClientPeek.tsx`); inside M2 → "View profile" after picking a linked client (opens on top of M2); P10 → a row's client | `ClientCaseModal.tsx` |
 | M4 | Call notes | "Notes — *name*" | P10 → notes on a row | `CallNotesModal.tsx` |
-| M5 | Appointment detail | The client's name | P4 → click an appointment | `AppointmentModal.tsx` |
+| M5 | Appointment detail | The client's name | P4 → click an appointment / **Focus**; P17.2 → **Focus**; M18 → "Focus view — notes & documents" (opens on top) | `AppointmentModal.tsx` |
 | M6 | Client notes | The client's name | P4 → "Open in modal" under a row's notes | `NotesModal.tsx` |
 | M7 | Day agenda | The date | P7 → click a day | `CalendarPage.tsx` (`DayModal`) |
 | M8 | New jail intake | "New jail intake" | P9 → **+ New intake**. Intake status (New Detainee / Payment link sent. Waiting on payment) + optional POC e-mail — the same fields as M2's "this call is a jail intake" | `NewJailIntakeModal.tsx` |
 | M9 | Jail intake detail | The detainee's name | P9 → click an intake. The status chip changes the status (D6). A paid intake ("Needs to be scheduled") shows **Book consult**: attorney + date + time → saved to Monday, then a link to press Create Appt there | `JailIntakeDetailModal.tsx` |
-| M10 | Book a consult | "Book a consult" | P3.2 | `NewAppointmentModal.tsx` |
+| M10 | Book a consult | "Book a consult" | P3.2; P17.1 **+ Book Appt** (starts with a client search). 30-minute time slots; "Needs to pay?" shown disabled (under construction) | `NewAppointmentModal.tsx` |
 | M11 | New contract | "New contract (Fee K)" | P3.3; P14.1 (starts with a client search) | `NewContractModal.tsx` |
 | M12 | File preview | The file name | P3.6; the documents section of M5 | `FilePreviewModal.tsx` |
 | M13 | Entry editor | The entry's name | P3.8 (admin) | `EntryEditorModal.tsx` |
@@ -222,6 +230,8 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
 | M16 | Connect Monday.com | "Connect your Monday.com account" / "Reconnect…" / "Monday.com connected" | Opens by itself after sign-in when Monday isn't connected (any page but P11); **Not now** hides it for 12 h | `MondayConnectPrompt.tsx` |
 | M17 | Released from detention | "Released from detention" | P3.0 → **Released?** on the "Detained at …" pill | `ReleaseDetentionModal.tsx` |
+| M18 | Prep consult | "Prep consult" | P17.2 → **Prep** on a consult → D23, D24 | `ConsultPrepModal.tsx` |
+| M19 | Client documents | "Client documents" | M18 → **Browse SharePoint…** (the P3.6 browser in pick mode: Attach / upload) | `ConsultPrepModal.tsx` + `DocumentsTab.tsx` |
 
 ## Dropdowns
 
@@ -249,5 +259,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D20 | Call status filter | P10.1 | `CallLogPage.tsx` |
 | D21 | Taken-by filter | P10.1 | `CallLogPage.tsx` |
 | D22 | Show column | M1 | `KpiDetailModal.tsx` |
+| D23 | Type of appt | M18 | `ConsultPrepModal.tsx` |
+| D24 | How to proceed | M18 | `ConsultPrepModal.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.

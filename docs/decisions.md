@@ -502,3 +502,16 @@ The daily series held **thirteen** backups where `BACKUP_KEEP` defaults to 4. De
 **Rules**: offered only on "Needs to be scheduled" intakes with no linked appointment. The attorney must be both an "Appt with:" label and a bookable board's badge (`data/attorney-boards.json`), so a workflow label like "Appt requested. Waiting on date" is never written. The date is today or later (Central); the time is optional and written the same way M10 writes one.
 
 **Revisit if**: staff forget the second step often enough to matter. The full chain would then need a test on a throwaway intake first, to see which automations fire on an API-created appointment.
+
+## 2026-10-02 — Receptionists (P17): Consult Prep Note, Pinned Update, Shared Folder Naming
+
+**Context**: Reception preps every consult for the attorney (type of appt, how it will happen, documents, description) and asked for the result as a note on the client's profile, on the appointment, and in the profile's Emails & Activities. Spec: `docs/features/reception.md`.
+
+**Decisions**:
+- **E&A type by name, not by id.** Reception wants a new "Consult Prep Note" type. It doesn't exist yet, so the API looks it up by name (`fetchCustomActivities`, cached 30 min) and posts as the existing "Consult note" until someone creates it in Monday. No release is needed when it appears. Not created via `create_custom_activity`, to avoid the duplicate-name picker problem from 2026-08-25.
+- **Pin via API 2025-07.** `pin_to_top` isn't on the 2024-10 schema, so `pinUpdateToTop` uses the same per-request version override as mentions. A failed pin is logged, never queued: the note itself is already posted.
+- **Write-back goes where the value came from**: phone → profile Phone, description → appointment Description, a folder link → the profile's empty E-File / Consult File (never replaces one). An emptied box is not a write-back.
+- **One folder-naming rule.** `consult-naming.ts` moved from `scripts/sharepoint/` to `libs/core` (re-exported at the old path) so P17's "Find or create folder" and the consult sweep name and look up folders identically: E-Files, then Closed, then `{year} Consults`; create only when none exists. A name the rule refuses is never guessed; reception pastes a link instead.
+- **Popups above the sidebar.** `ui/dialog`, `ui/select` and `ui/popover` moved from `z-50` to `z-[70]`; the sidebar is 60 (so the phone drawer clears its 55 backdrop) and was painting over wide popups at tablet widths.
+
+**Revisit if**: the pin turns out to be refused on the live account (then drop it), or reception wants Type of Appt filterable in Monday (then add columns rather than parsing notes).

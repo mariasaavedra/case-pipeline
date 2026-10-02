@@ -53,6 +53,19 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    id: "reception",
+    label: "Receptionists",
+    path: "/reception",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M4 11V9a6 6 0 0112 0v2" />
+        <rect x="2.5" y="11" width="3" height="5" rx="1" />
+        <rect x="14.5" y="11" width="3" height="5" rx="1" />
+        <path d="M16 16c0 1.1-1.3 2-3 2h-2" />
+      </svg>
+    ),
+  },
+  {
     id: "contracts",
     label: "Contracts",
     path: "/contracts",
