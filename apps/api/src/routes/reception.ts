@@ -40,7 +40,7 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { getBoardColumnsFor } from "@case-pipeline/query";
-import { fetchCustomActivities } from "@case-pipeline/monday";
+import { fetchCustomActivities, MondayApiError } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { activeBoardKeys, loadAttorneyBoards } from "../attorney-boards.js";
 import { consultFolderName } from "@case-pipeline/core";
@@ -199,29 +199,6 @@ export function parsePrepBody(raw: unknown): { ok: true; body: PrepBody } | { ok
 // The note
 // -----------------------------------------------------------------------------
 
-export interface PrepContext {
-  /** YYYY-MM-DD of the consult, or null when the board has none. */
-  date: string | null;
-  /** HH:MM (24-hour), or null. */
-  time: string | null;
-  attorney: string | null;
-  author: string;
-}
-
-/** "Oct 3, 2026" from YYYY-MM-DD — noon UTC so no timezone can move the day. */
-function formatDay(ymd: string): string {
-  return new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", {
-    month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
-  });
-}
-
-/** "14:30" → "2:30 PM". */
-function formatTime(hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  const hour = h ?? 0;
-  return `${hour % 12 === 0 ? 12 : hour % 12}:${String(m ?? 0).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
-}
-
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -238,55 +215,56 @@ export function methodLabel(b: PrepBody): string {
 }
 
 /**
- * The prep note, three ways from one source so they never drift:
+ * The prep note, from one source so its copies never drift:
  *
- *   Consult prep — Oct 3, 2026 at 2:30 PM with Michael Sharma-Crawford
  *   Type of appt: 1st time
  *   How to proceed: Zoom — https://zoom.us/j/…
  *   Documents:
- *   • e-file — https://…
+ *   • Consult folder                      (a link named after the document)
+ *   Description: <description>
  *
- *   <description>
- *
- *   Prepared by Ana Reyes
- *
- * `text` is the E&A content and the local timeline copy; `html` is the Monday
- * Update body, where documents and the Zoom link are real links.
+ * No headline and no "Prepared by" (reception, 2026-10-02): Monday already
+ * shows who posted it and when, and the consult's own date is on the
+ * appointment. `html` is what goes to Monday — the Updates AND the E&A entry,
+ * whose content Monday stores and renders as HTML (staff's own entries carry
+ * `<a href>` links), so documents read as their name in blue. `text` is the
+ * local timeline copy.
  */
-export function prepNote(b: PrepBody, ctx: PrepContext): { title: string; text: string; html: string } {
-  const when = ctx.date ? (ctx.time ? `${formatDay(ctx.date)} at ${formatTime(ctx.time)}` : formatDay(ctx.date)) : null;
-  const headline = `Consult prep${when ? ` — ${when}` : ""}${ctx.attorney ? ` with ${ctx.attorney}` : ""}`;
-
-  const text: string[] = [headline, `Type of appt: ${apptTypeLabel(b)}`, `How to proceed: ${methodLabel(b)}`];
+export function prepNote(b: PrepBody): { text: string; html: string } {
+  const text: string[] = [`Type of appt: ${apptTypeLabel(b)}`, `How to proceed: ${methodLabel(b)}`];
   if (b.documents.length > 0) {
     text.push("Documents:", ...b.documents.map((d) => `• ${d.name} — ${d.url}`));
   }
-  if (b.description) text.push("", b.description);
-  text.push("", `Prepared by ${ctx.author}`);
+  if (b.description) text.push(`Description: ${b.description}`);
 
-  const link = (url: string, label: string) => `<a href="${escapeHtml(url)}" target="_blank">${escapeHtml(label)}</a>`;
+  const link = (url: string, label: string) =>
+    `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
   const how =
     b.method === "Zoom" && b.zoomLink
       ? `Zoom — ${link(b.zoomLink, b.zoomLink)}`
       : escapeHtml(methodLabel(b));
   const html: string[] = [
-    `<p><strong>${escapeHtml(headline)}</strong></p>`,
-    `<p><strong>Type of appt:</strong> ${escapeHtml(apptTypeLabel(b))}<br><strong>How to proceed:</strong> ${how}</p>`,
+    `<p><strong>Type of appt:</strong> ${escapeHtml(apptTypeLabel(b))}</p>`,
+    `<p><strong>How to proceed:</strong> ${how}</p>`,
   ];
   if (b.documents.length > 0) {
-    html.push(
-      `<p><strong>Documents:</strong></p><ul>${b.documents.map((d) => `<li>📎 ${link(d.url, d.name)}</li>`).join("")}</ul>`,
-    );
+    html.push(`<p><strong>Documents:</strong></p>`, ...b.documents.map((d) => `<p>• ${link(d.url, d.name)}</p>`));
   }
-  if (b.description) html.push(`<p>${escapeHtml(b.description).replace(/\n/g, "<br>")}</p>`);
-  html.push(`<p><em>Prepared by ${escapeHtml(ctx.author)}</em></p>`);
+  if (b.description) {
+    html.push(`<p><strong>Description:</strong> ${escapeHtml(b.description).replace(/\n/g, "<br>")}</p>`);
+  }
 
-  return {
-    title: when ? `Consult prep — ${when}` : "Consult prep",
-    text: text.join("\n"),
-    html: html.join(""),
-  };
+  return { text: text.join("\n"), html: html.join("") };
 }
+
+/**
+ * The E&A entry's title. Staff's own entries have none (Monday stores null),
+ * so the prep note goes without one too. The API marks title as required,
+ * though; if Monday refuses the blank one, the route retries once with
+ * PREP_TITLE_FALLBACK, and an entry queued during an outage carries it.
+ */
+export const PREP_TITLE = "";
+export const PREP_TITLE_FALLBACK = "Consult prep";
 
 // -----------------------------------------------------------------------------
 // Write-back of edited fields
@@ -620,7 +598,7 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
 
     const author = req.user?.name ?? req.user?.preferred_username ?? "Staff";
     const authorOid = req.user?.oid ?? null;
-    const note = prepNote(prep, { date: appt.date, time: appt.time, attorney: appt.attorney, author });
+    const note = prepNote(prep);
 
     let pending = false;
     const failures: string[] = [];
@@ -673,19 +651,31 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
       }, err);
     }
 
-    // 3. Emails & Activities on the profile.
+    // 3. Emails & Activities on the profile — HTML content, so documents are
+    //    named links. No title, like staff's own entries (see PREP_TITLE).
     const activity: CreateTimelineItemInput = {
       itemId: profileMondayId,
-      title: note.title,
+      title: PREP_TITLE,
       customActivityId: await prepActivityId(),
-      content: note.text,
+      content: note.html,
     };
+    const postActivity = (input: CreateTimelineItemInput) =>
+      withTokenFallback((token) => dataSource.createTimelineItem(input, token), writeTokenOptions(req));
     try {
-      await withTokenFallback((token) => dataSource.createTimelineItem(activity, token), writeTokenOptions(req));
+      try {
+        await postActivity(activity);
+      } catch (err) {
+        // Monday refusing the request itself (not an outage) is most likely the
+        // blank title on a non-null argument: try once more with one.
+        if (!(err instanceof MondayApiError) || err.retryable) throw err;
+        console.warn("[reception] E&A entry refused with a blank title; retrying with one:", err.message);
+        await postActivity({ ...activity, title: PREP_TITLE_FALLBACK });
+      }
     } catch (err) {
+      // Queued with a title, so a retry can't fail on that again.
       queue("E&A entry", {
         opType: "create_timeline_item", targetTable: "profiles", targetLocalId: profileLocalId,
-        mondayItemId: profileMondayId, authorOid, payload: { ...activity },
+        mondayItemId: profileMondayId, authorOid, payload: { ...activity, title: PREP_TITLE_FALLBACK },
       }, err);
     }
 

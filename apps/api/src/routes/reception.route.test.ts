@@ -17,6 +17,8 @@ import { initializeSchema } from "@case-pipeline/seed/db/schema";
 type Call = { op: string; [k: string]: unknown };
 let calls: Call[] = [];
 let failUpdates = false;
+/** "refuse": Monday rejects a blank title (non-retryable); "down": an outage. */
+let activityMode: "ok" | "refuse" | "down" = "ok";
 
 vi.mock("../data-source/index.js", () => ({
   dataSource: {
@@ -29,6 +31,9 @@ vi.mock("../data-source/index.js", () => ({
       calls.push({ op: "pin", updateId, itemId });
     },
     createTimelineItem: async (input: { itemId: string; title: string; customActivityId: string; content?: string }) => {
+      const { MondayApiError, NetworkError } = await import("@case-pipeline/monday");
+      if (activityMode === "down") throw new NetworkError("Monday is down");
+      if (activityMode === "refuse" && input.title === "") throw new MondayApiError("title must not be blank", 200, false);
       calls.push({ op: "activity", ...input });
       return "tl-1";
     },
@@ -50,7 +55,7 @@ vi.mock("@case-pipeline/monday", async (orig) => ({
   fetchCustomActivities: async () => new Map([["other-id", "Casenote"]]),
 }));
 
-const { registerReceptionRoutes, CONSULT_NOTE_ACTIVITY_ID } = await import("./reception.js");
+const { registerReceptionRoutes, CONSULT_NOTE_ACTIVITY_ID, PREP_TITLE_FALLBACK } = await import("./reception.js");
 
 let db: Database.Database;
 let server: Server;
@@ -87,6 +92,7 @@ async function prep(body: Record<string, unknown>) {
 beforeEach(async () => {
   calls = [];
   failUpdates = false;
+  activityMode = "ok";
   db = new Database(":memory:");
   initializeSchema(db);
   const app = express();
@@ -124,8 +130,10 @@ describe("POST /api/reception/consults/:localId/prep", () => {
     expect(calls.find((c) => c.op === "pin")).toEqual({ op: "pin", updateId: "upd-901", itemId: "901" });
     const activity = calls.find((c) => c.op === "activity")!;
     expect(activity.customActivityId).toBe(CONSULT_NOTE_ACTIVITY_ID);
-    expect(activity.title).toBe("Consult prep — Oct 2, 2026 at 2:00 PM");
-    expect(String(activity.content)).toContain("• Consult folder — " + consultFolder);
+    // No title, like staff's own entries; HTML content so the folder is a named link.
+    expect(activity.title).toBe("");
+    expect(String(activity.content)).toContain(`<a href="${consultFolder}" target="_blank" rel="noopener noreferrer">Consult folder</a>`);
+    expect(String(activity.content)).not.toMatch(/Consult prep|Prepared by/);
 
     const columns = calls.filter((c) => c.op === "column").map((c) => [c.boardId, c.columnId, c.value]);
     expect(columns).toEqual([
@@ -160,6 +168,26 @@ describe("POST /api/reception/consults/:localId/prep", () => {
       { op_type: "create_update", monday_item_id: "901" },
     ]);
     expect(db.prepare("SELECT pending FROM consult_preps").get()).toEqual({ pending: 1 });
+  });
+
+  it("retries the E&A entry once with a title when Monday refuses a blank one", async () => {
+    seed();
+    activityMode = "refuse";
+    const r = await prep({ apptType: "1st time", method: "Phone", phone: "639 099 8178" });
+    expect(r.status).toBe(200);
+    const activities = calls.filter((c) => c.op === "activity");
+    expect(activities.map((a) => a.title)).toEqual([PREP_TITLE_FALLBACK]);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM write_queue").get()).toEqual({ n: 0 });
+  });
+
+  it("queues the E&A entry with a title when Monday is down", async () => {
+    seed();
+    activityMode = "down";
+    const r = await prep({ apptType: "1st time", method: "Phone", phone: "639 099 8178" });
+    expect(r.status).toBe(202);
+    const row = db.prepare("SELECT op_type, payload FROM write_queue").get() as { op_type: string; payload: string };
+    expect(row.op_type).toBe("create_timeline_item");
+    expect(JSON.parse(row.payload).title).toBe(PREP_TITLE_FALLBACK);
   });
 
   it("refuses an appointment with no linked profile", async () => {
