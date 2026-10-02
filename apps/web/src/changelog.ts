@@ -14,6 +14,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-02",
+    title: "Arrange the sidebar your way",
+    items: [
+      "Click Customize at the bottom of the sidebar, then drag pages by the dotted handle to put them in the order you like, or click the eye to hide a page you don't use.",
+      "Click Done to save. Your layout follows you to any computer you sign in on, and doesn't change anyone else's. Reset puts everything back.",
+    ],
+  },
+  {
     date: "2026-09-29",
     title: "Dropdowns on the last row open fully",
     items: [

@@ -759,6 +759,81 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* G1 Customize mode — reorder (grip) + hide (eye) */
+.sidebar-edit-row {
+  cursor: default;
+  padding-left: 4px;
+  gap: 8px;
+  user-select: none;
+}
+
+.sidebar-edit-dragging {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(180, 83, 9, 0.5);
+}
+
+.sidebar-grip,
+.sidebar-eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.sidebar-grip {
+  cursor: grab;
+  touch-action: none;
+}
+
+.sidebar-edit-dragging .sidebar-grip {
+  cursor: grabbing;
+}
+
+.sidebar-grip:hover,
+.sidebar-eye:hover,
+.sidebar-grip:focus-visible,
+.sidebar-eye:focus-visible {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-eye {
+  cursor: pointer;
+}
+
+.sidebar-customize {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+}
+
+.sidebar-link {
+  border: none;
+  background: transparent;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+}
+
+.sidebar-link:hover {
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sidebar-link-primary {
+  color: var(--color-amber);
+}
+
 .sidebar-toggle {
   display: flex;
   align-items: center;

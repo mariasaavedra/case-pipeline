@@ -44,6 +44,17 @@ export interface Preferences {
    * data/kpi-columns.json; an absent key falls back to it.
    */
   kpiColumns: Record<string, string>;
+  /**
+   * G1 sidebar layout: page ids in the user's order, and the ones they hid.
+   * Empty order = the built-in order. Ids the web no longer knows are ignored
+   * there, and new pages show up at the end, so this never needs a migration.
+   */
+  sidebarNav: SidebarNavPref;
+}
+
+export interface SidebarNavPref {
+  order: string[];
+  hidden: string[];
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -56,6 +67,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   dashboardLayout: [],
   columns: {},
   kpiColumns: {},
+  sidebarNav: { order: [], hidden: [] },
 };
 
 const THEMES: ThemePref[] = ["light", "dark", "system"];
@@ -87,6 +99,30 @@ export function sanitizeKpiColumns(input: unknown): Record<string, string> {
     out[cardKey] = columnId;
   }
   return out;
+}
+
+/** Sidebar page ids are kebab-case route names ("active-cases"). */
+const NAV_ID_PATTERN = /^[a-z0-9-]{1,64}$/;
+const MAX_NAV_IDS = 50;
+
+function sanitizeNavIds(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const x of v) {
+    if (typeof x !== "string" || !NAV_ID_PATTERN.test(x) || out.includes(x)) continue;
+    out.push(x);
+    if (out.length >= MAX_NAV_IDS) break;
+  }
+  return out;
+}
+
+/** Validate a { order, hidden } sidebar layout; bad entries are dropped, duplicates collapsed. */
+export function sanitizeSidebarNav(input: unknown): SidebarNavPref {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return { order: [], hidden: [] };
+  }
+  const o = input as Record<string, unknown>;
+  return { order: sanitizeNavIds(o.order), hidden: sanitizeNavIds(o.hidden) };
 }
 
 /**
@@ -133,6 +169,10 @@ export function sanitizePreferencesPatch(input: unknown): Partial<Preferences> {
   // dropping a card key from the map is how a user clears their override.
   if (typeof o.kpiColumns === "object" && o.kpiColumns !== null && !Array.isArray(o.kpiColumns)) {
     out.kpiColumns = sanitizeKpiColumns(o.kpiColumns);
+  }
+  // Also sent whole: "Reset" in the sidebar sends empty lists.
+  if (typeof o.sidebarNav === "object" && o.sidebarNav !== null && !Array.isArray(o.sidebarNav)) {
+    out.sidebarNav = sanitizeSidebarNav(o.sidebarNav);
   }
   return out;
 }

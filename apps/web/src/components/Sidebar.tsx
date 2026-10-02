@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { navigate, matchRoute } from "../router";
 import { useViewport } from "../hooks/useViewport";
+import { usePreferences } from "../hooks/usePreferences";
 import type { AuthUser } from "../auth/AuthProvider";
 import { SectionCode } from "./ScreenCode";
+import { arrangeNav, moveId, normalizeNav, DEFAULT_SIDEBAR_NAV } from "./sidebar-layout";
 
 const COLLAPSED_KEY = "sidebar-collapsed";
 
@@ -216,6 +218,61 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
     } catch {}
   };
 
+  // Customize mode: drag rows (or arrow keys on the grip) to reorder, eye to
+  // hide. Edits live in a draft until Done; saved per user (preferences.sidebarNav).
+  const { prefs, update } = usePreferences();
+  const [draft, setDraft] = useState<{ order: string[]; hidden: string[] } | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const editing = draft !== null;
+  const saved = prefs.sidebarNav ?? DEFAULT_SIDEBAR_NAV;
+  const defaultIds = NAV_ITEMS.map((i) => i.id);
+
+  const startEditing = () =>
+    setDraft({ order: arrangeNav(NAV_ITEMS, saved.order).map((i) => i.id), hidden: [...saved.hidden] });
+  const finishEditing = () => {
+    if (draft) update("sidebarNav", normalizeNav(defaultIds, draft.order, draft.hidden));
+    setDraft(null);
+    setDragId(null);
+  };
+  const cancelEditing = () => {
+    setDraft(null);
+    setDragId(null);
+  };
+  const resetDraft = () => setDraft({ order: defaultIds, hidden: [] });
+  const toggleHidden = (id: string) =>
+    setDraft((d) =>
+      d && { ...d, hidden: d.hidden.includes(id) ? d.hidden.filter((x) => x !== id) : [...d.hidden, id] },
+    );
+  const moveTo = (id: string, to: number) => setDraft((d) => d && { ...d, order: moveId(d.order, id, to) });
+
+  // Pointer drag (mouse + touch): the row under the pointer's Y is the target slot.
+  const onDragMove = (e: React.PointerEvent) => {
+    if (!dragId || !draft) return;
+    let to = draft.order.length - 1;
+    for (const [i, id] of draft.order.entries()) {
+      const el = rowRefs.current.get(id);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (e.clientY < r.top + r.height / 2) {
+        to = i;
+        break;
+      }
+    }
+    const from = draft.order.indexOf(dragId);
+    // Removing the dragged row first shifts every later slot up by one.
+    moveTo(dragId, to > from ? to - 1 : to);
+  };
+
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancelEditing();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing]);
+
   const isAdmin = user?.role === "admin";
   const isBuilding = (item: NavItem) => !isAdmin && UNDER_CONSTRUCTION_PAGES.has(item.id);
   const isLocked = (item: NavItem) => item.disabled || isBuilding(item);
@@ -229,7 +286,7 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
   // Effective rail mode: the open mobile drawer always shows full labels;
   // the tablet range (641–1024px) forces the icon rail regardless of the
   // user's manual collapse preference; otherwise honour the manual toggle.
-  const rail = mobileOpen ? false : collapsed || isTabletRail;
+  const rail = mobileOpen || editing ? false : collapsed || isTabletRail;
   const width = rail ? 60 : 220;
 
   return (
@@ -266,8 +323,74 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
         </div>
 
         {/* Nav items */}
+        {editing && draft ? (
+          <nav className="sidebar-nav" aria-label="Reorder pages" onPointerMove={onDragMove}>
+            {arrangeNav(NAV_ITEMS, draft.order).map((item, index) => {
+              const hidden = draft.hidden.includes(item.id);
+              return (
+                <div
+                  key={item.id}
+                  ref={(el) => {
+                    if (el) rowRefs.current.set(item.id, el);
+                    else rowRefs.current.delete(item.id);
+                  }}
+                  className={`sidebar-item sidebar-edit-row ${dragId === item.id ? "sidebar-edit-dragging" : ""}`}
+                  style={{ opacity: hidden ? 0.4 : 1 }}
+                >
+                  <button
+                    type="button"
+                    className="sidebar-grip"
+                    aria-label={`Move ${item.label} (drag, or use the up and down arrow keys)`}
+                    title="Drag to reorder"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      setDragId(item.id);
+                    }}
+                    onPointerUp={() => setDragId(null)}
+                    onPointerCancel={() => setDragId(null)}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                        e.preventDefault();
+                        moveTo(item.id, index + (e.key === "ArrowUp" ? -1 : 1));
+                      }
+                    }}
+                  >
+                    <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor" aria-hidden>
+                      <circle cx="4" cy="3" r="1.3" /><circle cx="8" cy="3" r="1.3" />
+                      <circle cx="4" cy="8" r="1.3" /><circle cx="8" cy="8" r="1.3" />
+                      <circle cx="4" cy="13" r="1.3" /><circle cx="8" cy="13" r="1.3" />
+                    </svg>
+                  </button>
+                  <span className="sidebar-icon">{item.icon}</span>
+                  <span className="sidebar-label">{item.label}</span>
+                  <button
+                    type="button"
+                    className="sidebar-eye"
+                    onClick={() => toggleHidden(item.id)}
+                    aria-pressed={!hidden}
+                    aria-label={hidden ? `Show ${item.label}` : `Hide ${item.label}`}
+                    title={hidden ? "Hidden — click to show" : "Click to hide"}
+                  >
+                    {hidden ? (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+                        <path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z" />
+                        <path d="M2.5 13.5l11-11" />
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+                        <path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z" />
+                        <circle cx="8" cy="8" r="2" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </nav>
+        ) : (
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map((item) => {
+          {arrangeNav(NAV_ITEMS, saved.order).filter((item) => !saved.hidden.includes(item.id)).map((item) => {
             const active = isActiveItem(item, pathname);
             const locked = isLocked(item);
             const building = isBuilding(item);
@@ -291,10 +414,29 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
             );
           })}
         </nav>
+        )}
 
-        {/* G1 — the sidebar itself (docs/ui-map.md) */}
-        <div style={{ padding: "0 10px" }}>
-          <SectionCode code="G1" />
+        {/* G1 — the sidebar itself (docs/ui-map.md), with the Customize controls */}
+        <div className="sidebar-customize" style={{ padding: "0 10px" }}>
+          {!rail && (
+            editing ? (
+              <>
+                <button type="button" className="sidebar-link" onClick={resetDraft} title="Back to the standard order, nothing hidden">
+                  Reset
+                </button>
+                <span style={{ flex: 1 }} />
+                <button type="button" className="sidebar-link" onClick={cancelEditing}>Cancel</button>
+                <button type="button" className="sidebar-link sidebar-link-primary" onClick={finishEditing}>Done</button>
+              </>
+            ) : (
+              <button type="button" className="sidebar-link" onClick={startEditing} title="Reorder or hide pages in this list">
+                Customize
+              </button>
+            )
+          )}
+          <span style={{ marginLeft: "auto" }}>
+            <SectionCode code="G1" />
+          </span>
         </div>
 
         {/* Settings */}
