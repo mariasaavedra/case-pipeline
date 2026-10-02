@@ -321,3 +321,107 @@ export async function uploadFile(
   }
   throw new GraphError(500, "Upload finished without a completed item");
 }
+
+// ---- Client folders ---------------------------------------------------------
+
+/** The firm's tenant and the three sites a client folder can live on. */
+const TENANT_HOST = "sharmacrawford.sharepoint.com";
+const SITE_CONSULTS = "/sites/scalconsults";
+const SITE_EFILES = "/sites/scalefiles";
+const SITE_CLOSED = "/sites/SCALClosed";
+
+/** An item by path in a drive, or null when nothing is there. */
+async function itemAtPath(driveId: string, path: string): Promise<DriveItem | null> {
+  try {
+    return await graphFetch<DriveItem>(driveItemRequestPath(driveId, path));
+  } catch (err) {
+    if (err instanceof GraphError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+/**
+ * Walk a folder path, creating each missing segment. conflictBehavior=fail plus
+ * a re-read on 409 means a folder someone else just made is used, never renamed
+ * into a "NAME 1" sibling.
+ */
+async function ensureFolderPath(driveId: string, path: string): Promise<DriveItem> {
+  let parent = "";
+  let item: DriveItem | null = null;
+  for (const segment of path.split("/").filter(Boolean)) {
+    const here = parent ? `${parent}/${segment}` : segment;
+    item = await itemAtPath(driveId, here);
+    if (!item) {
+      const children = parent
+        ? `/drives/${driveId}/root:/${encodePath(parent)}:/children`
+        : `/drives/${driveId}/root/children`;
+      try {
+        item = await graphFetch<DriveItem>(children, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: segment, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+        });
+      } catch (err) {
+        if (!(err instanceof GraphError && err.status === 409)) throw err;
+        item = await itemAtPath(driveId, here);
+        if (!item) throw err;
+      }
+    }
+    parent = here;
+  }
+  if (!item) throw new GraphError(400, "Empty folder path");
+  return item;
+}
+
+export type ClientFolderKind = "e_file" | "consult_file";
+
+export interface ClientFolderResult {
+  /** Which profile column the link belongs in — an existing e-file wins over a new consult folder. */
+  kind: ClientFolderKind;
+  url: string;
+  created: boolean;
+  /** "2026 Consults/E/ESTRADA, Silvia" etc., for the confirmation line. */
+  path: string;
+}
+
+/**
+ * Find the client's folder, or create it — the same lookups, in the same order,
+ * as the consult sweep (scripts/sharepoint/sweep.ts), so the two never disagree:
+ *
+ *   scalefiles    {initial}/{LASTNAME, First}          → existing e-file
+ *   SCALClosed    {LASTNAME, First}                    → existing (closed) e-file
+ *   scalconsults  {year} Consults/{initial}/{name}      → existing consult folder
+ *
+ * Only when none exists is one created: under Consults for a consult, under
+ * E-Files when the e-file is what was asked for. Creating a consult folder for
+ * someone who already has an e-file would put a duplicate in the wrong place.
+ */
+export async function findOrCreateClientFolder(opts: {
+  want: ClientFolderKind;
+  folder: string;
+  initial: string;
+  year: number;
+}): Promise<ClientFolderResult> {
+  const efiles = await driveIdFor(TENANT_HOST, SITE_EFILES);
+  const efilePath = `${opts.initial}/${opts.folder}`;
+  const efile = await itemAtPath(efiles, efilePath);
+  if (efile?.folder) return { kind: "e_file", url: efile.webUrl, created: false, path: `E-Files/${efilePath}` };
+
+  const closed = await driveIdFor(TENANT_HOST, SITE_CLOSED);
+  const closedItem = await itemAtPath(closed, opts.folder);
+  if (closedItem?.folder) return { kind: "e_file", url: closedItem.webUrl, created: false, path: `Closed/${opts.folder}` };
+
+  const consults = await driveIdFor(TENANT_HOST, SITE_CONSULTS);
+  const consultPath = `${opts.year} Consults/${opts.initial}/${opts.folder}`;
+  const consult = await itemAtPath(consults, consultPath);
+  if (consult?.folder && opts.want === "consult_file") {
+    return { kind: "consult_file", url: consult.webUrl, created: false, path: `Consults/${consultPath}` };
+  }
+
+  if (opts.want === "e_file") {
+    const made = await ensureFolderPath(efiles, efilePath);
+    return { kind: "e_file", url: made.webUrl, created: true, path: `E-Files/${efilePath}` };
+  }
+  const made = await ensureFolderPath(consults, consultPath);
+  return { kind: "consult_file", url: made.webUrl, created: true, path: `Consults/${consultPath}` };
+}

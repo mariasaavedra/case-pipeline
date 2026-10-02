@@ -169,6 +169,9 @@ Writes and user/account routes:
 | `POST /api/profiles/:id/updates` | Post a note to Monday.com (falls back to the write queue on outage) |
 | `POST /api/updates/:localId/replies` | Sub-note under a timeline entry: a real Monday reply under an update, or — for an E&A entry, which Monday can't thread — a `Re: <entry> (<date>) —` update on the same item. Stored as a `reply` row threaded by `reply_to_update_id` (plan = `routes/note-replies.ts`). Queues on outage |
 | `POST /api/profiles/:id/release` | Mark a detained client released (M17): clears Det. Facility on their open court case(s) in Monday and logs a "Casenote" E&A entry on the profile (note required, release date optional). Queues on outage. Plan = `routes/detention-write.ts` |
+| `GET /api/reception/consults` | P17: consults on the active attorney boards between `?from`/`?to` (default today + 7 days), each with its latest prep (`consult_preps`, schema v29) |
+| `POST /api/reception/consults/:localId/prep` | M18 consult prep: one note posted as an Update on the profile, a pinned Update on the appointment (`pin_to_top`, API 2025-07) and a "Consult Prep Note" E&A entry on the profile (falls back to "Consult note" until that type exists in Monday — looked up by name). Edited phone → profile Phone; edited description → appointment Description. Queues on outage. Plan + rules = `routes/reception.ts` |
+| `POST /api/reception/consults/:localId/files` | A file uploaded in M19 (already in SharePoint) also attached to the profile's Files column. Raw body, `?name=`, `?type=` |
 | `POST /api/profiles/:id/render` | Generate a DOCX for a profile from live Monday.com data (default template `client_letter_docx`) |
 | `GET /api/auth/me` | Validate token, upsert user (first user becomes admin) |
 | `GET/PUT /api/preferences`, `PATCH /api/me/profile` | Per-user preferences and profile |
