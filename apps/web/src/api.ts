@@ -1063,3 +1063,87 @@ export async function updateMailFields(
   if (body.fieldErrors) return { fieldErrors: body.fieldErrors, error: body.error ?? "Some fields aren't valid" };
   throw new Error(body.error ?? `HTTP ${res.status}`);
 }
+
+// =============================================================================
+// Reception (P17) — consult prep
+// =============================================================================
+
+export const APPT_TYPES = ["1st time", "Trial Prep", "Standard Follow up", "Initial Court follow up", "Detained appt", "Other"] as const;
+export type ApptType = (typeof APPT_TYPES)[number];
+export const PREP_METHODS = ["Phone", "Zoom", "Other"] as const;
+export type PrepMethod = (typeof PREP_METHODS)[number];
+
+export interface ReceptionConsult {
+  localId: string;
+  mondayItemId: string | null;
+  boardKey: string;
+  /** The attorney's board badge (R, M, LB…). */
+  board: string;
+  name: string;
+  status: string | null;
+  date: string | null;
+  time: string | null;
+  attorney: string | null;
+  language: string | null;
+  fromCalendly: boolean;
+  phone: string | null;
+  description: string | null;
+  description2: string | null;
+  profile: { localId: string; name: string; phone: string | null; eFile: string | null; consultFile: string | null } | null;
+  lastPrep: { at: string; author: string | null; apptType: string; method: string; pending: boolean } | null;
+  /** The folder name the consult sweep would use, or why the row's names can't build one. */
+  folderName: { ok: true; folder: string; initial: string } | { ok: false; detail: string };
+}
+
+export interface ReceptionConsultsResult {
+  from: string;
+  to: string;
+  today: string;
+  consults: ReceptionConsult[];
+}
+
+export function fetchReceptionConsults(from?: string, to?: string): Promise<ReceptionConsultsResult> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const qs = params.toString();
+  return apiFetch<ReceptionConsultsResult>(`/api/reception/consults${qs ? `?${qs}` : ""}`);
+}
+
+export interface PrepInput {
+  apptType: ApptType;
+  apptTypeOther?: string;
+  /** Where the client is detained — required for "Detained appt". */
+  detainedAt?: string;
+  method: PrepMethod;
+  phone?: string;
+  zoomLink?: string;
+  methodOther?: string;
+  description: string;
+  documents: Array<{ name: string; url: string }>;
+  /** A folder found, created or pasted for a client whose profile had none — saved to the profile. */
+  folderLinks?: Array<{ kind: "e_file" | "consult_file"; url: string }>;
+}
+
+export function prepConsult(
+  appointmentLocalId: string,
+  input: PrepInput,
+): Promise<{ prepped: true; pending: boolean; wroteBack: string[] }> {
+  return apiFetch(`/api/reception/consults/${encodeURIComponent(appointmentLocalId)}/prep`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/** Also attach a file uploaded during prep to the client's profile (Files column). */
+export function attachConsultFile(appointmentLocalId: string, file: File): Promise<{ attached: true }> {
+  const params = new URLSearchParams({ name: file.name });
+  if (file.type) params.set("type", file.type);
+  return apiFetch(`/api/reception/consults/${encodeURIComponent(appointmentLocalId)}/files?${params.toString()}`, {
+    method: "POST",
+    // Always octet-stream: the real type rides in ?type= (see routes/reception.ts).
+    headers: { "Content-Type": "application/octet-stream" },
+    body: file,
+  });
+}

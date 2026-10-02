@@ -5,11 +5,14 @@
 // the client's SharePoint e-file / consult folders in place. Graph is called
 // directly from the browser with the signed-in user's delegated token, so nobody
 // sees anything SharePoint wouldn't already show them.
+//
+// `pick` turns it into a picker (M19, from the consult prep popup): each file
+// gets an Attach toggle, and files uploaded here are reported back so the
+// caller can attach them too.
 // =============================================================================
 
 import { useState, useMemo, useCallback } from "react";
-import type { ClientCaseSummary } from "../api";
-import { collectClientFolders, type ClientFolder } from "../sharepoint/collectFolders";
+import { collectClientFolders, type ClientFolder, type FolderSource } from "../sharepoint/collectFolders";
 import {
   resolveFolder,
   listChildren,
@@ -23,8 +26,22 @@ import {
 import { SharePointPlaceholder } from "./SharePointPlaceholder";
 import { FilePreviewModal } from "./FilePreviewModal";
 
+/** A file chosen in pick mode. */
+export interface PickedFile {
+  name: string;
+  url: string;
+}
+
 interface Props {
-  data: ClientCaseSummary;
+  /** A ClientCaseSummary, or just a profile's folder links. */
+  data: FolderSource;
+  pick?: {
+    /** URLs already chosen. */
+    selected: ReadonlySet<string>;
+    onToggle: (file: PickedFile) => void;
+    /** A file uploaded in pick mode — it is also chosen. */
+    onUploaded?: (file: File, item: DriveItem) => void;
+  };
 }
 
 interface Crumb {
@@ -73,7 +90,7 @@ function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function DocumentsTab({ data }: Props) {
+export function DocumentsTab({ data, pick }: Props) {
   const folders = useMemo(() => collectClientFolders(data), [data]);
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
   const [children, setChildren] = useState<DriveItem[]>([]);
@@ -178,9 +195,10 @@ export function DocumentsTab({ data }: Props) {
       try {
         for (const file of Array.from(files)) {
           setUploading({ name: file.name, progress: 0 });
-          await uploadFile(parent.item.driveId, parent.item.itemId, file, (progress) =>
+          const uploaded = await uploadFile(parent.item.driveId, parent.item.itemId, file, (progress) =>
             setUploading({ name: file.name, progress }),
           );
+          pick?.onUploaded?.(file, uploaded);
         }
         setChildren(await listChildren(parent.item.driveId, parent.item.itemId));
       } catch (err) {
@@ -193,7 +211,7 @@ export function DocumentsTab({ data }: Props) {
         setUploading(null);
       }
     },
-    [crumbs],
+    [crumbs, pick],
   );
 
   /** Consent popup — must run from a click or the browser blocks it. */
@@ -381,7 +399,26 @@ export function DocumentsTab({ data }: Props) {
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-ink-faint)", flexShrink: 0, minWidth: 78, textAlign: "right" }}>
                 {formatDate(c.lastModifiedDateTime)}
               </span>
-              {!c.folder && c["@microsoft.graph.downloadUrl"] && (
+              {pick && !c.folder && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    pick.onToggle({ name: c.name, url: c.webUrl });
+                  }}
+                  className="action-btn"
+                  aria-pressed={pick.selected.has(c.webUrl)}
+                  style={{
+                    flexShrink: 0,
+                    ...(pick.selected.has(c.webUrl)
+                      ? { background: "var(--color-amber-light)", color: "var(--color-amber-dark)", borderColor: "var(--color-amber)" }
+                      : {}),
+                  }}
+                >
+                  {pick.selected.has(c.webUrl) ? "✓ Attached" : "Attach"}
+                </button>
+              )}
+              {!pick && !c.folder && c["@microsoft.graph.downloadUrl"] && (
                 <a
                   href={c["@microsoft.graph.downloadUrl"]}
                   download={c.name}

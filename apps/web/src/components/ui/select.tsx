@@ -68,7 +68,7 @@ function SelectContent({
         sideOffset={sideOffset}
         alignItemWithTrigger={alignItemWithTrigger}
         collisionPadding={8}
-        className={cn("z-50", positionerClassName)}
+        className={cn("z-[70]", positionerClassName)}
       >
         <SelectPrimitive.Popup
           data-slot="select-content"

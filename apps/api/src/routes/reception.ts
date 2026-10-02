@@ -1,0 +1,820 @@
+// =============================================================================
+// Reception — consult prep for the Receptionists page (P17 → M18)
+// =============================================================================
+// Receptionists prepare each consult before the attorney sees the client. The
+// appointment already exists (Calendly or booked by staff); prepping it records
+// the type of appointment, how it will happen (phone / Zoom / other), the
+// documents the attorney should look at, and a description. One submit:
+//
+//   1. posts the prep note as an Update on the client's PROFILE,
+//   2. posts the same note as an Update on the APPOINTMENT, pinned to the top,
+//   3. logs it in the profile's Emails & Activities as a "Consult Prep Note"
+//      (falls back to the existing "Consult note" type until that one exists),
+//   4. writes edited fields back where they came from: the phone to the
+//      profile's Phone column, the description to the appointment's
+//      Description column — and a folder link typed in for a client that had
+//      none to the profile's E-File / Consult File (empty columns only).
+//
+// Same rails as every other write: personal Monday token first, durable queue
+// on outage, audit entry. A consult_preps row (schema v29) is what lets P17
+// show "Prepped" without parsing notes.
+//
+// Documents are links (SharePoint files picked or uploaded in M19, plus the
+// client's e-file folder). A file uploaded in the popup is also attached to the
+// profile's Files column through POST …/files — a separate call per file,
+// because express.json() caps bodies at 100 KB.
+//
+// `parsePrepBody`, `prepNote` and `planPrepWriteBack` are pure, so the rules
+// are tested without a database or a network (reception.test.ts).
+// =============================================================================
+
+import express from "express";
+import type { Express } from "express";
+import type BetterSqlite3 from "better-sqlite3";
+type DatabaseInstance = BetterSqlite3.Database;
+import { randomUUID } from "node:crypto";
+import { requireAuth } from "../auth/middleware.js";
+import { dataSource } from "../data-source/index.js";
+import { withTokenFallback } from "../write-auth.js";
+import type { WriteTokenOptions } from "../write-token.js";
+import { enqueueWrite } from "../write-queue/processor.js";
+import { auditFromReq } from "../audit/log.js";
+import { getBoardColumnsFor } from "@case-pipeline/query";
+import { fetchCustomActivities } from "@case-pipeline/monday";
+import type { CreateTimelineItemInput } from "@case-pipeline/monday";
+import { activeBoardKeys, loadAttorneyBoards } from "../attorney-boards.js";
+import { consultFolderName } from "@case-pipeline/core";
+import { FIRM_TIMEZONE } from "../firm.js";
+
+// -----------------------------------------------------------------------------
+// The form
+// -----------------------------------------------------------------------------
+
+/** Type of appointment, in the order reception asked for them. */
+export const APPT_TYPES = [
+  "1st time",
+  "Trial Prep",
+  "Standard Follow up",
+  "Initial Court follow up",
+  "Detained appt",
+  "Other",
+] as const;
+export type ApptType = (typeof APPT_TYPES)[number];
+
+/** How the consult will happen. */
+export const PREP_METHODS = ["Phone", "Zoom", "Other"] as const;
+export type PrepMethod = (typeof PREP_METHODS)[number];
+
+export const PREP_DESCRIPTION_MAX = 5000;
+export const PREP_OTHER_MAX = 200;
+export const PREP_DOCUMENTS_MAX = 30;
+
+export interface PrepDocument {
+  name: string;
+  url: string;
+}
+
+/** The two profile columns that hold a client's SharePoint folder. */
+export const FOLDER_KINDS = ["e_file", "consult_file"] as const;
+export type FolderKind = (typeof FOLDER_KINDS)[number];
+export const FOLDER_LABELS: Record<FolderKind, string> = { e_file: "E-File folder", consult_file: "Consult folder" };
+/** The profile column titles they live under on the Profiles board. */
+const FOLDER_COLUMN_TITLES: Record<FolderKind, string> = { e_file: "e-file", consult_file: "consult file" };
+
+export interface PrepFolderLink {
+  kind: FolderKind;
+  url: string;
+}
+
+export interface PrepBody {
+  apptType: ApptType;
+  /** The "specify" text when apptType is Other, else null. */
+  apptTypeOther: string | null;
+  /** Where the client is detained when apptType is "Detained appt", else null. */
+  detainedAt: string | null;
+  method: PrepMethod;
+  /** The number to call when method is Phone, else null. */
+  phone: string | null;
+  /** The meeting link when method is Zoom, else null. */
+  zoomLink: string | null;
+  /** The "specify" text when method is Other, else null. */
+  methodOther: string | null;
+  description: string;
+  documents: PrepDocument[];
+  /** Folder links typed in for a client whose profile had none — saved to the profile. */
+  folderLinks: PrepFolderLink[];
+}
+
+const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+const isHttpUrl = (v: string): boolean => {
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
+};
+
+/** Validate M18's body. Every refusal is a sentence a receptionist can act on. */
+export function parsePrepBody(raw: unknown): { ok: true; body: PrepBody } | { ok: false; error: string } {
+  const b = (raw ?? {}) as Record<string, unknown>;
+
+  const apptType = APPT_TYPES.find((t) => t === str(b.apptType));
+  if (!apptType) return { ok: false, error: "Pick the type of appointment" };
+  const apptTypeOther = apptType === "Other" ? str(b.apptTypeOther) : "";
+  if (apptType === "Other" && !apptTypeOther) return { ok: false, error: "Specify the type of appointment" };
+  if (apptTypeOther.length > PREP_OTHER_MAX) return { ok: false, error: "The appointment type is too long" };
+  const detainedAt = apptType === "Detained appt" ? str(b.detainedAt) : "";
+  if (apptType === "Detained appt" && !detainedAt) return { ok: false, error: "Add where the client is detained" };
+  if (detainedAt.length > PREP_OTHER_MAX) return { ok: false, error: "The detention place is too long" };
+
+  const method = PREP_METHODS.find((m) => m === str(b.method));
+  if (!method) return { ok: false, error: "Pick how the consult will happen" };
+  const phone = method === "Phone" ? str(b.phone) : "";
+  if (method === "Phone" && !/\d{3}/.test(phone)) return { ok: false, error: "Add the phone number to call" };
+  if (phone.length > 50) return { ok: false, error: "The phone number is too long" };
+  const zoomLink = method === "Zoom" ? str(b.zoomLink) : "";
+  if (method === "Zoom" && !isHttpUrl(zoomLink)) return { ok: false, error: "Add the Zoom link (starting with https://)" };
+  const methodOther = method === "Other" ? str(b.methodOther) : "";
+  if (method === "Other" && !methodOther) return { ok: false, error: "Specify how the consult will happen" };
+  if (methodOther.length > PREP_OTHER_MAX) return { ok: false, error: "The 'other' method is too long" };
+
+  const description = str(b.description);
+  if (description.length > PREP_DESCRIPTION_MAX) {
+    return { ok: false, error: `The description is too long (max ${PREP_DESCRIPTION_MAX} characters)` };
+  }
+
+  const rawDocs = Array.isArray(b.documents) ? b.documents : [];
+  if (rawDocs.length > PREP_DOCUMENTS_MAX) return { ok: false, error: `At most ${PREP_DOCUMENTS_MAX} documents` };
+  const documents: PrepDocument[] = [];
+  const seen = new Set<string>();
+  for (const d of rawDocs) {
+    const doc = (d ?? {}) as Record<string, unknown>;
+    const url = str(doc.url);
+    const name = str(doc.name) || url;
+    if (!isHttpUrl(url)) return { ok: false, error: `"${name.slice(0, 60)}" is not a link` };
+    if (seen.has(url)) continue;
+    seen.add(url);
+    documents.push({ name: name.slice(0, 200), url });
+  }
+
+  const rawFolders = Array.isArray(b.folderLinks) ? b.folderLinks : [];
+  const folderLinks: PrepFolderLink[] = [];
+  for (const f of rawFolders) {
+    const link = (f ?? {}) as Record<string, unknown>;
+    const kind = FOLDER_KINDS.find((k) => k === str(link.kind));
+    const url = str(link.url);
+    if (!kind) return { ok: false, error: "Unknown folder type" };
+    if (folderLinks.some((x) => x.kind === kind)) continue;
+    if (!isHttpUrl(url) || !/\.sharepoint\.com/i.test(new URL(url).hostname)) {
+      return { ok: false, error: `The ${FOLDER_LABELS[kind]} must be a SharePoint link` };
+    }
+    folderLinks.push({ kind, url });
+    // It is also a document the attorney should open, listed first.
+    if (!seen.has(url)) {
+      seen.add(url);
+      documents.unshift({ name: FOLDER_LABELS[kind], url });
+    }
+  }
+
+  return {
+    ok: true,
+    body: {
+      apptType,
+      apptTypeOther: apptTypeOther || null,
+      detainedAt: detainedAt || null,
+      method,
+      phone: phone || null,
+      zoomLink: zoomLink || null,
+      methodOther: methodOther || null,
+      description,
+      documents,
+      folderLinks,
+    },
+  };
+}
+
+// -----------------------------------------------------------------------------
+// The note
+// -----------------------------------------------------------------------------
+
+export interface PrepContext {
+  /** YYYY-MM-DD of the consult, or null when the board has none. */
+  date: string | null;
+  /** HH:MM (24-hour), or null. */
+  time: string | null;
+  attorney: string | null;
+  author: string;
+}
+
+/** "Oct 3, 2026" from YYYY-MM-DD — noon UTC so no timezone can move the day. */
+function formatDay(ymd: string): string {
+  return new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
+  });
+}
+
+/** "14:30" → "2:30 PM". */
+function formatTime(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const hour = h ?? 0;
+  return `${hour % 12 === 0 ? 12 : hour % 12}:${String(m ?? 0).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+export function apptTypeLabel(b: PrepBody): string {
+  if (b.apptType === "Other") return `Other — ${b.apptTypeOther}`;
+  if (b.apptType === "Detained appt") return `Detained appt — ${b.detainedAt}`;
+  return b.apptType;
+}
+
+export function methodLabel(b: PrepBody): string {
+  if (b.method === "Phone") return `Phone — ${b.phone}`;
+  if (b.method === "Zoom") return `Zoom — ${b.zoomLink}`;
+  return `Other — ${b.methodOther}`;
+}
+
+/**
+ * The prep note, three ways from one source so they never drift:
+ *
+ *   Consult prep — Oct 3, 2026 at 2:30 PM with Michael Sharma-Crawford
+ *   Type of appt: 1st time
+ *   How to proceed: Zoom — https://zoom.us/j/…
+ *   Documents:
+ *   • e-file — https://…
+ *
+ *   <description>
+ *
+ *   Prepared by Ana Reyes
+ *
+ * `text` is the E&A content and the local timeline copy; `html` is the Monday
+ * Update body, where documents and the Zoom link are real links.
+ */
+export function prepNote(b: PrepBody, ctx: PrepContext): { title: string; text: string; html: string } {
+  const when = ctx.date ? (ctx.time ? `${formatDay(ctx.date)} at ${formatTime(ctx.time)}` : formatDay(ctx.date)) : null;
+  const headline = `Consult prep${when ? ` — ${when}` : ""}${ctx.attorney ? ` with ${ctx.attorney}` : ""}`;
+
+  const text: string[] = [headline, `Type of appt: ${apptTypeLabel(b)}`, `How to proceed: ${methodLabel(b)}`];
+  if (b.documents.length > 0) {
+    text.push("Documents:", ...b.documents.map((d) => `• ${d.name} — ${d.url}`));
+  }
+  if (b.description) text.push("", b.description);
+  text.push("", `Prepared by ${ctx.author}`);
+
+  const link = (url: string, label: string) => `<a href="${escapeHtml(url)}" target="_blank">${escapeHtml(label)}</a>`;
+  const how =
+    b.method === "Zoom" && b.zoomLink
+      ? `Zoom — ${link(b.zoomLink, b.zoomLink)}`
+      : escapeHtml(methodLabel(b));
+  const html: string[] = [
+    `<p><strong>${escapeHtml(headline)}</strong></p>`,
+    `<p><strong>Type of appt:</strong> ${escapeHtml(apptTypeLabel(b))}<br><strong>How to proceed:</strong> ${how}</p>`,
+  ];
+  if (b.documents.length > 0) {
+    html.push(
+      `<p><strong>Documents:</strong></p><ul>${b.documents.map((d) => `<li>📎 ${link(d.url, d.name)}</li>`).join("")}</ul>`,
+    );
+  }
+  if (b.description) html.push(`<p>${escapeHtml(b.description).replace(/\n/g, "<br>")}</p>`);
+  html.push(`<p><em>Prepared by ${escapeHtml(ctx.author)}</em></p>`);
+
+  return {
+    title: when ? `Consult prep — ${when}` : "Consult prep",
+    text: text.join("\n"),
+    html: html.join(""),
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Write-back of edited fields
+// -----------------------------------------------------------------------------
+
+export interface PrepWriteBackStep {
+  target: "profile" | "appointment";
+  field: "phone" | "description" | FolderKind;
+  columnId: string;
+  value: string;
+}
+
+/**
+ * Which pre-filled fields were edited, and where each goes back to — the place
+ * it was pre-filled from. Phone: the profile's Phone column (only when the
+ * consult is by phone, since that is the only time the field is shown).
+ * Description: the appointment's Description column. Clearing a field is not a
+ * write-back: an empty box most likely means "nothing to add", not "erase".
+ * A folder link only ever fills an EMPTY E-File / Consult File — a link already
+ * on the profile (perhaps set in Monday since the page loaded) is never replaced.
+ */
+export function planPrepWriteBack(
+  b: PrepBody,
+  current: {
+    profilePhone: string | null;
+    appointmentDescription: string | null;
+    profileFolders?: Partial<Record<FolderKind, string | null>>;
+  },
+  columns: {
+    profilePhone: string | null;
+    appointmentDescription: string | null;
+    profileFolders?: Partial<Record<FolderKind, string | null>>;
+  },
+): PrepWriteBackStep[] {
+  const steps: PrepWriteBackStep[] = [];
+  const same = (a: string | null, c: string | null) => (a ?? "").trim() === (c ?? "").trim();
+  if (b.method === "Phone" && b.phone && columns.profilePhone && !same(b.phone, current.profilePhone)) {
+    steps.push({ target: "profile", field: "phone", columnId: columns.profilePhone, value: b.phone });
+  }
+  if (b.description && columns.appointmentDescription && !same(b.description, current.appointmentDescription)) {
+    steps.push({ target: "appointment", field: "description", columnId: columns.appointmentDescription, value: b.description });
+  }
+  for (const f of b.folderLinks) {
+    const columnId = columns.profileFolders?.[f.kind];
+    if (columnId && !(current.profileFolders?.[f.kind] ?? "").trim()) {
+      steps.push({ target: "profile", field: f.kind, columnId, value: f.url });
+    }
+  }
+  return steps;
+}
+
+// -----------------------------------------------------------------------------
+// Routes
+// -----------------------------------------------------------------------------
+
+/** The activity type reception asked for, looked up by name in Monday. */
+export const CONSULT_PREP_ACTIVITY_NAME = "Consult Prep Note";
+/**
+ * "Consult note" — the existing E&A type booking already posts under
+ * (appointment-write.ts). Used until someone creates "Consult Prep Note" in
+ * Monday; after that the name lookup finds it with no release.
+ */
+export const CONSULT_NOTE_ACTIVITY_ID = "34b09f1c-3572-4590-85af-9635a09eddb8";
+
+/** Largest file M19 may also attach to the profile's Files column. */
+export const PREP_FILE_MAX_BYTES = 25 * 1024 * 1024;
+
+interface ConsultRow {
+  localId: string;
+  mondayItemId: string | null;
+  boardKey: string;
+  name: string;
+  status: string | null;
+  date: string | null;
+  time: string | null;
+  attorney: string | null;
+  columnValues: string | null;
+  profileLocalId: string | null;
+  profileMondayId: string | null;
+  profileName: string | null;
+  profilePhone: string | null;
+  profileRaw: string | null;
+  prepAt: string | null;
+  prepAuthor: string | null;
+  prepApptType: string | null;
+  prepMethod: string | null;
+  prepPending: number | null;
+}
+
+export interface ReceptionConsult {
+  localId: string;
+  mondayItemId: string | null;
+  boardKey: string;
+  /** The attorney's board badge (R, M, LB…). */
+  board: string;
+  name: string;
+  status: string | null;
+  date: string | null;
+  time: string | null;
+  attorney: string | null;
+  language: string | null;
+  fromCalendly: boolean;
+  phone: string | null;
+  description: string | null;
+  description2: string | null;
+  profile: {
+    localId: string;
+    name: string;
+    phone: string | null;
+    eFile: string | null;
+    consultFile: string | null;
+  } | null;
+  lastPrep: { at: string; author: string | null; apptType: string; method: string; pending: boolean } | null;
+  /**
+   * The client folder name the consult sweep would use ("ESTRADA, Silvia" under
+   * initial "E"), so M19 can find or create it at the same path — or why the
+   * names on the row can't be trusted to build one.
+   */
+  folderName: { ok: true; folder: string; initial: string } | { ok: false; detail: string };
+}
+
+function parseJson(s: string | null): Record<string, unknown> {
+  if (!s) return {};
+  try {
+    const v = JSON.parse(s) as unknown;
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** A column value as display text: plain string, or a status/dropdown `{label}`. */
+function textOf(v: unknown): string | null {
+  if (typeof v === "string") return v.trim() || null;
+  if (v && typeof v === "object" && "label" in v && typeof (v as { label: unknown }).label === "string") {
+    return ((v as { label: string }).label).trim() || null;
+  }
+  return null;
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function addDays(ymd: string, n: number): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Consults on the active attorney boards between two dates, with their latest prep. */
+export function getReceptionConsults(
+  db: DatabaseInstance,
+  opts: { from: string; to: string; boardKeys: string[]; boardBadges: Map<string, string> },
+): ReceptionConsult[] {
+  if (opts.boardKeys.length === 0) return [];
+  const rows = db
+    .prepare(
+      `SELECT bi.local_id AS localId, bi.monday_item_id AS mondayItemId, bi.board_key AS boardKey, bi.name,
+              bi.status, bi.next_date AS date, bi.next_time AS time, bi.attorney, bi.column_values AS columnValues,
+              p.local_id AS profileLocalId, p.monday_item_id AS profileMondayId, p.name AS profileName,
+              p.phone AS profilePhone, p.raw_column_values AS profileRaw,
+              cp.created_at AS prepAt, cp.author_name AS prepAuthor, cp.appt_type AS prepApptType,
+              cp.method AS prepMethod, cp.pending AS prepPending
+         FROM board_items bi
+         LEFT JOIN profiles p ON p.local_id = bi.profile_local_id AND p.deleted_at IS NULL
+         LEFT JOIN consult_preps cp ON cp.id = (
+           SELECT id FROM consult_preps WHERE appointment_local_id = bi.local_id ORDER BY id DESC LIMIT 1
+         )
+        WHERE bi.board_key IN (${opts.boardKeys.map(() => "?").join(",")})
+          AND bi.deleted_at IS NULL
+          AND bi.next_date >= ? AND bi.next_date <= ?
+        ORDER BY bi.next_date ASC, COALESCE(bi.next_time, '99:99') ASC, bi.name ASC`,
+    )
+    .all(...opts.boardKeys, opts.from, opts.to) as ConsultRow[];
+
+  return rows.map((r) => {
+    const cv = parseJson(r.columnValues);
+    const praw = parseJson(r.profileRaw);
+    // The appointment's own First / Last Name first (what Calendly filled),
+    // then the profile's — the same sources the sweep reads.
+    const named = consultFolderName({
+      firstName: textOf(cv.first_name) ?? textOf(praw.first_name),
+      lastName: textOf(cv.last_name) ?? textOf(praw.last_name),
+    });
+    return {
+      localId: r.localId,
+      mondayItemId: r.mondayItemId,
+      boardKey: r.boardKey,
+      board: opts.boardBadges.get(r.boardKey) ?? r.boardKey,
+      name: r.name,
+      status: r.status,
+      date: r.date,
+      time: r.time,
+      attorney: r.attorney,
+      language: textOf(cv.language),
+      fromCalendly: textOf(cv.calendly)?.toLowerCase() === "yes" || /calendly\.com/i.test(textOf(cv.consult_uuid) ?? ""),
+      phone: textOf(cv.phone),
+      description: textOf(cv.description),
+      description2: textOf(cv.description_2),
+      profile: r.profileLocalId && r.profileName
+        ? {
+            localId: r.profileLocalId,
+            name: r.profileName,
+            phone: r.profilePhone,
+            eFile: textOf(praw.e_file),
+            consultFile: textOf(praw.consult_file),
+          }
+        : null,
+      lastPrep: r.prepAt
+        ? {
+            at: r.prepAt,
+            author: r.prepAuthor,
+            apptType: r.prepApptType ?? "",
+            method: r.prepMethod ?? "",
+            pending: r.prepPending === 1,
+          }
+        : null,
+      folderName: named.ok
+        ? { ok: true, folder: named.name.folder, initial: named.name.initial }
+        : { ok: false, detail: named.detail },
+    };
+  });
+}
+
+export interface ReceptionDeps {
+  db: DatabaseInstance;
+  mondayApiToken: string | undefined;
+  writeTokenOptions: WriteTokenOptions;
+}
+
+export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void {
+  const { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions } = deps;
+
+  /** "Consult Prep Note" by name once it exists, cached; "Consult note" until then. */
+  let activityCache: { id: string; at: number } | null = null;
+  const ACTIVITY_TTL_MS = 30 * 60 * 1000;
+  async function prepActivityId(): Promise<string> {
+    if (activityCache && Date.now() - activityCache.at < ACTIVITY_TTL_MS) return activityCache.id;
+    let id = CONSULT_NOTE_ACTIVITY_ID;
+    try {
+      const all = await fetchCustomActivities(MONDAY_API_TOKEN);
+      const wanted = CONSULT_PREP_ACTIVITY_NAME.toLowerCase();
+      for (const [actId, name] of all) {
+        if (name.trim().toLowerCase() === wanted) id = actId;
+      }
+    } catch (err) {
+      console.error("[reception] could not list E&A activity types; using Consult note:", err);
+    }
+    activityCache = { id, at: Date.now() };
+    return id;
+  }
+
+  // Consults between ?from and ?to (YYYY-MM-DD, inclusive). Defaults: today
+  // through 7 days out, in the firm's timezone.
+  app.get("/api/reception/consults", requireAuth, (req, res) => {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TIMEZONE });
+    const from = typeof req.query.from === "string" && DATE_RE.test(req.query.from) ? req.query.from : today;
+    const toRaw = typeof req.query.to === "string" && DATE_RE.test(req.query.to) ? req.query.to : addDays(from, 7);
+    // A bounded window: the list is a work queue, not an archive.
+    const to = toRaw < from ? from : toRaw > addDays(from, 62) ? addDays(from, 62) : toRaw;
+    const boards = loadAttorneyBoards();
+    const consults = getReceptionConsults(db, {
+      from,
+      to,
+      boardKeys: activeBoardKeys(),
+      boardBadges: new Map(boards.map((b) => [b.boardKey, b.displayName])),
+    });
+    res.json({ data: { from, to, today, consults } });
+  });
+
+  app.post("/api/reception/consults/:localId/prep", requireAuth, async (req, res) => {
+    if (!MONDAY_API_TOKEN) {
+      res.status(503).json({ error: "Monday.com write-back not configured (MONDAY_API_TOKEN missing)" });
+      return;
+    }
+    const parsed = parsePrepBody(req.body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    const prep = parsed.body;
+    const localId = String(req.params.localId);
+
+    const appt = db
+      .prepare(
+        `SELECT bi.local_id AS localId, bi.monday_item_id AS mondayItemId, bi.board_key AS boardKey,
+                bi.next_date AS date, bi.next_time AS time, bi.attorney, bi.column_values AS columnValues,
+                p.local_id AS profileLocalId, p.monday_item_id AS profileMondayId, p.batch_id AS batchId,
+                p.phone AS profilePhone, p.raw_column_values AS profileRaw
+           FROM board_items bi
+           LEFT JOIN profiles p ON p.local_id = bi.profile_local_id AND p.deleted_at IS NULL
+          WHERE bi.local_id = ? AND bi.deleted_at IS NULL`,
+      )
+      .get(localId) as
+      | {
+          localId: string; mondayItemId: string | null; boardKey: string; date: string | null; time: string | null;
+          attorney: string | null; columnValues: string | null; profileLocalId: string | null;
+          profileMondayId: string | null; batchId: number | null; profilePhone: string | null;
+          profileRaw: string | null;
+        }
+      | undefined;
+    if (!appt || !appt.boardKey.startsWith("appointments")) {
+      res.status(404).json({ error: "Appointment not found" });
+      return;
+    }
+    if (!appt.mondayItemId) {
+      res.status(400).json({ error: "This appointment has no Monday.com item ID" });
+      return;
+    }
+    if (!appt.profileLocalId || !appt.profileMondayId) {
+      res.status(409).json({ error: "This appointment is not linked to a client profile in Monday — link it first" });
+      return;
+    }
+    const apptMondayId = appt.mondayItemId;
+    const profileMondayId = appt.profileMondayId;
+    const profileLocalId = appt.profileLocalId;
+
+    const author = req.user?.name ?? req.user?.preferred_username ?? "Staff";
+    const authorOid = req.user?.oid ?? null;
+    const note = prepNote(prep, { date: appt.date, time: appt.time, attorney: appt.attorney, author });
+
+    let pending = false;
+    const failures: string[] = [];
+    const queue = (what: string, input: Parameters<typeof enqueueWrite>[1], err: unknown) => {
+      console.error(`[reception] ${what} failed; queueing for retry:`, err);
+      pending = true;
+      failures.push(what);
+      enqueueWrite(db, input);
+    };
+
+    // 1. Update on the profile — and a local copy so the timeline shows it now.
+    try {
+      const posted = await withTokenFallback(
+        (token) => dataSource.postUpdate(profileMondayId, note.html, token),
+        writeTokenOptions(req),
+      );
+      db.prepare(`
+        INSERT OR IGNORE INTO client_updates
+          (batch_id, local_id, monday_update_id, profile_local_id, board_item_local_id,
+           board_key, author_name, author_email, text_body, body_html, source_type,
+           reply_to_update_id, created_at_source, sync_status)
+        VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, 'update', NULL, ?, 'synced')
+      `).run(
+        appt.batchId ?? null, randomUUID(), posted.result, profileLocalId,
+        author, req.user?.email ?? null, note.text, note.html, new Date().toISOString(),
+      );
+    } catch (err) {
+      queue("profile update", {
+        opType: "create_update", targetTable: "profiles", targetLocalId: profileLocalId,
+        mondayItemId: profileMondayId, authorOid, payload: { body: note.html },
+      }, err);
+    }
+
+    // 2. Update on the appointment, pinned. A failed pin is cosmetic — the
+    //    note is there either way — so it is logged, never queued.
+    try {
+      const posted = await withTokenFallback(
+        (token) => dataSource.postUpdate(apptMondayId, note.html, token),
+        writeTokenOptions(req),
+      );
+      try {
+        await withTokenFallback((token) => dataSource.pinUpdate(posted.result, apptMondayId, token), writeTokenOptions(req));
+      } catch (err) {
+        console.error("[reception] pinning the prep note failed (note is posted):", err);
+      }
+    } catch (err) {
+      queue("appointment update", {
+        opType: "create_update", targetTable: "board_items", targetLocalId: appt.localId,
+        mondayItemId: apptMondayId, authorOid, payload: { body: note.html },
+      }, err);
+    }
+
+    // 3. Emails & Activities on the profile.
+    const activity: CreateTimelineItemInput = {
+      itemId: profileMondayId,
+      title: note.title,
+      customActivityId: await prepActivityId(),
+      content: note.text,
+    };
+    try {
+      await withTokenFallback((token) => dataSource.createTimelineItem(activity, token), writeTokenOptions(req));
+    } catch (err) {
+      queue("E&A entry", {
+        opType: "create_timeline_item", targetTable: "profiles", targetLocalId: profileLocalId,
+        mondayItemId: profileMondayId, authorOid, payload: { ...activity },
+      }, err);
+    }
+
+    // 4. Edited fields back to where they came from.
+    const profileSchema = getBoardColumnsFor(db, "profiles");
+    const apptSchema = getBoardColumnsFor(db, appt.boardKey);
+    const colByTitle = (
+      schema: ReturnType<typeof getBoardColumnsFor>, title: string, types: string[],
+    ) => schema?.columns.find((c) => c.title.trim().toLowerCase() === title && types.includes(c.type)) ?? null;
+    const phoneCol = colByTitle(profileSchema, "phone", ["text", "phone"]);
+    const descCol = colByTitle(apptSchema, "description", ["long_text", "text"]);
+    const profileRaw = parseJson(appt.profileRaw);
+    const folderCol = (kind: FolderKind) => colByTitle(profileSchema, FOLDER_COLUMN_TITLES[kind], ["text", "link"]);
+    const steps = planPrepWriteBack(
+      prep,
+      {
+        profilePhone: appt.profilePhone,
+        appointmentDescription: textOf(parseJson(appt.columnValues).description),
+        profileFolders: { e_file: textOf(profileRaw.e_file), consult_file: textOf(profileRaw.consult_file) },
+      },
+      {
+        profilePhone: phoneCol?.type === "text" ? phoneCol.columnId : null,
+        appointmentDescription: descCol?.columnId ?? null,
+        // Text columns only: a link column wants JSON, and both are text today.
+        profileFolders: {
+          e_file: folderCol("e_file")?.type === "text" ? folderCol("e_file")!.columnId : null,
+          consult_file: folderCol("consult_file")?.type === "text" ? folderCol("consult_file")!.columnId : null,
+        },
+      },
+    );
+    for (const step of steps) {
+      const isProfile = step.target === "profile";
+      const boardId = isProfile ? profileSchema!.mondayBoardId : apptSchema!.mondayBoardId;
+      const itemId = isProfile ? profileMondayId : apptMondayId;
+      try {
+        await withTokenFallback(
+          (token) => dataSource.setColumnValue(boardId, itemId, step.columnId, step.value, token),
+          writeTokenOptions(req),
+        );
+      } catch (err) {
+        queue(`${step.field} write-back`, {
+          opType: "change_column", targetTable: isProfile ? "profiles" : "board_items",
+          targetLocalId: isProfile ? profileLocalId : appt.localId, mondayItemId: itemId, authorOid,
+          payload: { boardId, columnId: step.columnId, value: step.value },
+        }, err);
+      }
+      // Optimistic local mirror, so P17 and the 360 view agree right away.
+      if (step.field === "phone") {
+        db.prepare("UPDATE profiles SET phone = ? WHERE local_id = ?").run(step.value, profileLocalId);
+      } else if (isProfile) {
+        db.prepare(`UPDATE profiles SET raw_column_values = json_set(COALESCE(raw_column_values, '{}'), '$.${step.field}', ?) WHERE local_id = ?`)
+          .run(step.value, profileLocalId);
+      } else {
+        db.prepare("UPDATE board_items SET column_values = json_set(COALESCE(column_values, '{}'), '$.description', ?) WHERE local_id = ?")
+          .run(step.value, appt.localId);
+      }
+    }
+
+    db.prepare(`
+      INSERT INTO consult_preps
+        (appointment_local_id, appointment_monday_id, profile_local_id, appt_type, method,
+         fields, note_text, author_oid, author_name, pending)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      appt.localId, apptMondayId, profileLocalId, apptTypeLabel(prep), prep.method,
+      JSON.stringify(prep), note.text, authorOid, author, pending ? 1 : 0,
+    );
+
+    auditFromReq(req, "monday.consult_prepped", {
+      targetType: "profile", targetId: profileLocalId, targetMondayId: profileMondayId,
+      metadata: {
+        appointment: apptMondayId,
+        boardKey: appt.boardKey,
+        apptType: apptTypeLabel(prep),
+        method: prep.method,
+        documents: prep.documents.length,
+        wroteBack: steps.map((s) => s.field),
+        queued: failures,
+      },
+    });
+    res.status(pending ? 202 : 200).json({ data: { prepped: true, pending, wroteBack: steps.map((s) => s.field) } });
+  });
+
+  // A file uploaded in M19 also goes onto the client's profile, in its Files
+  // column. Raw body (any type), the file name in ?name=. Best-effort from the
+  // popup's point of view: the file is already safe in SharePoint.
+  app.post(
+    "/api/reception/consults/:localId/files",
+    requireAuth,
+    express.raw({ type: () => true, limit: PREP_FILE_MAX_BYTES }),
+    async (req, res) => {
+      if (!MONDAY_API_TOKEN) {
+        res.status(503).json({ error: "Monday.com write-back not configured (MONDAY_API_TOKEN missing)" });
+        return;
+      }
+      const body = req.body as unknown;
+      if (!Buffer.isBuffer(body) || body.length === 0) {
+        res.status(400).json({ error: "Send the file as the request body" });
+        return;
+      }
+      const name = (typeof req.query.name === "string" ? req.query.name : "").trim().replace(/[\\/]/g, "_").slice(0, 200);
+      if (!name) {
+        res.status(400).json({ error: "?name= is required" });
+        return;
+      }
+      const row = db
+        .prepare(
+          `SELECT p.local_id AS profileLocalId, p.monday_item_id AS profileMondayId
+             FROM board_items bi JOIN profiles p ON p.local_id = bi.profile_local_id
+            WHERE bi.local_id = ? AND bi.deleted_at IS NULL`,
+        )
+        .get(String(req.params.localId)) as { profileLocalId: string; profileMondayId: string | null } | undefined;
+      if (!row?.profileMondayId) {
+        res.status(409).json({ error: "This appointment is not linked to a client profile in Monday" });
+        return;
+      }
+      const filesCol = getBoardColumnsFor(db, "profiles")?.columns.find(
+        (c) => c.type === "file" && c.title.trim().toLowerCase() === "files",
+      );
+      if (!filesCol) {
+        res.status(409).json({ error: "Could not resolve the profile's Files column — run a sync first" });
+        return;
+      }
+      // The body is always sent as octet-stream (a JSON file would otherwise be
+      // eaten by the global express.json()); the real type rides in ?type=.
+      const typeParam = typeof req.query.type === "string" ? req.query.type.trim() : "";
+      const contentType = /^[\w.+-]+\/[\w.+-]+$/.test(typeParam) ? typeParam : "application/octet-stream";
+      try {
+        await withTokenFallback(
+          (token) => dataSource.addFile(row.profileMondayId!, filesCol.columnId, name, new Uint8Array(body), contentType, token),
+          writeTokenOptions(req),
+        );
+      } catch (err) {
+        // No queue: add_file reads from data/, and keeping a copy of every
+        // client document on the server is not worth it for a duplicate of a
+        // file SharePoint already holds. The popup says it was not attached.
+        console.error("[reception] attaching the file to the profile failed:", err);
+        res.status(502).json({ error: "Saved to SharePoint, but Monday did not accept the file" });
+        return;
+      }
+      auditFromReq(req, "monday.consult_file_attached", {
+        targetType: "profile", targetId: row.profileLocalId, targetMondayId: row.profileMondayId,
+        metadata: { name, bytes: body.length },
+      });
+      res.json({ data: { attached: true } });
+    },
+  );
+}

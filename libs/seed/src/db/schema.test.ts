@@ -526,3 +526,23 @@ describe("v27 → v28 SharePoint folder index", () => {
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'sp_folders'").get()).toBeTruthy();
   });
 });
+
+describe("v28 → v29 consult preps", () => {
+  test("creates consult_preps on an existing database", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (28);
+    `);
+    initializeSchema(db);
+    const cols = (db.prepare("SELECT name FROM pragma_table_info('consult_preps')").all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toEqual(expect.arrayContaining(["appointment_local_id", "appt_type", "method", "fields", "note_text", "pending"]));
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+  });
+
+  test("a fresh database has it too", () => {
+    const db = new Database(":memory:");
+    initializeSchema(db);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'consult_preps'").get()).toBeTruthy();
+  });
+});
