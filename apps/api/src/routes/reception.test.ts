@@ -205,7 +205,21 @@ describe("getReceptionConsults", () => {
       board: "M", language: "Espanol", fromCalendly: true, description: "Asks",
       profile: { localId: "p1", name: "Silvia Estrada", consultFile: "https://x.sharepoint.com/c", eFile: null },
       lastPrep: null,
+      detainedAt: null,
     });
+  });
+
+  it("carries the facility from the client's open court case", () => {
+    const db = seed();
+    const cc = db.prepare(
+      `INSERT INTO board_items (batch_id, local_id, board_key, name, group_title, profile_local_id, column_values, updated_at_source)
+       VALUES (1, ?, 'court_cases', 'case', ?, 'p1', ?, ?)`,
+    );
+    cc.run("c-closed", "Closed", JSON.stringify({ det_facility: { label: "Old Jail (MO)" } }), "2026-09-30");
+    cc.run("c-old", "Court Case", JSON.stringify({ det_facility: { label: "Butler Co. (KS)" } }), "2026-08-01");
+    cc.run("c-new", "Court Case", JSON.stringify({ det_facility: { label: "Chase Co. (KS)" } }), "2026-09-01");
+    const list = getReceptionConsults(db, opts);
+    expect(list.find((c) => c.localId === "a1")!.detainedAt).toBe("Chase Co. (KS)");
   });
 
   it("shows the latest prep", () => {

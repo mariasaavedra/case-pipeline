@@ -14,7 +14,7 @@ The receptionist team's main job is preparing appointments for the attorneys. Th
 
 | Question | Answer |
 |---|---|
-| Prep fields | **Type of Appt** (dropdown): 1st time / Trial Prep / Standard Follow up / Initial Court follow up / Detained appt (asks where they are detained) / Other (specify). **How to proceed** is a dropdown too. **How to proceed**: Phone (number) / Zoom (link) / Other (specify). **Documents**: e-file + relevant documents. **Description**. |
+| Prep fields | **Type of Appt** (dropdown): 1st time / Trial Prep / Standard Follow up / Initial Court follow up / Detained appt (asks where they are detained — pre-filled from the Det. Facility on the client's open court case, the same rule as P3.0's "Detained at …" pill; P17 tags those rows "Detained · facility") / Other (specify). **How to proceed** is a dropdown too. **How to proceed**: Phone (number) / Zoom (link) / Other (specify). **Documents**: e-file + relevant documents. **Description**. |
 | One form or per type? | One form for every consult. |
 | Where does the note go? | Monday **Update** on the profile **and** on the appointment (pinned there), **and** an **Emails & Activities** entry on the profile. |
 | E&A type | A new **"Consult Prep Note"** type. Looked up by name in Monday; until someone creates it, entries post as the existing "Consult note". |

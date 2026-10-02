@@ -373,6 +373,7 @@ interface ConsultRow {
   prepApptType: string | null;
   prepMethod: string | null;
   prepPending: number | null;
+  detainedAt: string | null;
 }
 
 export interface ReceptionConsult {
@@ -405,6 +406,8 @@ export interface ReceptionConsult {
    * names on the row can't be trusted to build one.
    */
   folderName: { ok: true; folder: string; initial: string } | { ok: false; detail: string };
+  /** Det. Facility on the client's open court case — pre-fills "Detained appt". */
+  detainedAt: string | null;
 }
 
 function parseJson(s: string | null): Record<string, unknown> {
@@ -447,7 +450,18 @@ export function getReceptionConsults(
               p.local_id AS profileLocalId, p.monday_item_id AS profileMondayId, p.name AS profileName,
               p.phone AS profilePhone, p.raw_column_values AS profileRaw,
               cp.created_at AS prepAt, cp.author_name AS prepAuthor, cp.appt_type AS prepApptType,
-              cp.method AS prepMethod, cp.pending AS prepPending
+              cp.method AS prepMethod, cp.pending AS prepPending,
+              -- Same rule as getOpenDetentions (P3.0's "Detained at …" pill):
+              -- the newest open "Court Case" row with a Det. Facility.
+              (SELECT json_extract(cc.column_values, '$.det_facility.label')
+                 FROM board_items cc
+                WHERE cc.profile_local_id = bi.profile_local_id
+                  AND cc.board_key = 'court_cases'
+                  AND cc.group_title = 'Court Case'
+                  AND cc.deleted_at IS NULL
+                  AND COALESCE(json_extract(cc.column_values, '$.det_facility.label'), '') <> ''
+                ORDER BY COALESCE(cc.updated_at_source, cc.created_at) DESC
+                LIMIT 1) AS detainedAt
          FROM board_items bi
          LEFT JOIN profiles p ON p.local_id = bi.profile_local_id AND p.deleted_at IS NULL
          LEFT JOIN consult_preps cp ON cp.id = (
@@ -505,6 +519,7 @@ export function getReceptionConsults(
       folderName: named.ok
         ? { ok: true, folder: named.name.folder, initial: named.name.initial }
         : { ok: false, detail: named.detail },
+      detainedAt: r.profileLocalId ? r.detainedAt : null,
     };
   });
 }

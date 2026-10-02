@@ -1093,6 +1093,8 @@ export interface ReceptionConsult {
   lastPrep: { at: string; author: string | null; apptType: string; method: string; pending: boolean } | null;
   /** The folder name the consult sweep would use, or why the row's names can't build one. */
   folderName: { ok: true; folder: string; initial: string } | { ok: false; detail: string };
+  /** Det. Facility on the client's open court case — pre-fills "Detained appt". */
+  detainedAt: string | null;
 }
 
 export interface ReceptionConsultsResult {

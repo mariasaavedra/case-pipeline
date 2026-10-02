@@ -107,7 +107,8 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
 
   const [apptType, setApptType] = useState<ApptType | "">("");
   const [apptTypeOther, setApptTypeOther] = useState("");
-  const [detainedAt, setDetainedAt] = useState("");
+  // Pre-filled from the client's open court case; reception checks it, not types it.
+  const [detainedAt, setDetainedAt] = useState(consult.detainedAt ?? "");
   const [method, setMethod] = useState<PrepMethod | "">("");
   const [phone, setPhone] = useState(startPhone);
   const [zoomLink, setZoomLink] = useState("");
@@ -280,6 +281,9 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                   <input type="text" value={detainedAt} onChange={(e) => setDetainedAt(e.target.value)} maxLength={200}
                     placeholder="Where are they detained? (e.g. Chase Co. (KS))" aria-label="Where is the client detained" autoFocus
                     className="mt-2 w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
+                )}
+                {apptType === "Detained appt" && consult.detainedAt && detainedAt.trim() === consult.detainedAt && (
+                  <span style={hintStyle}>From the client's open court case (Det. Facility) — change it if they have moved.</span>
                 )}
               </div>
 
