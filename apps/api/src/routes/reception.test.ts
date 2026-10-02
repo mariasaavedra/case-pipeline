@@ -47,6 +47,13 @@ describe("parsePrepBody", () => {
     expect(parsePrepBody({ ...base, folderLinks: [{ kind: "nope", url: "https://x.sharepoint.com/a" }] }).ok).toBe(false);
   });
 
+  it("accepts an Emergency consultation and names it as such in the note", () => {
+    const b = body({ apptType: "Emergency consultation" });
+    expect(b.apptType).toBe("Emergency consultation");
+    const n = prepNote(b, { date: null, time: null, attorney: null, author: "Ana" });
+    expect(n.text).toContain("Type of appt: Emergency consultation");
+  });
+
   it("requires a known appointment type, and the specify text for Other", () => {
     expect(parsePrepBody({ ...base, apptType: "Coffee" })).toEqual({ ok: false, error: "Pick the type of appointment" });
     expect(parsePrepBody({ ...base, apptType: "Other" })).toEqual({ ok: false, error: "Specify the type of appointment" });
