@@ -57,6 +57,7 @@ export const APPT_TYPES = [
   "Standard Follow up",
   "Initial Court follow up",
   "Detained appt",
+  "Emergency consultation",
   "Other",
 ] as const;
 export type ApptType = (typeof APPT_TYPES)[number];

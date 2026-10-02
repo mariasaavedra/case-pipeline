@@ -1073,7 +1073,7 @@ export async function updateMailFields(
 // Reception (P17) — consult prep
 // =============================================================================
 
-export const APPT_TYPES = ["1st time", "Trial Prep", "Standard Follow up", "Initial Court follow up", "Detained appt", "Other"] as const;
+export const APPT_TYPES = ["1st time", "Trial Prep", "Standard Follow up", "Initial Court follow up", "Detained appt", "Emergency consultation", "Other"] as const;
 export type ApptType = (typeof APPT_TYPES)[number];
 export const PREP_METHODS = ["Phone", "Zoom", "Other"] as const;
 export type PrepMethod = (typeof PREP_METHODS)[number];
