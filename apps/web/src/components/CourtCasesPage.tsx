@@ -320,7 +320,7 @@ function StagePicker({
       <SelectTrigger size="sm" className="bg-secondary text-[13px] max-w-full" aria-label={`Case Prep Status for ${c.clientName}`}>
         <SelectValue placeholder={NO_STAGE} />
       </SelectTrigger>
-      <SelectContent code="D27">
+      <SelectContent code="D28">
         {items.map((i) => (
           <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
         ))}
@@ -613,9 +613,9 @@ export function CourtCasesPage({ view }: { view: View }) {
           {/* P15.2 — filters + data problems */}
           <SectionCode code="P15.2" />
           <div className="flex items-center gap-2 flex-wrap mb-3">
-            <FilterSelect label="Judge" value={filter.judge} options={options.judges} onChange={(v) => setFilter({ ...filter, judge: v })} code="D23" />
-            <FilterSelect label="Attorney" value={filter.attorney} options={options.attorneys} onChange={(v) => setFilter({ ...filter, attorney: v })} code="D24" />
-            <FilterSelect label="Paralegal" value={filter.paralegal} options={options.paralegals} onChange={(v) => setFilter({ ...filter, paralegal: v })} code="D25" />
+            <FilterSelect label="Judge" value={filter.judge} options={options.judges} onChange={(v) => setFilter({ ...filter, judge: v })} code="D25" />
+            <FilterSelect label="Attorney" value={filter.attorney} options={options.attorneys} onChange={(v) => setFilter({ ...filter, attorney: v })} code="D26" />
+            <FilterSelect label="Paralegal" value={filter.paralegal} options={options.paralegals} onChange={(v) => setFilter({ ...filter, paralegal: v })} code="D27" />
             <div className="flex gap-1" role="group" aria-label="Hearing type">
               {[["", "All types"], ["mch", "MCH"], ["trial", "Trial"], ["other", "Other"]].map(([k, l]) => (
                 <button key={k} type="button" className={`filter-chip ${filter.kind === k ? "filter-chip-active" : ""}`} onClick={() => setFilter({ ...filter, kind: k! })}>

@@ -18,6 +18,7 @@ import {
 } from "./jail-intake-fields";
 
 const filled: JailIntakeFieldValues = {
+  status: "Payment link sent. Waiting on payment",
   firstName: "Juan",
   lastName: "PEREZ",
   jail: "Kay County",
@@ -25,6 +26,7 @@ const filled: JailIntakeFieldValues = {
   language: "Espanol",
   pocName: "Maria, sister",
   pocPhone: "316-869-3861",
+  pocEmail: "maria@example.com",
   countryOfBirth: "Mexico",
   dateOfBirth: "03/07/1980",
   priorRemoval: "Yes",
@@ -62,6 +64,8 @@ describe("toCreateJailIntakeInput", () => {
       language: "Espanol",
       pocName: "Maria, sister",
       pocPhone: "316-869-3861",
+      pocEmail: "maria@example.com",
+      status: "Payment link sent. Waiting on payment",
       countryOfBirth: "Mexico",
       dateOfBirth: "03/07/1980",
       priorRemoval: "Yes",
@@ -79,6 +83,12 @@ describe("toCreateJailIntakeInput", () => {
     }
     expect(out.priorRemoval).toBeUndefined();
     expect(out.pickedUpByIce).toBeUndefined();
+    expect(out.pocEmail).toBeUndefined();
+  });
+
+  test("a new intake starts as New Detainee unless changed", () => {
+    expect(emptyJailIntakeFields.status).toBe("New Detainee");
+    expect(toCreateJailIntakeInput({ ...emptyJailIntakeFields, firstName: "Juan" }).status).toBe("New Detainee");
   });
 
   test("trims what it keeps", () => {

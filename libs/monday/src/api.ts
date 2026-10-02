@@ -955,6 +955,21 @@ export async function createUpdate(
 }
 
 /**
+ * Pin an update to the top of its item's update feed (`pin_to_top`). Not on the
+ * 2024-10 schema the rest of the app is pinned to, so it rides the same
+ * per-request version override as mentions. Callers treat a failure as
+ * cosmetic — the update itself is already posted.
+ */
+export async function pinUpdateToTop(updateId: string, itemId: string, tokenOverride?: string): Promise<void> {
+  await mondayRequest<{ data: { pin_to_top: { id: string } } }>(
+    `mutation PinToTop($id: ID!, $itemId: ID) { pin_to_top(id: $id, item_id: $itemId) { id } }`,
+    { id: updateId, itemId },
+    tokenOverride,
+    MENTIONS_API_VERSION,
+  );
+}
+
+/**
  * Set a simple column value on an item (status label, date, text). For a status
  * column, `value` is the label text — Monday matches it to an existing label
  * (so callers must pass a label that exists on the column). Returns the item id.

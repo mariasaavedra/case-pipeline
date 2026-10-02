@@ -32,7 +32,7 @@ import { MONDAY_JAIL_INTAKES_BOARD_ID, mondayItemUrl } from "../config";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { StatusBadge } from "./StatusBadge";
+import { StatusEditor } from "./StatusEditor";
 import { ClientLink } from "./ClientPeek";
 
 function formatDate(value: string | null): string {
@@ -205,6 +205,9 @@ export function JailIntakeDetailModal({ intake, onClose, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [posted, setPosted] = useState<{ pending: boolean; descriptionUpdated: boolean; descriptionFull: boolean } | null>(null);
   const [notes, setNotes] = useState<JailIntakeNote[] | null>(null);
+  // Changed in place (D6 below); Book consult follows it, so a switch to
+  // "Needs to be scheduled" offers booking without reopening the popup.
+  const [status, setStatus] = useState(intake.status);
 
   const loadNotes = useCallback(() => {
     fetchJailIntakeNotes(intake.localId)
@@ -253,7 +256,15 @@ export function JailIntakeDetailModal({ intake, onClose, onChanged }: Props) {
               borderBottom: "1px solid var(--color-border-light)",
             }}
           >
-            {intake.status && <StatusBadge status={intake.status} />}
+            <StatusEditor
+              boardKey="_fa_jail_intakes"
+              boardItemLocalId={intake.localId}
+              status={status}
+              onChanged={(next) => {
+                setStatus(next);
+                onChanged?.();
+              }}
+            />
             {intake.convertedTo ? (
               <>
                 <span
@@ -307,10 +318,11 @@ export function JailIntakeDetailModal({ intake, onClose, onChanged }: Props) {
             <Row label="Language" value={intake.language} />
             <Row label="Point of contact" value={intake.pocName} />
             <Row label="Phone" value={intake.pocPhone} />
+            <Row label="POC e-mail" value={intake.pocEmail} />
             <Row label="Last contact" value={intake.lastInteractionDate ? formatDate(intake.lastInteractionDate) : null} />
           </div>
 
-          {intake.status === BOOKABLE_STATUS && !intake.convertedTo && (
+          {status === BOOKABLE_STATUS && !intake.convertedTo && (
             <BookConsultSection intake={intake} onSaved={onChanged} />
           )}
 

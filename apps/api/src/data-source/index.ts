@@ -16,12 +16,15 @@ import {
   createItem as mondayCreateItem,
   createTimelineItem as mondayCreateTimelineItem,
   addFileToColumn,
+  pinUpdateToTop,
 } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput, UpdateMention } from "@case-pipeline/monday";
 
 export interface DataSource {
   /** Post a note/update on an item, or a threaded reply when `parentId` is given; `mentions` notifies those users. Returns the new update id. */
   postUpdate(itemId: string, body: string, token?: string, parentId?: string, mentions?: UpdateMention[]): Promise<string>;
+  /** Pin an existing update to the top of its item's feed. */
+  pinUpdate(updateId: string, itemId: string, token?: string): Promise<void>;
   /** Set a simple column value (status label, date, number, text). */
   setColumnValue(boardId: string, itemId: string, columnId: string, value: string, token?: string): Promise<void>;
   /** Set a JSON-valued column (people, board_relation, …) on an existing item. */
@@ -37,6 +40,7 @@ export interface DataSource {
 /** Backed by Monday.com — the current, only implementation. */
 export const mondayDataSource: DataSource = {
   postUpdate: (itemId, body, token, parentId, mentions) => createUpdate(itemId, body, token, parentId, mentions),
+  pinUpdate: (updateId, itemId, token) => pinUpdateToTop(updateId, itemId, token),
   setColumnValue: async (boardId, itemId, columnId, value, token) => {
     await changeSimpleColumnValue(boardId, itemId, columnId, value, token);
   },

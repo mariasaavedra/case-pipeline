@@ -26,6 +26,7 @@ const columnIds: IntakeColumnIds = {
   language: "status_1__1",
   poc_name_and_relationship_with_detained: "text_mkkgcg74",
   poc_phone: "text2",
+  poc_email: "text",
   intake_created_on: "date_1__1",
   description: "long_text",
   country_of_birth: "country_of_birth__1",
@@ -55,6 +56,36 @@ const full = {
   priorRemoval: "Yes",
   pickedUpByIce: "2026-02-21",
 };
+
+describe("planJailIntakeWrite — POC e-mail and starting status", () => {
+  const values = (input: Record<string, unknown>) => {
+    const out = plan({ firstName: "Juan", ...input });
+    if (!("plan" in out)) throw new Error(out.rejection.error);
+    return out.plan.columnValues;
+  };
+
+  it("writes the POC e-mail to the board's POC Email column, and nothing when blank", () => {
+    expect(values({ pocEmail: " maria@example.com " }).text).toBe("maria@example.com");
+    expect("text" in values({ pocEmail: "  " })).toBe(false);
+  });
+
+  it("refuses something that is not an e-mail", () => {
+    expect(plan({ firstName: "Juan", pocEmail: "316-869-3861" })).toEqual({
+      rejection: { status: 400, error: "The POC e-mail doesn't look like an e-mail address" },
+    });
+  });
+
+  it("starts as New Detainee, or Payment link sent when chosen", () => {
+    expect(values({}).status).toEqual({ label: "New Detainee" });
+    expect(values({ status: "Payment link sent. Waiting on payment" }).status)
+      .toEqual({ label: "Payment link sent. Waiting on payment" });
+  });
+
+  it("refuses any other starting status", () => {
+    const out = plan({ firstName: "Juan", status: "Scheduled" });
+    expect("rejection" in out && out.rejection.status).toBe(400);
+  });
+});
 
 describe("planJailIntakeWrite", () => {
   it("names the item after the detainee, the way the board does", () => {

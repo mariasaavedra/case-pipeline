@@ -518,6 +518,8 @@ export interface JailIntake {
   language: string | null;
   pocName: string | null;
   pocPhone: string | null;
+  /** The board's "POC Email" text column. */
+  pocEmail: string | null;
   /** YYYY-MM-DD, from the board's "Intake Created" column. */
   intakeCreatedOn: string | null;
   lastInteractionDate: string | null;
