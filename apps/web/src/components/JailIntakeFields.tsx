@@ -17,6 +17,7 @@
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import {
+  INTAKE_CREATE_STATUSES,
   INTAKE_LANGUAGES,
   PRIOR_REMOVAL_OPTIONS,
   type JailIntakeFieldValues,
@@ -24,6 +25,7 @@ import {
 } from "./jail-intake-fields";
 
 export {
+  INTAKE_CREATE_STATUSES,
   INTAKE_LANGUAGES,
   PRIOR_REMOVAL_OPTIONS,
   emptyJailIntakeFields,
@@ -75,8 +77,11 @@ export function JailIntakeFields({ value, onChange, omit = [] }: Props) {
 
   /** A Select must NOT be wrapped in a label — see the note in ui/select usage:
    *  a labelable trigger gets a second, synthesized click and the popover shuts. */
-  const select = (k: JailIntakeFieldName, label: string, options: string[], blank: string) => {
-    const items = [{ value: "", label: blank }, ...options.map((o) => ({ value: o, label: o }))];
+  const select = (k: JailIntakeFieldName, label: string, options: string[], blank: string | null) => {
+    const items = [
+      ...(blank === null ? [] : [{ value: "", label: blank }]),
+      ...options.map((o) => ({ value: o, label: o })),
+    ];
     return (
       <div style={{ display: "block", marginBottom: 12, flex: 1 }}>
         <span style={labelStyle}>{label}</span>
@@ -85,8 +90,7 @@ export function JailIntakeFields({ value, onChange, omit = [] }: Props) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent code="D13" className="w-[var(--anchor-width)]">
-            <SelectItem value="">{blank}</SelectItem>
-            {items.slice(1).map((i) => (
+            {items.map((i) => (
               <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
             ))}
           </SelectContent>
@@ -117,6 +121,9 @@ export function JailIntakeFields({ value, onChange, omit = [] }: Props) {
 
   return (
     <>
+      {/* No blank option: every intake has a status, and New Detainee is the default.
+          "Intake status", not "Status": in Log a call it sits above the call's own Status. */}
+      {row(select("status", "Intake status", INTAKE_CREATE_STATUSES, null))}
       {row(text("firstName", "Detainee first name"), text("lastName", "Detainee last name"))}
       {row(text("jail", "Facility", "e.g. Kay County"), text("alienNumber", "A-number", "000-000-000"))}
       {row(
@@ -134,6 +141,7 @@ export function JailIntakeFields({ value, onChange, omit = [] }: Props) {
         !hidden.has("pocName") && text("pocName", "Point of contact", "Name and relationship"),
         !hidden.has("pocPhone") && text("pocPhone", "Their phone"),
       )}
+      {row(text("pocEmail", "Point of contact e-mail (optional)", "name@example.com"))}
       <label style={{ display: "block", marginBottom: 12 }}>
         <span style={labelStyle}>Description</span>
         <textarea

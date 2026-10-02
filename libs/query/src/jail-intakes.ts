@@ -49,6 +49,7 @@ interface IntakeColumnValues {
   language?: { label?: string };
   poc_name_and_relationship_with_detained?: string;
   poc_phone?: string;
+  poc_email?: string;
   intake_created_on?: { date?: string };
   last_interaction_date?: { date?: string };
   consult_date?: { date?: string; time?: string };
@@ -195,6 +196,7 @@ export function getJailIntakes(
       language: cv.language?.label ?? null,
       pocName: cv.poc_name_and_relationship_with_detained ?? null,
       pocPhone: cv.poc_phone ?? null,
+      pocEmail: cv.poc_email ?? null,
       intakeCreatedOn: cv.intake_created_on?.date ?? null,
       lastInteractionDate: cv.last_interaction_date?.date ?? null,
       consultDate: cv.consult_date?.date ?? null,

@@ -220,8 +220,8 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M5 | Appointment detail | The client's name | P4 → click an appointment / **Focus**; P17.2 → **Focus**; M18 → "Focus view — notes & documents" (opens on top) | `AppointmentModal.tsx` |
 | M6 | Client notes | The client's name | P4 → "Open in modal" under a row's notes | `NotesModal.tsx` |
 | M7 | Day agenda | The date | P7 → click a day | `CalendarPage.tsx` (`DayModal`) |
-| M8 | New jail intake | "New jail intake" | P9 → **+ New intake** | `NewJailIntakeModal.tsx` |
-| M9 | Jail intake detail | The detainee's name | P9 → click an intake. A paid intake ("Needs to be scheduled") shows **Book consult**: attorney + date + time → saved to Monday, then a link to press Create Appt there | `JailIntakeDetailModal.tsx` |
+| M8 | New jail intake | "New jail intake" | P9 → **+ New intake**. Intake status (New Detainee / Payment link sent. Waiting on payment) + optional POC e-mail — the same fields as M2's "this call is a jail intake" | `NewJailIntakeModal.tsx` |
+| M9 | Jail intake detail | The detainee's name | P9 → click an intake. The status chip changes the status (D6). A paid intake ("Needs to be scheduled") shows **Book consult**: attorney + date + time → saved to Monday, then a link to press Create Appt there | `JailIntakeDetailModal.tsx` |
 | M10 | Book a consult | "Book a consult" | P3.2; P17.1 **+ Book Appt** (starts with a client search). 30-minute time slots; "Needs to pay?" shown disabled (under construction) | `NewAppointmentModal.tsx` |
 | M11 | New contract | "New contract (Fee K)" | P3.3; P14.1 (starts with a client search) | `NewContractModal.tsx` |
 | M12 | File preview | The file name | P3.6; the documents section of M5 | `FilePreviewModal.tsx` |
@@ -242,7 +242,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D3 | Relief card menu | P3.0 → Relief card | `ClientSnapshot.tsx` |
 | D4 | Next action card menu | P3.0 → Next action card | `ClientSnapshot.tsx` |
 | D5 | Timeline date range | P3.1 → date range filter | `TimelineFilters.tsx` |
-| D6 | Status picker | P10 row status; M13 | `StatusEditor.tsx` |
+| D6 | Status picker | P10 row status; M13; M9 intake status | `StatusEditor.tsx` |
 | D7 | Highlighted For picker | P10 row | `HighlightedForEditor.tsx` |
 | D8 | Status filter | P2.3 | `FilterBar.tsx` |
 | D9 | Attorney filter | P2.3 | `FilterBar.tsx` |
@@ -253,7 +253,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D14 | Attorney picker | M10; M9 Book consult | `NewAppointmentModal.tsx`, `JailIntakeDetailModal.tsx` |
 | D15 | Case type picker | M11 | `NewContractModal.tsx` |
 | D16 | Call status | M2 | `LogCallModal.tsx` |
-| D17 | Language | M2 → more fields | `LogCallModal.tsx` |
+| D17 | Language | M2 (always shown; reused by the jail intake) | `LogCallModal.tsx` |
 | D18 | Taken by | M2 → more fields | `LogCallModal.tsx` |
 | D19 | Highlight for | M2 → more fields | `LogCallModal.tsx` |
 | D20 | Call status filter | P10.1 | `CallLogPage.tsx` |

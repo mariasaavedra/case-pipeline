@@ -278,6 +278,7 @@ export interface JailIntake {
   language: string | null;
   pocName: string | null;
   pocPhone: string | null;
+  pocEmail: string | null;
   intakeCreatedOn: string | null;
   lastInteractionDate: string | null;
   consultDate: string | null;
@@ -355,6 +356,10 @@ export async function createJailIntake(input: {
   language?: string;
   pocName?: string;
   pocPhone?: string;
+  /** Optional — the board's "POC Email" column. */
+  pocEmail?: string;
+  /** "New Detainee" (default) or "Payment link sent. Waiting on payment". */
+  status?: string;
   /** Fills the board's own "Description" long-text column. */
   description?: string;
   countryOfBirth?: string;

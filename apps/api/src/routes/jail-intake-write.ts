@@ -39,8 +39,19 @@ const DATE_RE_ISO = /^\d{4}-\d{2}-\d{2}$/;
 /** Where a new lead belongs — the board's non-scheduled group. */
 const INTAKE_GROUP_TITLE = "Jail Intakes";
 
-/** Every lead starts here; the board's own funnel moves it on. */
+/** A lead starts here unless the caller is already further along. */
 const INITIAL_STATUS = "New Detainee";
+
+/**
+ * The statuses a NEW intake may be created in (M2 / M8), spelled as the board
+ * spells them. A payment link is often sent on the very call that creates the
+ * intake, so that one is offered too; everything later in the funnel is set
+ * from M9 or the board, not at creation.
+ */
+export const INTAKE_CREATE_STATUSES = [INITIAL_STATUS, "Payment link sent. Waiting on payment"] as const;
+
+/** Loose on purpose — it only catches a phone number or a name typed in the wrong box. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** config/boards.yaml keys this route writes. */
 export type IntakeColumnKey =
@@ -50,6 +61,7 @@ export type IntakeColumnKey =
   | "language"
   | "poc_name_and_relationship_with_detained"
   | "poc_phone"
+  | "poc_email"
   | "intake_created_on"
   | "description"
   | "country_of_birth"
@@ -74,6 +86,10 @@ export interface JailIntakeInput {
   language?: unknown;
   pocName?: unknown;
   pocPhone?: unknown;
+  /** Optional; the board's "POC Email" text column. */
+  pocEmail?: unknown;
+  /** One of INTAKE_CREATE_STATUSES; New Detainee when absent. */
+  status?: unknown;
   /** Goes to the board's own "Description" long-text column. */
   description?: unknown;
   countryOfBirth?: unknown;
@@ -134,6 +150,11 @@ export function planJailIntakeWrite(
   set("alien_number", str(input.alienNumber));
   set("poc_name_and_relationship_with_detained", str(input.pocName));
   set("poc_phone", str(input.pocPhone));
+  const pocEmail = str(input.pocEmail);
+  if (pocEmail && !EMAIL_RE.test(pocEmail)) {
+    return { rejection: { status: 400, error: "The POC e-mail doesn't look like an e-mail address" } };
+  }
+  set("poc_email", pocEmail);
   set("description", str(input.description));
   set("country_of_birth", str(input.countryOfBirth));
   // A text column, deliberately: staff have typed both "03/07/1980" and
@@ -155,7 +176,11 @@ export function planJailIntakeWrite(
   const language = str(input.language);
   if (language) set("language", { label: language });
 
-  set("status", { label: INITIAL_STATUS });
+  const status = str(input.status) || INITIAL_STATUS;
+  if (!(INTAKE_CREATE_STATUSES as readonly string[]).includes(status)) {
+    return { rejection: { status: 400, error: `A new intake can start as: ${INTAKE_CREATE_STATUSES.join(" or ")}` } };
+  }
+  set("status", { label: status });
   // The board's own "Intake Created" column, in the firm's zone — the list view
   // filters on it, so a date a day out would put a new lead outside the default.
   set("intake_created_on", { date: today });
