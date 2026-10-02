@@ -2,8 +2,8 @@ import { useState, useMemo, useEffect, useLayoutEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import type { ClientUpdate, ClientUpdateAttachment } from "../api";
 import {
-  BOARD_DISPLAY_NAMES,
-  APPOINTMENT_BOARD_KEYS,
+  boardDisplayName,
+  isAppointmentBoard,
   DOCUMENT_BOARD_KEYS,
   NOTICE_BOARD_KEYS as NOTICE_KEYS,
 } from "@case-pipeline/query/types";
@@ -146,7 +146,7 @@ function getEventBadge(u: ClientUpdate): { label: string; bg: string; text: stri
   if (u.sourceType === "note") return { label: "Note", bg: "var(--color-surface-warm)", text: "var(--color-ink-muted)" };
   if (u.sourceType === "reply") return { label: "Reply", bg: "var(--color-status-purple-bg)", text: "var(--color-status-purple)" };
   if (u.boardKey && DOCUMENT_BOARD_KEYS.has(u.boardKey)) return { label: "Document", bg: "var(--color-status-blue-bg)", text: "var(--color-status-blue)" };
-  if (u.boardKey && APPOINTMENT_BOARD_KEYS.has(u.boardKey)) return { label: "Appt", bg: "var(--color-status-green-bg)", text: "var(--color-status-green)" };
+  if (u.boardKey && isAppointmentBoard(u.boardKey)) return { label: "Appt", bg: "var(--color-status-green-bg)", text: "var(--color-status-green)" };
   if (u.boardKey && NOTICE_KEYS.has(u.boardKey)) return { label: "Notice", bg: "var(--color-status-yellow-bg)", text: "var(--color-status-yellow)" };
   return { label: "Note", bg: "var(--color-surface-warm)", text: "var(--color-ink-muted)" };
 }
@@ -323,7 +323,7 @@ function TimelineEntry({ u, replies, onReplyPosted }: EntryProps) {
             >
               {time}
             </span>
-            {u.boardKey && <span className="board-tag">{BOARD_DISPLAY_NAMES[u.boardKey] ?? u.boardKey}</span>}
+            {u.boardKey && <span className="board-tag">{boardDisplayName(u.boardKey)}</span>}
           </div>
           {u.title && (
             <p className="text-sm font-medium mb-0.5" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>

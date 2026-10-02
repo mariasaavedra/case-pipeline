@@ -9,7 +9,7 @@ import { QuickAccess } from "./QuickAccess";
 import { KpiDetailModal } from "./KpiDetailModal";
 import { formatColumnValue } from "../utils/columnValue";
 import { useAuth } from "../auth/useAuth";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 import { SectionCode } from "./ScreenCode";
 
 function getGreeting(): string {
@@ -102,7 +102,7 @@ function KpiItemRow({ item, columnId, columnLabel }: { item: KpiItem; columnId: 
           )
         ) : (
           item.boardKey && (
-            <span className="board-tag">{BOARD_DISPLAY_NAMES[item.boardKey] ?? item.boardKey}</span>
+            <span className="board-tag">{boardDisplayName(item.boardKey)}</span>
           )
         )}
         {item.clientName && item.clientLocalId && (

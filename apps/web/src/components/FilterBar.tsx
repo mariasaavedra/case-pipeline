@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import { fetchFilterOptions } from "../api";
 import type { FilterOptions } from "../api";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 
@@ -60,7 +60,7 @@ export function FilterBar({ filters, onFilterChange, onClear, hasActiveFilters, 
     { value: "", label: "All Board Types" },
     ...(options?.boardTypes ?? []).map((b) => ({
       value: b.key,
-      label: BOARD_DISPLAY_NAMES[b.key] ?? b.key,
+      label: boardDisplayName(b.key),
     })),
   ];
 

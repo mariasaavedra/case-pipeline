@@ -4,7 +4,7 @@ import { getStatusColor, DOCUMENT_BOARD_KEYS } from "../config";
 import { StatusBadge } from "./StatusBadge";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { getMostRelevantUpdate } from "../utils/relevance";
-import { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 
 type StatusMode = "worst" | "all" | "primary";
 type PopoverId = "status" | "deadline" | "relief" | "action" | null;
@@ -194,7 +194,7 @@ export function ClientSnapshot({ data }: Props) {
                     <div className="flex flex-wrap gap-1 justify-end">
                       {s.boards.map((bk) => (
                         <span key={bk} className="board-tag" style={{ fontSize: 10 }}>
-                          {BOARD_DISPLAY_NAMES[bk] ?? bk}
+                          {boardDisplayName(bk)}
                         </span>
                       ))}
                     </div>
@@ -219,7 +219,7 @@ export function ClientSnapshot({ data }: Props) {
               </div>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="board-tag" style={{ fontSize: 10 }}>
-                  {BOARD_DISPLAY_NAMES[nextDeadline.boardKey] ?? nextDeadline.boardKey}
+                  {boardDisplayName(nextDeadline.boardKey)}
                 </span>
                 <span
                   className="text-[11px] truncate"
@@ -258,7 +258,7 @@ export function ClientSnapshot({ data }: Props) {
                     </span>
                     <div className="min-w-0">
                       <span className="board-tag" style={{ fontSize: 10 }}>
-                        {BOARD_DISPLAY_NAMES[d.boardKey] ?? d.boardKey}
+                        {boardDisplayName(d.boardKey)}
                       </span>
                       <p className="text-xs mt-0.5" style={{ color: "var(--color-ink-muted)" }}>
                         {d.itemName}
@@ -392,7 +392,7 @@ export function ClientSnapshot({ data }: Props) {
                 </div>
                 {lastAction.boardKey && (
                   <span className="board-tag mb-2 inline-block" style={{ fontSize: 10 }}>
-                    {BOARD_DISPLAY_NAMES[lastAction.boardKey] ?? lastAction.boardKey}
+                    {boardDisplayName(lastAction.boardKey)}
                   </span>
                 )}
                 <p

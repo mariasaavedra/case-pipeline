@@ -1,5 +1,5 @@
 import type { ContractSummary, ClientContracts, StatusTone } from "../api";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 import { translateStatus } from "../config";
 import { useStatusOverrides } from "../StatusOverridesProvider";
 
@@ -119,7 +119,7 @@ function ContractRow({ contract: c }: { contract: ContractSummary }) {
           <div className="flex flex-col gap-1">
             <span style={{ color: ink }}>
               <span className="board-tag mr-1.5">
-                {BOARD_DISPLAY_NAMES[c.linkedCase.boardKey] ?? c.linkedCase.boardKey}
+                {boardDisplayName(c.linkedCase.boardKey)}
               </span>
               {c.linkedCase.status && <CaseStatus status={c.linkedCase.status} />}
             </span>

@@ -67,7 +67,7 @@ export type {
   SearchType,
   TypedSearchResult,
 } from "./types";
-export { BOARD_DISPLAY_NAMES, APPOINTMENT_BOARD_KEYS, DOCUMENT_BOARD_KEYS, NOTICE_BOARD_KEYS, PAID_CONTRACT_STATUSES } from "./types";
+export { BOARD_DISPLAY_NAMES, boardDisplayName, isAppointmentBoard, appointmentBoardInitials, DOCUMENT_BOARD_KEYS, NOTICE_BOARD_KEYS, PAID_CONTRACT_STATUSES } from "./types";
 export {
   normalizeContractStatus,
   contractStatusKey,

@@ -7,7 +7,7 @@ import { validateSchema } from "@case-pipeline/seed/db/schema";
 import {
   searchClients,
   getClientCaseSummary,
-  BOARD_DISPLAY_NAMES,
+  boardDisplayName,
 } from "@case-pipeline/query";
 import type { ClientCaseSummary, BoardItemSummary } from "@case-pipeline/query";
 
@@ -84,7 +84,7 @@ function printSummary(summary: ClientCaseSummary): void {
     for (const boardKey of boardKeys) {
       const items = boardItems[boardKey];
       if (!items) continue;
-      const displayName = BOARD_DISPLAY_NAMES[boardKey] ?? boardKey;
+      const displayName = boardDisplayName(boardKey);
 
       console.log(`\n${"─".repeat(60)}`);
       console.log(`  ${displayName.toUpperCase()} (${items.length})`);
@@ -103,7 +103,7 @@ function printSummary(summary: ClientCaseSummary): void {
     console.log(`${"─".repeat(60)}`);
 
     for (const appt of appointments) {
-      const board = BOARD_DISPLAY_NAMES[appt.boardKey] ?? appt.boardKey;
+      const board = boardDisplayName(appt.boardKey);
       console.log(`  ${board}: ${formatStatus(appt.status)} | ${formatDate(appt.nextDate)}`);
     }
   }

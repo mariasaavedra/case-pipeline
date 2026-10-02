@@ -9,7 +9,7 @@
 // =============================================================================
 
 import type { BoardItemSummary } from "../api";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { StatusEditor } from "./StatusEditor";
 import { useBoardStatusOptions } from "../StatusOptionsProvider";
@@ -39,7 +39,7 @@ function displayValue(v: unknown): string {
 
 export function EntryEditorModal({ entry, boardKey, onClose, onStatusChanged }: Props) {
   const def = useBoardStatusOptions(boardKey);
-  const boardName = BOARD_DISPLAY_NAMES[boardKey] ?? boardKey;
+  const boardName = boardDisplayName(boardKey);
 
   const fields = Object.entries(entry.columnValues ?? {})
     .map(([id, v]) => [id, displayValue(v)] as const)

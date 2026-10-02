@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { fetchAlerts } from "../api";
 import type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "../api";
 import { ClientLink } from "./ClientPeek";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 import { MailReviewModal } from "./MailReviewModal";
 import { SectionCode } from "./ScreenCode";
 
@@ -123,7 +123,7 @@ function AlertItemRow({
           {/* Board tag */}
           {item.boardKey && (
             <span className="board-tag">
-              {BOARD_DISPLAY_NAMES[item.boardKey] ?? item.boardKey}
+              {boardDisplayName(item.boardKey)}
             </span>
           )}
 

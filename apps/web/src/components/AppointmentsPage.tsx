@@ -17,7 +17,7 @@ import { ClientLink } from "./ClientPeek";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { NotesModal } from "./NotesModal";
 import { AppointmentModal } from "./AppointmentModal";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName, appointmentBoardInitials } from "@case-pipeline/query/types";
 import { clientPath } from "../router";
 import { SectionCode } from "./ScreenCode";
 
@@ -50,7 +50,7 @@ const ATTORNEY_PALETTE = [
 
 function getAttorneyMeta(boardKey: string, index: number) {
   const slot = ATTORNEY_PALETTE[index % ATTORNEY_PALETTE.length]!;
-  const initial = boardKey.replace("appointments_", "").toUpperCase();
+  const initial = appointmentBoardInitials(boardKey);
   return { initial, ...slot };
 }
 
@@ -315,7 +315,7 @@ function AttorneyColumn({
   onFocus: (entry: AppointmentEntry) => void;
 }) {
   const meta = getAttorneyMeta(boardKey, index);
-  const displayName = (BOARD_DISPLAY_NAMES[boardKey] ?? boardKey)
+  const displayName = boardDisplayName(boardKey)
     .replace("Appointments (", "")
     .replace(")", "");
 
@@ -461,7 +461,7 @@ function AppointmentCard({
 
             {/* Attorney board tag */}
             <span className="board-tag">
-              {BOARD_DISPLAY_NAMES[appointment.boardKey] ?? appointment.boardKey}
+              {boardDisplayName(appointment.boardKey)}
             </span>
           </div>
 
@@ -608,7 +608,7 @@ function AppointmentCard({
                   className="text-[11px] font-semibold uppercase tracking-wider mb-2"
                   style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
                 >
-                  {BOARD_DISPLAY_NAMES[boardKey] ?? boardKey} ({items.length})
+                  {boardDisplayName(boardKey)} ({items.length})
                 </h4>
                 {items.slice(0, 3).map((item) => (
                   <div key={item.localId} className="flex items-center gap-2 mb-1">
@@ -959,7 +959,7 @@ export function AppointmentsPage() {
                     cursor: "pointer",
                     fontFamily: "var(--font-body)",
                   }}
-                  title={(BOARD_DISPLAY_NAMES[bk] ?? bk).replace("Appointments (", "").replace(")", "")}
+                  title={boardDisplayName(bk).replace("Appointments (", "").replace(")", "")}
                 >
                   {meta.initial}
                 </button>

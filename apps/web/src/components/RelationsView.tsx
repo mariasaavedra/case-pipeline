@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { fetchClientRelationships } from "../api";
 import type { RelationshipWithDetails } from "../api";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 import { StatusBadge } from "./StatusBadge";
 
 interface Props {
@@ -100,7 +100,7 @@ export function RelationsView({ profileLocalId }: Props) {
                     </span>
                     {r.sourceBoardKey && (
                       <span className="board-tag" style={{ fontSize: 10 }}>
-                        {BOARD_DISPLAY_NAMES[r.sourceBoardKey] ?? r.sourceBoardKey}
+                        {boardDisplayName(r.sourceBoardKey)}
                       </span>
                     )}
                   </div>
@@ -127,7 +127,7 @@ export function RelationsView({ profileLocalId }: Props) {
                     </span>
                     {r.targetBoardKey && (
                       <span className="board-tag" style={{ fontSize: 10 }}>
-                        {BOARD_DISPLAY_NAMES[r.targetBoardKey] ?? r.targetBoardKey}
+                        {boardDisplayName(r.targetBoardKey)}
                       </span>
                     )}
                   </div>

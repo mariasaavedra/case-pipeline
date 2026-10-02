@@ -11,6 +11,8 @@ function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
 }
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { getAppointments, getAttorneyList } from "./appointments";
+import { listAppointmentBoardKeys } from "./appointment-boards";
+import { isAppointmentBoard, boardDisplayName } from "./types";
 
 // =============================================================================
 // Helpers
@@ -408,5 +410,33 @@ describe("getAttorneyList", () => {
     const attorneys = getAttorneyList(db);
     expect(attorneys).toEqual([]);
     db.close();
+  });
+});
+
+// =============================================================================
+// A newly onboarded attorney's board needs no code change
+// =============================================================================
+
+describe("new attorney board (appointments_cr)", () => {
+  test("is listed once synced, and its appointments are returned", () => {
+    const db = freshDb();
+    insertBoardItem(db, { localId: "a1", boardKey: "appointments_r", name: "R consult", nextDate: "2026-10-05", attorney: "R" });
+    insertBoardItem(db, { localId: "a2", boardKey: "appointments_cr", name: "CR consult", nextDate: "2026-10-05", attorney: "CR" });
+    // `_` must match literally: a board merely starting "appointments" is not one
+    insertBoardItem(db, { localId: "x1", boardKey: "appointmentsX", name: "Not appt", nextDate: "2026-10-05" });
+
+    expect(listAppointmentBoardKeys(db)).toEqual(["appointments_cr", "appointments_r"]);
+    const result = getAppointments(db, { date: "2026-10-05" });
+    expect(result.entries.map((e) => e.appointment.name).sort()).toEqual(["CR consult", "R consult"]);
+    expect(getAttorneyList(db)).toEqual(["CR", "R"]);
+    db.close();
+  });
+
+  test("reads as an appointment board with its initials", () => {
+    expect(isAppointmentBoard("appointments_cr")).toBe(true);
+    expect(isAppointmentBoard("court_cases")).toBe(false);
+    expect(boardDisplayName("appointments_cr")).toBe("Appointments (CR)");
+    expect(boardDisplayName("court_cases")).toBe("Court Cases");
+    expect(boardDisplayName("unknown_board")).toBe("unknown_board");
   });
 });

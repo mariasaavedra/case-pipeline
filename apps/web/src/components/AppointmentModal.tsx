@@ -3,7 +3,7 @@ import type { AppointmentEntry, ClientUpdate } from "../api";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { NoteComposer } from "./NoteComposer";
 import { DocumentsTab } from "./DocumentsTab";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 import { formatANumber } from "@case-pipeline/core";
 import { Link } from "./Link";
 import { clientPath } from "../router";
@@ -73,7 +73,7 @@ export function AppointmentModal({ entry, onClose }: Props) {
           {/* Board + status badges */}
           <div className="flex items-center gap-2 flex-wrap mb-1.5">
             <span className="board-tag">
-              {BOARD_DISPLAY_NAMES[appointment.boardKey] ?? appointment.boardKey}
+              {boardDisplayName(appointment.boardKey)}
             </span>
             {appointment.status && (
               <span

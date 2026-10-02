@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { KpiCardDetail, KpiDetailItem } from "../api";
 import { fetchKpiCardItems, fetchGlobalKpiColumns, updateGlobalKpiColumns } from "../api";
 import { formatColumnValue, isLabelValue } from "../utils/columnValue";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 import { ClientLink } from "./ClientPeek";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -296,7 +296,7 @@ function Row({ item, columnId }: { item: KpiDetailItem; columnId: string | null 
       <td className="px-6 py-2.5 align-top" style={{ color: "var(--color-ink)" }}>
         <span>{item.name}</span>
         {item.boardKey && (
-          <span className="board-tag ml-2">{BOARD_DISPLAY_NAMES[item.boardKey] ?? item.boardKey}</span>
+          <span className="board-tag ml-2">{boardDisplayName(item.boardKey)}</span>
         )}
       </td>
       <td className="px-6 py-2.5 align-top whitespace-nowrap" style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-mono)" }}>

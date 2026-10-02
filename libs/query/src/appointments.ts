@@ -18,7 +18,8 @@ import type {
   ClientUpdate,
   ClientCaseSummary,
 } from "./types";
-import { APPOINTMENT_BOARD_KEYS, CLOSED_CONTRACT_STATUSES } from "./types";
+import { CLOSED_CONTRACT_STATUSES } from "./types";
+import { listAppointmentBoardKeys } from "./appointment-boards";
 import { batchGetClientCaseSummaries } from "./case-summary";
 import { batchGetClientUpdates } from "./updates";
 import { readSharePointLinks } from "./client";
@@ -66,7 +67,7 @@ export function getAppointments(
   db: Database,
   opts: AppointmentOptions = {},
 ): AppointmentsResult {
-  const boardKeyList = opts.boardKeys ?? [...APPOINTMENT_BOARD_KEYS];
+  const boardKeyList = opts.boardKeys ?? listAppointmentBoardKeys(db);
   const boardKeyPlaceholders = boardKeyList.map(() => "?").join(",");
 
   const today = new Date();
@@ -198,7 +199,7 @@ export function getAppointments(
  * Get distinct attorney identifiers from appointment boards.
  */
 export function getAttorneyList(db: Database, boardKeyList?: string[]): string[] {
-  const keys = boardKeyList ?? [...APPOINTMENT_BOARD_KEYS];
+  const keys = boardKeyList ?? listAppointmentBoardKeys(db);
   const placeholders = keys.map(() => "?").join(",");
   const rows = db
     .prepare(

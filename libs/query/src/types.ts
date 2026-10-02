@@ -337,13 +337,21 @@ export function normalizeContractStatus(
   };
 }
 
-// Board keys that represent appointment boards
-export const APPOINTMENT_BOARD_KEYS = new Set([
-  "appointments_r",
-  "appointments_m",
-  "appointments_lb",
-  "appointments_wh",
-]);
+// Appointment boards: one per attorney, keyed `appointments_<initials>`
+// (appointments_r, appointments_lb, …). Recognised by that prefix rather than
+// a fixed list, so onboarding an attorney is a Settings change (which enforces
+// the same key shape) and not a code change. For the keys actually present in
+// the data, see listAppointmentBoardKeys in ./appointment-boards.
+export const APPOINTMENT_BOARD_PREFIX = "appointments_";
+
+export function isAppointmentBoard(boardKey: string | null | undefined): boolean {
+  return !!boardKey && boardKey.startsWith(APPOINTMENT_BOARD_PREFIX);
+}
+
+/** "appointments_lb" → "LB": the attorney badge an appointment board reads as. */
+export function appointmentBoardInitials(boardKey: string): string {
+  return boardKey.slice(APPOINTMENT_BOARD_PREFIX.length).toUpperCase();
+}
 
 // Board keys whose timeline entries read as documents on the client timeline.
 export const DOCUMENT_BOARD_KEYS = new Set([
@@ -617,8 +625,11 @@ export const BOARD_DISPLAY_NAMES: Record<string, string> = {
   _na_originals_cards_notices: "Originals/Cards/Notices",
   rfes_all: "RFEs",
   _fa_jail_intakes: "Jail Intakes",
-  appointments_r: "Appointments (R)",
-  appointments_m: "Appointments (M)",
-  appointments_lb: "Appointments (LB)",
-  appointments_wh: "Appointments (WH)",
 };
+
+/** Readable board name; appointment boards read as "Appointments (LB)". */
+export function boardDisplayName(boardKey: string): string {
+  if (BOARD_DISPLAY_NAMES[boardKey]) return BOARD_DISPLAY_NAMES[boardKey];
+  if (isAppointmentBoard(boardKey)) return `Appointments (${appointmentBoardInitials(boardKey)})`;
+  return boardKey;
+}

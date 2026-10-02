@@ -24,15 +24,17 @@ import { cachedAccount } from "./sharepoint/auth.js";
 import { renderDocxTemplate } from "@case-pipeline/template";
 import type { TimelineNote } from "./sharepoint/consult-note.js";
 
-const APPOINTMENT_BOARDS = ["appointments_r", "appointments_lb", "appointments_m"];
+import { listAppointmentBoardKeys } from "@case-pipeline/query/appointment-boards";
 const PROFILES_BOARD_ID = "8025265377";
 
 const arg = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const flag = (n: string) => process.argv.includes(`--${n}`);
 
 function loadCandidates(db: Database.Database, days: number): SweepCandidate[] {
+  // Every attorney's board, as synced — a new attorney is covered with no code change.
+  const boards = listAppointmentBoardKeys(db);
   const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
-  const placeholders = APPOINTMENT_BOARDS.map(() => "?").join(",");
+  const placeholders = boards.map(() => "?").join(",");
   return db
     .prepare(`
       SELECT
@@ -57,7 +59,7 @@ function loadCandidates(db: Database.Database, days: number): SweepCandidate[] {
         AND json_extract(bi.column_values, '$.consult_date.date') >= ?
       ORDER BY consultDate DESC
     `)
-    .all(...APPOINTMENT_BOARDS, since) as SweepCandidate[];
+    .all(...boards, since) as SweepCandidate[];
 }
 
 /**
