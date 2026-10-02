@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 29;
+export const SCHEMA_VERSION = 30;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -449,6 +449,34 @@ CREATE TABLE IF NOT EXISTS consult_preps (
     created_at             TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_consult_preps_appt ON consult_preps(appointment_local_id);
+
+-- Drive intake (v30+): one row per file a client uploaded to their Google Drive
+-- consult folder, and where the intake job copied it (SharePoint, Monday).
+-- Each copy is stamped separately so a retry only redoes what failed.
+-- Local-only — NOT rebuilt by sync; losing it would re-copy every file.
+CREATE TABLE IF NOT EXISTS drive_intake_files (
+    drive_file_id          TEXT PRIMARY KEY,
+    name                   TEXT NOT NULL,
+    mime_type              TEXT,
+    size                   INTEGER,
+    drive_created_at       TEXT,
+    folder_path            TEXT NOT NULL,         -- 'OCTOBER / October 02, 2026 / M / …'
+    match_status           TEXT NOT NULL,         -- matched | unmatched | ambiguous | unsupported
+    match_detail           TEXT,
+    appointment_local_id   TEXT,
+    appointment_monday_id  TEXT,
+    profile_local_id       TEXT,
+    sp_url                 TEXT,                  -- where it landed in SharePoint
+    sp_done_at             TEXT,
+    monday_update_id       TEXT,
+    monday_done_at         TEXT,
+    last_error             TEXT,
+    attempts               INTEGER NOT NULL DEFAULT 0,
+    first_seen_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_drive_intake_status ON drive_intake_files(match_status);
+CREATE INDEX IF NOT EXISTS idx_drive_intake_appt ON drive_intake_files(appointment_local_id);
 
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_profiles_batch ON profiles(batch_id);
@@ -1314,6 +1342,35 @@ export function initializeSchema(db: Database): void {
             created_at             TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_consult_preps_appt ON consult_preps(appointment_local_id);
+      `);
+    }
+
+    // Migration v29 → v30: Drive intake ledger. New table only.
+    if (fromVersion < 30) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS drive_intake_files (
+            drive_file_id          TEXT PRIMARY KEY,
+            name                   TEXT NOT NULL,
+            mime_type              TEXT,
+            size                   INTEGER,
+            drive_created_at       TEXT,
+            folder_path            TEXT NOT NULL,
+            match_status           TEXT NOT NULL,
+            match_detail           TEXT,
+            appointment_local_id   TEXT,
+            appointment_monday_id  TEXT,
+            profile_local_id       TEXT,
+            sp_url                 TEXT,
+            sp_done_at             TEXT,
+            monday_update_id       TEXT,
+            monday_done_at         TEXT,
+            last_error             TEXT,
+            attempts               INTEGER NOT NULL DEFAULT 0,
+            first_seen_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_drive_intake_status ON drive_intake_files(match_status);
+        CREATE INDEX IF NOT EXISTS idx_drive_intake_appt ON drive_intake_files(appointment_local_id);
       `);
     }
 

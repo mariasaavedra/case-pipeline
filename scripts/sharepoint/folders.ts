@@ -294,6 +294,85 @@ export async function uploadSmallFile(
   return (await res.json()) as DriveItem;
 }
 
+/** Upload-session chunks must be multiples of 320 KiB; 10 × 320 KiB ≈ 3.1 MiB. */
+const CHUNK = 320 * 1024 * 10;
+
+/**
+ * Upload a file of any size: a simple PUT when small, an upload session when
+ * not. Client uploads include 20 MB TIFF scans, well past the 4 MB simple
+ * limit. Same conflict rule as uploadSmallFile — the caller decides.
+ */
+export async function uploadFile(
+  auth: GraphAuth,
+  driveId: string,
+  parentItemId: string,
+  name: string,
+  content: Buffer,
+  contentType: string,
+  conflictBehavior: "fail" | "replace" | "rename",
+): Promise<DriveItem> {
+  if (content.length < SIMPLE_UPLOAD_MAX) {
+    const token = await auth.getToken();
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${parentItemId}:/${encodeURIComponent(name)}:/content` +
+        `?@microsoft.graph.conflictBehavior=${conflictBehavior}`,
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": contentType },
+        body: new Uint8Array(content),
+      },
+    );
+    if (!res.ok) throw await uploadError(res);
+    return (await res.json()) as DriveItem;
+  }
+
+  const session = await graphFetch<{ uploadUrl: string }>(
+    auth,
+    `/drives/${driveId}/items/${parentItemId}:/${encodeURIComponent(name)}:/createUploadSession`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": conflictBehavior } }),
+    },
+  );
+
+  // The upload URL is pre-authorised: sending a bearer token to it is an error.
+  for (let start = 0; start < content.length; start += CHUNK) {
+    const end = Math.min(start + CHUNK, content.length);
+    const res = await fetch(session.uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Length": String(end - start),
+        "Content-Range": `bytes ${start}-${end - 1}/${content.length}`,
+      },
+      body: new Uint8Array(content.subarray(start, end)),
+    });
+    if (!res.ok) {
+      await fetch(session.uploadUrl, { method: "DELETE" }).catch(() => undefined);
+      throw await uploadError(res);
+    }
+    if (end === content.length) return (await res.json()) as DriveItem;
+  }
+  throw new Error(`Upload of ${name} ended without a final response`);
+}
+
+async function uploadError(res: Response): Promise<GraphError> {
+  let message = `Graph ${res.status}`;
+  try {
+    message = ((await res.json()) as { error?: { message?: string } }).error?.message ?? message;
+  } catch { /* body was not JSON */ }
+  return new GraphError(res.status, message);
+}
+
+/** Resolve a SharePoint sharing link (…/:f:/s/site/…) to the item it points at. */
+export async function getItemBySharingUrl(
+  auth: GraphAuth,
+  url: string,
+): Promise<DriveItem & { parentReference?: { driveId?: string } }> {
+  const encoded = "u!" + Buffer.from(url, "utf-8").toString("base64").replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-");
+  return graphFetch(auth, `/shares/${encoded}/driveItem`);
+}
+
 /**
  * Whether a file still looks untouched by a person since the automation wrote
  * it. Regenerating a document is fine; overwriting something an attorney edited

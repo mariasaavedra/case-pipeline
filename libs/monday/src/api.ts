@@ -428,11 +428,41 @@ export async function addFileToColumn(
   contentType = "application/pdf",
   tokenOverride?: string,
 ): Promise<string> {
-  const token = tokenOverride ?? getApiToken();
   const query = `mutation ($file: File!) {
     add_file_to_column(item_id: ${JSON.stringify(String(itemId))}, column_id: ${JSON.stringify(columnId)}, file: $file) { id }
   }`;
-  const result = await requestWithRetry<{ data: { add_file_to_column: { id: string } } }>((timeoutMs) => {
+  const data = await uploadFile<{ add_file_to_column: { id: string } }>(query, fileName, bytes, contentType, tokenOverride);
+  return data.add_file_to_column.id;
+}
+
+/**
+ * Attach a file to an existing update (add_file_to_update). The file shows on
+ * the update and in the item's Files gallery, which is what makes this usable
+ * on boards that have no file column. Returns the asset id.
+ */
+export async function addFileToUpdate(
+  updateId: string,
+  fileName: string,
+  bytes: Uint8Array,
+  contentType = "application/octet-stream",
+  tokenOverride?: string,
+): Promise<string> {
+  const query = `mutation ($file: File!) {
+    add_file_to_update(update_id: ${JSON.stringify(String(updateId))}, file: $file) { id }
+  }`;
+  const data = await uploadFile<{ add_file_to_update: { id: string } }>(query, fileName, bytes, contentType, tokenOverride);
+  return data.add_file_to_update.id;
+}
+
+async function uploadFile<T>(
+  query: string,
+  fileName: string,
+  bytes: Uint8Array,
+  contentType: string,
+  tokenOverride?: string,
+): Promise<T> {
+  const token = tokenOverride ?? getApiToken();
+  const result = await requestWithRetry<{ data: T }>((timeoutMs) => {
     const form = new FormData();
     form.append("query", query);
     // Copy into a plain ArrayBuffer: Blob won't take a view over a SharedArrayBuffer.
@@ -448,7 +478,20 @@ export async function addFileToColumn(
       timeoutMs,
     );
   });
-  return result.data.add_file_to_column.id;
+  return result.data;
+}
+
+/** Files already on an item (column, update or gallery), for de-duplication. */
+export async function fetchItemAssets(
+  itemId: string,
+  tokenOverride?: string,
+): Promise<Array<{ id: string; name: string; file_size: number }>> {
+  const result = await mondayRequest<{ data: { items: Array<{ assets: Array<{ id: string; name: string; file_size: number }> }> } }>(
+    `query ($id: [ID!]) { items(ids: $id) { assets { id name file_size } } }`,
+    { id: [itemId] },
+    tokenOverride,
+  );
+  return result.data.items[0]?.assets ?? [];
 }
 
 // =============================================================================
