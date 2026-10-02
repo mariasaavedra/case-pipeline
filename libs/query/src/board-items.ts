@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import type { BoardItemSummary } from "./types";
-import { APPOINTMENT_BOARD_KEYS } from "./types";
+import { isAppointmentBoard } from "./types";
 
 interface RawBatchBoardItemRow extends RawBoardItemRow {
   profile_local_id: string;
@@ -72,7 +72,7 @@ export function batchGetClientBoardItems(
       groupTitle: row.groupTitle,
       columnValues: safeParseJson(row.column_values),
     };
-    if (APPOINTMENT_BOARD_KEYS.has(row.boardKey)) {
+    if (isAppointmentBoard(row.boardKey)) {
       entry.appointments.push(item);
     } else {
       (entry.byBoard[row.boardKey] ??= []).push(item);
@@ -123,7 +123,7 @@ export function getClientBoardItems(
       columnValues: safeParseJson(row.column_values),
     };
 
-    if (APPOINTMENT_BOARD_KEYS.has(row.boardKey)) {
+    if (isAppointmentBoard(row.boardKey)) {
       appointments.push(item);
     } else {
       const arr = (byBoard[row.boardKey] ??= []);

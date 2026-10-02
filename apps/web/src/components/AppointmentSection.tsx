@@ -1,12 +1,6 @@
 import type { BoardItemSummary } from "../api";
+import { appointmentBoardInitials } from "@case-pipeline/query/types";
 import { StatusBadge } from "./StatusBadge";
-
-const BOARD_LABEL: Record<string, string> = {
-  appointments_r: "R",
-  appointments_m: "M",
-  appointments_lb: "LB",
-  appointments_wh: "WH",
-};
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "\u2014";
@@ -93,7 +87,7 @@ export function AppointmentSection({ appointments }: Props) {
               </td>
               <td className="px-5 py-2.5">
                 <span className="board-tag">
-                  {BOARD_LABEL[a.boardKey] ?? a.boardKey}
+                  {appointmentBoardInitials(a.boardKey)}
                 </span>
               </td>
               <td className="px-5 py-2.5">

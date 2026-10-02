@@ -34,7 +34,7 @@ import { linkTargetForSite, CONSULT_FILE, type LinkTarget } from "./sharepoint/l
 import { consultOutcome, type ConsultOutcome } from "./sharepoint/consult-status.js";
 import { changeSimpleColumnValue, setApiToken } from "@case-pipeline/monday";
 
-const APPOINTMENT_BOARDS = ["appointments_r", "appointments_lb", "appointments_m"];
+import { listAppointmentBoardKeys } from "@case-pipeline/query/appointment-boards";
 
 /** Profiles board — config/boards.yaml. */
 const PROFILES_BOARD_ID = "8025265377";
@@ -59,7 +59,8 @@ function arg(name: string): string | undefined {
 const flag = (name: string) => process.argv.includes(`--${name}`);
 
 function loadRows(db: Database.Database): Row[] {
-  const placeholders = APPOINTMENT_BOARDS.map(() => "?").join(",");
+  const boards = listAppointmentBoardKeys(db);
+  const placeholders = boards.map(() => "?").join(",");
   return db
     .prepare(`
       SELECT
@@ -85,7 +86,7 @@ function loadRows(db: Database.Database): Row[] {
         AND json_extract(bi.column_values, '$.calendly.label') = 'yes'
       ORDER BY consultDate DESC
     `)
-    .all(...APPOINTMENT_BOARDS) as Row[];
+    .all(...boards) as Row[];
 }
 
 interface MatchedRow {
@@ -348,7 +349,7 @@ async function main() {
     planned.push({ ...row, path: consultFolderPath(year, result.name) });
   }
 
-  console.log(`Calendly consults on ${APPOINTMENT_BOARDS.join(", ")}: ${rows.length}\n`);
+  console.log(`Calendly consults on every appointment board: ${rows.length}\n`);
   console.log(`  already linked (skip)     ${alreadyLinked.length}`);
   console.log(`  no consult date (skip)    ${noDate.length}`);
   console.log(`  NEEDS A FOLDER            ${planned.length}`);

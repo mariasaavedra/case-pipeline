@@ -2765,6 +2765,215 @@ boards:
         types:
           - text
           - long_text
+  appointments_cr:
+    # Created as a copy of Appointments M (2026-10): same column ids, so the
+    # same mapping. Not R's, which sync would otherwise fall back to.
+    id: "18428646171"
+    name: Appointments CR
+    columns:
+      subitems:
+        resolve: by_id
+        id: subitems__1
+      status:
+        resolve: by_id
+        id: status
+      consult_date:
+        resolve: by_id
+        id: date3__1
+      create_fee_k:
+        resolve: by_id
+        id: lookup_mkzr8dme
+      case_type:
+        resolve: by_id
+        id: mirror_mkm0vyty
+      attorney:
+        resolve: by_id
+        id: people__1
+      case_no:
+        resolve: by_id
+        id: mirror_mkm0rr7g
+      alien_number:
+        resolve: by_id
+        id: dup__of_first_name2__1
+      date_of_birth:
+        resolve: by_id
+        id: date_of_birth_mkmqmrv
+      country_of_birth:
+        resolve: by_id
+        id: country_of_birth__1
+      phone:
+        resolve: by_id
+        id: text2
+      email:
+        resolve: by_id
+        id: text
+      description:
+        resolve: by_id
+        id: long_text
+      address:
+        resolve: by_id
+        id: text0__1
+      language:
+        resolve: by_id
+        id: status_1__1
+      monday_doc_v2:
+        resolve: by_id
+        id: monday_doc_v2__1
+      consult_id:
+        resolve: by_id
+        id: item_id__1
+      profiles:
+        resolve: by_id
+        id: connect_boards4__1
+      pronouns:
+        resolve: by_id
+        id: lookup_mm0aedf8
+      consult_uuid:
+        resolve: by_id
+        id: text2__1
+      calendly:
+        resolve: by_id
+        id: status_1_Mjj3Ia2N
+      consult_created_on:
+        resolve: by_id
+        id: date_1__1
+      link_to_jail_intakes:
+        resolve: by_id
+        id: link_to_jail_intakes_mkkgxq4a
+      client_e_file:
+        resolve: by_id
+        id: mirror_mkkz5py9
+      case_type_1:
+        resolve: by_id
+        id: mirror_mkkzgqsx
+      projects:
+        resolve: by_title
+        pattern: projects
+        types:
+          - mirror
+          - lookup
+      fee_ks:
+        resolve: by_id
+        id: mirror_mkm0a3nx
+      paralegal:
+        resolve: by_id
+        id: mirror_mkmnh620
+      jail_intakes:
+        resolve: by_id
+        id: link_to_jail_intakes_mkn2zsy5
+      consult_sharepoint:
+        resolve: by_id
+        id: text_mkn3gp82
+      link_to_profiles:
+        resolve: by_id
+        id: board_relation_mknznp7x
+      link_to_open_forms:
+        resolve: by_id
+        id: board_relation_mkpkrjkm
+      profile_id:
+        resolve: by_id
+        id: lookup_mkxpqm68
+      consult_file:
+        resolve: by_id
+        id: lookup_mkxpm30e
+      paid:
+        resolve: by_id
+        id: boolean_mm07h8ct
+      docs:
+        resolve: by_id
+        id: boolean_mm07cjs3
+      call_reminder:
+        resolve: by_id
+        id: boolean_mm07zyg1
+      m_consult_note:
+        resolve: by_id
+        id: long_text_mm0af4tz
+      method:
+        resolve: by_id
+        id: dropdown_mm0anrrq
+      zoom_link:
+        resolve: by_id
+        id: link_mm0fyc43
+      link_to_activities:
+        resolve: by_id
+        id: link_to_activities_mkm033kc
+      submission_link:
+        resolve: by_title
+        pattern: submission.*link
+      mirror:
+        resolve: by_title
+        pattern: mirror
+        types:
+          - mirror
+          - lookup
+      mirror_1:
+        resolve: by_title
+        pattern: mirror.*1
+        types:
+          - mirror
+          - lookup
+      court_attorney_notes:
+        resolve: by_title
+        pattern: court.*attorney.*notes
+        types:
+          - mirror
+          - lookup
+      m_court_prep_note:
+        resolve: by_title
+        pattern: m.*-.*court.*prep.*note
+        types:
+          - text
+          - long_text
+      court_prep_notes_court_cases:
+        resolve: by_type
+        type: board_relation
+      client_court_case_appt:
+        resolve: by_title
+        pattern: client.*-.*court.*case.*appt?
+        types:
+          - status
+      appts_profiles:
+        resolve: by_title
+        pattern: appts.*-.*profiles
+        types:
+          - mirror
+          - lookup
+      first_name:
+        resolve: by_title
+        pattern: first.*name
+        types:
+          - text
+          - long_text
+      last_name:
+        resolve: by_title
+        pattern: last.*name
+        types:
+          - text
+          - long_text
+      street:
+        resolve: by_title
+        pattern: street
+        types:
+          - text
+          - long_text
+      city:
+        resolve: by_title
+        pattern: city
+        types:
+          - text
+          - long_text
+      state:
+        resolve: by_title
+        pattern: state
+        types:
+          - text
+          - long_text
+      zip_code:
+        resolve: by_title
+        pattern: zip.*code
+        types:
+          - text
+          - long_text
   profiles:
     id: "8025265377"
     name: Profiles

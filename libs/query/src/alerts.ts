@@ -6,9 +6,9 @@ import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import type { AlertsResult, AlertGroup, AlertItem } from "./types";
 import { getMailReviewAlertGroup, countMailToReview } from "./mail-review";
+import { listAppointmentBoardKeys } from "./appointment-boards";
 import {
   CLOSED_BOARD_ITEM_STATUSES,
-  APPOINTMENT_BOARD_KEYS,
   PAID_CONTRACT_STATUSES,
 } from "./types";
 
@@ -43,7 +43,7 @@ export function getAlertsTotalCount(db: Database): number {
 
   const closedStatuses = [...CLOSED_BOARD_ITEM_STATUSES];
   const closedPh = closedStatuses.map(() => "?").join(",");
-  const apptKeys = [...APPOINTMENT_BOARD_KEYS];
+  const apptKeys = listAppointmentBoardKeys(db);
   const apptPh = apptKeys.map(() => "?").join(",");
   const paidStatuses = [...PAID_CONTRACT_STATUSES];
   const paidPh = paidStatuses.map(() => "?").join(",");
@@ -102,7 +102,7 @@ function getOverdueDeadlines(
 ): AlertGroup {
   const closedStatuses = [...CLOSED_BOARD_ITEM_STATUSES];
   const closedPh = closedStatuses.map(() => "?").join(",");
-  const apptKeys = [...APPOINTMENT_BOARD_KEYS];
+  const apptKeys = listAppointmentBoardKeys(db);
   const apptPh = apptKeys.map(() => "?").join(",");
 
   const attorneyClause = opts.attorney ? "AND bi.attorney = ?" : "";
@@ -165,7 +165,7 @@ function getStaleCases(
 ): AlertGroup {
   const closedStatuses = [...CLOSED_BOARD_ITEM_STATUSES];
   const closedPh = closedStatuses.map(() => "?").join(",");
-  const apptKeys = [...APPOINTMENT_BOARD_KEYS];
+  const apptKeys = listAppointmentBoardKeys(db);
   const apptPh = apptKeys.map(() => "?").join(",");
   const staleDate = addDays(todayStr, -30);
 
@@ -249,7 +249,7 @@ function getPendingContractsWithoutActivity(db: Database): AlertGroup {
   const paidPh = paidStatuses.map(() => "?").join(",");
   const closedStatuses = [...CLOSED_BOARD_ITEM_STATUSES];
   const closedPh = closedStatuses.map(() => "?").join(",");
-  const apptKeys = [...APPOINTMENT_BOARD_KEYS];
+  const apptKeys = listAppointmentBoardKeys(db);
   const apptPh = apptKeys.map(() => "?").join(",");
 
   const countRow = db
@@ -307,7 +307,7 @@ function getPendingContractsWithoutActivity(db: Database): AlertGroup {
 function getAlertAttorneys(db: Database, todayStr: string): string[] {
   const closedStatuses = [...CLOSED_BOARD_ITEM_STATUSES];
   const closedPh = closedStatuses.map(() => "?").join(",");
-  const apptKeys = [...APPOINTMENT_BOARD_KEYS];
+  const apptKeys = listAppointmentBoardKeys(db);
   const apptPh = apptKeys.map(() => "?").join(",");
 
   const rows = db

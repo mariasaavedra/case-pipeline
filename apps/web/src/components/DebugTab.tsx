@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from "react";
 import type { ClientCaseSummary, BoardItemSummary } from "../api";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 import { useStatusOptions } from "../StatusOptionsProvider";
 import { EntryEditorModal } from "./EntryEditorModal";
 
@@ -100,7 +100,7 @@ export function DebugTab({ data }: Props) {
           <section key={boardKey}>
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-sm font-semibold" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
-                {BOARD_DISPLAY_NAMES[boardKey] ?? boardKey}
+                {boardDisplayName(boardKey)}
               </h3>
               <span className="text-[11px]" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)" }}>
                 {visible.length}

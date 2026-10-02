@@ -25,7 +25,8 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
-import { APPOINTMENT_BOARD_KEYS, BOARD_DISPLAY_NAMES } from "./types";
+import { boardDisplayName } from "./types";
+import { listAppointmentBoardKeys } from "./appointment-boards";
 
 export type CalendarCategory =
   | "hearing"
@@ -83,13 +84,14 @@ const SUPPLEMENTARY_BOARD_CATEGORY: Record<string, CalendarCategory> = {
   motions: "hearing",
 };
 
-const APPOINTMENT_BOARD_KEY_LIST = [...APPOINTMENT_BOARD_KEYS, "_fa_jail_intakes"];
+// Read per call: an attorney added in Settings appears once their board syncs.
+function appointmentCalendarBoardKeys(db: Database): string[] {
+  return [...listAppointmentBoardKeys(db), "_fa_jail_intakes"];
+}
 
-const ALL_CALENDAR_BOARD_KEYS = [
-  "calendaring",
-  ...Object.keys(SUPPLEMENTARY_BOARD_CATEGORY),
-  ...APPOINTMENT_BOARD_KEY_LIST,
-];
+function allCalendarBoardKeys(db: Database): string[] {
+  return ["calendaring", ...Object.keys(SUPPLEMENTARY_BOARD_CATEGORY), ...appointmentCalendarBoardKeys(db)];
+}
 
 // =============================================================================
 // Attorney normalization
@@ -151,12 +153,13 @@ function attorneyMatchClause(canonicalName: string): { sql: string; params: stri
 }
 
 function getCalendarAttorneyList(db: Database): string[] {
-  const placeholders = ALL_CALENDAR_BOARD_KEYS.map(() => "?").join(",");
+  const boardKeys = allCalendarBoardKeys(db);
+  const placeholders = boardKeys.map(() => "?").join(",");
   const rows = db
     .prepare(
       `SELECT DISTINCT attorney FROM board_items WHERE board_key IN (${placeholders}) AND attorney IS NOT NULL`,
     )
-    .all(...ALL_CALENDAR_BOARD_KEYS) as { attorney: string }[];
+    .all(...boardKeys) as { attorney: string }[];
 
   const names = new Set<string>();
   for (const r of rows) {
@@ -427,7 +430,7 @@ function getSupplementaryEvents(
     localId: r.localId,
     boardKey: r.boardKey,
     category: SUPPLEMENTARY_BOARD_CATEGORY[r.boardKey]!,
-    subType: BOARD_DISPLAY_NAMES[r.boardKey] ?? r.boardKey,
+    subType: boardDisplayName(r.boardKey),
     date: r.eventDate,
     time: r.eventTime,
     status: r.status,
@@ -450,9 +453,10 @@ function getAppointmentEvents(
 ): CalendarEvent[] {
   if (!wantsCategory("appointment")) return [];
 
-  const boardPlaceholders = APPOINTMENT_BOARD_KEY_LIST.map(() => "?").join(",");
+  const boardKeys = appointmentCalendarBoardKeys(db);
+  const boardPlaceholders = boardKeys.map(() => "?").join(",");
   const attorneyClause = opts.attorney ? "AND bi.attorney = ?" : "";
-  const params: (string | number)[] = [...APPOINTMENT_BOARD_KEY_LIST, opts.from, opts.to];
+  const params: (string | number)[] = [...boardKeys, opts.from, opts.to];
   if (opts.attorney) params.push(opts.attorney);
 
   const rows = db
@@ -481,7 +485,7 @@ function getAppointmentEvents(
     localId: r.localId,
     boardKey: r.boardKey,
     category: "appointment" as const,
-    subType: BOARD_DISPLAY_NAMES[r.boardKey] ?? r.boardKey,
+    subType: boardDisplayName(r.boardKey),
     date: r.eventDate,
     time: r.eventTime,
     status: r.status,

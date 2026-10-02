@@ -97,9 +97,9 @@ to skip an already-existing folder.
 
 ## Trigger
 
-An item on **Appointments R / LB / M** whose **"Calendly?"** status
+An item on any attorney's **Appointments** board (every `appointments_<initials>` board synced, so R, LB, M, WH, CR, and any attorney added later) whose **"Calendly?"** status
 (`status_1_Mjj3Ia2N`, label `yes`) is set, and which is linked to a profile
-(`connect_boards4__1`). All three boards share the same column ids.
+(`connect_boards4__1`). The appointment boards share these column ids.
 
 ## What it produces
 

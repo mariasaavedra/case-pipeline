@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ClientCaseSummary } from "../api";
 import { renderProfileDoc } from "../api";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 
 interface Props {
   data: ClientCaseSummary;
@@ -23,7 +23,7 @@ function generateSummaryText(data: ClientCaseSummary): string {
 
   for (const [boardKey, items] of Object.entries(data.boardItems)) {
     if (items.length === 0) continue;
-    lines.push(`${BOARD_DISPLAY_NAMES[boardKey] ?? boardKey}: ${items.length} item(s)`);
+    lines.push(`${boardDisplayName(boardKey)}: ${items.length} item(s)`);
     for (const item of items) {
       lines.push(`  - ${item.name} [${item.status ?? "No status"}]`);
     }

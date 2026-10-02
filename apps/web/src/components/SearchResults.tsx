@@ -1,5 +1,5 @@
 import type { SearchResult, TypedSearchResult } from "../api";
-import { BOARD_DISPLAY_NAMES } from "@case-pipeline/query/types";
+import { boardDisplayName } from "@case-pipeline/query/types";
 
 interface ProfileResultsProps {
   results: SearchResult[];
@@ -159,7 +159,7 @@ export function TypedSearchResults({ results, onSelect }: TypedResultsProps) {
                 style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
               >
                 {r.boardKey
-                  ? (BOARD_DISPLAY_NAMES[r.boardKey] ?? r.boardKey)
+                  ? boardDisplayName(r.boardKey)
                   : r.caseType ?? r.type}
               </td>
             </tr>
