@@ -50,7 +50,7 @@ describe("parsePrepBody", () => {
   it("accepts an Emergency consultation and names it as such in the note", () => {
     const b = body({ apptType: "Emergency consultation" });
     expect(b.apptType).toBe("Emergency consultation");
-    const n = prepNote(b, { date: null, time: null, attorney: null, author: "Ana" });
+    const n = prepNote(b);
     expect(n.text).toContain("Type of appt: Emergency consultation");
   });
 
@@ -65,7 +65,7 @@ describe("parsePrepBody", () => {
     const b = body({ apptType: "Detained appt", detainedAt: " Chase Co. (KS) ", apptTypeOther: "ignored" });
     expect(b.detainedAt).toBe("Chase Co. (KS)");
     expect(b.apptTypeOther).toBeNull();
-    const n = prepNote(b, { date: null, time: null, attorney: null, author: "Ana" });
+    const n = prepNote(b);
     expect(n.text).toContain("Type of appt: Detained appt — Chase Co. (KS)");
     // Not asked for, so not kept, on any other type.
     expect(body({ detainedAt: "Chase Co." }).detainedAt).toBeNull();
@@ -106,43 +106,39 @@ describe("parsePrepBody", () => {
 });
 
 describe("prepNote", () => {
-  const ctx = { date: "2026-10-03", time: "14:30", attorney: "Michael Sharma-Crawford", author: "Ana Reyes" };
-
-  it("reads the same in text and html", () => {
+  it("is just the fields: no headline, no Prepared by, Description labelled", () => {
     const n = prepNote(
-      body({ method: "Zoom", zoomLink: "https://zoom.us/j/9", description: "Asks about\nhis I-130", documents: [{ name: "e-file", url: "https://x.sharepoint.com/e" }] }),
-      ctx,
+      body({ method: "Zoom", zoomLink: "https://zoom.us/j/9", description: "Asks about\nhis I-130", documents: [{ name: "Consult folder", url: "https://x.sharepoint.com/c" }] }),
     );
-    expect(n.title).toBe("Consult prep — Oct 3, 2026 at 2:30 PM");
     expect(n.text).toBe(
       [
-        "Consult prep — Oct 3, 2026 at 2:30 PM with Michael Sharma-Crawford",
         "Type of appt: 1st time",
         "How to proceed: Zoom — https://zoom.us/j/9",
         "Documents:",
-        "• e-file — https://x.sharepoint.com/e",
-        "",
-        "Asks about\nhis I-130",
-        "",
-        "Prepared by Ana Reyes",
+        "• Consult folder — https://x.sharepoint.com/c",
+        "Description: Asks about\nhis I-130",
       ].join("\n"),
     );
-    expect(n.html).toContain('<a href="https://zoom.us/j/9" target="_blank">https://zoom.us/j/9</a>');
-    expect(n.html).toContain('<li>📎 <a href="https://x.sharepoint.com/e" target="_blank">e-file</a></li>');
-    expect(n.html).toContain("Asks about<br>his I-130");
+    expect(n.html).toBe(
+      '<p><strong>Type of appt:</strong> 1st time</p>' +
+      '<p><strong>How to proceed:</strong> Zoom — <a href="https://zoom.us/j/9" target="_blank" rel="noopener noreferrer">https://zoom.us/j/9</a></p>' +
+      '<p><strong>Documents:</strong></p>' +
+      // The link reads as the document's name — "Consult folder" in blue, not the URL.
+      '<p>• <a href="https://x.sharepoint.com/c" target="_blank" rel="noopener noreferrer">Consult folder</a></p>' +
+      '<p><strong>Description:</strong> Asks about<br>his I-130</p>',
+    );
+    expect(n.html).not.toMatch(/Consult prep|Prepared by/);
+  });
+
+  it("leaves out Documents and Description when there are none", () => {
+    expect(prepNote(body()).text).toBe("Type of appt: 1st time\nHow to proceed: Phone — (913) 555-0101");
   });
 
   it("escapes typed text in the html", () => {
-    const n = prepNote(body({ description: "<script>x</script>", apptType: "Other", apptTypeOther: "A & B" }), ctx);
+    const n = prepNote(body({ description: "<script>x</script>", apptType: "Other", apptTypeOther: "A & B" }));
     expect(n.html).not.toContain("<script>");
     expect(n.html).toContain("&lt;script&gt;");
     expect(n.html).toContain("Other — A &amp; B");
-  });
-
-  it("copes with a consult that has no date or attorney", () => {
-    const n = prepNote(body(), { date: null, time: null, attorney: null, author: "Ana" });
-    expect(n.title).toBe("Consult prep");
-    expect(n.text.split("\n")[0]).toBe("Consult prep");
   });
 });
 
