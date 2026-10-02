@@ -31,7 +31,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import { addFileToUpdate, createUpdate, fetchItemAssets, setApiToken } from "@case-pipeline/monday";
 import { driveClientFromEnv, FOLDER_MIME, type DriveClient, type DriveFile } from "./drive/drive-client.js";
-import { readContext } from "./drive/folder-names.js";
+import { isMonthFolder, readContext } from "./drive/folder-names.js";
 import { matchUpload, WINDOW_DAYS, type AppointmentRow, type MatchResult } from "./drive/match.js";
 import { resolveDestination, type ClientLinks, type Destination } from "./drive/destination.js";
 import { graphAuthFromEnv } from "./sharepoint/auth.js";
@@ -210,7 +210,8 @@ async function main() {
     if (done && ((done.sp_done_at && done.monday_done_at) || done.match_status === "unsupported")) continue;
 
     const ancestors = await ancestorsOf(drive, rootId, file, folderCache);
-    if (!ancestors) {
+    // Outside the root, or in one of the firm's own folders beside the months.
+    if (!ancestors || !isMonthFolder(ancestors[0])) {
       outsideTree++;
       continue;
     }
@@ -374,7 +375,7 @@ async function main() {
 
   console.log(
     `[drive] ${files.length} file(s) since ${since}` +
-      (outsideTree ? ` (${outsideTree} outside the intake folder, ignored)` : "") +
+      (outsideTree ? ` (${outsideTree} outside the month folders, ignored)` : "") +
       ` · to SharePoint ${tally.sharepoint} · to Monday ${tally.monday} · already there ${tally.already}` +
       ` · waiting for a folder ${tally.waiting} · for review ${tally.review} · failed ${tally.failed}`,
   );

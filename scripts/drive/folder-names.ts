@@ -22,6 +22,15 @@ const MONTHS = [
   "july", "august", "september", "october", "november", "december",
 ];
 
+/**
+ * "OCTOBER" — the only top-level folders the intake reads. The root also holds
+ * the firm's own folders (CLE programs, "2026 - CONTRACTS", …); files there are
+ * not client uploads and must not even reach review.
+ */
+export function isMonthFolder(name: string | undefined): boolean {
+  return !!name && MONTHS.includes(name.trim().toLowerCase());
+}
+
 /** "October 02, 2026" → "2026-10-02". */
 export function parseDayFolder(name: string): string | null {
   const m = name.trim().match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
