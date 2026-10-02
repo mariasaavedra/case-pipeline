@@ -578,6 +578,20 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                 />
               </label>
 
+              {/* Always visible: a jail intake below reuses it, so it can't hide
+                  behind "More options". */}
+              <div style={{ display: "block", marginBottom: 12 }}>
+                {fieldLabel("Language")}
+                <Select items={languageItems} value={language} onValueChange={(v) => setLanguage(v ?? "")}>
+                  <SelectTrigger aria-label="Language" size="sm" className="w-full border-border-light bg-surface">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent code="D17" className="w-[var(--anchor-width)]">
+                    {languageItems.map((l) => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Some calls ARE a jail intake. Filling it in here means one save
                   creates the call and then the intake linked to it, instead of
                   logging the call and starting again in another popup. */}
@@ -610,7 +624,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                         omit={["pocName", "pocPhone", "language"]}
                       />
                       <p style={{ fontSize: 11, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginTop: -4 }}>
-                        The caller above becomes the intake&rsquo;s point of contact, and the call&rsquo;s language is reused.
+                        The caller above becomes the intake&rsquo;s point of contact, and the call&rsquo;s Language above is reused.
                         Everything else can be filled in on the board.
                       </p>
                     </div>
@@ -639,22 +653,11 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                 onClick={() => setShowMore((s) => !s)}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: showMore ? 12 : 4, fontSize: 12, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
               >
-                {showMore ? "▾ Fewer options" : "▸ More options (language, taken by, highlight for)"}
+                {showMore ? "▾ Fewer options" : "▸ More options (taken by, highlight for)"}
               </button>
 
               {showMore && (
                 <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-                  <div style={{ flex: 1, display: "block" }}>
-                    {fieldLabel("Language")}
-                    <Select items={languageItems} value={language} onValueChange={(v) => setLanguage(v ?? "")}>
-                      <SelectTrigger aria-label="Language" size="sm" className="w-full border-border-light bg-surface">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent code="D17" className="w-[var(--anchor-width)]">
-                        {languageItems.map((l) => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div style={{ flex: 1, display: "block" }}>
                     {fieldLabel("Taken by")}
                     <Select items={staffItems} value={takenById} onValueChange={(v) => setTakenById(v ?? "")}>

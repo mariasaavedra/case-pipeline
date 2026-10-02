@@ -20,7 +20,11 @@ export const INTAKE_LANGUAGES = [
 /** The board's own options on "Have you even been removed?" (its spelling). */
 export const PRIOR_REMOVAL_OPTIONS = ["No", "Yes", "Unknown"];
 
+/** Statuses a new intake can start in — the board's spelling. Mirrors the API. */
+export const INTAKE_CREATE_STATUSES = ["New Detainee", "Payment link sent. Waiting on payment"];
+
 export interface JailIntakeFieldValues {
+  status: string;
   firstName: string;
   lastName: string;
   jail: string;
@@ -28,6 +32,7 @@ export interface JailIntakeFieldValues {
   language: string;
   pocName: string;
   pocPhone: string;
+  pocEmail: string;
   countryOfBirth: string;
   dateOfBirth: string;
   priorRemoval: string;
@@ -39,6 +44,7 @@ export interface JailIntakeFieldValues {
 export type JailIntakeFieldName = keyof JailIntakeFieldValues;
 
 export const emptyJailIntakeFields: JailIntakeFieldValues = {
+  status: "New Detainee",
   firstName: "",
   lastName: "",
   jail: "",
@@ -46,6 +52,7 @@ export const emptyJailIntakeFields: JailIntakeFieldValues = {
   language: "",
   pocName: "",
   pocPhone: "",
+  pocEmail: "",
   countryOfBirth: "",
   dateOfBirth: "",
   priorRemoval: "",
@@ -68,6 +75,8 @@ export function toCreateJailIntakeInput(
     language: v.language || extra.language || undefined,
     pocName: t(v.pocName) ?? extra.pocName,
     pocPhone: t(v.pocPhone) ?? extra.pocPhone,
+    pocEmail: t(v.pocEmail),
+    status: v.status || undefined,
     countryOfBirth: t(v.countryOfBirth),
     dateOfBirth: t(v.dateOfBirth),
     priorRemoval: v.priorRemoval || undefined,
