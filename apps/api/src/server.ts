@@ -539,6 +539,7 @@ const server = app.listen(PORT, HOST, () => {
   if (DB_SOURCE === "live") {
     scheduleNightlySync();
     scheduleConsultSweep();
+    scheduleDriveIntake();
     scheduleWalCheckpoint();
     scheduleBackups();
     if (MONDAY_API_TOKEN) {
@@ -778,6 +779,50 @@ function runConsultSweep(days: string): Promise<void> {
       reject(err);
     });
   });
+}
+
+/**
+ * Drive intake: copy client uploads from their Google Drive consult folder to
+ * SharePoint + the Monday appointment. See docs/features/drive-intake.md.
+ *
+ * Off unless DRIVE_INTAKE=on. Runs as its own process, like the sweep, and
+ * never alongside a sync or another intake run.
+ */
+let intakeInFlight = false;
+
+function scheduleDriveIntake() {
+  if (process.env.DRIVE_INTAKE !== "on") {
+    console.log("[drive] Intake DISABLED (set DRIVE_INTAKE=on to enable). Run manually: npm run drive:intake");
+    return;
+  }
+  const intakeCron = process.env.DRIVE_INTAKE_CRON ?? "*/15 7-20 * * *";
+
+  cron.schedule(
+    intakeCron,
+    () => {
+      if (syncInFlight || intakeInFlight) {
+        console.log("[drive] Intake skipped — a sync or intake is running.");
+        return;
+      }
+      intakeInFlight = true;
+      const child = spawn("npm", ["run", "drive:intake", "--", "--apply"], {
+        cwd: REPO_ROOT,
+        stdio: "inherit",
+        env: process.env,
+        shell: true,
+      });
+      child.on("close", (code) => {
+        intakeInFlight = false;
+        if (code !== 0) console.error(`[drive] Intake exited with code ${code}`);
+      });
+      child.on("error", (err) => {
+        intakeInFlight = false;
+        console.error("[drive] Error:", err);
+      });
+    },
+    { timezone: FIRM_TIMEZONE },
+  );
+  console.log(`[drive] Intake scheduled — cron "${intakeCron}" (${FIRM_TIMEZONE}).`);
 }
 
 function scheduleWalCheckpoint() {

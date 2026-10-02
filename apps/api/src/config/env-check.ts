@@ -229,10 +229,28 @@ export function checkEnvironment(opts: CheckOptions = {}): EnvIssue[] {
     "SYNC_INCREMENTAL_CRON",
     "BACKUP_CRON",
     "CONSULT_SWEEP_CRON",
+    "DRIVE_INTAKE_CRON",
   ] as const) {
     const expr = env[key]?.trim();
     if (expr && !cron.validate(expr)) {
       err(key, "is not a valid cron expression — the job would never run", "Check the five-field syntax.");
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drive intake — switched on but unable to run
+  // ---------------------------------------------------------------------------
+  if (env.DRIVE_INTAKE?.trim() === "on") {
+    for (const key of ["DRIVE_INTAKE_ROOT_ID", "GOOGLE_SERVICE_ACCOUNT_KEY"] as const) {
+      if (!env[key]?.trim()) err(key, "is required when DRIVE_INTAKE=on", "See docs/features/drive-intake.md.");
+    }
+    const since = env.DRIVE_INTAKE_SINCE?.trim();
+    if (!since || !/^\d{4}-\d{2}-\d{2}$/.test(since)) {
+      err(
+        "DRIVE_INTAKE_SINCE",
+        "must be a date (YYYY-MM-DD) when DRIVE_INTAKE=on",
+        "Files uploaded before it are left alone — set it to the day reception stops copying by hand.",
+      );
     }
   }
 

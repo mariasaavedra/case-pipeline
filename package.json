@@ -33,7 +33,8 @@
     "sharepoint:folders": "tsx --env-file-if-exists=.env scripts/sharepoint-folders.ts",
     "sharepoint:links": "tsx --env-file-if-exists=.env scripts/sharepoint-links.ts",
     "consult:folders": "tsx --env-file-if-exists=.env scripts/consult-folders.ts",
-    "consult:sweep": "tsx --env-file-if-exists=.env scripts/consult-sweep.ts"
+    "consult:sweep": "tsx --env-file-if-exists=.env scripts/consult-sweep.ts",
+    "drive:intake": "tsx --env-file-if-exists=.env scripts/drive-intake.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
