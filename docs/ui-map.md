@@ -60,6 +60,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P15 | Court Cases | `/court-cases` (Docket), `/court-cases/prep` (Prep Pipeline), `/court-cases/motions` (Motions) | Sidebar → Court Cases (admins only for now) | `components/CourtCasesPage.tsx` |
 | P16 | Map | `/map` | Sidebar → Map | placeholder in `app.tsx` (not built yet) |
 | P17 | Receptionists | `/reception` | Sidebar → Receptionists (below Appointments) | `components/ReceptionPage.tsx` |
+| P18 | Address Changes | `/address-changes` | Sidebar → Address Changes (admins only for now) | `components/AddressChangesPage.tsx` |
 
 ### Global
 
@@ -150,6 +151,14 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 |---|---|---|
 | P17.1 | Header | Consult count, not prepped count; **+ Book Appt** → M10 (pick the client first); range (Today / Tomorrow / Next 7 days), attorney and "not prepped" filters |
 | P17.2 | Consult list | Grouped by day: time, client (→ M3), Calendly / language tags, attorney board, description, Prepped / Not prepped; **Focus** → M5; **Prep** → M18 |
+
+### Inside P18 Address Changes
+
+| Code | Name | Notes |
+|---|---|---|
+| P18.1 | Header | Open count, paid and waiting on us, waiting on payment; colour legend (days since Date Received) |
+| P18.2 | Filters + cleanup strip | Assistant (D30); show/hide items unpaid 6+ months; "Needs cleanup on Monday" chips (unpaid 6+ months, court or USCIS not set, no new address, no date received, profile not connected) |
+| P18.3 | List by phase | Paid: our turn · With client or attorney · Submitted · Waiting on payment · On hold. Row: client (→ M3), court/USCIS + ECAS/paper, old → new address, received + age, next hearing (court changes), assistant, status picker (D31) that writes to Monday after a confirm; **Sent Out** also sets Date Sent = today |
 
 ### Inside P6 My Cases
 
@@ -275,5 +284,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D27 | Paralegal filter | P15.2 | `CourtCasesPage.tsx` |
 | D28 | Case Prep Status picker | P15.4 (Prep Pipeline) | `CourtCasesPage.tsx` |
 | D29 | Motion type filter | P15.2 (Motions) | `CourtCasesPage.tsx` |
+| D30 | Assistant filter | P18.2 | `AddressChangesPage.tsx` |
+| D31 | Address change status picker | P18.3 | `AddressChangesPage.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.
