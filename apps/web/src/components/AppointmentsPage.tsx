@@ -844,6 +844,12 @@ export function AppointmentsPage() {
 
   const attorneys = data?.attorneys ?? [];
 
+  // A remembered filter that is no longer an option (e.g. an old "A, B"
+  // combination chip) would show nothing — fall back to All.
+  useEffect(() => {
+    if (data && attorney !== "all" && !data.attorneys.includes(attorney)) setAttorney("all");
+  }, [data, attorney]);
+
   // Group entries by date for list mode (week view)
   const entriesByDate: Record<string, AppointmentEntry[]> = {};
   if (data) {

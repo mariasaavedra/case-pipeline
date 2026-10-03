@@ -175,6 +175,23 @@ describe("getAppointments", () => {
     db.close();
   });
 
+  test("attorney filter includes appointments shared with other attorneys", () => {
+    const db = freshDb();
+    const day = todayStr();
+    insertBoardItem(db, { localId: "a1", boardKey: "appointments_lb", name: "Solo", nextDate: day, attorney: "Lucy Betteridge" });
+    insertBoardItem(db, { localId: "a2", boardKey: "appointments_m", name: "Shared", nextDate: day, attorney: "Michael Sharma-Crawford, Lucy Betteridge" });
+    insertBoardItem(db, { localId: "a3", boardKey: "appointments_m", name: "Other", nextDate: day, attorney: "Michael Sharma-Crawford" });
+    // A name that only contains another's as a substring must not match.
+    insertBoardItem(db, { localId: "a4", boardKey: "appointments_m", name: "Lookalike", nextDate: day, attorney: "Lucy Betteridge Jr" });
+
+    const lucy = getAppointments(db, { attorney: "Lucy Betteridge", date: day });
+    expect(lucy.entries.map((e) => e.appointment.name).sort()).toEqual(["Shared", "Solo"]);
+
+    const michael = getAppointments(db, { attorney: "Michael Sharma-Crawford", date: day });
+    expect(michael.entries.map((e) => e.appointment.name).sort()).toEqual(["Other", "Shared"]);
+    db.close();
+  });
+
   test("week range includes appointments within 7 days", () => {
     const db = freshDb();
     insertProfile(db, { localId: "p1", name: "Maria Garcia" });
@@ -394,6 +411,17 @@ describe("getAttorneyList", () => {
 
     const attorneys = getAttorneyList(db);
     expect(attorneys).toEqual(["M", "R"]);
+    db.close();
+  });
+
+  test("splits shared appointments into one option per attorney", () => {
+    const db = freshDb();
+
+    insertBoardItem(db, { localId: "a1", boardKey: "appointments_lb", name: "C1", attorney: "Lucy Betteridge" });
+    insertBoardItem(db, { localId: "a2", boardKey: "appointments_lb", name: "C2", attorney: "Michael Sharma-Crawford, Lucy Betteridge" });
+    insertBoardItem(db, { localId: "a3", boardKey: "appointments_wh", name: "C3", attorney: "William Hanna, Michael Sharma-Crawford" });
+
+    expect(getAttorneyList(db)).toEqual(["Lucy Betteridge", "Michael Sharma-Crawford", "William Hanna"]);
     db.close();
   });
 
