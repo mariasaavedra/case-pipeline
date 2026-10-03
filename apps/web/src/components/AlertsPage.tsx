@@ -200,6 +200,19 @@ function AlertItemRow({
             {item.daysOverdue}d overdue
           </span>
         )}
+        {item.daysLeft != null && (
+          <span
+            className="text-xs font-semibold"
+            title={item.date ?? undefined}
+            style={{
+              color: item.daysLeft <= 7 ? "var(--color-status-red)" : "var(--color-status-yellow)",
+              fontFamily: "var(--font-mono)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {item.daysLeft === 0 ? "due today" : `${item.daysLeft}d left`}
+          </span>
+        )}
         {item.daysSinceUpdate != null && (
           <span
             className="text-xs font-semibold"
@@ -208,7 +221,7 @@ function AlertItemRow({
             {item.daysSinceUpdate}d since update
           </span>
         )}
-        {item.daysOverdue == null && item.daysSinceUpdate == null && item.date && (
+        {item.daysOverdue == null && item.daysLeft == null && item.daysSinceUpdate == null && item.date && (
           <span
             className="text-xs"
             style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}

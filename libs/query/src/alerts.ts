@@ -6,6 +6,7 @@ import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import type { AlertsResult, AlertGroup, AlertItem } from "./types";
 import { getMailReviewAlertGroup, countMailToReview } from "./mail-review";
+import { getAppealDeadlineAlertGroup, getAppealDeadlineItems } from "./appeal-deadlines";
 import { CLOSED_BOARD_ITEM_STATUSES } from "./types";
 
 interface AlertOptions {
@@ -41,6 +42,7 @@ export function getAlerts(
 ): AlertsResult {
   const todayStr = formatDate(new Date());
   const groups = [
+    getAppealDeadlineAlertGroup(db, opts),
     getOverdueDeadlines(db, todayStr, opts),
     getStaleCases(db, todayStr, opts),
     getMailReviewAlertGroup(db, opts),
@@ -58,7 +60,8 @@ export function getAlertsTotalCount(db: Database): number {
   return (
     countOverdue(db, todayStr, {}) +
     countStale(db, todayStr, {}) +
-    countMailToReview(db)
+    countMailToReview(db) +
+    getAppealDeadlineItems(db).length
   );
 }
 
