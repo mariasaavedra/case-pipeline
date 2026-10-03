@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { validateToken } from "./validate-token.js";
 import type { AzureClaims } from "./validate-token.js";
 import { usersDb } from "../db/users-db.js";
+import { touchPresence } from "./presence.js";
 
 declare global {
   namespace Express {
@@ -33,6 +34,15 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (row && row.active === 0) {
     res.status(403).json({ error: "Account disabled" });
     return;
+  }
+  // Presence for the admin "who's online" view. Best-effort: a failed stamp
+  // must never block the request.
+  if (row) {
+    try {
+      touchPresence(usersDb, req.user.oid);
+    } catch {
+      /* ignore */
+    }
   }
   next();
 }

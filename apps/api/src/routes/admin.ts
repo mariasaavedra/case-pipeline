@@ -5,6 +5,7 @@ import { usersDb, type UserRow } from "../db/users-db.js";
 import { toPublicUser, type AuditLogRow } from "../db/users-types.js";
 import { auditFromReq } from "../audit/log.js";
 import { buildAuditQuery, type AuditFilter } from "./audit-query.js";
+import { listPresence } from "../auth/presence.js";
 
 // Role gating happens in the requireAdmin middleware (server.ts) — handlers
 // here can assume an admin caller.
@@ -15,6 +16,11 @@ export function handleAdminListUsers(_req: Request, res: Response): void {
     .all() as UserRow[];
   // Never expose the stored Monday token (even encrypted) to the client.
   res.json({ data: users.map(toPublicUser) });
+}
+
+// GET /api/admin/users/presence — who's online / idle / offline right now
+export function handleAdminPresence(_req: Request, res: Response): void {
+  res.json({ data: listPresence(usersDb) });
 }
 
 export function handleAdminUpdateRole(req: Request, res: Response): void {

@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../auth/useAuth";
 import { usePreferences } from "../hooks/usePreferences";
 import type { Theme, DefaultPage, DateFormat } from "../hooks/usePreferences";
-import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser } from "../api";
-import type { AttorneyBoard, PublicUser, MondayConnectionStatus } from "../api";
+import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser, fetchUserPresence } from "../api";
+import type { AttorneyBoard, PublicUser, MondayConnectionStatus, UserPresence, PresenceStatus } from "../api";
 import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
@@ -20,6 +20,23 @@ import { navigate } from "../router";
 
 type UserRow = PublicUser;
 
+/** How often the Users section re-reads presence while Settings is open. */
+const PRESENCE_POLL_MS = 30_000;
+
+const PRESENCE_COLOR: Record<PresenceStatus, string> = {
+  online: "var(--color-status-green)",
+  idle: "var(--color-amber)",
+  offline: "var(--color-border)",
+};
+
+function presenceLabel(p: UserPresence | undefined): string {
+  if (!p || p.secondsAgo === null) return "Never active";
+  if (p.status === "online") return "Online";
+  const s = p.secondsAgo;
+  const ago = s < 3600 ? `${Math.floor(s / 60)}m` : s < 86_400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86_400)}d`;
+  return p.status === "idle" ? `Idle · ${ago}` : `Seen ${ago} ago`;
+}
+
 function UsersSection() {
   const { user } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -27,6 +44,19 @@ function UsersSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<number | null>(null);
+  const [presence, setPresence] = useState<Map<number, UserPresence>>(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      fetchUserPresence()
+        .then((rows) => { if (!cancelled) setPresence(new Map(rows.map((r) => [r.id, r]))); })
+        .catch(() => {});
+    load();
+    const t = setInterval(load, PRESENCE_POLL_MS);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+  const onlineNow = [...presence.values()].filter((p) => p.status === "online");
 
   useEffect(() => {
     fetchAdminUsers()
@@ -76,6 +106,17 @@ function UsersSection() {
 
       {error && <div style={styles.errorBox}>{error}</div>}
 
+      {presence.size > 0 && (
+        <p style={{ ...styles.userEmail, marginBottom: "10px" }} aria-live="polite">
+          <span style={{ color: PRESENCE_COLOR.online }}>●</span>{" "}
+          <strong style={{ color: "var(--color-ink)" }}>{onlineNow.length} online now</strong>
+          {onlineNow.length > 0 && <> — {onlineNow.map((p) => p.name).join(", ")}</>}
+          <span title="Online = used the app in the last 5 minutes; idle = in the last hour. Refreshes every 30 seconds.">
+            {" "}· updates every 30s
+          </span>
+        </p>
+      )}
+
       {loading ? (
         <div style={styles.faint}>Loading…</div>
       ) : (
@@ -90,8 +131,25 @@ function UsersSection() {
                 opacity: u.active === 0 ? 0.55 : 1,
               }}
             >
-              <div style={styles.avatar}>
-                {u.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <div style={styles.avatar}>
+                  {u.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
+                </div>
+                {u.active !== 0 && (
+                  <span
+                    aria-hidden
+                    style={{
+                      position: "absolute",
+                      right: -1,
+                      bottom: -1,
+                      width: 11,
+                      height: 11,
+                      borderRadius: "50%",
+                      border: "2px solid var(--color-surface)",
+                      backgroundColor: PRESENCE_COLOR[presence.get(u.id)?.status ?? "offline"],
+                    }}
+                  />
+                )}
               </div>
               <div style={{ flex: 1, minWidth: 140 }}>
                 <div style={styles.userName}>
@@ -101,6 +159,18 @@ function UsersSection() {
                 </div>
                 <div style={styles.userEmail}>{u.email}</div>
               </div>
+
+              {u.active !== 0 && (
+                <div
+                  style={{
+                    ...styles.lastLogin,
+                    color: presence.get(u.id)?.status === "online" ? "var(--color-status-green)" : "var(--color-ink-faint)",
+                  }}
+                  title={presence.get(u.id)?.lastActiveAt ? `Last active ${new Date(presence.get(u.id)!.lastActiveAt + "Z").toLocaleString()}` : undefined}
+                >
+                  {presenceLabel(presence.get(u.id))}
+                </div>
+              )}
 
               {/* Admin-assigned board identity (for My Cases) */}
               <select

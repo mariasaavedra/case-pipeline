@@ -968,6 +968,18 @@ export function deleteSavedView(id: number): Promise<{ removed: boolean }> {
 export function fetchAdminUsers(): Promise<PublicUser[]> {
   return apiFetch<PublicUser[]>("/api/admin/users");
 }
+export type PresenceStatus = "online" | "idle" | "offline";
+export interface UserPresence {
+  id: number;
+  name: string;
+  email: string;
+  lastActiveAt: string | null;
+  secondsAgo: number | null;
+  status: PresenceStatus;
+}
+export function fetchUserPresence(): Promise<UserPresence[]> {
+  return apiFetch<UserPresence[]>("/api/admin/users/presence");
+}
 export function updateAdminUser(
   id: number,
   patch: { job_title?: string | null; paralegal_link?: string | null; active?: boolean },
