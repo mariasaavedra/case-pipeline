@@ -36,6 +36,7 @@ import { requireAuth, requireAdmin } from "./auth/middleware.js";
 import { handleAuthMe } from "./routes/auth.js";
 import {
   handleAdminListUsers,
+  handleAdminPresence,
   handleAdminUpdateRole,
   handleAdminUpdateUser,
   handleAdminAudit,
@@ -250,6 +251,7 @@ registerMondayWebhook(app, db);
 // Admin — requireAdmin gates the role once here, so a future admin route can't
 // forget the check.
 app.get("/api/admin/users", requireAuth, requireAdmin, handleAdminListUsers);
+app.get("/api/admin/users/presence", requireAuth, requireAdmin, handleAdminPresence);
 app.patch("/api/admin/users/:id/role", requireAuth, requireAdmin, handleAdminUpdateRole);
 app.patch("/api/admin/users/:id", requireAuth, requireAdmin, handleAdminUpdateUser);
 app.get("/api/admin/audit", requireAuth, requireAdmin, (req, res) => handleAdminAudit(req, res, db));
