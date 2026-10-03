@@ -78,13 +78,20 @@ Source: the **Motions** board (`board_key = 'motions'`), joined to its court cas
 - **Hearing soon**: open motion whose active case has a hearing within 14 days. Shown first, in its own section.
 - **Docket / Prep rows** tag each open motion: "MTC pending 45d", "BONDMTN to send".
 - **Cleanup chips** (Motions tab): open but the case is closed (moved to Inactive / Withdrew / Ordered Removed: leftovers, hidden from "Waiting" and shown only here), no court case linked, waiting with no filed date, decided but status says no judge order, profile not connected.
-- Read-only for now: the motion status is not written back from here.
+- **Status write-back** (added 2026-10-03): each motion row has a status picker with the board's Status labels. After a "Change to X?" confirm it writes `PATCH /api/motions/:localId/status` (`{status, from, date}`), with these rules:
+  - **Filed** also writes **MTN Filed on**. **Granted / Denied** (incl. "… - NO JO") also write **Dec. Date**. The date defaults to the one on Monday, else today; it can't be in the future.
+  - **Stale check:** `from` is the status the user saw. 409 if the motion changed since.
+  - Personal token first, queued on outage. A date that fails after the status went through is queued on its own.
+  - The local `status` and date update right away. The page reloads and the motion moves to its new section.
+  - Audited as `monday.status_changed`, with the date.
+  - On Monday, the item's **group** may follow by automation (Granted and Denied items always sit in their group today). The app reads the phase from the status, so it doesn't depend on that.
+  - Plan = `planMotionStatusWrite` in `apps/api/src/routes/motion-write.ts` (unit-tested).
 
 On the 2026-10-01 snapshot: 130 waiting (94 of them 90+ days), 26 to send, and 57 open motions sitting on closed court cases.
 
 ## Not done yet
 
-- Motions: change a motion's status (Filed → Granted / Denied + decision date) from the tab; feed EOIR decisions on motions from Mail intake.
+- Motions: feed EOIR decisions on motions from Mail intake, so the status changes without a click.
 
 - Readiness thresholds as admin settings (like the urgency thresholds).
 - Opening P15 to everyone after the court team checks the counts.

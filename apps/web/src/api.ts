@@ -608,6 +608,22 @@ export async function changeCourtCasePrepStage(
   });
 }
 
+/** Change a motion's Status on Monday, with the date that goes with it (Filed →
+ * MTN Filed on, Granted/Denied → Dec. Date; YYYY-MM-DD, default today). `from`
+ * is the status the user saw — 409 if it changed since. pending = queued. */
+export async function changeMotionStatus(
+  localId: string,
+  status: string,
+  from: string | null,
+  date?: string,
+): Promise<{ localId: string; status: string; phase: string; filedOn?: string; decidedOn?: string; pending: boolean }> {
+  return apiFetch(`/api/motions/${encodeURIComponent(localId)}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, from, ...(date ? { date } : {}) }),
+  });
+}
+
 export async function fetchAddressChanges(): Promise<import("@case-pipeline/query").AddressChangesResult> {
   return apiFetch("/api/address-changes");
 }

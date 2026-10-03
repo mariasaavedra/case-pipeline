@@ -68,4 +68,18 @@ describe("MotionsView", () => {
     expect(render([leftover])).not.toContain("Client leftover");
     expect(render([leftover], true)).toContain("Open, but case is closed");
   });
+
+  it("shows a status picker on each motion once the board's labels have synced", () => {
+    const el = document.createElement("div");
+    const root = createRoot(el);
+    act(() =>
+      root.render(
+        <MotionsView motions={[motion({ localId: "w" })]} filter={filter} onPerson={() => {}} showingProblem={false} statusOptions={["Filed", "Granted", "Denied"]} />,
+      ),
+    );
+    expect(el.querySelector('[aria-label="Status for Client w\'s MTC"]')).not.toBeNull();
+    act(() => root.render(<MotionsView motions={[motion({ localId: "w" })]} filter={filter} onPerson={() => {}} showingProblem={false} />));
+    expect(el.querySelector('[aria-label^="Status for"]')).toBeNull();
+    act(() => root.unmount());
+  });
 });

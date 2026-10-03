@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { fetchCourtCases, changeCourtCasePrepStage } from "../api";
+import { fetchCourtCases, changeCourtCasePrepStage, changeMotionStatus } from "../api";
 import type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness, CaseMotion, CourtMotion, MotionFlag } from "../api";
 import { navigate } from "../router";
 import { ClientLink } from "./ClientPeek";
@@ -516,7 +516,111 @@ function PipelineView({
 // Motions view
 // =============================================================================
 
-function MotionRow({ m, filter, onPerson }: { m: CourtMotion; filter: Filter; onPerson: (key: "attorney" | "paralegal", name: string) => void }) {
+/** The date a status stamps on Monday (mirrors motionDateFieldFor in the query). */
+function motionDateLabel(status: string): { label: string; field: "filedOn" | "decidedOn" } | null {
+  if (/^filed$/i.test(status.trim())) return { label: "Filed on", field: "filedOn" };
+  if (/^(granted|denied)\b/i.test(status.trim())) return { label: "Decision date", field: "decidedOn" };
+  return null;
+}
+
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/** Status picker for one motion: pick a status, set the date it carries, confirm → Monday. */
+function MotionStatusPicker({ m, options, onChanged }: { m: CourtMotion; options: string[]; onChanged: (localId: string, pending: boolean) => void }) {
+  const [to, setTo] = useState<string | null>(null);
+  const [date, setDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const items = options.map((o) => ({ value: o, label: o }));
+  const dated = to ? motionDateLabel(to) : null;
+
+  const pick = (v: string) => {
+    const d = motionDateLabel(v);
+    // Start from the date already on Monday, else today.
+    setDate((d?.field === "filedOn" ? m.filedOn : d?.field === "decidedOn" ? m.decidedOn : null) ?? localToday());
+    setError(null);
+    setTo(v);
+  };
+
+  const confirm = async () => {
+    if (!to) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await changeMotionStatus(m.localId, to, m.status, dated ? date : undefined);
+      setTo(null);
+      onChanged(m.localId, r.pending);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change the status");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (to) {
+    return (
+      <div className="text-xs space-y-1.5 mt-1">
+        <div style={{ color: "var(--color-ink)" }}>
+          Change to <strong>{to}</strong>?
+        </div>
+        {dated && (
+          <label className="flex items-center gap-1.5" style={{ color: "var(--color-ink-muted)" }}>
+            {dated.label}
+            <input
+              type="date"
+              value={date}
+              max={localToday()}
+              onChange={(e) => setDate(e.target.value)}
+              className="rounded border px-1 py-0.5 bg-secondary"
+              style={{ borderColor: "var(--color-border)", color: "var(--color-ink)" }}
+            />
+          </label>
+        )}
+        <div className="flex gap-1.5">
+          <Button type="button" size="sm" disabled={saving || (!!dated && !date)} onClick={confirm}>
+            {saving ? "Saving…" : "Change"}
+          </Button>
+          <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => setTo(null)}>
+            Cancel
+          </Button>
+        </div>
+        {error && <div style={{ color: "var(--urgency-overdue)" }}>{error}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <Select items={items} value={m.status ?? ""} onValueChange={(v) => v && v !== m.status && pick(v)}>
+      <SelectTrigger size="sm" className="bg-secondary text-[12px] max-w-full mt-1 h-7" aria-label={`Status for ${m.clientName}'s ${motionName(m.types)}`}>
+        <SelectValue placeholder="No status" />
+      </SelectTrigger>
+      <SelectContent code="D32">
+        {items.map((i) => (
+          <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function MotionRow({
+  m,
+  filter,
+  onPerson,
+  statusOptions,
+  pending,
+  onChanged,
+}: {
+  m: CourtMotion;
+  filter: Filter;
+  onPerson: (key: "attorney" | "paralegal", name: string) => void;
+  statusOptions: string[];
+  pending: boolean;
+  onChanged: (localId: string, pending: boolean) => void;
+}) {
   const ageTone = m.phase === "waiting" ? AGE_TONE[m.age] : null;
   const edge = m.hearingSoon ? "var(--urgency-critical)" : ageTone ? `var(--urgency-${ageTone})` : "var(--color-ink-faint)";
   return (
@@ -526,7 +630,16 @@ function MotionRow({ m, filter, onPerson }: { m: CourtMotion; filter: Filter; on
     >
       <div className="min-w-0">
         <div className="text-sm font-semibold truncate" style={{ color: "var(--color-ink)" }} title={m.itemName}>{motionName(m.types)}</div>
-        <div className="text-xs truncate" style={{ color: "var(--color-ink-faint)" }} title="Status on Monday">{m.status ?? m.group ?? ""}</div>
+        {statusOptions.length > 0 ? (
+          <MotionStatusPicker m={m} options={statusOptions} onChanged={onChanged} />
+        ) : (
+          <div className="text-xs truncate" style={{ color: "var(--color-ink-faint)" }} title="Status on Monday">{m.status ?? m.group ?? ""}</div>
+        )}
+        {pending && (
+          <div className="text-xs mt-1" style={{ color: "var(--urgency-missing)" }} title="Monday was unreachable; the change is queued and will be retried">
+            Queued for Monday
+          </div>
+        )}
       </div>
       <div className="min-w-0">
         {m.clientLocalId ? (
@@ -598,13 +711,21 @@ export function MotionsView({
   filter,
   onPerson,
   showingProblem,
+  statusOptions = [],
+  pendingIds = new Set<string>(),
+  onChanged = () => {},
 }: {
   motions: CourtMotion[];
   filter: Filter;
   onPerson: (key: "attorney" | "paralegal", name: string) => void;
   showingProblem: boolean;
+  statusOptions?: string[];
+  pendingIds?: Set<string>;
+  onChanged?: (localId: string, pending: boolean) => void;
 }) {
-  const row = (m: CourtMotion) => <MotionRow key={m.localId} m={m} filter={filter} onPerson={onPerson} />;
+  const row = (m: CourtMotion) => (
+    <MotionRow key={m.localId} m={m} filter={filter} onPerson={onPerson} statusOptions={statusOptions} pending={pendingIds.has(m.localId)} onChanged={onChanged} />
+  );
 
   if (showingProblem) {
     return (
@@ -755,6 +876,18 @@ export function CourtCasesPage({ view }: { view: View }) {
     load();
   };
 
+  // A motion status change: the server already updated live.db (status + date),
+  // so a reload re-sorts it into its new section.
+  const onWritten = (localId: string, pending: boolean) => {
+    setPendingIds((s) => {
+      const next = new Set(s);
+      if (pending) next.add(localId);
+      else next.delete(localId);
+      return next;
+    });
+    load();
+  };
+
   const t = data?.thresholds;
   const upcoming30 = all.filter((c) => c.daysToHearing !== null && c.daysToHearing >= 0 && c.daysToHearing <= 30).length;
   const behind = all.filter((c) => c.readiness === "behind").length;
@@ -792,7 +925,7 @@ export function CourtCasesPage({ view }: { view: View }) {
           ? "Upcoming hearings by week. Left edge = prep readiness."
           : view === "prep"
             ? "Cases by Case Prep Status. Change a stage here and it is written to Monday."
-            : "The Motions board. Waiting = filed, no decision yet; left edge amber after 60 days, red after 90."}
+            : "The Motions board. Waiting = filed, no decision yet; left edge amber after 60 days, red after 90. Change a status here and it is written to Monday (Filed sets MTN Filed on; Granted / Denied set Dec. Date)."}
         {t && !isMotions && (
           <>
             {" "}Behind = Trial within {t.trialBehindDays} days before Trial Prep (
@@ -875,7 +1008,15 @@ export function CourtCasesPage({ view }: { view: View }) {
           </div>
 
           {isMotions ? (
-            <MotionsView motions={motionsVisible} filter={filter} onPerson={onPerson} showingProblem={motionProblem !== null} />
+            <MotionsView
+              motions={motionsVisible}
+              filter={filter}
+              onPerson={onPerson}
+              showingProblem={motionProblem !== null}
+              statusOptions={data.motionStatusOptions}
+              pendingIds={pendingIds}
+              onChanged={onWritten}
+            />
           ) : view === "docket" ? (
             <DocketView cases={visible} filter={filter} onPerson={onPerson} showingProblem={problem !== null} />
           ) : (

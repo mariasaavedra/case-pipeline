@@ -144,7 +144,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 | P15.2 | Filters + cleanup strip | Judge (D25), attorney (D26), paralegal (D27), hearing type chips (motion type D29 on the Motions tab); on the Motions tab the cleanup chips are motion problems (open but case closed, no court case, no filed date, no judge order, profile not connected); "Needs cleanup on Monday" chips (hearing date passed, awaiting new date, no date, profile not connected) |
 | P15.3 | Summary table (Prep Pipeline) | Attorney rows × Case Prep Status; cell colour = worst readiness; click to filter P15.4 |
 | P15.4 | Case list | Docket: 30/60/90/all-upcoming window, grouped by week. Prep Pipeline: grouped by stage, with a stage picker (D28) that writes to Monday after a "Move to X?" confirm. Rows tag each open motion ("MTC pending 45d", "BONDMTN to send") |
-| P15.5 | Motion list (Motions tab) | Hearing within 14 days with a motion still open · To send · Waiting for the judge (60/90-day aging) · Decided in the last 30 days |
+| P15.5 | Motion list (Motions tab) | Hearing within 14 days with a motion still open · To send · Waiting for the judge (60/90-day aging) · Decided in the last 30 days. Each row has a status picker (D32) that writes to Monday after a confirm; Filed / Granted / Denied ask for the date that goes with it |
 ### Inside P17 Receptionists
 
 | Code | Name | Notes |
@@ -286,5 +286,6 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D29 | Motion type filter | P15.2 (Motions) | `CourtCasesPage.tsx` |
 | D30 | Assistant filter | P18.2 | `AddressChangesPage.tsx` |
 | D31 | Address change status picker | P18.3 | `AddressChangesPage.tsx` |
+| D32 | Motion status picker | P15.5 (Motions) | `CourtCasesPage.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.

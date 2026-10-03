@@ -92,6 +92,37 @@ const GROUP_PHASE: Record<string, MotionPhase> = {
 
 const OPEN_PHASES = new Set<MotionPhase>(["to_send", "waiting"]);
 
+/** Monday column ids on the Motions board (config/boards.yaml resolves these by id). */
+export const MOTION_COLUMN_IDS = {
+  status: "project_status",
+  filedOn: "date_mkqg8972",
+  decidedOn: "date_mkqyjq82",
+} as const;
+
+/** The date a status change stamps: Filed → MTN Filed on; Granted / Denied → Dec. Date. */
+export function motionDateFieldFor(status: string): "filed_on" | "decided_on" | null {
+  if (/^filed$/i.test(status.trim())) return "filed_on";
+  if (/^(granted|denied)\b/i.test(status.trim())) return "decided_on";
+  return null;
+}
+
+export interface MotionWriteSchema {
+  /** Every Status label on the Motions board, in board order. Empty = not synced (writes hidden). */
+  statusOptions: string[];
+}
+
+export function getMotionWriteSchema(db: Database): MotionWriteSchema {
+  const row = db
+    .prepare("SELECT options FROM board_columns WHERE board_key = 'motions' AND column_id = ?")
+    .get(MOTION_COLUMN_IDS.status) as { options: string | null } | undefined;
+  try {
+    const opts = row?.options ? (JSON.parse(row.options) as { label?: unknown }[]) : [];
+    return { statusOptions: opts.map((o) => (typeof o.label === "string" ? o.label.trim() : "")).filter(Boolean) };
+  } catch {
+    return { statusOptions: [] };
+  }
+}
+
 // =============================================================================
 // Helpers
 // =============================================================================
