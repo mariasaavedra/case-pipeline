@@ -11,6 +11,7 @@
 // See docs/features/court-cases.md.
 
 import type BetterSqlite3 from "better-sqlite3";
+import { getCourtMotions, type CourtMotion, type MotionPhase } from "./court-motions";
 type Database = BetterSqlite3.Database;
 
 // =============================================================================
@@ -61,6 +62,16 @@ export interface CourtCase {
   deadlineType: string | null;
   readiness: Readiness;
   flags: CourtCaseFlag[];
+  /** Motions on this case still to send or waiting for the judge. */
+  openMotions: CaseMotion[];
+}
+
+/** A motion as tagged on a court case row. */
+export interface CaseMotion {
+  localId: string;
+  types: string[];
+  phase: Extract<MotionPhase, "to_send" | "waiting">;
+  daysWaiting: number | null;
 }
 
 export interface CourtCasesResult {
@@ -73,6 +84,8 @@ export interface CourtCasesResult {
   /** Monday column id of Case Prep Status, when the board schema has synced. */
   stageColumnId: string | null;
   thresholds: ReadinessThresholds;
+  /** Every motion on the Motions board, most pressing first (Motions tab). */
+  motions: CourtMotion[];
 }
 
 export interface ReadinessThresholds {
@@ -339,6 +352,7 @@ export function getCourtCases(db: Database, options: CourtCasesOptions = {}): Co
       deadlineType: label(cv.deadline_type),
       readiness: awaiting ? "n_a" : readinessOf(hearingKind, prepStage, daysToHearing, thresholds),
       flags,
+      openMotions: [],
     };
   });
 
@@ -354,6 +368,15 @@ export function getCourtCases(db: Database, options: CourtCasesOptions = {}): Co
       READINESS_ORDER[a.readiness] - READINESS_ORDER[b.readiness] ||
       a.clientName.localeCompare(b.clientName),
   );
+
+  const motions = getCourtMotions(db, { today, hearings: new Map(cases.map((c) => [c.localId, c.hearingDate])) });
+  const caseById = new Map(cases.map((c) => [c.localId, c]));
+  for (const m of motions) {
+    const c = m.courtCaseLocalId ? caseById.get(m.courtCaseLocalId) : undefined;
+    if (c && (m.phase === "to_send" || m.phase === "waiting")) {
+      c.openMotions.push({ localId: m.localId, types: m.types, phase: m.phase, daysWaiting: m.daysWaiting });
+    }
+  }
 
   const stages = [...new Set(cases.map((c) => c.prepStage ?? NO_PREP_STAGE))].sort(byStage);
 
@@ -371,5 +394,5 @@ export function getCourtCases(db: Database, options: CourtCasesOptions = {}): Co
     stageOptions = [];
   }
 
-  return { cases, stages, stageOptions, stageColumnId: col?.column_id ?? null, thresholds };
+  return { cases, stages, stageOptions, stageColumnId: col?.column_id ?? null, thresholds, motions };
 }

@@ -17,7 +17,7 @@ export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from 
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
 export type { PreschedulingResult, PreschedulingCase, WaitLevel } from "@case-pipeline/query";
 export type { PendingContractsResult, PendingContract } from "@case-pipeline/query";
-export type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness } from "@case-pipeline/query";
+export type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness, CaseMotion, CourtMotion, MotionFlag, MotionPhase } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
 export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail, MailWriteBackPlan, StepOutcome, WriteBackState, NoticeFields, FieldEdits } from "@case-pipeline/query";

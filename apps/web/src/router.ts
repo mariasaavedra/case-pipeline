@@ -80,9 +80,9 @@ export function matchRoute(pathname: string): Route {
     return { page: "mail", params: {} };
   }
 
-  // P15 has two views over the same cases: the hearing docket and the prep pipeline.
-  if (path === "/court-cases" || path === "/court-cases/prep") {
-    return { page: "court-cases", params: { view: path.endsWith("/prep") ? "prep" : "docket" } };
+  // P15 has three views over one fetch: the hearing docket, the prep pipeline and motions.
+  if (path === "/court-cases" || path === "/court-cases/prep" || path === "/court-cases/motions") {
+    return { page: "court-cases", params: { view: path.endsWith("/prep") ? "prep" : path.endsWith("/motions") ? "motions" : "docket" } };
   }
 
   if (path === "/map") {
