@@ -481,6 +481,8 @@ export interface AlertItem {
   attorney: string | null;
   date: string | null;
   daysOverdue?: number;
+  /** Days until `date` (a deadline still ahead: Appeal & Federal Deadlines). */
+  daysLeft?: number;
   daysSinceUpdate?: number;
   caseType?: string;
   /** Set on "Mail to review" items: opens the review popup instead of a board item. */

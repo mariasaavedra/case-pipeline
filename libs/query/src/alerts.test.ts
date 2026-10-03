@@ -11,6 +11,9 @@ function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
 }
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { getAlerts, getAlertsTotalCount } from "./alerts";
+import type { AlertsResult, AlertGroup } from "./types";
+
+const group = (r: AlertsResult, label: string): AlertGroup => r.groups.find((g) => g.label === label)!;
 
 // =============================================================================
 // Helpers
@@ -122,6 +125,7 @@ describe("getAlerts", () => {
     const result = getAlerts(db);
     expect(result.totalCount).toBe(0);
     expect(result.groups.map((g) => g.label)).toEqual([
+      "Appeal & Federal Deadlines",
       "Overdue Deadlines",
       "Stale Cases",
       "Mail to review",
@@ -143,7 +147,7 @@ describe("getAlerts", () => {
     });
 
     const result = getAlerts(db);
-    const overdue = result.groups[0]!;
+    const overdue = group(result, "Overdue Deadlines");
     expect(overdue.severity).toBe("critical");
     expect(overdue.count).toBe(1);
     expect(overdue.items[0]!.name).toBe("Overdue Case");
@@ -164,7 +168,7 @@ describe("getAlerts", () => {
     });
 
     const result = getAlerts(db);
-    expect(result.groups[0]!.count).toBe(0);
+    expect(group(result, "Overdue Deadlines").count).toBe(0);
   });
 
   test("closed-status items are excluded from overdue", () => {
@@ -180,7 +184,7 @@ describe("getAlerts", () => {
     });
 
     const result = getAlerts(db);
-    expect(result.groups[0]!.count).toBe(0);
+    expect(group(result, "Overdue Deadlines").count).toBe(0);
   });
 
   test("appointment board items are excluded", () => {
@@ -196,7 +200,7 @@ describe("getAlerts", () => {
     });
 
     const result = getAlerts(db);
-    expect(result.groups[0]!.count).toBe(0);
+    expect(group(result, "Overdue Deadlines").count).toBe(0);
   });
 
   test("stale case detected — no updates in 30+ days", () => {
@@ -219,7 +223,7 @@ describe("getAlerts", () => {
     });
 
     const result = getAlerts(db);
-    const stale = result.groups[1]!;
+    const stale = group(result, "Stale Cases");
     expect(stale.severity).toBe("warning");
     expect(stale.count).toBe(1);
     expect(stale.items[0]!.name).toBe("Stale Case");
@@ -245,7 +249,7 @@ describe("getAlerts", () => {
     });
 
     const result = getAlerts(db);
-    expect(result.groups[1]!.count).toBe(0);
+    expect(group(result, "Stale Cases").count).toBe(0);
   });
 
   test("paid contracts are not an alert group (P13 Prescheduling owns them)", () => {
@@ -284,7 +288,7 @@ describe("getAlerts", () => {
     // Still open: an RFE the client hasn't answered is exactly what to chase.
     insertBoardItem(db, { localId: "open1", boardKey: "rfes_all", name: "RFE open", status: "Not Responding", nextDate: past, profileLocalId: "p1" });
 
-    const overdue = getAlerts(db).groups[0]!;
+    const overdue = group(getAlerts(db), "Overdue Deadlines");
     expect(overdue.items.map((i) => i.name)).toEqual(["RFE open"]);
     expect(overdue.count).toBe(1);
   });
@@ -307,7 +311,7 @@ describe("getAlerts", () => {
     insertBoardItem(db, { localId: "old", boardKey: "_cd_open_forms", name: "Year old", status: "Prepping for Atty Review", nextDate: addDays(todayStr(), -400), profileLocalId: "p1" });
     insertBoardItem(db, { localId: "new", boardKey: "_cd_open_forms", name: "Last week", status: "Prepping for Atty Review", nextDate: addDays(todayStr(), -7), profileLocalId: "p1" });
 
-    expect(getAlerts(db).groups[0]!.items.map((i) => i.name)).toEqual(["Last week", "Year old"]);
+    expect(group(getAlerts(db), "Overdue Deadlines").items.map((i) => i.name)).toEqual(["Last week", "Year old"]);
   });
 
   test("archived (deleted) rows never alert", () => {
@@ -316,7 +320,7 @@ describe("getAlerts", () => {
     insertBoardItem(db, { localId: "bi1", boardKey: "court_cases", name: "Gone", status: "In Progress", nextDate: addDays(todayStr(), -3), profileLocalId: "p1" });
     run(db, "UPDATE board_items SET deleted_at = datetime('now') WHERE local_id = 'bi1'");
 
-    expect(getAlerts(db).groups[0]!.count).toBe(0);
+    expect(group(getAlerts(db), "Overdue Deadlines").count).toBe(0);
   });
 
   test("attorney filter scopes overdue and stale results", () => {
@@ -342,11 +346,11 @@ describe("getAlerts", () => {
     });
 
     const allResult = getAlerts(db);
-    expect(allResult.groups[0]!.count).toBe(2);
+    expect(group(allResult, "Overdue Deadlines").count).toBe(2);
 
     const filtered = getAlerts(db, { attorney: "R" });
-    expect(filtered.groups[0]!.count).toBe(1);
-    expect(filtered.groups[0]!.items[0]!.name).toBe("R's Case");
+    expect(group(filtered, "Overdue Deadlines").count).toBe(1);
+    expect(group(filtered, "Overdue Deadlines").items[0]!.name).toBe("R's Case");
   });
 });
 
