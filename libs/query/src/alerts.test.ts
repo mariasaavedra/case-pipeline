@@ -124,7 +124,6 @@ describe("getAlerts", () => {
     expect(result.groups.map((g) => g.label)).toEqual([
       "Overdue Deadlines",
       "Stale Cases",
-      "Pending Contracts",
       "Mail to review",
     ]);
     expect(result.groups.every((g) => g.count === 0)).toBe(true);
@@ -249,7 +248,7 @@ describe("getAlerts", () => {
     expect(result.groups[1]!.count).toBe(0);
   });
 
-  test("pending contract without board items is flagged", () => {
+  test("paid contracts are not an alert group (P13 Prescheduling owns them)", () => {
     const db = freshDb();
     insertProfile(db, { localId: "p1", name: "Grace" });
     insertContract(db, {
@@ -260,32 +259,64 @@ describe("getAlerts", () => {
     });
 
     const result = getAlerts(db);
-    const pending = result.groups[2]!;
-    expect(pending.severity).toBe("info");
-    expect(pending.count).toBe(1);
-    expect(pending.items[0]!.name).toBe("Asylum");
-    expect(pending.items[0]!.clientName).toBe("Grace");
+    expect(result.totalCount).toBe(0);
+    expect(getAlertsTotalCount(db)).toBe(0);
   });
 
-  test("pending contract WITH active board items is NOT flagged", () => {
+  test("board-specific finished statuses are excluded, case-insensitively", () => {
     const db = freshDb();
     insertProfile(db, { localId: "p1", name: "Hank" });
-    insertContract(db, {
-      localId: "c1",
-      profileLocalId: "p1",
-      caseType: "TPS",
-      status: "Paid Needs Action",
-    });
-    insertBoardItem(db, {
-      localId: "bi1",
-      boardKey: "court_cases",
-      name: "Active Work",
-      status: "In Progress",
-      profileLocalId: "p1",
-    });
+    const past = addDays(todayStr(), -10);
+    const rows: [string, string][] = [
+      ["_cd_open_forms", "Sent Out"],
+      ["_cd_open_forms", "SENT OUT"],
+      ["_cd_open_forms", "Interview done"],
+      ["_cd_open_forms", "Send to North Pole"],
+      ["_cd_open_forms", "To close"],
+      ["rfes_all", "Sent out"],
+      ["appeals", "Submitted"],
+      ["_lt_i918b_s", "Not Hiring"],
+      ["_lt_i918b_s", "Expired"],
+    ];
+    rows.forEach(([boardKey, status], i) =>
+      insertBoardItem(db, { localId: `done${i}`, boardKey, name: `${boardKey} ${status}`, status, nextDate: past, profileLocalId: "p1" }),
+    );
+    // Still open: an RFE the client hasn't answered is exactly what to chase.
+    insertBoardItem(db, { localId: "open1", boardKey: "rfes_all", name: "RFE open", status: "Not Responding", nextDate: past, profileLocalId: "p1" });
 
-    const result = getAlerts(db);
-    expect(result.groups[2]!.count).toBe(0);
+    const overdue = getAlerts(db).groups[0]!;
+    expect(overdue.items.map((i) => i.name)).toEqual(["RFE open"]);
+    expect(overdue.count).toBe(1);
+  });
+
+  test("boards whose date is history, not a deadline, never alert", () => {
+    const db = freshDb();
+    insertProfile(db, { localId: "p1", name: "Iris" });
+    const past = addDays(todayStr(), -10);
+    for (const boardKey of ["_na_originals_cards_notices", "address_changes", "_fa_jail_intakes", "appointments_cr"]) {
+      insertBoardItem(db, { localId: boardKey, boardKey, name: boardKey, status: "Scheduled", nextDate: past, profileLocalId: "p1" });
+    }
+
+    expect(getAlerts(db).totalCount).toBe(0);
+    expect(getAlertsTotalCount(db)).toBe(0);
+  });
+
+  test("overdue lists the most recently missed deadline first", () => {
+    const db = freshDb();
+    insertProfile(db, { localId: "p1", name: "Jon" });
+    insertBoardItem(db, { localId: "old", boardKey: "_cd_open_forms", name: "Year old", status: "Prepping for Atty Review", nextDate: addDays(todayStr(), -400), profileLocalId: "p1" });
+    insertBoardItem(db, { localId: "new", boardKey: "_cd_open_forms", name: "Last week", status: "Prepping for Atty Review", nextDate: addDays(todayStr(), -7), profileLocalId: "p1" });
+
+    expect(getAlerts(db).groups[0]!.items.map((i) => i.name)).toEqual(["Last week", "Year old"]);
+  });
+
+  test("archived (deleted) rows never alert", () => {
+    const db = freshDb();
+    insertProfile(db, { localId: "p1", name: "Kim" });
+    insertBoardItem(db, { localId: "bi1", boardKey: "court_cases", name: "Gone", status: "In Progress", nextDate: addDays(todayStr(), -3), profileLocalId: "p1" });
+    run(db, "UPDATE board_items SET deleted_at = datetime('now') WHERE local_id = 'bi1'");
+
+    expect(getAlerts(db).groups[0]!.count).toBe(0);
   });
 
   test("attorney filter scopes overdue and stale results", () => {
@@ -334,16 +365,18 @@ describe("getAlertsTotalCount", () => {
       profileLocalId: "p1",
     });
 
-    // 1 pending contract
-    insertProfile(db, { localId: "p2", name: "Kate" });
-    insertContract(db, {
-      localId: "c1",
-      profileLocalId: "p2",
-      caseType: "U-Visa",
-      status: "Paid Needs Action",
+    // 1 stale
+    insertBoardItem(db, {
+      localId: "bi2",
+      boardKey: "rfes_all",
+      name: "Stale RFE",
+      status: "Pending",
+      nextDate: addDays(todayStr(), 20),
+      profileLocalId: "p1",
     });
 
     const count = getAlertsTotalCount(db);
-    expect(count).toBeGreaterThanOrEqual(2);
+    expect(count).toBe(2);
+    expect(count).toBe(getAlerts(db).totalCount);
   });
 });

@@ -9,6 +9,7 @@ import { ClientLink } from "./ClientPeek";
 import { boardDisplayName } from "@case-pipeline/query/types";
 import { MailReviewModal } from "./MailReviewModal";
 import { SectionCode } from "./ScreenCode";
+import { navigate } from "../router";
 
 type SeverityFilter = "all" | AlertSeverity;
 
@@ -16,7 +17,6 @@ const SEVERITY_LABELS: { id: SeverityFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "critical", label: "Critical" },
   { id: "warning", label: "Warning" },
-  { id: "info", label: "Info" },
 ];
 
 const SEVERITY_STYLES: Record<AlertSeverity, { bg: string; text: string; border: string }> = {
@@ -474,7 +474,7 @@ export function AlertsPage() {
               All clear
             </p>
             <p className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-              No overdue deadlines, stale cases, pending contracts without activity, or mail to review.
+              No overdue deadlines, stale cases, or mail to review.
             </p>
           </div>
         </div>
@@ -510,6 +510,27 @@ export function AlertsPage() {
           {severity !== "all" ? ` (${severity})` : ""}
           {attorney !== "all" ? ` for ${attorney}` : ""}
         </div>
+      )}
+
+      {/* Paid Fee Ks waiting on work used to be an Alerts group; P13 tracks them properly. */}
+      {!loading && data && (
+        <p
+          className="mt-3 text-center text-xs"
+          style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+        >
+          Paid contracts waiting on documents are on{" "}
+          <a
+            href="/prescheduling"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/prescheduling");
+            }}
+            style={{ color: "var(--color-amber)" }}
+          >
+            Prescheduling
+          </a>
+          .
+        </p>
       )}
 
       {/* A decision closes the item: reload so it leaves the list and the counts. */}
