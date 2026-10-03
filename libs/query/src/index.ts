@@ -25,7 +25,7 @@ export { getActiveCases } from "./active-cases";
 export { getPrescheduling } from "./prescheduling";
 export { getPendingContracts } from "./pending-contracts";
 export { getCourtCases, ACTIVE_COURT_CASE_GROUP, PREP_STAGE_COLUMN_TITLE } from "./court-cases";
-export { getCourtMotions, HEARING_SOON_DAYS, MOTION_LATE_DAYS, MOTION_WAITING_DAYS } from "./court-motions";
+export { getCourtMotions, getMotionWriteSchema, motionDateFieldFor, phaseOf as motionPhaseOf, MOTION_COLUMN_IDS, HEARING_SOON_DAYS, MOTION_LATE_DAYS, MOTION_WAITING_DAYS } from "./court-motions";
 export type { CourtMotion, MotionAge, MotionFlag, MotionPhase } from "./court-motions";
 export { getAddressChanges } from "./address-changes";
 export { getCallLogEntries, getCallLogStaffOptions } from "./call-log";

@@ -66,6 +66,7 @@ import { registerCallLogRoutes } from "./routes/call-log.js";
 import { registerMailRoutes } from "./routes/mail.js";
 import { registerBoardItemWriteRoutes } from "./routes/board-item-write.js";
 import { registerCourtCaseWriteRoutes } from "./routes/court-case-write.js";
+import { registerMotionWriteRoutes } from "./routes/motion-write.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
 import { registerDetentionWriteRoutes } from "./routes/detention-write.js";
 import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
@@ -477,6 +478,7 @@ registerReceptionRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenO
 // =============================================================================
 registerBoardItemWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerCourtCaseWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerMotionWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 
 // =============================================================================
 // Call Log — see routes/call-log.ts

@@ -11,7 +11,7 @@
 // See docs/features/court-cases.md.
 
 import type BetterSqlite3 from "better-sqlite3";
-import { getCourtMotions, type CourtMotion, type MotionPhase } from "./court-motions";
+import { getCourtMotions, getMotionWriteSchema, type CourtMotion, type MotionPhase } from "./court-motions";
 type Database = BetterSqlite3.Database;
 
 // =============================================================================
@@ -86,6 +86,8 @@ export interface CourtCasesResult {
   thresholds: ReadinessThresholds;
   /** Every motion on the Motions board, most pressing first (Motions tab). */
   motions: CourtMotion[];
+  /** Status labels for the motion status picker (empty until the board schema syncs). */
+  motionStatusOptions: string[];
 }
 
 export interface ReadinessThresholds {
@@ -394,5 +396,5 @@ export function getCourtCases(db: Database, options: CourtCasesOptions = {}): Co
     stageOptions = [];
   }
 
-  return { cases, stages, stageOptions, stageColumnId: col?.column_id ?? null, thresholds, motions };
+  return { cases, stages, stageOptions, stageColumnId: col?.column_id ?? null, thresholds, motions, motionStatusOptions: getMotionWriteSchema(db).statusOptions };
 }
