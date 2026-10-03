@@ -183,8 +183,8 @@ boards:
         resolve: by_id
         id: link_to_activities_mkm0107k
       link_to_court_cases:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm3t11b8
       street:
         resolve: by_title
         pattern: street
@@ -999,8 +999,8 @@ boards:
           - mirror
           - lookup
       link_to_address_changes:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm405fgh
   motions:
     id: "8025556892"
     name: Motions
@@ -1135,8 +1135,14 @@ boards:
           - mirror
           - lookup
       link_to_court_cases:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm3qa0bb
+      link_to_court_cases_1:
+        resolve: by_id
+        id: board_relation_mm6ej8ht
+      sched_order_deadlines:
+        resolve: by_id
+        id: board_relation_mm6etg9j
   court_cases:
     id: "8025546360"
     name: Court Cases
@@ -1251,7 +1257,7 @@ boards:
         id: color_mkp888rz
       ij:
         resolve: by_id
-        id: text6__1
+        id: dropdown_mm5y9sgr
       written_court_calendaring:
         resolve: by_id
         id: lookup_mkye8s59
@@ -1734,8 +1740,8 @@ boards:
           - text
           - long_text
       profile_profile_link_for_court_cases:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm3tdegy
       create_fee_k_profiles:
         resolve: by_title
         pattern: create.*fee.*k.*-.*profiles
@@ -1775,8 +1781,8 @@ boards:
           - mirror
           - lookup
       hearings:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm39s7e1
       language_profiles:
         resolve: by_title
         pattern: language.*-.*profiles
@@ -1784,8 +1790,8 @@ boards:
           - mirror
           - lookup
       court_prep_appts:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm3trf3w
       court_prep_note:
         resolve: by_title
         pattern: court.*prep.*note
@@ -1802,8 +1808,8 @@ boards:
         resolve: by_type
         type: date
       link_to_litigation:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm3cxpjk
       profile_status_profiles:
         resolve: by_title
         pattern: profile.*status.*-.*profiles
@@ -1859,14 +1865,95 @@ boards:
           - mirror
           - lookup
       link_to_address_changes:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm40b1b9
       link_to_address_changes_1:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm40qj01
       link_to_court_tasks:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm4njwkc
+      sched_order_deadlines:
+        resolve: by_id
+        id: board_relation_mm6e3sph
+      link_to_deadlines:
+        resolve: by_id
+        id: board_relation_mm1t4jrg
+      link_to_deadlines_1:
+        resolve: by_id
+        id: board_relation_mm52mttb
+      trial_prep_court_tasks:
+        resolve: by_id
+        id: board_relation_mm5668mj
+      initial_tp_appt:
+        resolve: by_id
+        id: board_relation_mm656njf
+      tp_1_appt:
+        resolve: by_id
+        id: board_relation_mm65mpdq
+      tp_2_appt:
+        resolve: by_id
+        id: board_relation_mm658edw
+      tp_3_appt:
+        resolve: by_id
+        id: board_relation_mm65wex8
+      tp_4_appt:
+        resolve: by_id
+        id: board_relation_mm65tx7f
+      sched_order_type:
+        resolve: by_id
+        id: dropdown_mm5ypt7m
+      met_sched_order:
+        resolve: by_id
+        id: text_mm66h5pz
+      rider_text:
+        resolve: by_id
+        id: text_mm566303
+      hearing_notice_calendaring:
+        resolve: by_id
+        id: lookup_mm54gwah
+      order_deadlines:
+        resolve: by_id
+        id: lookup_mm6r4c3b
+      order_assigned_to:
+        resolve: by_id
+        id: lookup_mm6e33xd
+      sched_order_status:
+        resolve: by_id
+        id: lookup_mm6hfnfy
+      sched_order_deadline_type:
+        resolve: by_id
+        id: lookup_mm6eamv9
+      sched_order_warning:
+        resolve: by_id
+        id: lookup_mm6efj7v
+      sched_order_due:
+        resolve: by_id
+        id: lookup_mm6eb41j
+      sched_order_written:
+        resolve: by_id
+        id: lookup_mm6e53xf
+      sched_order_filing:
+        resolve: by_id
+        id: lookup_mm6e7zf1
+      sched_order_completed:
+        resolve: by_id
+        id: lookup_mm6e3gak
+      fee_k_req_status:
+        resolve: by_id
+        id: lookup_mm56azj
+      fee_k_current_hearing:
+        resolve: by_id
+        id: lookup_mm4wbdsw
+      payment_note_current_hearing:
+        resolve: by_id
+        id: lookup_mm4nknsk
+      hearing_paid_connected:
+        resolve: by_id
+        id: lookup_mm56hk2f
+      paid_on_connected:
+        resolve: by_id
+        id: lookup_mm4wtxne
   _lt_i918b_s:
     id: "8025538497"
     name: "[LT] I918B's"
@@ -2002,8 +2089,8 @@ boards:
           - mirror
           - lookup
       affirmative_filings_open_forms_link:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm40zbr4
       last_filed_form:
         resolve: by_title
         pattern: last.*filed.*form
@@ -2011,8 +2098,8 @@ boards:
           - mirror
           - lookup
       court_cases:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm40h070
       ecas_or_paper_court_cases:
         resolve: by_title
         pattern: ecas.*or.*paper?.*-.*court.*cases
@@ -2520,8 +2607,8 @@ boards:
         types:
           - status
       court_prep_appt_court_case:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm3thjat
       court_case_profile:
         resolve: by_title
         pattern: court.*case?.*-.*profile
@@ -2716,8 +2803,8 @@ boards:
           - text
           - long_text
       court_prep_notes_court_cases:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm3tebnr
       client_court_case_appt:
         resolve: by_title
         pattern: client.*-.*court.*case.*appt?
@@ -3183,8 +3270,8 @@ boards:
           - mirror
           - lookup
       court_cases_mother:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm3t62nn
       motions_connected_profile:
         resolve: by_title
         pattern: motions.*-.*connected.*profile
@@ -3255,8 +3342,8 @@ boards:
         resolve: by_type
         type: creation_log
       link_to_calendaring:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm40mzas
   appeals:
     id: "3473957885"
     name: Appeals
@@ -3439,9 +3526,6 @@ boards:
       link_to_activities:
         resolve: by_id
         id: link_to_activities_mkm0kx85
-      link_to_court_cases:
-        resolve: by_type
-        type: board_relation
       first_name:
         resolve: by_title
         pattern: first.*name
@@ -3537,8 +3621,8 @@ boards:
           - mirror
           - lookup
       court_cases:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm3cy1nd
       immigration_hearing_date_court_cases:
         resolve: by_title
         pattern: immigration.*hearing.*date.*-.*court.*cases
@@ -3556,8 +3640,8 @@ boards:
         resolve: by_id
         id: color_mkrjc7n8
       court_cases:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mkyrycjz
       due_date:
         resolve: by_id
         id: date_mkrzrqxn
@@ -3697,11 +3781,11 @@ boards:
         resolve: by_id
         id: board_relation_mkynms9x
       link_to_court_cases:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm397n06
       link_to_subitems_of_calendaring:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm5641k9
       mirror:
         resolve: by_title
         pattern: mirror
@@ -3721,8 +3805,8 @@ boards:
           - text
           - long_text
       connect_boards:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mky2rj04
       court_task_connected:
         resolve: by_title
         pattern: court.*task.*-.*connected
@@ -3865,8 +3949,111 @@ boards:
           - mirror
           - lookup
       link_to_fee_ks:
-        resolve: by_type
-        type: board_relation
+        resolve: by_id
+        id: board_relation_mm4nzrmx
+      hearing_history_court_cases:
+        resolve: by_id
+        id: board_relation_mm39447m
+      deadlines_mother:
+        resolve: by_id
+        id: board_relation_mm536h1r
+  deadlines_due_dates:
+    id: "18404344923"
+    name: Deadlines and Due Dates
+    columns:
+      status:
+        resolve: by_id
+        id: color_mm6efvq5
+      deadline_type:
+        resolve: by_id
+        id: color_mm1hbktw
+      due_date:
+        resolve: by_id
+        id: date_mm1htf4s
+      issued:
+        resolve: by_id
+        id: date_mm6ebr2x
+      received:
+        resolve: by_id
+        id: date_mm6e721v
+      warning:
+        resolve: by_id
+        id: date_mm6eay4v
+      due:
+        resolve: by_id
+        id: date_mm6ega65
+      written:
+        resolve: by_id
+        id: date_mm6em8vp
+      completed:
+        resolve: by_id
+        id: date_mm6ek4ar
+      judge_order:
+        resolve: by_id
+        id: file_mm6efsm9
+      filing:
+        resolve: by_id
+        id: file_mm6egmk0
+      issuing_ij:
+        resolve: by_id
+        id: dropdown_mm6e8aet
+      ordered:
+        resolve: by_id
+        id: dropdown_mm72230n
+      review:
+        resolve: by_id
+        id: long_text_mm1vbas5
+      court_cases:
+        resolve: by_id
+        id: board_relation_mm6ekebc
+      link_to_calendaring:
+        resolve: by_id
+        id: board_relation_mm532p1q
+      court_tasks:
+        resolve: by_id
+        id: board_relation_mm6ewxfk
+      hearing_type:
+        resolve: by_id
+        id: lookup_mm74sgrb
+      deadline_list:
+        resolve: by_id
+        id: lookup_mm74xz4z
+      ordered_court_case:
+        resolve: by_id
+        id: lookup_mm72jy5a
+      met:
+        resolve: by_id
+        id: lookup_mm6eve6z
+      sched_order_type:
+        resolve: by_id
+        id: lookup_mm6errhj
+      due_date_court_case:
+        resolve: by_id
+        id: lookup_mm6eq60r
+      judge_order_court_case:
+        resolve: by_id
+        id: lookup_mm6ebfde
+      sched_order_calendaring:
+        resolve: by_id
+        id: lookup_mm54c5a5
+      judge_order_calendaring:
+        resolve: by_id
+        id: lookup_mm55gvmb
+      connected_board:
+        resolve: by_id
+        id: lookup_mm53egap
+      task_due_date:
+        resolve: by_id
+        id: lookup_mm73ctr1
+      task_status:
+        resolve: by_id
+        id: lookup_mm72afck
+      person_assigned:
+        resolve: by_id
+        id: lookup_mm6esrbm
+      creation_log:
+        resolve: by_id
+        id: pulse_log_mm5432kj
   call_log:
     id: "6775627168"
     name: Call Log

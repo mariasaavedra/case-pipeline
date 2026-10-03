@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase, PreschedulingResult, PendingContractsResult, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, PreschedulingResult, PendingContractsResult, CourtCasesResult, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -17,6 +17,7 @@ export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from 
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
 export type { PreschedulingResult, PreschedulingCase, WaitLevel } from "@case-pipeline/query";
 export type { PendingContractsResult, PendingContract } from "@case-pipeline/query";
+export type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
 export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail, MailWriteBackPlan, StepOutcome, WriteBackState, NoticeFields, FieldEdits } from "@case-pipeline/query";
@@ -586,6 +587,24 @@ export async function renderProfileDoc(
 
 export async function fetchPendingContracts(): Promise<PendingContractsResult> {
   return apiFetch<PendingContractsResult>("/api/pending-contracts");
+}
+
+export async function fetchCourtCases(): Promise<CourtCasesResult> {
+  return apiFetch<CourtCasesResult>("/api/court-cases");
+}
+
+/** Move a court case to another Case Prep Status. `from` is the stage the user
+ * saw — the server refuses (409) if the case moved since. pending = queued. */
+export async function changeCourtCasePrepStage(
+  localId: string,
+  stage: string,
+  from: string | null,
+): Promise<{ localId: string; stage: string; pending: boolean }> {
+  return apiFetch(`/api/court-cases/${encodeURIComponent(localId)}/prep-stage`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stage, from }),
+  });
 }
 
 export async function fetchPrescheduling(): Promise<PreschedulingResult> {

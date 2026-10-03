@@ -21,6 +21,7 @@ const ClientsPage = lazy(() => import("./components/ClientsPage").then((m) => ({
 const AlertsPage = lazy(() => import("./components/AlertsPage").then((m) => ({ default: m.AlertsPage })));
 const ReceptionPage = lazy(() => import("./components/ReceptionPage").then((m) => ({ default: m.ReceptionPage })));
 const ContractsPage = lazy(() => import("./components/ContractsPage").then((m) => ({ default: m.ContractsPage })));
+const CourtCasesPage = lazy(() => import("./components/CourtCasesPage").then((m) => ({ default: m.CourtCasesPage })));
 const PreschedulingPage = lazy(() => import("./components/PreschedulingPage").then((m) => ({ default: m.PreschedulingPage })));
 const ActiveCasesPage = lazy(() => import("./components/ActiveCasesPage").then((m) => ({ default: m.ActiveCasesPage })));
 const MyCasesPage = lazy(() => import("./components/MyCasesPage").then((m) => ({ default: m.MyCasesPage })));
@@ -359,7 +360,7 @@ function App() {
             {route.page === "call-log" && !loading && <CallLogPage />}
             {route.page === "jail-intakes" && !loading && <JailIntakesPage />}
             {route.page === "mail" && !loading && (underConstruction ? <UnderConstruction label="Mail" /> : <MailPage />)}
-            {route.page === "court-cases" && !loading && <UnderConstruction label="Court Cases" planned={!underConstruction} />}
+            {route.page === "court-cases" && !loading && (underConstruction ? <UnderConstruction label="Court Cases" /> : <CourtCasesPage view={route.params.view === "prep" ? "prep" : "docket"} />)}
             {route.page === "map" && !loading && <UnderConstruction label="Map" planned={!underConstruction} />}
 
             {/* Clients page — search + filtered browse */}

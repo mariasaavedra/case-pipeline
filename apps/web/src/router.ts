@@ -80,8 +80,9 @@ export function matchRoute(pathname: string): Route {
     return { page: "mail", params: {} };
   }
 
-  if (path === "/court-cases") {
-    return { page: "court-cases", params: {} };
+  // P15 has two views over the same cases: the hearing docket and the prep pipeline.
+  if (path === "/court-cases" || path === "/court-cases/prep") {
+    return { page: "court-cases", params: { view: path.endsWith("/prep") ? "prep" : "docket" } };
   }
 
   if (path === "/map") {

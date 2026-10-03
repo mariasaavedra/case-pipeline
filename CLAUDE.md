@@ -111,6 +111,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `alerts.ts` | Overdue deadlines + stale cases, only on boards whose date is a real deadline (`DEADLINE_BOARDS`, with each board's "finished" statuses); plus "Mail to review" |
 | `prescheduling.ts` | P13 Prescheduling: Paid Fee Ks by PS Stage, days since hire (30/60), "not cooperating" (reminder 14+ days, no evidence since), North Pole parked |
 | `pending-contracts.ts` | P14 Contracts: Pending Fee Ks by Contract Stage, aged from sent (else added) date, 30/60 days |
+| `court-cases.ts` | P15 Court Cases: active court cases with hearing/judge/method, Case Prep Status, readiness (Trial 60/90, MCH 14 days), data-cleanup flags |
 | `board-columns.ts` | Per-board column schema for the in-place field editors |
 | `board-items.ts` | Per-profile board item queries + `batchGetClientBoardItems` |
 | `case-summary.ts` | Full 360° client summary + `batchGetClientCaseSummaries` |
@@ -151,6 +152,7 @@ Data reads:
 | `GET /api/active-cases` | P5 data: `cases` (each once, by urgency, with attorney/forms/Urgent flag) + `assignees` lanes (used by My Cases). `?includeSnoozed=1` reveals North-Pole-parked cases |
 | `GET /api/prescheduling` | P13 data: Paid Fee Ks waiting for documents, with wait level, not-cooperating flag, PS Stages in workflow order |
 | `GET /api/pending-contracts` | P14 data: Pending Fee Ks with age level, payment link, AF/FF, stages in pipeline order |
+| `GET /api/court-cases` | P15 data: active court cases (Docket + Prep Pipeline views), stages in workflow order, Case Prep Status options |
 | `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Mail to review" |
 | `GET /api/search` | Cross-type search: profiles, contracts, court cases, etc. |
 | `GET /api/filter-options` | Distinct values for filter dropdowns (priorities, statuses, attorneys, board types) |
@@ -170,6 +172,7 @@ Writes and user/account routes:
 | `POST /api/profiles/:id/updates` | Post a note to Monday.com (falls back to the write queue on outage) |
 | `POST /api/updates/:localId/replies` | Sub-note under a timeline entry: a real Monday reply under an update, or — for an E&A entry, which Monday can't thread — a `Re: <entry> (<date>) —` update on the same item. Stored as a `reply` row threaded by `reply_to_update_id` (plan = `routes/note-replies.ts`). Queues on outage |
 | `POST /api/profiles/:id/release` | Mark a detained client released (M17): clears Det. Facility on their open court case(s) in Monday and logs a "Casenote" E&A entry on the profile (note required, release date optional). Queues on outage. Plan = `routes/detention-write.ts` |
+| `PATCH /api/court-cases/:localId/prep-stage` | Move a court case to another Case Prep Status (P15 Prep Pipeline). `{stage, from}`: labels from the synced schema, 409 if the stage moved since the page loaded, local column updated optimistically, queues on outage. Plan = `routes/court-case-write.ts` |
 | `GET /api/reception/consults` | P17: consults on the active attorney boards between `?from`/`?to` (default today + 7 days), each with its latest prep (`consult_preps`, schema v29) |
 | `POST /api/reception/consults/:localId/prep` | M18 consult prep: one note posted as an Update on the profile, a pinned Update on the appointment (`pin_to_top`, API 2025-07) and a "Consult Prep Note" E&A entry on the profile (falls back to "Consult note" until that type exists in Monday — looked up by name). Edited phone → profile Phone; edited description → appointment Description. Queues on outage. Plan + rules = `routes/reception.ts` |
 | `POST /api/reception/consults/:localId/files` | A file uploaded in M19 (already in SharePoint) also attached to the profile's Files column. Raw body, `?name=`, `?type=` |
