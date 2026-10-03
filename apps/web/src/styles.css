@@ -759,6 +759,170 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* G1 Customize mode — reorder (grip) + hide (eye) */
+.sidebar-nav-editing {
+  position: relative; /* rows' offsetTop is measured against the list */
+  margin: 0 6px;
+  padding: 2px 4px;
+  overflow-x: hidden;
+  border-radius: 10px;
+  outline: 1px dashed rgba(180, 83, 9, 0.45);
+  outline-offset: -1px;
+  background: rgba(180, 83, 9, 0.04);
+  animation: sidebar-edit-in 0.25s ease-out;
+}
+
+.sidebar-nav-dragging {
+  cursor: grabbing;
+}
+
+.sidebar-edit-row {
+  position: relative;
+  cursor: default;
+  padding-left: 4px;
+  gap: 8px;
+  user-select: none;
+  transition: opacity 0.2s ease, filter 0.2s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sidebar-edit-hidden {
+  opacity: 0.38;
+  filter: grayscale(1);
+}
+
+.sidebar-edit-hidden .sidebar-label {
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+}
+
+/* The lifted row: follows the pointer (transform set inline), floats above the rest */
+.sidebar-edit-dragging {
+  z-index: 2;
+  background: #2a2f3a;
+  color: #fff;
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(180, 83, 9, 0.7);
+  opacity: 1;
+  filter: none;
+}
+
+.sidebar-edit-dragging .sidebar-grip {
+  color: var(--color-amber);
+}
+
+/* Handles and eyes pop in one after another when Customize opens */
+.sidebar-edit-row .sidebar-grip,
+.sidebar-edit-row .sidebar-eye {
+  animation: sidebar-pop 0.3s cubic-bezier(0.2, 0.8, 0.2, 1.4) backwards;
+  animation-delay: calc(var(--i, 0) * 22ms);
+}
+
+.sidebar-eye-icon {
+  animation: sidebar-blink 0.22s ease-out;
+}
+
+.sidebar-saved {
+  padding: 2px 6px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-amber);
+  animation: sidebar-saved 1.8s ease forwards;
+}
+
+@keyframes sidebar-edit-in {
+  from { outline-color: transparent; background: transparent; }
+}
+
+@keyframes sidebar-pop {
+  from { opacity: 0; transform: scale(0.4); }
+}
+
+@keyframes sidebar-blink {
+  0% { transform: scaleY(0.1); }
+  100% { transform: scaleY(1); }
+}
+
+@keyframes sidebar-saved {
+  0% { opacity: 0; transform: translateY(4px); }
+  12%, 75% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-nav-editing,
+  .sidebar-edit-row .sidebar-grip,
+  .sidebar-edit-row .sidebar-eye,
+  .sidebar-eye-icon {
+    animation: none;
+  }
+  .sidebar-saved {
+    animation: none;
+  }
+}
+
+.sidebar-grip,
+.sidebar-eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.sidebar-grip {
+  cursor: grab;
+  touch-action: none;
+}
+
+.sidebar-edit-dragging .sidebar-grip {
+  cursor: grabbing;
+}
+
+.sidebar-grip:hover,
+.sidebar-eye:hover,
+.sidebar-grip:focus-visible,
+.sidebar-eye:focus-visible {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-eye {
+  cursor: pointer;
+}
+
+.sidebar-customize {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+}
+
+.sidebar-link {
+  border: none;
+  background: transparent;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+}
+
+.sidebar-link:hover {
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sidebar-link-primary {
+  color: var(--color-amber);
+}
+
 .sidebar-toggle {
   display: flex;
   align-items: center;

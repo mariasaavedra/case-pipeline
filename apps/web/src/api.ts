@@ -811,6 +811,13 @@ export interface ServerPreferences {
   columns: Record<string, string[]>;
   /** Per-card display column on the dashboard, overriding the firm-wide default. */
   kpiColumns: Record<string, string>;
+  /** G1 sidebar: page ids in the user's order + the ones they hid. */
+  sidebarNav: SidebarNavPref;
+}
+
+export interface SidebarNavPref {
+  order: string[];
+  hidden: string[];
 }
 
 export interface PublicUser {

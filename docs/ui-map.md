@@ -65,7 +65,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 
 | Code | Name | Notes |
 |---|---|---|
-| G1 | Sidebar | Page links, Settings, your name and sign-out (`Sidebar.tsx`) |
+| G1 | Sidebar | Page links, Settings, your name and sign-out (`Sidebar.tsx`). **Customize** (above Settings) lets each user drag pages into their own order and hide ones they don't use; saved per user in `preferences.sidebarNav` |
 | G2 | Top bar | Back and **+ Log call** (`app.tsx`); not on Settings |
 
 The **Version badge** (opens M14) sits in the Home header and on Sign in

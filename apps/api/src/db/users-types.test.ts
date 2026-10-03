@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   sanitizePreferencesPatch,
   sanitizeKpiColumns,
+  sanitizeSidebarNav,
   parsePreferences,
   mergePreferences,
   DEFAULT_PREFERENCES,
@@ -79,5 +80,18 @@ describe("preferences validation", () => {
     const merged = mergePreferences(DEFAULT_PREFERENCES, { theme: "dark" });
     expect(merged.theme).toBe("dark");
     expect(merged.defaultPage).toBe(DEFAULT_PREFERENCES.defaultPage);
+  });
+
+  it("keeps a clean sidebar layout and drops junk ids", () => {
+    const patch = sanitizePreferencesPatch({
+      sidebarNav: {
+        order: ["clients", "home", "clients", "Bad Id", 7, "../x", "active-cases"],
+        hidden: ["map", { x: 1 }],
+      },
+    });
+    expect(patch.sidebarNav).toEqual({ order: ["clients", "home", "active-cases"], hidden: ["map"] });
+    expect(sanitizePreferencesPatch({ sidebarNav: ["home"] }).sidebarNav).toBeUndefined();
+    expect(sanitizeSidebarNav({ order: "home" })).toEqual({ order: [], hidden: [] });
+    expect(parsePreferences('{"theme":"light"}').sidebarNav).toEqual({ order: [], hidden: [] });
   });
 });

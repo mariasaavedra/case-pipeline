@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { getPreferences, updatePreferences } from "../api";
+import { getPreferences, updatePreferences, type SidebarNavPref } from "../api";
 import { setScreenCodesVisible } from "./useScreenCodes";
 
 export type Theme = "light" | "dark" | "system";
@@ -12,6 +12,7 @@ export interface Preferences {
   sidebarCollapsedDefault: boolean;
   dateFormat: DateFormat;
   showScreenCodes: boolean;
+  sidebarNav: SidebarNavPref;
 }
 
 const STORAGE_KEY = "user-preferences";
@@ -22,6 +23,7 @@ const DEFAULTS: Preferences = {
   sidebarCollapsedDefault: false,
   dateFormat: "MM/DD/YYYY",
   showScreenCodes: true,
+  sidebarNav: { order: [], hidden: [] },
 };
 
 function load(): Preferences {
@@ -72,6 +74,7 @@ export function usePreferences() {
           sidebarCollapsedDefault: server.sidebarCollapsedDefault,
           dateFormat: server.dateFormat,
           showScreenCodes: server.showScreenCodes ?? true,
+          sidebarNav: server.sidebarNav ?? DEFAULTS.sidebarNav,
         };
         setPrefs(merged);
         save(merged);

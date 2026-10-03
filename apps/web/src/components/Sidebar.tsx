@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { navigate, matchRoute } from "../router";
 import { useViewport } from "../hooks/useViewport";
+import { usePreferences } from "../hooks/usePreferences";
 import type { AuthUser } from "../auth/AuthProvider";
 import { SectionCode } from "./ScreenCode";
+import { arrangeNav, moveId, normalizeNav, DEFAULT_SIDEBAR_NAV } from "./sidebar-layout";
 
 const COLLAPSED_KEY = "sidebar-collapsed";
 
@@ -229,6 +231,137 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
     } catch {}
   };
 
+  // Customize mode: drag rows (or arrow keys on the grip) to reorder, eye to
+  // hide. Edits live in a draft until Done; saved per user (preferences.sidebarNav).
+  const { prefs, update } = usePreferences();
+  const [draft, setDraft] = useState<{ order: string[]; hidden: string[] } | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const editing = draft !== null;
+  const saved = prefs.sidebarNav ?? DEFAULT_SIDEBAR_NAV;
+  const defaultIds = NAV_ITEMS.map((i) => i.id);
+
+  const startEditing = () =>
+    setDraft({ order: arrangeNav(NAV_ITEMS, saved.order).map((i) => i.id), hidden: [...saved.hidden] });
+  const finishEditing = () => {
+    if (draft) update("sidebarNav", normalizeNav(defaultIds, draft.order, draft.hidden));
+    setDraft(null);
+    setDragId(null);
+    setSavedFlash(true);
+  };
+  const cancelEditing = () => {
+    setDraft(null);
+    setDragId(null);
+  };
+  const resetDraft = () => setDraft({ order: defaultIds, hidden: [] });
+  const toggleHidden = (id: string) =>
+    setDraft((d) =>
+      d && { ...d, hidden: d.hidden.includes(id) ? d.hidden.filter((x) => x !== id) : [...d.hidden, id] },
+    );
+  const moveTo = (id: string, to: number) => setDraft((d) => d && { ...d, order: moveId(d.order, id, to) });
+
+  // Pointer drag (mouse + touch). The grabbed row follows the pointer; the
+  // others slide out of its way (FLIP). Hit-testing uses each row's untransformed
+  // slot (offsetTop ignores transforms) so rows mid-animation never jitter it.
+  const navRef = useRef<HTMLElement>(null);
+  const grab = useRef<{ offset: number; y: number } | null>(null);
+  const lastTops = useRef(new Map<string, number>());
+  const [savedFlash, setSavedFlash] = useState(false);
+  const reduceMotion = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+  const slotTop = (el: HTMLElement) => {
+    const nav = navRef.current;
+    return nav ? nav.getBoundingClientRect().top + el.offsetTop - nav.scrollTop : el.offsetTop;
+  };
+
+  const positionDragged = () => {
+    const el = dragId ? rowRefs.current.get(dragId) : undefined;
+    if (!el || !grab.current) return;
+    el.style.transform = `translateY(${grab.current.y - grab.current.offset - slotTop(el)}px) scale(1.02)`;
+  };
+
+  const onDragMove = (e: React.PointerEvent) => {
+    if (!dragId || !draft || !grab.current) return;
+    grab.current.y = e.clientY;
+    // The lifted row takes whichever slot its centre is over, so a neighbour
+    // makes room after half a row of travel, never later.
+    const dragged = rowRefs.current.get(dragId);
+    const probe = e.clientY - grab.current.offset + (dragged?.offsetHeight ?? 0) / 2;
+    let target = draft.order.length - 1;
+    for (const [i, id] of draft.order.entries()) {
+      const el = rowRefs.current.get(id);
+      if (!el) continue;
+      if (probe < slotTop(el) + el.offsetHeight) {
+        target = i;
+        break;
+      }
+    }
+    if (target !== draft.order.indexOf(dragId)) moveTo(dragId, target);
+    else positionDragged();
+  };
+
+  const startDrag = (e: React.PointerEvent<HTMLButtonElement>, id: string) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const row = rowRefs.current.get(id);
+    grab.current = { offset: row ? e.clientY - slotTop(row) : 0, y: e.clientY };
+    setDragId(id);
+  };
+
+  // Drop: settle the lifted row into its slot instead of snapping.
+  const endDrag = () => {
+    const el = dragId ? rowRefs.current.get(dragId) : undefined;
+    if (el) {
+      const lifted = el.style.transform;
+      el.style.transform = "";
+      if (lifted && !reduceMotion()) {
+        el.animate([{ transform: lifted }, { transform: "none" }], { duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" });
+      }
+    }
+    grab.current = null;
+    setDragId(null);
+  };
+
+  // FLIP: after each reorder, slide every moved row from its old slot to the new one.
+  useLayoutEffect(() => {
+    if (!draft) {
+      lastTops.current.clear();
+      return;
+    }
+    const animate = !reduceMotion();
+    for (const id of draft.order) {
+      const el = rowRefs.current.get(id);
+      if (!el) continue;
+      const top = el.offsetTop;
+      const prev = lastTops.current.get(id);
+      if (animate && prev !== undefined && prev !== top && id !== dragId) {
+        el.animate([{ transform: `translateY(${prev - top}px)` }, { transform: "none" }], {
+          duration: 200,
+          easing: "cubic-bezier(.2,.8,.2,1)",
+        });
+      }
+      lastTops.current.set(id, top);
+    }
+    positionDragged();
+    // Only a reorder moves rows; drag position updates go through positionDragged directly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft?.order]);
+
+  useEffect(() => {
+    if (!savedFlash) return;
+    const t = setTimeout(() => setSavedFlash(false), 1800);
+    return () => clearTimeout(t);
+  }, [savedFlash]);
+
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancelEditing();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing]);
+
   const isAdmin = user?.role === "admin";
   const isBuilding = (item: NavItem) => !isAdmin && UNDER_CONSTRUCTION_PAGES.has(item.id);
   const isLocked = (item: NavItem) => item.disabled || isBuilding(item);
@@ -242,7 +375,7 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
   // Effective rail mode: the open mobile drawer always shows full labels;
   // the tablet range (641–1024px) forces the icon rail regardless of the
   // user's manual collapse preference; otherwise honour the manual toggle.
-  const rail = mobileOpen ? false : collapsed || isTabletRail;
+  const rail = mobileOpen || editing ? false : collapsed || isTabletRail;
   const width = rail ? 60 : 220;
 
   return (
@@ -279,8 +412,75 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
         </div>
 
         {/* Nav items */}
+        {editing && draft ? (
+          <nav
+            ref={navRef}
+            className={`sidebar-nav sidebar-nav-editing ${dragId ? "sidebar-nav-dragging" : ""}`}
+            aria-label="Reorder pages"
+            onPointerMove={onDragMove}
+          >
+            {arrangeNav(NAV_ITEMS, draft.order).map((item, index) => {
+              const hidden = draft.hidden.includes(item.id);
+              return (
+                <div
+                  key={item.id}
+                  ref={(el) => {
+                    if (el) rowRefs.current.set(item.id, el);
+                    else rowRefs.current.delete(item.id);
+                  }}
+                  className={`sidebar-item sidebar-edit-row ${dragId === item.id ? "sidebar-edit-dragging" : ""} ${hidden ? "sidebar-edit-hidden" : ""}`}
+                  style={{ "--i": index } as React.CSSProperties}
+                >
+                  <button
+                    type="button"
+                    className="sidebar-grip"
+                    aria-label={`Move ${item.label} (drag, or use the up and down arrow keys)`}
+                    title="Drag to reorder"
+                    onPointerDown={(e) => startDrag(e, item.id)}
+                    onPointerUp={endDrag}
+                    onPointerCancel={endDrag}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                        e.preventDefault();
+                        moveTo(item.id, index + (e.key === "ArrowUp" ? -1 : 1));
+                      }
+                    }}
+                  >
+                    <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor" aria-hidden>
+                      <circle cx="4" cy="3" r="1.3" /><circle cx="8" cy="3" r="1.3" />
+                      <circle cx="4" cy="8" r="1.3" /><circle cx="8" cy="8" r="1.3" />
+                      <circle cx="4" cy="13" r="1.3" /><circle cx="8" cy="13" r="1.3" />
+                    </svg>
+                  </button>
+                  <span className="sidebar-icon">{item.icon}</span>
+                  <span className="sidebar-label">{item.label}</span>
+                  <button
+                    type="button"
+                    className="sidebar-eye"
+                    onClick={() => toggleHidden(item.id)}
+                    aria-pressed={!hidden}
+                    aria-label={hidden ? `Show ${item.label}` : `Hide ${item.label}`}
+                    title={hidden ? "Hidden — click to show" : "Click to hide"}
+                  >
+                    {hidden ? (
+                      <svg key="off" className="sidebar-eye-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+                        <path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z" />
+                        <path d="M2.5 13.5l11-11" />
+                      </svg>
+                    ) : (
+                      <svg key="on" className="sidebar-eye-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+                        <path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z" />
+                        <circle cx="8" cy="8" r="2" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </nav>
+        ) : (
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map((item) => {
+          {arrangeNav(NAV_ITEMS, saved.order).filter((item) => !saved.hidden.includes(item.id)).map((item) => {
             const active = isActiveItem(item, pathname);
             const locked = isLocked(item);
             const building = isBuilding(item);
@@ -304,10 +504,31 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
             );
           })}
         </nav>
+        )}
 
-        {/* G1 — the sidebar itself (docs/ui-map.md) */}
-        <div style={{ padding: "0 10px" }}>
-          <SectionCode code="G1" />
+        {/* G1 — the sidebar itself (docs/ui-map.md), with the Customize controls */}
+        <div className="sidebar-customize" style={{ padding: "0 10px" }}>
+          {!rail && (
+            editing ? (
+              <>
+                <button type="button" className="sidebar-link" onClick={resetDraft} title="Back to the standard order, nothing hidden">
+                  Reset
+                </button>
+                <span style={{ flex: 1 }} />
+                <button type="button" className="sidebar-link" onClick={cancelEditing}>Cancel</button>
+                <button type="button" className="sidebar-link sidebar-link-primary" onClick={finishEditing}>Done</button>
+              </>
+            ) : savedFlash ? (
+              <span className="sidebar-saved" role="status">✓ Saved</span>
+            ) : (
+              <button type="button" className="sidebar-link" onClick={startEditing} title="Reorder or hide pages in this list">
+                Customize
+              </button>
+            )
+          )}
+          <span style={{ marginLeft: "auto" }}>
+            <SectionCode code="G1" />
+          </span>
         </div>
 
         {/* Settings */}
