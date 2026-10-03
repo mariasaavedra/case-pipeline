@@ -122,7 +122,7 @@ export function getAppointments(
     LEFT JOIN profiles p ON p.local_id = bi.profile_local_id
     WHERE bi.board_key IN (${boardKeyPlaceholders})
       ${dateClause}
-      ${hasAttorneyFilter ? "AND bi.attorney = ?" : ""}
+      ${hasAttorneyFilter ? `AND ${ATTORNEY_MATCH_SQL}` : ""}
     ORDER BY bi.next_date ASC, bi.name ASC
   `;
 
@@ -195,8 +195,23 @@ export function getAppointments(
 // Attorney List
 // =============================================================================
 
+// A shared appointment stores every assignee in one cell ("Lucy Betteridge,
+// Michael Sharma-Crawford"). Filtering by one attorney matches any cell that
+// lists them, so the appointment shows under each assigned attorney.
+const ATTORNEY_MATCH_SQL =
+  "instr(',' || replace(bi.attorney, ', ', ',') || ',', ',' || ? || ',') > 0";
+
+/** One attorney cell → the individual names in it. */
+export function splitAttorneys(value: string): string[] {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 /**
- * Get distinct attorney identifiers from appointment boards.
+ * Get the individual attorneys on the appointment boards — combinations
+ * ("A, B") are split, so the filter offers one option per attorney.
  */
 export function getAttorneyList(db: Database, boardKeyList?: string[]): string[] {
   const keys = boardKeyList ?? listAppointmentBoardKeys(db);
@@ -211,7 +226,8 @@ export function getAttorneyList(db: Database, boardKeyList?: string[]): string[]
     )
     .all(...keys) as { attorney: string }[];
 
-  return rows.map((r) => r.attorney);
+  const names = new Set(rows.flatMap((r) => splitAttorneys(r.attorney)));
+  return [...names].sort((a, b) => a.localeCompare(b));
 }
 
 // =============================================================================
