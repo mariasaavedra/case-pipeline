@@ -110,6 +110,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `active-cases.ts` | P5 Active Cases: de-duplicated case list + per-paralegal lanes, urgency buckets |
 | `alerts.ts` | Overdue deadlines + stale cases, only on boards whose date is a real deadline (`DEADLINE_BOARDS`, with each board's "finished" statuses); plus "Mail to review" |
 | `appeal-deadlines.ts` | "Appeal & Federal Deadlines" alert group: BIA appeal clock on court cases "REMOVED - Appealing?" / recently "Ordered Removed" (30 days from the removal date in the item name, else last hearing), Appeals board appeal/brief due with nothing filed, Litigation due within 14 days |
+| `u-visa-certifications.ts` | Alert groups "I-918B Expiring" (signed certification expiring within 45 days or expired ≤60 days ago, no U visa / I-918 Open Form sent since signing; Expiration Date else signed + 6 months) and "I-918B Requests Pending" (90+ days since the hire date, unsigned). The I-918B board is not in `DEADLINE_BOARDS` |
 | `prescheduling.ts` | P13 Prescheduling: Paid Fee Ks by PS Stage, days since hire (30/60), "not cooperating" (reminder 14+ days, no evidence since), North Pole parked |
 | `pending-contracts.ts` | P14 Contracts: Pending Fee Ks by Contract Stage, aged from sent (else added) date, 30/60 days |
 | `court-cases.ts` | P15 Court Cases: active court cases with hearing/judge/method, Case Prep Status, readiness (Trial 60/90, MCH 14 days), data-cleanup flags |
@@ -156,7 +157,7 @@ Data reads:
 | `GET /api/pending-contracts` | P14 data: Pending Fee Ks with age level, payment link, AF/FF, stages in pipeline order |
 | `GET /api/court-cases` | P15 data: active court cases (Docket + Prep Pipeline views), stages in workflow order, Case Prep Status options |
 | `GET /api/address-changes` | P18 data: open address changes with phase, age level, next hearing, flags; the board's status labels + the Status / Date Sent column ids for write-back (via `PATCH /api/board-items/:localId/status` and `/columns`) |
-| `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Appeal & Federal Deadlines" and "Mail to review" |
+| `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Appeal & Federal Deadlines", "I-918B Expiring", "I-918B Requests Pending" and "Mail to review" |
 | `GET /api/search` | Cross-type search: profiles, contracts, court cases, etc. |
 | `GET /api/filter-options` | Distinct values for filter dropdowns (priorities, statuses, attorneys, board types) |
 | `GET /api/clients` | Filtered + paginated profile listing |
