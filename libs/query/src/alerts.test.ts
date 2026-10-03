@@ -126,6 +126,8 @@ describe("getAlerts", () => {
     expect(result.totalCount).toBe(0);
     expect(result.groups.map((g) => g.label)).toEqual([
       "Appeal & Federal Deadlines",
+      "I-918B Expiring",
+      "I-918B Requests Pending",
       "Overdue Deadlines",
       "Stale Cases",
       "Mail to review",
@@ -279,8 +281,6 @@ describe("getAlerts", () => {
       ["_cd_open_forms", "To close"],
       ["rfes_all", "Sent out"],
       ["appeals", "Submitted"],
-      ["_lt_i918b_s", "Not Hiring"],
-      ["_lt_i918b_s", "Expired"],
     ];
     rows.forEach(([boardKey, status], i) =>
       insertBoardItem(db, { localId: `done${i}`, boardKey, name: `${boardKey} ${status}`, status, nextDate: past, profileLocalId: "p1" }),
@@ -297,7 +297,8 @@ describe("getAlerts", () => {
     const db = freshDb();
     insertProfile(db, { localId: "p1", name: "Iris" });
     const past = addDays(todayStr(), -10);
-    for (const boardKey of ["_na_originals_cards_notices", "address_changes", "_fa_jail_intakes", "appointments_cr"]) {
+    // I-918B: its date is the hire due date; the I-918B groups alert on expiry instead.
+    for (const boardKey of ["_na_originals_cards_notices", "address_changes", "_fa_jail_intakes", "appointments_cr", "_lt_i918b_s"]) {
       insertBoardItem(db, { localId: boardKey, boardKey, name: boardKey, status: "Scheduled", nextDate: past, profileLocalId: "p1" });
     }
 

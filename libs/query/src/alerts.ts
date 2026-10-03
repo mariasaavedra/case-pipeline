@@ -7,6 +7,7 @@ type Database = BetterSqlite3.Database;
 import type { AlertsResult, AlertGroup, AlertItem } from "./types";
 import { getMailReviewAlertGroup, countMailToReview } from "./mail-review";
 import { getAppealDeadlineAlertGroup, getAppealDeadlineItems } from "./appeal-deadlines";
+import { getI918bAlertGroups, countI918bAlerts } from "./u-visa-certifications";
 import { CLOSED_BOARD_ITEM_STATUSES } from "./types";
 
 interface AlertOptions {
@@ -22,12 +23,15 @@ interface AlertOptions {
  * Intakes and appointments (consult date) — all in the past by design, so every
  * row read as "overdue" forever. Statuses match case-insensitively: the boards
  * spell "Sent Out" three ways. A row with no status never alerts.
+ *
+ * The I-918B board isn't here: its date is the hire due date, which kept
+ * alerting after the I-918 was filed. u-visa-certifications.ts alerts on the
+ * certification's expiry instead, and skips filed ones.
  */
 export const DEADLINE_BOARDS: Readonly<Record<string, readonly string[]>> = {
   _cd_open_forms: ["Sent Out", "Interview done", "Denied", "Not going forward", "Send to North Pole", "To close"],
   rfes_all: ["Sent out"],
   appeals: ["Submitted"],
-  _lt_i918b_s: ["Not Hiring", "Expired"],
   court_cases: [],
   motions: [],
   litigation: [],
@@ -43,6 +47,7 @@ export function getAlerts(
   const todayStr = formatDate(new Date());
   const groups = [
     getAppealDeadlineAlertGroup(db, opts),
+    ...getI918bAlertGroups(db, opts),
     getOverdueDeadlines(db, todayStr, opts),
     getStaleCases(db, todayStr, opts),
     getMailReviewAlertGroup(db, opts),
@@ -61,7 +66,8 @@ export function getAlertsTotalCount(db: Database): number {
     countOverdue(db, todayStr, {}) +
     countStale(db, todayStr, {}) +
     countMailToReview(db) +
-    getAppealDeadlineItems(db).length
+    getAppealDeadlineItems(db).length +
+    countI918bAlerts(db)
   );
 }
 
