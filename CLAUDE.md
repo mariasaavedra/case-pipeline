@@ -108,7 +108,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 |---|---|
 | `appointment-boards.ts` | Which `appointments_<initials>` boards exist in the synced data. No list in code: a new attorney = `boards.yaml` entry + Settings → Attorney boards |
 | `active-cases.ts` | P5 Active Cases: de-duplicated case list + per-paralegal lanes, urgency buckets |
-| `alerts.ts` | Overdue deadlines, stale cases, idle contracts |
+| `alerts.ts` | Overdue deadlines + stale cases, only on boards whose date is a real deadline (`DEADLINE_BOARDS`, with each board's "finished" statuses); plus "Mail to review" |
 | `prescheduling.ts` | P13 Prescheduling: Paid Fee Ks by PS Stage, days since hire (30/60), "not cooperating" (reminder 14+ days, no evidence since), North Pole parked |
 | `pending-contracts.ts` | P14 Contracts: Pending Fee Ks by Contract Stage, aged from sent (else added) date, 30/60 days |
 | `board-columns.ts` | Per-board column schema for the in-place field editors |
