@@ -2,12 +2,13 @@
 
 **Status:** implemented 2026-10-01. Visible to admins only; it still shows as under construction for everyone else (`UNDER_CONSTRUCTION_PAGES` in `Sidebar.tsx`) until the court team has checked the counts.
 
-One fetch, two views of the active immigration court cases (Court Cases board, group **Court Case**):
+One fetch, three views of the active immigration court cases (Court Cases board, group **Court Case**) and their motions:
 
 | View | URL | Question it answers |
 |---|---|---|
 | **Docket** | `/court-cases` | What's in court soon? Hearings for the next 30 / 60 / 90 days, by week, with judge, method and hearing type |
 | **Prep Pipeline** | `/court-cases/prep` | Is prep keeping up? Attorney × Case Prep Status table, then cases grouped by stage. **The stage can be changed here, and the change is written to Monday** |
+| **Motions** | `/court-cases/motions` | Which motions are still to file, which have waited too long for the judge, what was decided lately? (added 2026-10-02) |
 
 Both views share the judge / attorney / paralegal / hearing-type filters and the "Needs cleanup on Monday" strip.
 
@@ -62,7 +63,28 @@ The workflow comes first, then the side tracks; labels added on Monday later go 
 - Audited as `monday.column_changed` with from → to.
 - The UI asks "Move to X?" before writing.
 
+## Motions (added 2026-10-02)
+
+Source: the **Motions** board (`board_key = 'motions'`), joined to its court case by the Monday id in `court_case.linked_item_ids` (any group, so closed cases are recognised). Query: `libs/query/src/court-motions.ts`, returned as `motions` in `GET /api/court-cases`; each active case also carries `openMotions`.
+
+| Phase | Rule |
+|---|---|
+| To send | Groups "Motions to be sent", "ATTY BRIEF" |
+| Waiting | Group "Filed/Waiting for IJ" |
+| Granted / Denied | Groups "Granted" / "Denied", **or** a status starting Granted / Denied (status wins: "Granted - NO JUDGE ORDER" in the Filed group is granted) |
+| Closed | "Not Proceeding", "North Pole", or status Withdrawn / Turned Habeas |
+
+- **Age** (waiting only): days since Mtn Filed On. 60+ amber, 90+ red (`MOTION_WAITING_DAYS` / `MOTION_LATE_DAYS`).
+- **Hearing soon**: open motion whose active case has a hearing within 14 days. Shown first, in its own section.
+- **Docket / Prep rows** tag each open motion: "MTC pending 45d", "BONDMTN to send".
+- **Cleanup chips** (Motions tab): open but the case is closed (moved to Inactive / Withdrew / Ordered Removed: leftovers, hidden from "Waiting" and shown only here), no court case linked, waiting with no filed date, decided but status says no judge order, profile not connected.
+- Read-only for now: the motion status is not written back from here.
+
+On the 2026-10-01 snapshot: 130 waiting (94 of them 90+ days), 26 to send, and 57 open motions sitting on closed court cases.
+
 ## Not done yet
+
+- Motions: change a motion's status (Filed → Granted / Denied + decision date) from the tab; feed EOIR decisions on motions from Mail intake.
 
 - Readiness thresholds as admin settings (like the urgency thresholds).
 - Opening P15 to everyone after the court team checks the counts.

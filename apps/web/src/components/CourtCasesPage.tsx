@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { fetchCourtCases, changeCourtCasePrepStage } from "../api";
-import type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness } from "../api";
+import type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness, CaseMotion, CourtMotion, MotionFlag } from "../api";
 import { navigate } from "../router";
 import { ClientLink } from "./ClientPeek";
 import { SectionCode } from "./ScreenCode";
@@ -11,15 +11,18 @@ import { formatDue, PersonChip, Tag, CountTable, ListSection } from "./caseBoard
 // =============================================================================
 // P15 Court Cases
 // =============================================================================
-// Active immigration court cases, two views over one fetch:
+// Active immigration court cases, three views over one fetch:
 //   - Docket (/court-cases): upcoming hearings by week — judge, method, type.
 //   - Prep Pipeline (/court-cases/prep): cases by Case Prep Status, coloured by
 //     whether prep is keeping up with the hearing date; the stage can be moved
 //     from here (written to Monday).
-// A strip of data problems (past hearing, awaiting a new date, no date, profile
-// not connected) sits above both. See docs/features/court-cases.md.
+//   - Motions (/court-cases/motions): the Motions board — to send, waiting for
+//     the judge (aged 60 / 90 days), decided lately. Docket and Prep rows tag
+//     each case's open motions.
+// A strip of data problems sits above each view (cases, or motions on the
+// Motions tab). See docs/features/court-cases.md.
 
-type View = "docket" | "prep";
+type View = "docket" | "prep" | "motions";
 const NO_STAGE = "No stage";
 const NO_ATTORNEY = "No attorney";
 const ALL = "";
@@ -42,6 +45,19 @@ const FLAG_LABEL: Record<CourtCaseFlag, string> = {
 };
 const FLAGS: CourtCaseFlag[] = ["past_hearing", "awaiting_new_date", "no_hearing_date", "connect_profile"];
 
+const MOTION_FLAG_LABEL: Record<MotionFlag, string> = {
+  no_court_case: "No court case linked",
+  case_closed: "Open, but case is closed",
+  no_filed_date: "Filed, no filed date",
+  no_judge_order: "Decided, no judge order",
+  connect: "Profile not connected",
+};
+const MOTION_FLAGS: MotionFlag[] = ["case_closed", "no_court_case", "no_filed_date", "no_judge_order", "connect"];
+
+/** Waiting age → --urgency-* token (90+ days red, 60+ amber). */
+const AGE_TONE: Record<CourtMotion["age"], string | null> = { late: "overdue", waiting: "missing", fresh: null, unknown: null };
+const DECIDED_WINDOW_DAYS = 30;
+
 const WINDOWS = [30, 60, 90] as const;
 type Window = (typeof WINDOWS)[number] | "all";
 
@@ -50,8 +66,10 @@ interface Filter {
   attorney: string;
   paralegal: string;
   kind: string;
+  /** Motion type (Motions tab only). */
+  motion: string;
 }
-const EMPTY_FILTER: Filter = { judge: ALL, attorney: ALL, paralegal: ALL, kind: ALL };
+const EMPTY_FILTER: Filter = { judge: ALL, attorney: ALL, paralegal: ALL, kind: ALL, motion: ALL };
 
 // =============================================================================
 // Helpers
@@ -87,6 +105,19 @@ function kindTag(c: CourtCase) {
   return label ? <Tag color="court" title={c.hearingType ?? undefined}>{label}</Tag> : null;
 }
 
+const motionName = (types: string[]) => (types.length ? types.join(" / ") : "Motion");
+
+/** "MTC pending 45d" / "BONDMTN to send" on a case row. */
+function MotionTag({ m }: { m: CaseMotion }) {
+  const name = motionName(m.types);
+  if (m.phase === "to_send") return <Tag color="missing" title="Motion still to be filed">{name} to send</Tag>;
+  return (
+    <Tag color="soon" title={m.daysWaiting !== null ? `Filed ${m.daysWaiting} days ago, waiting for the judge` : "Filed, waiting for the judge"}>
+      {name} pending{m.daysWaiting !== null ? ` ${m.daysWaiting}d` : ""}
+    </Tag>
+  );
+}
+
 // =============================================================================
 // Shared row pieces
 // =============================================================================
@@ -107,6 +138,9 @@ function ClientCell({ c }: { c: CourtCase }) {
         {c.needsWebex && <Tag color="missing" title={c.method ?? undefined}>Needs Webex</Tag>}
         {c.aNumber && <span className="tabular-nums">A# {c.aNumber}</span>}
         {c.service && <span>· {c.service}</span>}
+        {c.openMotions.map((m) => (
+          <MotionTag key={m.localId} m={m} />
+        ))}
         {c.flags.map((f) => (
           <Tag key={f} color="overdue">{FLAG_LABEL[f]}</Tag>
         ))}
@@ -479,6 +513,153 @@ function PipelineView({
 }
 
 // =============================================================================
+// Motions view
+// =============================================================================
+
+function MotionRow({ m, filter, onPerson }: { m: CourtMotion; filter: Filter; onPerson: (key: "attorney" | "paralegal", name: string) => void }) {
+  const ageTone = m.phase === "waiting" ? AGE_TONE[m.age] : null;
+  const edge = m.hearingSoon ? "var(--urgency-critical)" : ageTone ? `var(--urgency-${ageTone})` : "var(--color-ink-faint)";
+  return (
+    <li
+      className="grid gap-x-4 gap-y-1.5 px-4 py-3 items-center grid-cols-1 md:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_9rem_9rem_minmax(0,1.2fr)]"
+      style={{ borderTop: "1px solid var(--color-border-light)", boxShadow: `inset 3px 0 0 ${edge}` }}
+    >
+      <div className="min-w-0">
+        <div className="text-sm font-semibold truncate" style={{ color: "var(--color-ink)" }} title={m.itemName}>{motionName(m.types)}</div>
+        <div className="text-xs truncate" style={{ color: "var(--color-ink-faint)" }} title="Status on Monday">{m.status ?? m.group ?? ""}</div>
+      </div>
+      <div className="min-w-0">
+        {m.clientLocalId ? (
+          <ClientLink clientId={m.clientLocalId} className="font-medium hover:underline truncate block" style={{ color: "var(--color-ink)" }}>
+            {m.clientName}
+          </ClientLink>
+        ) : (
+          <span className="font-medium truncate block" style={{ color: "var(--color-ink)" }}>{m.clientName}</span>
+        )}
+        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap text-xs" style={{ color: "var(--color-ink-faint)" }}>
+          {m.relief && <span>{m.relief}</span>}
+          {m.judge && <span>· {m.judge}</span>}
+          {m.flags.map((f) => (
+            <Tag key={f} color="overdue">{MOTION_FLAG_LABEL[f]}</Tag>
+          ))}
+        </div>
+      </div>
+      <div className="text-sm whitespace-nowrap">
+        {m.phase === "waiting" ? (
+          m.filedOn ? (
+            <>
+              <div style={{ color: "var(--color-ink-muted)" }}>Filed {formatDue(m.filedOn)}</div>
+              <div className="text-xs font-semibold" style={{ color: ageTone ? `var(--urgency-${ageTone})` : "var(--color-ink-muted)" }}>
+                {m.daysWaiting}d waiting
+              </div>
+            </>
+          ) : (
+            <span style={{ color: "var(--color-ink-faint)" }}>No filed date</span>
+          )
+        ) : m.phase === "granted" || m.phase === "denied" ? (
+          <>
+            <Tag color={m.phase === "granted" ? "later" : "overdue"}>{m.phase === "granted" ? "Granted" : "Denied"}</Tag>
+            {m.decidedOn && <div className="text-xs mt-0.5" style={{ color: "var(--color-ink-muted)" }}>{formatDue(m.decidedOn)}</div>}
+          </>
+        ) : m.phase === "to_send" ? (
+          <span style={{ color: "var(--urgency-missing)" }}>Not filed yet</span>
+        ) : (
+          <span style={{ color: "var(--color-ink-faint)" }}>Closed</span>
+        )}
+      </div>
+      <div className="text-sm whitespace-nowrap" title="Next hearing on the court case">
+        {m.hearingDate ? (
+          <>
+            <span style={{ color: "var(--color-ink-muted)" }}>{formatDue(m.hearingDate)}</span>
+            {m.daysToHearing !== null && (
+              <span className="ml-1.5 font-semibold" style={{ color: m.hearingSoon ? "var(--urgency-critical)" : "var(--color-ink-muted)" }}>
+                {countdown(m.daysToHearing)}
+              </span>
+            )}
+          </>
+        ) : (
+          <span style={{ color: "var(--color-ink-faint)" }}>{m.courtCaseActive ? "No hearing date" : m.courtCaseLocalId ? "Case closed" : "No case"}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+        {m.attorney && <PersonChip name={m.attorney} active={filter.attorney === m.attorney} onClick={() => onPerson("attorney", m.attorney!)} />}
+        {m.paralegals.map((p) => (
+          <button key={p} type="button" className="text-xs hover:underline" title="Paralegal" style={{ color: filter.paralegal === p ? "var(--color-amber-dark)" : "var(--color-ink-muted)" }} onClick={() => onPerson("paralegal", p)}>
+            {p}
+          </button>
+        ))}
+      </div>
+    </li>
+  );
+}
+
+export function MotionsView({
+  motions,
+  filter,
+  onPerson,
+  showingProblem,
+}: {
+  motions: CourtMotion[];
+  filter: Filter;
+  onPerson: (key: "attorney" | "paralegal", name: string) => void;
+  showingProblem: boolean;
+}) {
+  const row = (m: CourtMotion) => <MotionRow key={m.localId} m={m} filter={filter} onPerson={onPerson} />;
+
+  if (showingProblem) {
+    return (
+      <>
+        <SectionCode code="P15.5" />
+        <ListSection title="Needs cleanup on Monday" count={motions.length} tone={null}>
+          {motions.map(row)}
+        </ListSection>
+      </>
+    );
+  }
+
+  // Open motions on closed cases are leftovers, not real waits: they only show
+  // under the "Open, but case is closed" cleanup chip.
+  const live = motions.filter((m) => !m.flags.includes("case_closed"));
+  const soon = live.filter((m) => m.hearingSoon);
+  const toSend = live.filter((m) => m.phase === "to_send" && !m.hearingSoon);
+  const waiting = live.filter((m) => m.phase === "waiting" && !m.hearingSoon);
+  const today = new Date().toISOString().slice(0, 10);
+  const since = new Date(Date.now() - DECIDED_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const decided = motions
+    .filter((m) => (m.phase === "granted" || m.phase === "denied") && m.decidedOn && m.decidedOn >= since && m.decidedOn <= today)
+    .sort((a, b) => b.decidedOn!.localeCompare(a.decidedOn!));
+  const late = waiting.filter((m) => m.age === "late").length;
+  const granted = decided.filter((m) => m.phase === "granted").length;
+
+  return (
+    <>
+      <SectionCode code="P15.5" />
+      <div className="space-y-4">
+        {soon.length > 0 && (
+          <ListSection title="Hearing within 14 days, motion still open" count={soon.length} tone="critical">
+            {soon.map(row)}
+          </ListSection>
+        )}
+        <ListSection title="To send" count={toSend.length} tone={null} note="Drafting, attorney brief, or ready to file">
+          {toSend.map(row)}
+        </ListSection>
+        <ListSection title="Waiting for the judge" count={waiting.length} tone={null} note={late ? `${late} waiting 90+ days` : undefined}>
+          {waiting.map(row)}
+        </ListSection>
+        <ListSection
+          title={`Decided in the last ${DECIDED_WINDOW_DAYS} days`}
+          count={decided.length}
+          tone={null}
+          note={decided.length ? `${granted} granted · ${decided.length - granted} denied` : undefined}
+        >
+          {decided.map(row)}
+        </ListSection>
+      </div>
+    </>
+  );
+}
+
+// =============================================================================
 // Page
 // =============================================================================
 
@@ -517,6 +698,7 @@ export function CourtCasesPage({ view }: { view: View }) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>(EMPTY_FILTER);
   const [problem, setProblem] = useState<CourtCaseFlag | null>(null);
+  const [motionProblem, setMotionProblem] = useState<MotionFlag | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(() => {
@@ -532,8 +714,9 @@ export function CourtCasesPage({ view }: { view: View }) {
       judges: uniqueSorted(all.map((c) => c.judge)),
       attorneys: uniqueSorted(all.map((c) => c.attorney)),
       paralegals: uniqueSorted(all.flatMap((c) => c.paralegals)),
+      motionTypes: uniqueSorted((data?.motions ?? []).flatMap((m) => m.types)),
     }),
-    [all],
+    [all, data],
   );
 
   const matches = (c: CourtCase) =>
@@ -543,6 +726,17 @@ export function CourtCasesPage({ view }: { view: View }) {
     (!filter.kind || c.hearingKind === filter.kind);
   const filtered = all.filter(matches);
   const visible = problem ? filtered.filter((c) => c.flags.includes(problem)) : filtered;
+
+  // The Motions tab: same judge / attorney / paralegal filters, plus motion type.
+  const motionsFiltered = (data?.motions ?? []).filter(
+    (m) =>
+      (!filter.judge || m.judge === filter.judge) &&
+      (!filter.attorney || m.attorney === filter.attorney) &&
+      (!filter.paralegal || m.paralegals.includes(filter.paralegal)) &&
+      (!filter.motion || m.types.includes(filter.motion)),
+  );
+  const motionsVisible = motionProblem ? motionsFiltered.filter((m) => m.flags.includes(motionProblem)) : motionsFiltered;
+  const isMotions = view === "motions";
 
   const onPerson = (key: "attorney" | "paralegal", name: string) =>
     setFilter((f) => ({ ...f, [key]: f[key] === name ? ALL : name }));
@@ -564,7 +758,8 @@ export function CourtCasesPage({ view }: { view: View }) {
   const t = data?.thresholds;
   const upcoming30 = all.filter((c) => c.daysToHearing !== null && c.daysToHearing >= 0 && c.daysToHearing <= 30).length;
   const behind = all.filter((c) => c.readiness === "behind").length;
-  const filtering = Object.values(filter).some(Boolean) || problem !== null;
+  const filtering = Object.values(filter).some(Boolean) || problem !== null || motionProblem !== null;
+  const openMotions = (data?.motions ?? []).filter((m) => (m.phase === "to_send" || m.phase === "waiting") && !m.flags.includes("case_closed")).length;
 
   return (
     <div>
@@ -577,7 +772,7 @@ export function CourtCasesPage({ view }: { view: View }) {
         {data && (
           <span className="text-sm" style={{ color: "var(--color-ink-muted)" }}>
             {all.length} active · {upcoming30} hearings in the next 30 days ·{" "}
-            <span style={{ color: readyFg("behind") }}>{behind} behind schedule</span>
+            <span style={{ color: readyFg("behind") }}>{behind} behind schedule</span> · {openMotions} open motions
           </span>
         )}
       </div>
@@ -588,12 +783,17 @@ export function CourtCasesPage({ view }: { view: View }) {
         <button type="button" role="tab" className="tab-button" aria-selected={view === "prep"} onClick={() => navigate("/court-cases/prep")}>
           Prep Pipeline
         </button>
+        <button type="button" role="tab" className="tab-button" aria-selected={view === "motions"} onClick={() => navigate("/court-cases/motions")}>
+          Motions
+        </button>
       </div>
       <p className="text-sm mb-4" style={{ color: "var(--color-ink-faint)" }}>
         {view === "docket"
           ? "Upcoming hearings by week. Left edge = prep readiness."
-          : "Cases by Case Prep Status. Change a stage here and it is written to Monday."}
-        {t && (
+          : view === "prep"
+            ? "Cases by Case Prep Status. Change a stage here and it is written to Monday."
+            : "The Motions board. Waiting = filed, no decision yet; left edge amber after 60 days, red after 90."}
+        {t && !isMotions && (
           <>
             {" "}Behind = Trial within {t.trialBehindDays} days before Trial Prep (
             <span style={{ color: readyFg("at_risk") }}>at risk within {t.trialAtRiskDays}</span>), or MCH within {t.mchBehindDays} days still in Initial Set Up.
@@ -616,13 +816,16 @@ export function CourtCasesPage({ view }: { view: View }) {
             <FilterSelect label="Judge" value={filter.judge} options={options.judges} onChange={(v) => setFilter({ ...filter, judge: v })} code="D25" />
             <FilterSelect label="Attorney" value={filter.attorney} options={options.attorneys} onChange={(v) => setFilter({ ...filter, attorney: v })} code="D26" />
             <FilterSelect label="Paralegal" value={filter.paralegal} options={options.paralegals} onChange={(v) => setFilter({ ...filter, paralegal: v })} code="D27" />
-            <div className="flex gap-1" role="group" aria-label="Hearing type">
+            {isMotions && (
+              <FilterSelect label="Motion" value={filter.motion} options={options.motionTypes} onChange={(v) => setFilter({ ...filter, motion: v })} code="D29" />
+            )}
+            {!isMotions && <div className="flex gap-1" role="group" aria-label="Hearing type">
               {[["", "All types"], ["mch", "MCH"], ["trial", "Trial"], ["other", "Other"]].map(([k, l]) => (
                 <button key={k} type="button" className={`filter-chip ${filter.kind === k ? "filter-chip-active" : ""}`} onClick={() => setFilter({ ...filter, kind: k! })}>
                   {l}
                 </button>
               ))}
-            </div>
+            </div>}
             {filtering && (
               <button
                 type="button"
@@ -631,6 +834,7 @@ export function CourtCasesPage({ view }: { view: View }) {
                 onClick={() => {
                   setFilter(EMPTY_FILTER);
                   setProblem(null);
+                  setMotionProblem(null);
                 }}
               >
                 Clear filters
@@ -639,7 +843,21 @@ export function CourtCasesPage({ view }: { view: View }) {
           </div>
           <div className="flex items-center gap-2 flex-wrap mb-5" role="group" aria-label="Data problems">
             <span className="text-sm" style={{ color: "var(--color-ink-muted)" }}>Needs cleanup on Monday:</span>
-            {FLAGS.map((f) => {
+            {isMotions ? MOTION_FLAGS.map((f) => {
+              const n = motionsFiltered.filter((m) => m.flags.includes(f)).length;
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  disabled={n === 0}
+                  className={`filter-chip ${motionProblem === f ? "filter-chip-active" : ""}`}
+                  style={n > 0 && motionProblem !== f ? { color: "var(--urgency-overdue)" } : undefined}
+                  onClick={() => setMotionProblem(motionProblem === f ? null : f)}
+                >
+                  {MOTION_FLAG_LABEL[f]} · {n}
+                </button>
+              );
+            }) : FLAGS.map((f) => {
               const n = filtered.filter((c) => c.flags.includes(f)).length;
               return (
                 <button
@@ -656,7 +874,9 @@ export function CourtCasesPage({ view }: { view: View }) {
             })}
           </div>
 
-          {view === "docket" ? (
+          {isMotions ? (
+            <MotionsView motions={motionsVisible} filter={filter} onPerson={onPerson} showingProblem={motionProblem !== null} />
+          ) : view === "docket" ? (
             <DocketView cases={visible} filter={filter} onPerson={onPerson} showingProblem={problem !== null} />
           ) : (
             <PipelineView

@@ -360,7 +360,7 @@ function App() {
             {route.page === "call-log" && !loading && <CallLogPage />}
             {route.page === "jail-intakes" && !loading && <JailIntakesPage />}
             {route.page === "mail" && !loading && (underConstruction ? <UnderConstruction label="Mail" /> : <MailPage />)}
-            {route.page === "court-cases" && !loading && (underConstruction ? <UnderConstruction label="Court Cases" /> : <CourtCasesPage view={route.params.view === "prep" ? "prep" : "docket"} />)}
+            {route.page === "court-cases" && !loading && (underConstruction ? <UnderConstruction label="Court Cases" /> : <CourtCasesPage view={route.params.view === "prep" || route.params.view === "motions" ? route.params.view : "docket"} />)}
             {route.page === "map" && !loading && <UnderConstruction label="Map" planned={!underConstruction} />}
 
             {/* Clients page — search + filtered browse */}
