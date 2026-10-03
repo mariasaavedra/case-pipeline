@@ -27,6 +27,7 @@ export { getPendingContracts } from "./pending-contracts";
 export { getCourtCases, ACTIVE_COURT_CASE_GROUP, PREP_STAGE_COLUMN_TITLE } from "./court-cases";
 export { getCourtMotions, HEARING_SOON_DAYS, MOTION_LATE_DAYS, MOTION_WAITING_DAYS } from "./court-motions";
 export type { CourtMotion, MotionAge, MotionFlag, MotionPhase } from "./court-motions";
+export { getAddressChanges } from "./address-changes";
 export { getCallLogEntries, getCallLogStaffOptions } from "./call-log";
 export { getJailIntakes, getJailIntakeNotes, cutoffDate } from "./jail-intakes";
 export { scanMailPages, needsReview, extractNoticeFields, emptyFields, normalizeFields, parseNoticeDate, cleanName, compareNames, nameTokens, NAME_ROLES, splitIntoDocuments, analyzePage, repairOcrText, matchNotice, findFormsForProfile, normalizeANumber, normalizeFormType } from "./mail";
@@ -42,6 +43,7 @@ export type { ActiveCase, ActiveCasesAssignee, ActiveCasesResult, ActiveCasesOpt
 export type { PreschedulingCase, PreschedulingResult, PreschedulingOptions, WaitLevel } from "./prescheduling";
 export type { PendingContract, PendingContractsResult, PendingContractsOptions } from "./pending-contracts";
 export type { CaseMotion, CourtCase, CourtCasesResult, CourtCasesOptions, CourtCaseFlag, HearingKind, Readiness, ReadinessThresholds } from "./court-cases";
+export type { AddressChange, AddressChangesResult, AddressChangePhase, AddressChangeFlag } from "./address-changes";
 export type {
   ProfileSummary,
   ContractSummary,

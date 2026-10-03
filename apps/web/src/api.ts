@@ -18,6 +18,7 @@ export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from
 export type { PreschedulingResult, PreschedulingCase, WaitLevel } from "@case-pipeline/query";
 export type { PendingContractsResult, PendingContract } from "@case-pipeline/query";
 export type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness, CaseMotion, CourtMotion, MotionFlag, MotionPhase } from "@case-pipeline/query";
+export type { AddressChangesResult, AddressChange, AddressChangePhase, AddressChangeFlag } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
 export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail, MailWriteBackPlan, StepOutcome, WriteBackState, NoticeFields, FieldEdits } from "@case-pipeline/query";
@@ -605,6 +606,10 @@ export async function changeCourtCasePrepStage(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ stage, from }),
   });
+}
+
+export async function fetchAddressChanges(): Promise<import("@case-pipeline/query").AddressChangesResult> {
+  return apiFetch("/api/address-changes");
 }
 
 export async function fetchPrescheduling(): Promise<PreschedulingResult> {

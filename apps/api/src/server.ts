@@ -29,7 +29,7 @@ import {
   handleCallLog,
   handleJailIntakes,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getAddressChanges, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
 import { setApiToken } from "@case-pipeline/monday";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
@@ -403,6 +403,11 @@ app.get("/api/pending-contracts", (_req, res) => {
 // Readiness thresholds are the query defaults (Trial 60 / 90 days, MCH 14).
 app.get("/api/court-cases", (_req, res) => {
   res.json({ data: getCourtCases(db) });
+});
+// Address Changes (P18) — the open changes of address as a queue (payment → our
+// turn → client/attorney → submitted), aged from Date Received.
+app.get("/api/address-changes", (_req, res) => {
+  res.json({ data: getAddressChanges(db) });
 });
 // Calendar — hearings, court/USCIS deadlines, interviews, and appointments
 // unified across boards. See libs/query/src/calendar.ts.
