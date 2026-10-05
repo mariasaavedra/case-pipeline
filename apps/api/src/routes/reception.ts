@@ -273,7 +273,31 @@ export function methodLabel(b: PrepBody): string {
  * `<a href>` links), so documents read as their name in blue. `text` is the
  * local timeline copy.
  */
-export function prepNote(b: PrepBody): { text: string; html: string } {
+/**
+ * A Calendly booking's Description is the client's own words, and prep keeps
+ * them (reception, 2026-10-05): reception's text goes below, after this mark,
+ * and a second prep replaces only that part.
+ */
+export const RECEPTION_MARK = "\n\nReception: ";
+
+/** Split a Description into the client's words and reception's part (after RECEPTION_MARK). */
+export function splitDescription(d: string | null): { client: string; reception: string } {
+  const s = (d ?? "").trim();
+  const i = s.indexOf(RECEPTION_MARK);
+  if (i === -1) return { client: s, reception: "" };
+  return { client: s.slice(0, i).trim(), reception: s.slice(i + RECEPTION_MARK.length).trim() };
+}
+
+/** Booked through Calendly: its Calendly? column says yes, or its Consult UUID is a Calendly link. */
+export function isFromCalendly(cv: Record<string, unknown>): boolean {
+  return textOf(cv.calendly)?.toLowerCase() === "yes" || /calendly\.com/i.test(textOf(cv.consult_uuid) ?? "");
+}
+
+/**
+ * The prep note. `clientWrote` is a Calendly client's own description, shown
+ * above reception's so the attorney reads both.
+ */
+export function prepNote(b: PrepBody, opts: { clientWrote?: string | null } = {}): { text: string; html: string } {
   const text: string[] = [
     `Type of appt: ${apptTypeLabel(b)}`,
     `How to proceed: ${methodLabel(b)}`,
@@ -282,6 +306,7 @@ export function prepNote(b: PrepBody): { text: string; html: string } {
   if (b.documents.length > 0) {
     text.push("Documents:", ...b.documents.map((d) => `• ${d.name} — ${d.url}`));
   }
+  if (opts.clientWrote) text.push(`Client wrote: ${opts.clientWrote}`);
   if (b.description) text.push(`Description: ${b.description}`);
 
   const link = (url: string, label: string) =>
@@ -297,6 +322,9 @@ export function prepNote(b: PrepBody): { text: string; html: string } {
   ];
   if (b.documents.length > 0) {
     html.push(`<p><strong>Documents:</strong></p>`, ...b.documents.map((d) => `<p>• ${link(d.url, d.name)}</p>`));
+  }
+  if (opts.clientWrote) {
+    html.push(`<p><strong>Client wrote:</strong> ${escapeHtml(opts.clientWrote).replace(/\n/g, "<br>")}</p>`);
   }
   if (b.description) {
     html.push(`<p><strong>Description:</strong> ${escapeHtml(b.description).replace(/\n/g, "<br>")}</p>`);
@@ -329,7 +357,9 @@ export interface PrepWriteBackStep {
  * Which pre-filled fields were edited, and where each goes back to — the place
  * it was pre-filled from. Phone: the profile's Phone column (only when the
  * consult is by phone, since that is the only time the field is shown).
- * Description: the appointment's Description column. Clearing a field is not a
+ * Description: the appointment's Description column — for a Calendly booking
+ * (`keepClient`) the client's own words stay, with reception's text below them
+ * after RECEPTION_MARK (a re-prep replaces only that part). Clearing a field is not a
  * write-back: an empty box most likely means "nothing to add", not "erase".
  * A folder link only ever fills an EMPTY E-File / Consult File — a link already
  * on the profile (perhaps set in Monday since the page loaded) is never replaced.
@@ -340,6 +370,8 @@ export function planPrepWriteBack(
     profilePhone: string | null;
     appointmentDescription: string | null;
     profileFolders?: Partial<Record<FolderKind, string | null>>;
+    /** Keep the client's words in the Description (a Calendly booking). */
+    keepClient?: boolean;
   },
   columns: {
     profilePhone: string | null;
@@ -352,8 +384,12 @@ export function planPrepWriteBack(
   if (b.method === "Phone" && b.phone && columns.profilePhone && !same(b.phone, current.profilePhone)) {
     steps.push({ target: "profile", field: "phone", columnId: columns.profilePhone, value: b.phone });
   }
-  if (b.description && columns.appointmentDescription && !same(b.description, current.appointmentDescription)) {
-    steps.push({ target: "appointment", field: "description", columnId: columns.appointmentDescription, value: b.description });
+  if (b.description && columns.appointmentDescription) {
+    const client = current.keepClient ? splitDescription(current.appointmentDescription).client : "";
+    const value = client ? `${client}${RECEPTION_MARK}${b.description}` : b.description;
+    if (!same(value, current.appointmentDescription)) {
+      steps.push({ target: "appointment", field: "description", columnId: columns.appointmentDescription, value });
+    }
   }
   for (const f of b.folderLinks) {
     const columnId = columns.profileFolders?.[f.kind];
@@ -529,7 +565,7 @@ export function getReceptionConsults(
       time: r.time,
       attorney: r.attorney,
       language: textOf(cv.language),
-      fromCalendly: textOf(cv.calendly)?.toLowerCase() === "yes" || /calendly\.com/i.test(textOf(cv.consult_uuid) ?? ""),
+      fromCalendly: isFromCalendly(cv),
       phone: textOf(cv.phone),
       description: textOf(cv.description),
       description2: textOf(cv.description_2),
@@ -657,7 +693,11 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
 
     const author = req.user?.name ?? req.user?.preferred_username ?? "Staff";
     const authorOid = req.user?.oid ?? null;
-    const note = prepNote(prep);
+    // A Calendly client's own words stay in the Description and lead the note.
+    const apptCv = parseJson(appt.columnValues);
+    const keepClient = isFromCalendly(apptCv);
+    const clientWrote = keepClient ? splitDescription(textOf(apptCv.description)).client || null : null;
+    const note = prepNote(prep, { clientWrote });
 
     let pending = false;
     const failures: string[] = [];
@@ -752,7 +792,8 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
       prep,
       {
         profilePhone: appt.profilePhone,
-        appointmentDescription: textOf(parseJson(appt.columnValues).description),
+        appointmentDescription: textOf(apptCv.description),
+        keepClient,
         profileFolders: { e_file: textOf(profileRaw.e_file), consult_file: textOf(profileRaw.consult_file) },
       },
       {
