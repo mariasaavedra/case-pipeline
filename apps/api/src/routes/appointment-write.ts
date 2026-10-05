@@ -78,8 +78,8 @@ export interface BoardGroup {
  */
 const TODAY_STATUS_RE = /^today's consult \(1st/i;
 const UPCOMING_STATUS_RE = /^upcoming$/i;
-const TODAY_GROUP_RE = /^today's consults?$/i;
-const UPCOMING_GROUP_RE = /^upcoming$/i;
+export const TODAY_GROUP_RE = /^today's consults?$/i;
+export const UPCOMING_GROUP_RE = /^upcoming$/i;
 
 export interface AppointmentPlan {
   mondayBoardId: string;

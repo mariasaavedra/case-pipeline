@@ -66,6 +66,28 @@ export type ApptType = (typeof APPT_TYPES)[number];
 export const PREP_METHODS = ["Phone", "Zoom", "Other"] as const;
 export type PrepMethod = (typeof PREP_METHODS)[number];
 
+/**
+ * "Needs interpreter?" The office interprets Spanish (reception arranges it)
+ * and Portuguese (Rafael, the only Portuguese speaker); for any other language
+ * the client brings their own interpreter, whose language and contact are
+ * noted when reception has them (optional, reception 2026-10-05).
+ */
+export const INTERPRETER_NEEDS = ["No", "Spanish", "Portuguese", "Other language"] as const;
+export type InterpreterNeed = (typeof INTERPRETER_NEEDS)[number];
+/** Who interprets, per office language — what the note says. */
+export const OFFICE_INTERPRETERS: Record<"Spanish" | "Portuguese", string> = {
+  Spanish: "office (reception arranges)",
+  Portuguese: "office (Rafael)",
+};
+
+export interface PrepInterpreter {
+  need: InterpreterNeed;
+  /** The language, for "Other language" when given, else null. */
+  language: string | null;
+  /** The client's interpreter's name / phone / e-mail, for "Other language", else null. */
+  contact: string | null;
+}
+
 export const PREP_DESCRIPTION_MAX = 5000;
 export const PREP_OTHER_MAX = 200;
 export const PREP_DOCUMENTS_MAX = 30;
@@ -100,6 +122,7 @@ export interface PrepBody {
   zoomLink: string | null;
   /** The "specify" text when method is Other, else null. */
   methodOther: string | null;
+  interpreter: PrepInterpreter;
   description: string;
   documents: PrepDocument[];
   /** Folder links typed in for a client whose profile had none — saved to the profile. */
@@ -139,6 +162,15 @@ export function parsePrepBody(raw: unknown): { ok: true; body: PrepBody } | { ok
   const methodOther = method === "Other" ? str(b.methodOther) : "";
   if (method === "Other" && !methodOther) return { ok: false, error: "Specify how the consult will happen" };
   if (methodOther.length > PREP_OTHER_MAX) return { ok: false, error: "The 'other' method is too long" };
+
+  const rawInterp = (b.interpreter ?? {}) as Record<string, unknown>;
+  const need = INTERPRETER_NEEDS.find((n) => n === str(rawInterp.need));
+  if (!need) return { ok: false, error: "Pick whether the client needs an interpreter" };
+  const interpLanguage = need === "Other language" ? str(rawInterp.language) : "";
+  const interpContact = need === "Other language" ? str(rawInterp.contact) : "";
+  if (interpLanguage.length > PREP_OTHER_MAX) return { ok: false, error: "The interpreter's language is too long" };
+  if (interpContact.length > PREP_OTHER_MAX) return { ok: false, error: "The interpreter's contact is too long" };
+  const interpreter: PrepInterpreter = { need, language: interpLanguage || null, contact: interpContact || null };
 
   const description = str(b.description);
   if (description.length > PREP_DESCRIPTION_MAX) {
@@ -188,6 +220,7 @@ export function parsePrepBody(raw: unknown): { ok: true; body: PrepBody } | { ok
       phone: phone || null,
       zoomLink: zoomLink || null,
       methodOther: methodOther || null,
+      interpreter,
       description,
       documents,
       folderLinks,
@@ -208,6 +241,15 @@ export function apptTypeLabel(b: PrepBody): string {
   return b.apptType;
 }
 
+/** "Spanish — office (reception arranges)", "Vietnamese — client brings their own (contact: …)". */
+export function interpreterLabel(b: PrepBody): string {
+  const i = b.interpreter;
+  if (i.need === "No") return "Not needed";
+  if (i.need === "Spanish" || i.need === "Portuguese") return `${i.need} — ${OFFICE_INTERPRETERS[i.need]}`;
+  const lang = i.language ?? "Other language";
+  return `${lang} — client brings their own${i.contact ? ` (contact: ${i.contact})` : ""}`;
+}
+
 export function methodLabel(b: PrepBody): string {
   if (b.method === "Phone") return `Phone — ${b.phone}`;
   if (b.method === "Zoom") return `Zoom — ${b.zoomLink}`;
@@ -219,6 +261,7 @@ export function methodLabel(b: PrepBody): string {
  *
  *   Type of appt: 1st time
  *   How to proceed: Zoom — https://zoom.us/j/…
+ *   Interpreter: Portuguese — office (Rafael)
  *   Documents:
  *   • Consult folder                      (a link named after the document)
  *   Description: <description>
@@ -231,7 +274,11 @@ export function methodLabel(b: PrepBody): string {
  * local timeline copy.
  */
 export function prepNote(b: PrepBody): { text: string; html: string } {
-  const text: string[] = [`Type of appt: ${apptTypeLabel(b)}`, `How to proceed: ${methodLabel(b)}`];
+  const text: string[] = [
+    `Type of appt: ${apptTypeLabel(b)}`,
+    `How to proceed: ${methodLabel(b)}`,
+    `Interpreter: ${interpreterLabel(b)}`,
+  ];
   if (b.documents.length > 0) {
     text.push("Documents:", ...b.documents.map((d) => `• ${d.name} — ${d.url}`));
   }
@@ -246,6 +293,7 @@ export function prepNote(b: PrepBody): { text: string; html: string } {
   const html: string[] = [
     `<p><strong>Type of appt:</strong> ${escapeHtml(apptTypeLabel(b))}</p>`,
     `<p><strong>How to proceed:</strong> ${how}</p>`,
+    `<p><strong>Interpreter:</strong> ${escapeHtml(interpreterLabel(b))}</p>`,
   ];
   if (b.documents.length > 0) {
     html.push(`<p><strong>Documents:</strong></p>`, ...b.documents.map((d) => `<p>• ${link(d.url, d.name)}</p>`));
@@ -352,6 +400,8 @@ interface ConsultRow {
   prepApptType: string | null;
   prepMethod: string | null;
   prepPending: number | null;
+  prepInterpNeed: string | null;
+  prepInterpLanguage: string | null;
   detainedAt: string | null;
 }
 
@@ -378,7 +428,11 @@ export interface ReceptionConsult {
     eFile: string | null;
     consultFile: string | null;
   } | null;
-  lastPrep: { at: string; author: string | null; apptType: string; method: string; pending: boolean } | null;
+  lastPrep: {
+    at: string; author: string | null; apptType: string; method: string; pending: boolean;
+    /** The interpreter language from the prep ("Portuguese", "Vietnamese"), null when none was needed. */
+    interpreter: string | null;
+  } | null;
   /**
    * The client folder name the consult sweep would use ("ESTRADA, Silvia" under
    * initial "E"), so M19 can find or create it at the same path — or why the
@@ -430,6 +484,8 @@ export function getReceptionConsults(
               p.phone AS profilePhone, p.raw_column_values AS profileRaw,
               cp.created_at AS prepAt, cp.author_name AS prepAuthor, cp.appt_type AS prepApptType,
               cp.method AS prepMethod, cp.pending AS prepPending,
+              json_extract(cp.fields, '$.interpreter.need') AS prepInterpNeed,
+              json_extract(cp.fields, '$.interpreter.language') AS prepInterpLanguage,
               -- Same rule as getOpenDetentions (P3.0's "Detained at …" pill):
               -- the newest open "Court Case" row with a Det. Facility.
               (SELECT json_extract(cc.column_values, '$.det_facility.label')
@@ -493,6 +549,9 @@ export function getReceptionConsults(
             apptType: r.prepApptType ?? "",
             method: r.prepMethod ?? "",
             pending: r.prepPending === 1,
+            interpreter: !r.prepInterpNeed || r.prepInterpNeed === "No"
+              ? null
+              : r.prepInterpNeed === "Other language" ? (r.prepInterpLanguage ?? "Other language") : r.prepInterpNeed,
           }
         : null,
       folderName: named.ok

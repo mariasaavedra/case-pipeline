@@ -18,13 +18,15 @@
 // be pasted. Either way the link is saved to the empty profile column on save.
 // =============================================================================
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   APPT_TYPES,
+  INTERPRETER_NEEDS,
   PREP_METHODS,
   attachConsultFile,
   prepConsult,
   type ApptType,
+  type InterpreterNeed,
   type PrepMethod,
   type ReceptionConsult,
 } from "../api";
@@ -32,7 +34,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { DocumentsTab, type PickedFile } from "./DocumentsTab";
-import { findOrCreateClientFolder, getGraphToken, GraphConsentRequiredError, type ClientFolderKind } from "../sharepoint/graph";
+import { findOrCreateClientFolder, folderNameOf, getGraphToken, GraphConsentRequiredError, type ClientFolderKind } from "../sharepoint/graph";
+import { normalizeSharePointUrl } from "../sharepoint/parseLink";
 
 type FolderLink = { kind: ClientFolderKind; url: string };
 const FOLDER_LABEL: Record<ClientFolderKind, string> = { e_file: "E-File folder", consult_file: "Consult folder" };
@@ -91,6 +94,26 @@ function when(c: ReceptionConsult): string {
 
 type Attach = "attaching" | "attached" | "failed";
 
+/**
+ * "Needs interpreter?" pre-filled from the appointment's Language column
+ * (labels as on the boards: "Espanol", "Portuguese", "Vietnamese"…). English and
+ * the placeholder labels leave it to reception.
+ */
+function interpreterFromLanguage(language: string | null): { need: InterpreterNeed | ""; language: string } {
+  const l = (language ?? "").trim();
+  if (/^espa[nñ]ol$|^spanish$/i.test(l)) return { need: "Spanish", language: "" };
+  if (/^portugu[eê]s(e)?$/i.test(l)) return { need: "Portuguese", language: "" };
+  if (!l || /^(english|default|preferred language)$/i.test(l)) return { need: /^english$/i.test(l) ? "No" : "", language: "" };
+  return { need: "Other language", language: l };
+}
+
+const INTERPRETER_HINT: Record<InterpreterNeed, string> = {
+  No: "",
+  Spanish: "The office interprets — reception arranges it.",
+  Portuguese: "The office interprets — Rafael.",
+  "Other language": "The client brings their own interpreter.",
+};
+
 interface Props {
   consult: ReceptionConsult;
   /** Open the appointment's focus view (M5) on top, to read the notes while prepping. */
@@ -114,6 +137,10 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   const [zoomLink, setZoomLink] = useState("");
   const [methodOther, setMethodOther] = useState("");
   const [description, setDescription] = useState(startDescription);
+  const startInterp = interpreterFromLanguage(consult.language);
+  const [interpNeed, setInterpNeed] = useState<InterpreterNeed | "">(startInterp.need);
+  const [interpLanguage, setInterpLanguage] = useState(startInterp.language);
+  const [interpContact, setInterpContact] = useState("");
 
   // A folder found, created or pasted here, for a client whose profile had none.
   const [newFolder, setNewFolder] = useState<FolderLink | null>(null);
@@ -122,14 +149,36 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   const [pasteKind, setPasteKind] = useState<ClientFolderKind>("consult_file");
   const [pasteUrl, setPasteUrl] = useState("");
 
+  // The folder's own name ("VENTURA, Milton") for its link in the note, looked
+  // up per link; until it arrives (or if SharePoint can't say) the link keeps
+  // its generic label.
+  const [folderNames, setFolderNames] = useState<Record<string, string>>({});
+
   // The client's own folders, included by default — the attorney opens them first.
+  // Scheme-less stored links ("sharmacrawford.sharepoint.com/sites/…") get
+  // https:// so the note's link works and the API accepts it.
   const folders = useMemo<PickedFile[]>(() => {
     const out: PickedFile[] = [];
-    if (profile?.eFile) out.push({ name: "E-File folder", url: profile.eFile });
-    if (profile?.consultFile && profile.consultFile !== profile.eFile) out.push({ name: "Consult folder", url: profile.consultFile });
-    if (newFolder) out.push({ name: FOLDER_LABEL[newFolder.kind], url: newFolder.url });
+    const add = (raw: string, label: string) => {
+      const url = normalizeSharePointUrl(raw) ?? raw;
+      if (!out.some((f) => f.url === url)) out.push({ name: folderNames[url] ?? label, url });
+    };
+    if (profile?.eFile) add(profile.eFile, FOLDER_LABEL.e_file);
+    if (profile?.consultFile) add(profile.consultFile, FOLDER_LABEL.consult_file);
+    if (newFolder) add(newFolder.url, FOLDER_LABEL[newFolder.kind]);
     return out;
-  }, [profile, newFolder]);
+  }, [profile, newFolder, folderNames]);
+
+  const askedNames = useRef(new Set<string>());
+  useEffect(() => {
+    for (const f of folders) {
+      if (askedNames.current.has(f.url)) continue;
+      askedNames.current.add(f.url);
+      void folderNameOf(f.url).then((name) => {
+        if (name) setFolderNames((m) => (m[f.url] ? m : { ...m, [f.url]: name }));
+      });
+    }
+  }, [folders]);
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
   const includeFolder = (url: string) => !excluded[url];
   const noFolder = !!profile && !profile.eFile && !profile.consultFile && !newFolder;
@@ -145,6 +194,8 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
       const r = await findOrCreateClientFolder({
         want: "consult_file", folder: consult.folderName.folder, initial: consult.folderName.initial, year: consultYear,
       });
+      const name = r.path.split("/").pop();
+      if (name) setFolderNames((m) => ({ ...m, [r.url]: name }));
       setNewFolder({ kind: r.kind, url: r.url });
       setFolderMsg({ text: `${r.created ? "Created" : "Found existing"} ${r.path}`, error: false });
     } catch (e) {
@@ -193,6 +244,7 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   const submit = async () => {
     if (!apptType) { setError("Pick the type of appointment."); return; }
     if (!method) { setError("Pick how the consult will happen."); return; }
+    if (!interpNeed) { setError("Pick whether the client needs an interpreter."); return; }
     setSaving(true);
     setError(null);
     try {
@@ -204,6 +256,9 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
         phone: method === "Phone" ? phone : undefined,
         zoomLink: method === "Zoom" ? zoomLink : undefined,
         methodOther: method === "Other" ? methodOther : undefined,
+        interpreter: interpNeed === "Other language"
+          ? { need: interpNeed, language: interpLanguage, contact: interpContact }
+          : { need: interpNeed },
         description,
         documents: [...folders.filter((f) => includeFolder(f.url)), ...picked],
         folderLinks: newFolder ? [newFolder] : undefined,
@@ -309,6 +364,23 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                     placeholder="Specify… (e.g. in person at the office)" aria-label="Specify how the consult will happen" autoFocus
                     className="mt-2 w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
                 )}
+              </div>
+
+              {/* Needs interpreter? */}
+              <div style={{ marginBottom: 14 }}>
+                <span style={labelStyle}>Needs interpreter?</span>
+                <Dropdown options={INTERPRETER_NEEDS} value={interpNeed} onChange={setInterpNeed} label="Needs interpreter?" code="D33" />
+                {interpNeed === "Other language" && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <input type="text" value={interpLanguage} onChange={(e) => setInterpLanguage(e.target.value)} maxLength={200}
+                      placeholder="Language (optional)" aria-label="Interpreter language"
+                      className="rounded-md px-2 py-1.5 text-sm" style={{ ...fieldStyle, flex: 1, minWidth: 0 }} />
+                    <input type="text" value={interpContact} onChange={(e) => setInterpContact(e.target.value)} maxLength={200}
+                      placeholder="Interpreter's name / phone (optional)" aria-label="Interpreter contact"
+                      className="rounded-md px-2 py-1.5 text-sm" style={{ ...fieldStyle, flex: 2, minWidth: 0 }} />
+                  </div>
+                )}
+                {interpNeed && INTERPRETER_HINT[interpNeed] && <span style={hintStyle}>{INTERPRETER_HINT[interpNeed]}</span>}
               </div>
 
               {/* Documents */}

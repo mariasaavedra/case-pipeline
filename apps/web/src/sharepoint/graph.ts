@@ -13,7 +13,7 @@
 import { InteractionRequiredAuthError } from "@azure/msal-browser";
 import { msalInstance } from "../auth/AuthProvider";
 import { graphRequest } from "../auth/msal-config";
-import type { SharePointFolder } from "./parseLink";
+import { parseSharePointLink, type SharePointFolder } from "./parseLink";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
@@ -203,6 +203,27 @@ export async function resolveFolder(folder: SharePointFolder): Promise<ResolvedI
   // A drive's own root has no parentReference.driveId, so toResolved would
   // reject it — supply the id we already looked up.
   return toResolved(item, driveId);
+}
+
+/**
+ * A client folder's own name ("VENTURA, Milton", "MELO, Martin 21-153") for
+ * naming its link in a note. A path link carries it as its last segment, so no
+ * request is made; a sharing link (most E-File links) is opaque and asks Graph,
+ * silently — null when it can't (no consent yet, no access, offline), and the
+ * caller keeps its generic label.
+ */
+export async function folderNameOf(url: string): Promise<string | null> {
+  const folder = parseSharePointLink(url);
+  if (!folder) return null;
+  if (folder.kind === "path") {
+    const last = folder.relPath.split("/").filter(Boolean).pop();
+    if (last) return last;
+  }
+  try {
+    return (await resolveFolder(folder)).name || null;
+  } catch {
+    return null;
+  }
 }
 
 // ---- Browsing ---------------------------------------------------------------

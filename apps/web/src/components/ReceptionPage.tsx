@@ -6,6 +6,7 @@ import { ClientLink } from "./ClientPeek";
 import { SectionCode } from "./ScreenCode";
 import { Tag, PersonChip, ListSection } from "./caseBoardParts";
 import { ConsultPrepModal } from "./ConsultPrepModal";
+import { ConsultScheduleModal } from "./ConsultScheduleModal";
 import { NewAppointmentModal } from "./NewAppointmentModal";
 import { Button } from "./ui/button";
 
@@ -15,6 +16,7 @@ import { Button } from "./ui/button";
 // Reception's main job is preparing consults for the attorneys. This page lists
 // the consults on every active attorney board (Calendly-booked or added by
 // staff), day by day, each marked Prepped / Not prepped. "Prep" opens M18;
+// "Edit" opens M20 (date, time, attorney — a new attorney moves it to their board);
 // "+ Book Appt" opens M10 with a client search, for a consult that is not on a
 // board yet. "Focus" opens the same focus view as P4 (M5: notes, documents,
 // note composer) over the page — also from inside M18, so the notes can be read
@@ -69,17 +71,18 @@ function preppedOn(at: string): string {
 // Consult list (P17.2)
 // =============================================================================
 
-function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus }: {
+function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit }: {
   c: ReceptionConsult;
   attorneyActive: boolean;
   onAttorney: (name: string) => void;
   onPrep: (c: ReceptionConsult) => void;
   onFocus: (c: ReceptionConsult) => void;
+  onEdit: (c: ReceptionConsult) => void;
 }) {
   const prepped = c.lastPrep !== null;
   return (
     <li
-      className="grid gap-x-4 gap-y-1.5 px-4 py-3 items-center grid-cols-1 md:grid-cols-[5.5rem_minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,2fr)_9rem]"
+      className="grid gap-x-4 gap-y-1.5 px-4 py-3 items-center grid-cols-1 md:grid-cols-[5.5rem_minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,2fr)_14rem]"
       style={{
         borderTop: "1px solid var(--color-border-light)",
         boxShadow: `inset 3px 0 0 ${prepped ? "var(--urgency-later)" : "var(--urgency-soon)"}`,
@@ -103,6 +106,7 @@ function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus }: {
           {!c.profile && <Tag color="missing" title="Not linked to a profile in Monday — link it before prepping">No profile</Tag>}
           {c.fromCalendly && <Tag color="later" title="Booked through Calendly">Calendly</Tag>}
           {c.language && <Tag color="court" title="Language">{c.language}</Tag>}
+          {c.lastPrep?.interpreter && <Tag color="court" title="Interpreter needed (from the prep)">Interpreter · {c.lastPrep.interpreter}</Tag>}
           {c.detainedAt && <Tag color="overdue" title="Det. Facility on the client's open court case">Detained · {c.detainedAt}</Tag>}
         </div>
         {(c.profile?.phone ?? c.phone) && (
@@ -139,6 +143,9 @@ function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus }: {
           <span className="text-xs font-semibold" style={{ color: "var(--urgency-soon)" }}>Not prepped</span>
         )}
         <div className="flex items-center gap-1.5">
+          <Button type="button" size="sm" variant="outline" onClick={() => onEdit(c)} title="Change the date, time or attorney">
+            Edit
+          </Button>
           <Button type="button" size="sm" variant="outline" onClick={() => onFocus(c)} title="Notes, documents and details without leaving the page">
             Focus
           </Button>
@@ -162,6 +169,7 @@ export function ReceptionPage() {
   const [attorney, setAttorney] = useState<string | null>(null);
   const [notPreppedOnly, setNotPreppedOnly] = useState(false);
   const [prepping, setPrepping] = useState<ReceptionConsult | null>(null);
+  const [editing, setEditing] = useState<ReceptionConsult | null>(null);
   const [booking, setBooking] = useState(false);
   const [focused, setFocused] = useState<AppointmentEntry | null>(null);
   const [focusError, setFocusError] = useState<string | null>(null);
@@ -297,6 +305,7 @@ export function ReceptionPage() {
                     onAttorney={pickAttorney}
                     onPrep={setPrepping}
                     onFocus={openFocus}
+                    onEdit={setEditing}
                   />
                 ))}
               </ListSection>
@@ -321,6 +330,7 @@ export function ReceptionPage() {
       )}
       {/* After M18 so it stacks on top when opened from inside the prep popup. */}
       {focused && <AppointmentModal entry={focused} onClose={() => setFocused(null)} />}
+      {editing && <ConsultScheduleModal consult={editing} onClose={() => setEditing(null)} onSaved={load} />}
       {booking && <NewAppointmentModal onClose={() => setBooking(false)} onBooked={load} />}
     </div>
   );
