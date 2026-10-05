@@ -357,6 +357,57 @@ export async function uploadFile(
   throw new GraphError(500, "Upload finished without a completed item");
 }
 
+// ---- Contract templates -----------------------------------------------------
+
+/**
+ * The SharePoint folder holding the firm's contract templates (Word files with
+ * {{tags}}, maintained by staff — see docs/features/contract-signing.md).
+ */
+export const CONTRACT_TEMPLATES_FOLDER =
+  "https://sharmacrawford.sharepoint.com/sites/SCALDocs/Shared Documents/Fee Contracts/App Templates";
+
+/** The .docx templates in that folder (not Word lock files, not the READ ME). */
+export async function listContractTemplates(): Promise<{ driveId: string; items: DriveItem[] }> {
+  const folder = parseSharePointLink(CONTRACT_TEMPLATES_FOLDER);
+  if (!folder) throw new GraphError(400, "The contract templates folder link isn't a SharePoint folder.");
+  const resolved = await resolveFolder(folder);
+  const items = (await listChildren(resolved.driveId, resolved.itemId)).filter(
+    (i) => !i.folder && /\.docx$/i.test(i.name) && !i.name.startsWith("~$") && !/^read ?me/i.test(i.name),
+  );
+  return { driveId: resolved.driveId, items };
+}
+
+// ---- Word → PDF -------------------------------------------------------------
+
+/** Where conversions are staged in the user's own OneDrive (deleted right after). */
+const CONVERT_FOLDER = "Case Pipeline (temporary)";
+
+/**
+ * Convert a Word document to PDF with Microsoft 365's own converter, so the
+ * PDF looks exactly as Word shows it and the server needs no Office install.
+ * The file is uploaded to the signed-in user's OneDrive, converted
+ * (`/content?format=pdf`), then deleted — whether or not the conversion worked.
+ */
+export async function convertDocxToPdf(docx: Blob, fileName: string): Promise<Blob> {
+  if (docx.size >= SIMPLE_UPLOAD_MAX) throw new GraphError(413, "This document is too large to convert (4 MB limit).");
+  const token = await getGraphToken();
+  const auth = { Authorization: `Bearer ${token}` };
+  const name = `${Date.now()}-${fileName.replace(/[\\/:*?"<>|#%]+/g, "_")}`;
+  const put = await fetch(
+    `${GRAPH}/me/drive/root:/${encodeURIComponent(CONVERT_FOLDER)}/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=rename`,
+    { method: "PUT", headers: { ...auth, "Content-Type": docx.type || "application/octet-stream" }, body: docx },
+  );
+  if (!put.ok) throw new GraphError(put.status, await describeError(put));
+  const item = (await put.json()) as { id: string };
+  try {
+    const pdf = await fetch(`${GRAPH}/me/drive/items/${item.id}/content?format=pdf`, { headers: auth });
+    if (!pdf.ok) throw new GraphError(pdf.status, await describeError(pdf));
+    return await pdf.blob();
+  } finally {
+    await fetch(`${GRAPH}/me/drive/items/${item.id}`, { method: "DELETE", headers: auth }).catch(() => {});
+  }
+}
+
 // ---- Client folders ---------------------------------------------------------
 
 /** The firm's tenant and the three sites a client folder can live on. */

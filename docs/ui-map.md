@@ -135,7 +135,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 |---|---|---|
 | P14.1 | Header | Pending count, older than 60 days, not sent yet; colour legend; **+ New contract** → M11 (pick the client first) |
 | P14.2 | Summary table | Attorney rows × Contract Stage; cell colour = oldest contract (days since sent, else added); click to filter P14.3 |
-| P14.3 | Contract list | Grouped by Contract Stage: age, payment link, AF/FF, attorneys, assistant |
+| P14.3 | Contract list | Grouped by Contract Stage: age, payment link, AF/FF, attorneys, assistant. Each row's **⋯** menu: **Generate contract…** → M22, **Payment links…** → M21, and the next signing step (Mark sent in Acrobat → attorney signed → client signed), which asks to confirm, then moves the stage and stamps its date on Monday |
 
 ### Inside P15 Court Cases
 
@@ -259,6 +259,8 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M17 | Released from detention | "Released from detention" | P3.0 → **Released?** on the "Detained at …" pill | `ReleaseDetentionModal.tsx` |
 | M18 | Prep consult | "Prep consult" | P17.2 → **Prep** on a consult → D23, D24, D33 | `ConsultPrepModal.tsx` |
 | M19 | Client documents | "Client documents" | M18 → **Browse SharePoint…** (the P3.6 browser in pick mode: Attach / upload) | `ConsultPrepModal.tsx` + `DocumentsTab.tsx` |
+| M21 | Payment links | "Payment links" | P14.3 → ⋯ → **Payment links…**. One LawPay link per fee (AF, PF → Operating; FF → Trust), description + amounts editable; **Mark sent** (only in Needs Payment Link) sets Payment Link Sent On | `PaymentLinksModal.tsx` |
+| M22 | Generate contract | "Generate contract" | P14.3 → ⋯ → **Generate contract…**. Pick a template from SharePoint `Fee Contracts/App Templates` (staff-edited Word files with `{{tags}}`); a broken template is shown with a link to fix it; only that template's fields are shown, pre-filled from Monday; **Generate PDF** (via the user's Microsoft 365) or **Word** | `GenerateContractModal.tsx` |
 | M20 | Change consult | "Change consult" | P17.2 → **Edit**. Attorney, date, time; a new attorney moves the appointment to their board in Monday. Calendly is not changed (reminder shown) | `ConsultScheduleModal.tsx` |
 
 ## Dropdowns
