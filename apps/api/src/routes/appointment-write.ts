@@ -27,7 +27,7 @@ import { auditFromReq } from "../audit/log.js";
 import { getBoardColumnsFor } from "@case-pipeline/query";
 import { fetchWorkspaceUsers, fetchBoardStructure } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
-import { FIRM_TIMEZONE } from "../firm.js";
+import { FIRM_TIMEZONE, mondayDateTime } from "../firm.js";
 import { randomUUID } from "node:crypto";
 import { bookableBoards, type AttorneyBoard } from "../attorney-boards.js";
 
@@ -178,9 +178,10 @@ export function planAppointmentWrite(
     return { rejection: { status: 409, error: `Could not resolve the 'Consult Date' column on ${board.boardKey}` } };
   }
 
-  // Monday takes date and time as separate keys; omitting time leaves it unset.
+  // Monday takes date and time as separate keys, the time in UTC (the form's
+  // time is Central); omitting time leaves it unset.
   const columnValues: Record<string, unknown> = {
-    [dateCol.columnId]: time ? { date, time: `${time}:00` } : { date },
+    [dateCol.columnId]: time ? mondayDateTime(date, time) : { date },
   };
 
   const descCol = byTitle("description", "long_text");

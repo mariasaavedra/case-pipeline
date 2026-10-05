@@ -28,7 +28,7 @@ import { fetchBoardStructure, fetchItem } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { getJailIntakeNotes, getBoardColumnsFor } from "@case-pipeline/query";
 import { loadBoardsConfig } from "@case-pipeline/config";
-import { FIRM_TIMEZONE } from "../firm.js";
+import { FIRM_TIMEZONE, mondayDateTime } from "../firm.js";
 import { bookableBoards } from "../attorney-boards.js";
 
 const BOARD_KEY = "_fa_jail_intakes";
@@ -314,7 +314,7 @@ export function planIntakeConsult(
       date, time: time || null, apptWith,
       writes: [
         // Same shape M10 writes a Consult Date in (appointment-write.ts).
-        { key: "consult_date", columnId: dateCol, value: time ? { date, time: `${time}:00` } : { date } },
+        { key: "consult_date", columnId: dateCol, value: time ? mondayDateTime(date, time) : { date } },
         { key: "appt_with", columnId: apptCol, value: { label: apptWith } },
       ],
     },
