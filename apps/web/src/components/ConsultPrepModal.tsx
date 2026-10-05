@@ -94,6 +94,15 @@ function when(c: ReceptionConsult): string {
 
 type Attach = "attaching" | "attached" | "failed";
 
+/** Same split as the API's splitDescription: the client's words, then "Reception: …". */
+function splitDescription(d: string | null): { client: string; reception: string } {
+  const mark = "\n\nReception: ";
+  const s = (d ?? "").trim();
+  const i = s.indexOf(mark);
+  if (i === -1) return { client: s, reception: "" };
+  return { client: s.slice(0, i).trim(), reception: s.slice(i + mark.length).trim() };
+}
+
 /**
  * "Needs interpreter?" pre-filled from the appointment's Language column
  * (labels as on the boards: "Espanol", "Portuguese", "Vietnamese"…). English and
@@ -126,7 +135,11 @@ interface Props {
 export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) {
   const profile = consult.profile;
   const startPhone = profile?.phone ?? consult.phone ?? "";
-  const startDescription = consult.description ?? "";
+  // A Calendly booking's Description is the client's own words: they stay, read
+  // only, and the box is reception's part, saved below them (routes/reception.ts).
+  const split = splitDescription(consult.description);
+  const clientWrote = consult.fromCalendly ? split.client : "";
+  const startDescription = consult.fromCalendly ? split.reception : consult.description ?? "";
 
   const [apptType, setApptType] = useState<ApptType | "">("");
   const [apptTypeOther, setApptTypeOther] = useState("");
@@ -457,12 +470,21 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
               </div>
 
               {/* Description */}
+              {clientWrote && (
+                <div style={{ marginBottom: 8 }}>
+                  <span style={labelStyle}>Client wrote (Calendly)</span>
+                  <p style={{ fontSize: 13, color: "var(--color-ink)", background: "var(--color-surface-warm)", borderRadius: 6, padding: "6px 10px", whiteSpace: "pre-wrap", fontFamily: "var(--font-body)" }}>
+                    {clientWrote}
+                  </p>
+                </div>
+              )}
               <label style={{ display: "block", marginBottom: 12 }}>
-                <span style={labelStyle}>Description</span>
+                <span style={labelStyle}>{clientWrote ? "Reception's description" : "Description"}</span>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={5} maxLength={5000}
                   placeholder="What the client wants to discuss, anything the attorney should know…"
                   className="w-full rounded-md px-2 py-1.5 text-sm" style={{ ...fieldStyle, resize: "vertical" }} />
-                {descriptionEdited && startDescription && <span style={hintStyle}>The appointment's Description in Monday will be updated.</span>}
+                {descriptionEdited && clientWrote && <span style={hintStyle}>Added below the client's words in the appointment's Description — theirs stay as written.</span>}
+                {descriptionEdited && !clientWrote && startDescription && <span style={hintStyle}>The appointment's Description in Monday will be updated.</span>}
                 {consult.description2 && (
                   <span style={hintStyle}>Description 2 (from Monday): {consult.description2}</span>
                 )}

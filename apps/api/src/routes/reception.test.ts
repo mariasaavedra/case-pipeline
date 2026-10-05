@@ -14,6 +14,7 @@ import {
   parsePrepBody,
   prepNote,
   planPrepWriteBack,
+  splitDescription,
   getReceptionConsults,
   PREP_DESCRIPTION_MAX,
   type PrepBody,
@@ -163,6 +164,36 @@ describe("planPrepWriteBack", () => {
 
   it("writes nothing when nothing was edited", () => {
     expect(planPrepWriteBack(body({ description: "Same" }), { profilePhone: "(913) 555-0101", appointmentDescription: " Same " }, cols)).toEqual([]);
+  });
+
+  it("keeps a Calendly client's words and puts reception's below; a re-prep replaces only reception's part", () => {
+    const cur = { profilePhone: "(913) 555-0101", appointmentDescription: "Quiero arreglar papeles", keepClient: true };
+    const first = planPrepWriteBack(body({ description: "Spouse petition, bring marriage cert" }), cur, cols);
+    expect(first).toEqual([{
+      target: "appointment", field: "description", columnId: "long_text",
+      value: "Quiero arreglar papeles\n\nReception: Spouse petition, bring marriage cert",
+    }]);
+    const again = planPrepWriteBack(body({ description: "Also asks about DACA" }), { ...cur, appointmentDescription: first[0]!.value }, cols);
+    expect(again[0]!.value).toBe("Quiero arreglar papeles\n\nReception: Also asks about DACA");
+    // The same text again writes nothing; an empty box never erases.
+    expect(planPrepWriteBack(body({ description: "Also asks about DACA" }), { ...cur, appointmentDescription: again[0]!.value }, cols)).toEqual([]);
+    expect(planPrepWriteBack(body({ description: "" }), cur, cols)).toEqual([]);
+    // A Calendly booking with no description of its own: just reception's text.
+    expect(planPrepWriteBack(body({ description: "Walk-in" }), { ...cur, appointmentDescription: "" }, cols)[0]!.value).toBe("Walk-in");
+  });
+
+  it("splits a Description into the client's words and reception's part", () => {
+    expect(splitDescription("Hola\n\nReception: notes\nmore")).toEqual({ client: "Hola", reception: "notes\nmore" });
+    expect(splitDescription("Hola")).toEqual({ client: "Hola", reception: "" });
+    expect(splitDescription(null)).toEqual({ client: "", reception: "" });
+    // The client writing "Reception:" themselves is not reception's part.
+    expect(splitDescription("Reception: was rude")).toEqual({ client: "Reception: was rude", reception: "" });
+  });
+
+  it("shows the Calendly client's words in the note, above reception's", () => {
+    const n = prepNote(body({ description: "Bring I-94" }), { clientWrote: "Need help <now>" });
+    expect(n.text).toContain("Client wrote: Need help <now>\nDescription: Bring I-94");
+    expect(n.html).toContain("<p><strong>Client wrote:</strong> Need help &lt;now&gt;</p>");
   });
 
   it("sends each edit back where it came from", () => {
