@@ -29,7 +29,11 @@ export interface PendingContract {
   assistant: string | null;
   addedOn: string | null;
   sentOn: string | null;
+  /** Signed Contract Received On — the client's signature came back. */
+  signedOn: string | null;
   paymentLinkSentOn: string | null;
+  /** The next signing / payment-link step for this contract's stage, or null. */
+  nextStep: ContractStep | null;
   /** Days since sent, or since added when not sent yet. */
   ageDays: number | null;
   /** What `ageDays` counts from. */
@@ -38,6 +42,8 @@ export interface PendingContract {
   /** Attorney fee and filing fee, in dollars, when set on Monday. */
   attorneyFee: number | null;
   filingFee: number | null;
+  /** Processing fee (PF), in dollars, when set on Monday. */
+  processingFee: number | null;
 }
 
 export interface PendingContractsResult {
@@ -84,6 +90,55 @@ const STAGE_ORDER = [
   "HOLD",
   "Needs Refund",
 ];
+
+// =============================================================================
+// Signing steps (Acrobat Pro hand-off)
+// =============================================================================
+// Contracts are signed in Acrobat Pro (attorney first, then the client), which
+// can't be connected to the app. Staff send from Acrobat and record each step
+// here; every step moves the Contract Stage and stamps the date that goes with
+// it. Payment links (LawPay) follow the client's signature. Written by
+// apps/api/src/routes/contract-step.ts. See docs/features/contract-signing.md.
+
+export type ContractStep = "sent_for_signature" | "attorney_signed" | "client_signed" | "payment_link_sent";
+
+/** Fee Ks column ids (by_id in config/boards.yaml) and their raw_column_values keys. */
+export const FEE_K_COLUMN_IDS = {
+  contractStage: { id: "deal_stage", key: "contract_stage" },
+  sentOn: { id: "date1__1", key: "contract_sent_on" },
+  signedOn: { id: "date8__1", key: "signed_contract_received_on" },
+  paymentLinkSentOn: { id: "date_mkzjh7f2", key: "payment_link_sent_on" },
+} as const;
+
+export interface ContractStepDef {
+  /** Stages this step can be taken from (null = no stage set). */
+  from: (string | null)[];
+  /** The Contract Stage it moves to. */
+  to: string;
+  /** The date column stamped with today, if any. */
+  date: keyof typeof FEE_K_COLUMN_IDS | null;
+}
+
+export const CONTRACT_STEPS: Record<ContractStep, ContractStepDef> = {
+  // Sent from Acrobat to the attorney (who signs first; Acrobat then emails the client).
+  sent_for_signature: {
+    from: [null, "Needs to be sent", "Ready to be sent", "Create to sign in office", "Needs to be Amended"],
+    to: "Atty Reviewing",
+    date: null,
+  },
+  // The attorney signed, so Acrobat has now sent it to the client.
+  attorney_signed: { from: ["Atty Reviewing"], to: "Sent to Client", date: "sentOn" },
+  client_signed: { from: ["Sent to Client"], to: "Needs Payment Link", date: "signedOn" },
+  payment_link_sent: { from: ["Needs Payment Link"], to: "Payment link sent", date: "paymentLinkSentOn" },
+};
+
+export function nextContractStep(stage: string | null): ContractStep | null {
+  const s = stage?.trim() || null;
+  for (const [step, def] of Object.entries(CONTRACT_STEPS) as [ContractStep, ContractStepDef][]) {
+    if (def.from.includes(s)) return step;
+  }
+  return null;
+}
 
 const AGE_ORDER: Record<WaitLevel, number> = { late: 0, waiting: 1, fresh: 2, unknown: 3 };
 
@@ -139,9 +194,11 @@ interface RawRow {
   assistant: string | null;
   addedOn: string | null;
   sentOn: string | null;
+  signedOn: string | null;
   paymentLinkSentOn: string | null;
   af: unknown;
   ff: unknown;
+  pf: unknown;
 }
 
 export function getPendingContracts(db: Database, options: PendingContractsOptions = {}): PendingContractsResult {
@@ -163,9 +220,11 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       json_extract(c.raw_column_values, '$.assistant.label')            AS assistant,
       json_extract(c.raw_column_values, '$.contract_added_on.date')     AS addedOn,
       json_extract(c.raw_column_values, '$.contract_sent_on.date')      AS sentOn,
+      json_extract(c.raw_column_values, '$.signed_contract_received_on.date') AS signedOn,
       json_extract(c.raw_column_values, '$.payment_link_sent_on.date')  AS paymentLinkSentOn,
       json_extract(c.raw_column_values, '$.af')                         AS af,
-      json_extract(c.raw_column_values, '$.ff')                         AS ff
+      json_extract(c.raw_column_values, '$.ff')                         AS ff,
+      json_extract(c.raw_column_values, '$.pf')                         AS pf
     FROM contracts c
     LEFT JOIN profiles p ON p.local_id = c.profile_local_id
     WHERE c.group_title = ? AND c.deleted_at IS NULL
@@ -183,16 +242,19 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       itemName: r.name,
       contractFor: parseLabels(r.contractFor),
       contractStage: r.contractStage?.trim() || null,
+      nextStep: nextContractStep(r.contractStage),
       attorneys: splitNames(r.attorney),
       assistant: r.assistant?.trim() || null,
       addedOn: r.addedOn,
       sentOn: r.sentOn,
+      signedOn: r.signedOn,
       paymentLinkSentOn: r.paymentLinkSentOn,
       ageDays,
       agedFrom: r.sentOn ? "sent" : r.addedOn ? "added" : null,
       ageLevel,
       attorneyFee: toAmount(r.af),
       filingFee: toAmount(r.ff),
+      processingFee: toAmount(r.pf),
     };
   });
 

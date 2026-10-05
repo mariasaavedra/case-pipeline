@@ -6,7 +6,7 @@ import { test, expect, describe } from "vitest";
 import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
-import { getPendingContracts, NO_CONTRACT_STAGE } from "./pending-contracts";
+import { getPendingContracts, nextContractStep, NO_CONTRACT_STAGE } from "./pending-contracts";
 
 // =============================================================================
 // Helpers
@@ -110,5 +110,17 @@ describe("getPendingContracts", () => {
     });
     expect(c.b).toMatchObject({ attorneys: [], attorneyFee: null, filingFee: null });
     db.close();
+  });
+});
+
+describe("nextContractStep", () => {
+  test("follows the Acrobat signing order, then the payment link", () => {
+    expect(nextContractStep(null)).toBe("sent_for_signature");
+    expect(nextContractStep("Ready to be sent")).toBe("sent_for_signature");
+    expect(nextContractStep("Atty Reviewing")).toBe("attorney_signed");
+    expect(nextContractStep("Sent to Client")).toBe("client_signed");
+    expect(nextContractStep("Needs Payment Link")).toBe("payment_link_sent");
+    expect(nextContractStep("HOLD")).toBeNull();
+    expect(nextContractStep("Payment link sent")).toBeNull();
   });
 });

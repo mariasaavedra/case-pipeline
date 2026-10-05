@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase, PreschedulingResult, PendingContractsResult, CourtCasesResult, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, PreschedulingResult, PendingContractsResult, ContractStep, CourtCasesResult, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -16,7 +16,7 @@ export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "
 export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
 export type { PreschedulingResult, PreschedulingCase, WaitLevel } from "@case-pipeline/query";
-export type { PendingContractsResult, PendingContract } from "@case-pipeline/query";
+export type { PendingContractsResult, PendingContract, ContractStep } from "@case-pipeline/query";
 export type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness, CaseMotion, CourtMotion, MotionFlag, MotionPhase } from "@case-pipeline/query";
 export type { AddressChangesResult, AddressChange, AddressChangePhase, AddressChangeFlag } from "@case-pipeline/query";
 export type { FoiasResult, Foia, FoiaPhase, FoiaFlag } from "@case-pipeline/query";
@@ -587,8 +587,52 @@ export async function renderProfileDoc(
   return { blob, filename: match?.[1] ?? "document.docx" };
 }
 
+/** What Monday knows for M22's form — ContractPrefill in apps/api/src/routes/contract-document.ts. */
+export interface ContractPrefill {
+  clientName: string;
+  email: string;
+  address: string;
+  attorneyName: string;
+  contractFor: string[];
+  attorneyFee: number | null;
+  filingFee: number | null;
+  processingFee: number | null;
+  hearingType: string;
+  hearingDate: string;
+}
+
+export async function fetchContractPrefill(localId: string): Promise<ContractPrefill> {
+  return apiFetch(`/api/contracts/${encodeURIComponent(localId)}/document-form`);
+}
+
+/** Audit a generated contract (template name + fees only). Best-effort. */
+export async function logContractGenerated(
+  localId: string,
+  info: { template: string; format: "pdf" | "docx"; attorneyFee: number | null; filingFee: number | null },
+): Promise<void> {
+  const headers = { ...(await authHeaders()), "Content-Type": "application/json" };
+  await fetch(`/api/contracts/${encodeURIComponent(localId)}/document-generated`, {
+    method: "POST", headers, body: JSON.stringify(info),
+  }).catch(() => {});
+}
+
 export async function fetchPendingContracts(): Promise<PendingContractsResult> {
   return apiFetch<PendingContractsResult>("/api/pending-contracts");
+}
+
+/** Record a signing / payment-link step on a contract (Acrobat Pro hand-off):
+ * moves its Contract Stage and stamps the date that goes with it. `from` is the
+ * stage the user saw — 409 if it changed since. pending = queued. */
+export async function recordContractStep(
+  localId: string,
+  step: ContractStep,
+  from: string | null,
+): Promise<{ localId: string; step: ContractStep; stage: string; date: string; pending: boolean }> {
+  return apiFetch(`/api/contracts/${encodeURIComponent(localId)}/step`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ step, from }),
+  });
 }
 
 export async function fetchCourtCases(): Promise<CourtCasesResult> {
