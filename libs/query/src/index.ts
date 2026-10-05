@@ -28,6 +28,7 @@ export { getCourtCases, ACTIVE_COURT_CASE_GROUP, PREP_STAGE_COLUMN_TITLE } from 
 export { getCourtMotions, getMotionWriteSchema, motionDateFieldFor, phaseOf as motionPhaseOf, MOTION_COLUMN_IDS, HEARING_SOON_DAYS, MOTION_LATE_DAYS, MOTION_WAITING_DAYS } from "./court-motions";
 export type { CourtMotion, MotionAge, MotionFlag, MotionPhase } from "./court-motions";
 export { getAddressChanges } from "./address-changes";
+export { getFoias } from "./foias";
 export { getCallLogEntries, getCallLogStaffOptions } from "./call-log";
 export { getJailIntakes, getJailIntakeNotes, cutoffDate } from "./jail-intakes";
 export { scanMailPages, needsReview, extractNoticeFields, emptyFields, normalizeFields, parseNoticeDate, cleanName, compareNames, nameTokens, NAME_ROLES, splitIntoDocuments, analyzePage, repairOcrText, matchNotice, findFormsForProfile, normalizeANumber, normalizeFormType } from "./mail";
@@ -44,6 +45,7 @@ export type { PreschedulingCase, PreschedulingResult, PreschedulingOptions, Wait
 export type { PendingContract, PendingContractsResult, PendingContractsOptions } from "./pending-contracts";
 export type { CaseMotion, CourtCase, CourtCasesResult, CourtCasesOptions, CourtCaseFlag, HearingKind, Readiness, ReadinessThresholds } from "./court-cases";
 export type { AddressChange, AddressChangesResult, AddressChangePhase, AddressChangeFlag } from "./address-changes";
+export type { Foia, FoiasResult, FoiaPhase, FoiaFlag } from "./foias";
 export type {
   ProfileSummary,
   ContractSummary,

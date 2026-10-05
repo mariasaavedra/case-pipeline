@@ -61,6 +61,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P16 | Map | `/map` | Sidebar → Map | placeholder in `app.tsx` (not built yet) |
 | P17 | Receptionists | `/reception` | Sidebar → Receptionists (below Appointments) | `components/ReceptionPage.tsx` |
 | P18 | Address Changes | `/address-changes` | Sidebar → Address Changes (admins only for now) | `components/AddressChangesPage.tsx` |
+| P19 | FOIAs | `/foias` | Sidebar → FOIAs (admins only for now) | `components/FoiasPage.tsx` |
 
 ### Global
 
@@ -159,6 +160,14 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 | P18.1 | Header | Open count, paid and waiting on us, waiting on payment; colour legend (days since Date Received) |
 | P18.2 | Filters + cleanup strip | Assistant (D30); show/hide items unpaid 6+ months; "Needs cleanup on Monday" chips (unpaid 6+ months, court or USCIS not set, no new address, no date received, profile not connected) |
 | P18.3 | List by phase | Paid: our turn · With client or attorney · Submitted · Waiting on payment · On hold. Row: client (→ M3), court/USCIS + ECAS/paper, old → new address, received + age, next hearing (court changes), assistant, status picker (D31) that writes to Monday after a confirm; **Sent Out** also sets Date Sent = today |
+
+### Inside P19 FOIAs
+
+| Code | Section | What it holds |
+|---|---|---|
+| P19.1 | Header | Open count, our turn, inquiry due, done (results in the last 30 days); colour legend |
+| P19.2 | Filters + cleanup strip | Paralegal (D34); show/hide items with no results 6+ months; "Needs cleanup on Monday" chips (no results 6+ months, no Filed On date, no paralegal, profile not connected) |
+| P19.3 | List by phase | Do we need it? · Our turn · Waiting on the agency · North Pole. Row: client (→ M3), request numbers, agencies filed ✓ / still to file, since or filed date + age, inquiry date, paralegal(s) + attorney, status, Where to file link. Read-only |
 
 ### Inside P6 My Cases
 
@@ -289,5 +298,6 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D31 | Address change status picker | P18.3 | `AddressChangesPage.tsx` |
 | D32 | Motion status picker | P15.5 (Motions) | `CourtCasesPage.tsx` |
 | D33 | Needs interpreter? | M18 | `ConsultPrepModal.tsx` |
+| D34 | Paralegal filter | P19.2 | `FoiasPage.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.

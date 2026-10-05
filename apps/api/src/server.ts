@@ -29,7 +29,7 @@ import {
   handleCallLog,
   handleJailIntakes,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getAddressChanges, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getAddressChanges, getFoias, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
 import { setApiToken } from "@case-pipeline/monday";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
@@ -410,6 +410,11 @@ app.get("/api/court-cases", (_req, res) => {
 // turn → client/attorney → submitted), aged from Date Received.
 app.get("/api/address-changes", (_req, res) => {
   res.json({ data: getAddressChanges(db) });
+});
+// FOIAs (P19) — open FOIA requests as a queue (decide → our turn → waiting on
+// the agency), aged from On FOIAs since / Filed On.
+app.get("/api/foias", (_req, res) => {
+  res.json({ data: getFoias(db) });
 });
 // Calendar — hearings, court/USCIS deadlines, interviews, and appointments
 // unified across boards. See libs/query/src/calendar.ts.

@@ -18,7 +18,7 @@ interface NavItem {
 
 /** Pages still being built: admins use them, everyone else sees them greyed
  *  out here and a notice on the page itself (app.tsx). Remove an id to open it. */
-export const UNDER_CONSTRUCTION_PAGES = new Set(["alerts", "mail", "court-cases", "address-changes", "map"]);
+export const UNDER_CONSTRUCTION_PAGES = new Set(["alerts", "mail", "court-cases", "address-changes", "foias", "map"]);
 
 const NAV_ITEMS: NavItem[] = [
   {
@@ -177,6 +177,19 @@ const NAV_ITEMS: NavItem[] = [
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M3 9.5L8 5l5 4.5V16H3V9.5z" />
         <path d="M12 7h5M15 4.5L17.5 7 15 9.5" />
+      </svg>
+    ),
+  },
+  {
+    id: "foias",
+    label: "FOIAs",
+    path: "/foias",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M4 2.5h8l4 4V17a.5.5 0 01-.5.5h-11A.5.5 0 014 17V2.5z" />
+        <path d="M12 2.5v4h4" />
+        <circle cx="9" cy="11.5" r="2.5" />
+        <path d="M10.8 13.3L13 15.5" />
       </svg>
     ),
   },
