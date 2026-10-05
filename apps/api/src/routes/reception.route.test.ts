@@ -40,6 +40,10 @@ vi.mock("../data-source/index.js", () => ({
     setColumnValue: async (boardId: string, itemId: string, columnId: string, value: string) => {
       calls.push({ op: "column", boardId, itemId, columnId, value });
     },
+    addFile: async (itemId: string, columnId: string, fileName: string, bytes: Uint8Array, contentType: string) => {
+      calls.push({ op: "file", itemId, columnId, fileName, bytes: bytes.length, contentType });
+      return "asset-1";
+    },
   },
 }));
 vi.mock("../auth/middleware.js", () => ({
@@ -195,6 +199,34 @@ describe("POST /api/reception/consults/:localId/prep", () => {
     db.prepare("UPDATE board_items SET profile_local_id = NULL").run();
     const r = await prep({ apptType: "1st time", method: "Phone", phone: "816 555 0000" });
     expect(r.status).toBe(409);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe("POST /api/reception/consults/:localId/files", () => {
+  it("copies the file into the APPOINTMENT's Files column, found by title on its board", async () => {
+    seed();
+    db.prepare("INSERT INTO board_columns (board_key, monday_board_id, column_id, title, type, position) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("appointments_m", "B-APPT", "file_mm7raex5", "Files", "file", 2);
+    const res = await fetch(`${base}/api/reception/consults/a1/files?name=Passport.pdf&type=application/pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: new Uint8Array([1, 2, 3]),
+    });
+    expect(res.status).toBe(200);
+    expect(calls).toEqual([
+      { op: "file", itemId: "901", columnId: "file_mm7raex5", fileName: "Passport.pdf", bytes: 3, contentType: "application/pdf" },
+    ]);
+  });
+
+  it("says so when the appointment's board has no Files column synced", async () => {
+    seed();
+    const res = await fetch(`${base}/api/reception/consults/a1/files?name=x.pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: new Uint8Array([1]),
+    });
+    expect(res.status).toBe(409);
     expect(calls).toEqual([]);
   });
 });

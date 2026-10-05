@@ -269,6 +269,20 @@ export async function getPreviewUrl(driveId: string, itemId: string): Promise<st
   return res.getUrl;
 }
 
+/**
+ * A file's bytes, for copying a SharePoint document into Monday. Graph's
+ * pre-authenticated downloadUrl is fetched directly (it allows CORS); the item
+ * is re-read for it because a listing's copy expires after about an hour.
+ */
+export async function downloadDriveFile(driveId: string, itemId: string): Promise<Blob> {
+  const item = await graphFetch<DriveItem>(`/drives/${driveId}/items/${itemId}`);
+  const url = item["@microsoft.graph.downloadUrl"];
+  if (!url) throw new GraphError(404, "SharePoint gave no download link for this file.");
+  const res = await fetch(url);
+  if (!res.ok) throw new GraphError(res.status, `Download failed (${res.status})`);
+  return res.blob();
+}
+
 // ---- Upload -----------------------------------------------------------------
 
 /** Graph's cutoff for a simple content PUT. Above this, an upload session is required. */

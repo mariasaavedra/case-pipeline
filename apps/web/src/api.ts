@@ -1210,9 +1210,9 @@ export function prepConsult(
   });
 }
 
-/** Also attach a file uploaded during prep to the client's profile (Files column). */
-export function attachConsultFile(appointmentLocalId: string, file: File): Promise<{ attached: true }> {
-  const params = new URLSearchParams({ name: file.name });
+/** Copy a document picked or uploaded during prep into the appointment's Files column in Monday. */
+export function attachConsultFile(appointmentLocalId: string, file: Blob, name: string): Promise<{ attached: true }> {
+  const params = new URLSearchParams({ name });
   if (file.type) params.set("type", file.type);
   return apiFetch(`/api/reception/consults/${encodeURIComponent(appointmentLocalId)}/files?${params.toString()}`, {
     method: "POST",

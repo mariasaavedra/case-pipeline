@@ -20,8 +20,9 @@
 // show "Prepped" without parsing notes.
 //
 // Documents are links (SharePoint files picked or uploaded in M19, plus the
-// client's e-file folder). A file uploaded in the popup is also attached to the
-// profile's Files column through POST …/files — a separate call per file,
+// client's e-file folder). On save, each picked or uploaded file is also copied
+// into the APPOINTMENT's Files column through POST …/files (reception,
+// 2026-10-05: the attorney opens the appointment) — a separate call per file,
 // because express.json() caps bodies at 100 KB.
 //
 // `parsePrepBody`, `prepNote` and `planPrepWriteBack` are pure, so the rules
@@ -413,7 +414,7 @@ export const CONSULT_PREP_ACTIVITY_NAME = "Consult Prep Note";
  */
 export const CONSULT_NOTE_ACTIVITY_ID = "34b09f1c-3572-4590-85af-9635a09eddb8";
 
-/** Largest file M19 may also attach to the profile's Files column. */
+/** Largest file M18 may also copy into the appointment's Files column. */
 export const PREP_FILE_MAX_BYTES = 25 * 1024 * 1024;
 
 interface ConsultRow {
@@ -859,8 +860,9 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
     res.status(pending ? 202 : 200).json({ data: { prepped: true, pending, wroteBack: steps.map((s) => s.field) } });
   });
 
-  // A file uploaded in M19 also goes onto the client's profile, in its Files
-  // column. Raw body (any type), the file name in ?name=. Best-effort from the
+  // A document picked or uploaded in M18/M19 also goes onto the appointment, in
+  // its Files column (each attorney board has its own column id; found by
+  // title). Raw body (any type), the file name in ?name=. Best-effort from the
   // popup's point of view: the file is already safe in SharePoint.
   app.post(
     "/api/reception/consults/:localId/files",
@@ -883,42 +885,46 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
       }
       const row = db
         .prepare(
-          `SELECT p.local_id AS profileLocalId, p.monday_item_id AS profileMondayId
-             FROM board_items bi JOIN profiles p ON p.local_id = bi.profile_local_id
-            WHERE bi.local_id = ? AND bi.deleted_at IS NULL`,
+          `SELECT local_id AS localId, monday_item_id AS mondayItemId, board_key AS boardKey
+             FROM board_items WHERE local_id = ? AND deleted_at IS NULL`,
         )
-        .get(String(req.params.localId)) as { profileLocalId: string; profileMondayId: string | null } | undefined;
-      if (!row?.profileMondayId) {
-        res.status(409).json({ error: "This appointment is not linked to a client profile in Monday" });
+        .get(String(req.params.localId)) as { localId: string; mondayItemId: string | null; boardKey: string } | undefined;
+      if (!row || !row.boardKey.startsWith("appointments")) {
+        res.status(404).json({ error: "Appointment not found" });
         return;
       }
-      const filesCol = getBoardColumnsFor(db, "profiles")?.columns.find(
+      if (!row.mondayItemId) {
+        res.status(400).json({ error: "This appointment has no Monday.com item ID" });
+        return;
+      }
+      const filesCol = getBoardColumnsFor(db, row.boardKey)?.columns.find(
         (c) => c.type === "file" && c.title.trim().toLowerCase() === "files",
       );
       if (!filesCol) {
-        res.status(409).json({ error: "Could not resolve the profile's Files column — run a sync first" });
+        res.status(409).json({ error: "Could not resolve the appointment's Files column — run a sync first" });
         return;
       }
+      const itemId = row.mondayItemId;
       // The body is always sent as octet-stream (a JSON file would otherwise be
       // eaten by the global express.json()); the real type rides in ?type=.
       const typeParam = typeof req.query.type === "string" ? req.query.type.trim() : "";
       const contentType = /^[\w.+-]+\/[\w.+-]+$/.test(typeParam) ? typeParam : "application/octet-stream";
       try {
         await withTokenFallback(
-          (token) => dataSource.addFile(row.profileMondayId!, filesCol.columnId, name, new Uint8Array(body), contentType, token),
+          (token) => dataSource.addFile(itemId, filesCol.columnId, name, new Uint8Array(body), contentType, token),
           writeTokenOptions(req),
         );
       } catch (err) {
         // No queue: add_file reads from data/, and keeping a copy of every
         // client document on the server is not worth it for a duplicate of a
         // file SharePoint already holds. The popup says it was not attached.
-        console.error("[reception] attaching the file to the profile failed:", err);
+        console.error("[reception] attaching the file to the appointment failed:", err);
         res.status(502).json({ error: "Saved to SharePoint, but Monday did not accept the file" });
         return;
       }
       auditFromReq(req, "monday.consult_file_attached", {
-        targetType: "profile", targetId: row.profileLocalId, targetMondayId: row.profileMondayId,
-        metadata: { name, bytes: body.length },
+        targetType: "board_item", targetId: row.localId, targetMondayId: itemId,
+        metadata: { name, bytes: body.length, boardKey: row.boardKey },
       });
       res.json({ data: { attached: true } });
     },
