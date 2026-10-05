@@ -599,6 +599,9 @@ export async function fetchBoardItems(
             column_values {
               id
               text
+              ... on DateValue {
+                value
+              }
               ... on BoardRelationValue {
                 linked_item_ids
                 display_value
@@ -757,6 +760,9 @@ export async function fetchItem(itemId: string): Promise<MondayItem> {
         column_values {
           id
           text
+          ... on DateValue {
+            value
+          }
           ... on BoardRelationValue {
             linked_item_ids
             display_value
@@ -1056,6 +1062,50 @@ export async function changeColumnValue(
     tokenOverride
   );
   return result.data.change_column_value.id;
+}
+
+/**
+ * Move an item to another board, into `groupId`. The item keeps its id, its
+ * updates and its Emails & Activities.
+ *
+ * No `columns_mapping`, on purpose: Monday then matches columns itself by
+ * title + type, which carries "First Name", "Consult SharePoint" etc. across
+ * boards whose column ids differ (verified live 2026-10-05, M ↔ R). Every
+ * explicit mapping we sent — full, partial, one pair, nulls, variables or
+ * inline, four API versions — was refused "Columns mapping is not in the
+ * expected format". Returns the item id.
+ */
+export async function moveItemToBoard(
+  boardId: string,
+  groupId: string,
+  itemId: string,
+  tokenOverride?: string
+): Promise<string> {
+  const result = await mondayRequest<{ data: { move_item_to_board: { id: string } } }>(
+    `mutation MoveItemToBoard($boardId: ID!, $groupId: ID!, $itemId: ID!) {
+       move_item_to_board(board_id: $boardId, group_id: $groupId, item_id: $itemId) { id }
+     }`,
+    { boardId, groupId, itemId },
+    tokenOverride
+  );
+  return result.data.move_item_to_board.id;
+}
+
+/** Set several columns on one item in a single call (same per-column shapes as createItem). */
+export async function changeMultipleColumnValues(
+  boardId: string,
+  itemId: string,
+  columnValues: Record<string, unknown>,
+  tokenOverride?: string
+): Promise<string> {
+  const result = await mondayRequest<{ data: { change_multiple_column_values: { id: string } } }>(
+    `mutation ChangeMultiple($boardId: ID!, $itemId: ID!, $values: JSON!) {
+       change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $values, create_labels_if_missing: false) { id }
+     }`,
+    { boardId, itemId, values: JSON.stringify(columnValues) },
+    tokenOverride
+  );
+  return result.data.change_multiple_column_values.id;
 }
 
 /**

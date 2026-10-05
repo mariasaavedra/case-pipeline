@@ -151,7 +151,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 | Code | Name | Notes |
 |---|---|---|
 | P17.1 | Header | Consult count, not prepped count; **+ Book Appt** → M10 (pick the client first); range (Today / Tomorrow / Next 7 days), attorney and "not prepped" filters |
-| P17.2 | Consult list | Grouped by day: time, client (→ M3), Calendly / language tags, attorney board, description, Prepped / Not prepped; **Focus** → M5; **Prep** → M18 |
+| P17.2 | Consult list | Grouped by day: time, client (→ M3), Calendly / language tags, attorney board, description, Prepped / Not prepped; **Edit** → M20; **Focus** → M5; **Prep** → M18 |
 
 ### Inside P18 Address Changes
 
@@ -166,7 +166,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 | Code | Section | What it holds |
 |---|---|---|
 | P19.1 | Header | Open count, our turn, inquiry due, done (results in the last 30 days); colour legend |
-| P19.2 | Filters + cleanup strip | Paralegal (D33); show/hide items with no results 6+ months; "Needs cleanup on Monday" chips (no results 6+ months, no Filed On date, no paralegal, profile not connected) |
+| P19.2 | Filters + cleanup strip | Paralegal (D34); show/hide items with no results 6+ months; "Needs cleanup on Monday" chips (no results 6+ months, no Filed On date, no paralegal, profile not connected) |
 | P19.3 | List by phase | Do we need it? · Our turn · Waiting on the agency · North Pole. Row: client (→ M3), request numbers, agencies filed ✓ / still to file, since or filed date + age, inquiry date, paralegal(s) + attorney, status, Where to file link. Read-only |
 
 ### Inside P6 My Cases
@@ -257,8 +257,9 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
 | M16 | Connect Monday.com | "Connect your Monday.com account" / "Reconnect…" / "Monday.com connected" | Opens by itself after sign-in when Monday isn't connected (any page but P11); **Not now** hides it for 12 h | `MondayConnectPrompt.tsx` |
 | M17 | Released from detention | "Released from detention" | P3.0 → **Released?** on the "Detained at …" pill | `ReleaseDetentionModal.tsx` |
-| M18 | Prep consult | "Prep consult" | P17.2 → **Prep** on a consult → D23, D24 | `ConsultPrepModal.tsx` |
+| M18 | Prep consult | "Prep consult" | P17.2 → **Prep** on a consult → D23, D24, D33 | `ConsultPrepModal.tsx` |
 | M19 | Client documents | "Client documents" | M18 → **Browse SharePoint…** (the P3.6 browser in pick mode: Attach / upload) | `ConsultPrepModal.tsx` + `DocumentsTab.tsx` |
+| M20 | Change consult | "Change consult" | P17.2 → **Edit**. Attorney, date, time; a new attorney moves the appointment to their board in Monday. Calendly is not changed (reminder shown) | `ConsultScheduleModal.tsx` |
 
 ## Dropdowns
 
@@ -296,6 +297,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D30 | Assistant filter | P18.2 | `AddressChangesPage.tsx` |
 | D31 | Address change status picker | P18.3 | `AddressChangesPage.tsx` |
 | D32 | Motion status picker | P15.5 (Motions) | `CourtCasesPage.tsx` |
-| D33 | Paralegal filter | P19.2 | `FoiasPage.tsx` |
+| D33 | Needs interpreter? | M18 | `ConsultPrepModal.tsx` |
+| D34 | Paralegal filter | P19.2 | `FoiasPage.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.

@@ -318,7 +318,7 @@ describe("planIntakeConsult", () => {
   it("writes the date (with time) first, then the attorney's badge, to the pinned ids", () => {
     const out = planIntakeConsult({ date: "2026-10-02", time: "14:30", apptWith: "LB" }, opts);
     expect("plan" in out && out.plan.writes).toEqual([
-      { key: "consult_date", columnId: "date3__1", value: { date: "2026-10-02", time: "14:30:00" } },
+      { key: "consult_date", columnId: "date3__1", value: { date: "2026-10-02", time: "19:30:00" } }, // 2:30 PM CDT in UTC
       { key: "appt_with", columnId: "status_1_mkkghdn7", value: { label: "LB" } },
     ]);
   });

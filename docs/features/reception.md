@@ -15,6 +15,7 @@ The receptionist team's main job is preparing appointments for the attorneys. Th
 | Question | Answer |
 |---|---|
 | Prep fields | **Type of Appt** (dropdown): 1st time / Trial Prep / Standard Follow up / Initial Court follow up / Detained appt (asks where they are detained — pre-filled from the Det. Facility on the client's open court case, the same rule as P3.0's "Detained at …" pill; P17 tags those rows "Detained · facility") / Emergency consultation / Other (specify). **How to proceed** is a dropdown too. **How to proceed**: Phone (number) / Zoom (link) / Other (specify). **Documents**: e-file + relevant documents. **Description**. |
+| Needs interpreter? (2026-10-05) | Dropdown, pre-filled from the appointment's Language: **No** / **Spanish** → office, reception arranges / **Portuguese** → office, Rafael / **Other language** → client brings their own; the language and the interpreter's contact are optional text. One line in the note (`Interpreter: …`); P17 tags prepped consults "Interpreter · <language>". No notification. In the note only — no Monday column. |
 | One form or per type? | One form for every consult. |
 | Where does the note go? | Monday **Update** on the profile **and** on the appointment (pinned there), **and** an **Emails & Activities** entry on the profile. |
 | E&A type | A new **"Consult Prep Note"** type. Looked up by name in Monday; until someone creates it, entries post as the existing "Consult note". |
@@ -40,6 +41,8 @@ The receptionist team's main job is preparing appointments for the attorneys. Th
   4. Write-back of edited fields
   5. `consult_preps` row (schema v29) — drives "Prepped" on P17
 - **M19** — the Documents tab's SharePoint browser (`DocumentsTab.tsx`) in pick mode. Uploads go to SharePoint from the browser (Graph, the user's own token); the same file is then sent to `POST /api/reception/consults/:localId/files` for the profile's Files column. Not queued: the file is already safe in SharePoint, and keeping copies of client documents on the server isn't worth it.
+- **M20** (`ConsultScheduleModal.tsx`) — `PATCH /api/reception/consults/:localId/schedule` (`routes/consult-schedule.ts`). Date + time → the appointment's Consult Date (sent in UTC, see `libs/core/src/firm-time.ts`). A different attorney → `move_item_to_board` to that attorney's board (same group title, else Upcoming / Today's consults), with no `columns_mapping` — Monday carries columns by title + type itself (verified live M ↔ R: First Name, Consult SharePoint, Description, date, status), while every explicit mapping was refused ("Columns mapping is not in the expected format") — then the Attorney people column. A failed move is refused, never queued; a failed date write queues. Calendly is not updated. Audited as `monday.consult_rescheduled`.
+- **Document link names** — the client's folders are named after the folder itself ("VENTURA, Milton"), not "E-File folder": a path link's last segment, or Graph `/shares` for a sharing link (silent; the generic label stays when it can't).
 - **M10** — `NewAppointmentModal.tsx`, unchanged booking rules (`routes/appointment-write.ts`); new: client search when opened without a client, 30-minute slots (8:00 AM–6:00 PM), disabled payment checkbox.
 
 ## Open

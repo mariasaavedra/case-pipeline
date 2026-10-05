@@ -86,7 +86,7 @@ describe("planAppointmentWrite", () => {
     const out = plan({ date: "2026-10-01", time: "14:30" });
     expect(out).toHaveProperty("plan");
     if (!("plan" in out)) return;
-    expect(out.plan.columnValues["date3__1"]).toEqual({ date: "2026-10-01", time: "14:30:00" });
+    expect(out.plan.columnValues["date3__1"]).toEqual({ date: "2026-10-01", time: "19:30:00" }); // 2:30 PM CDT, sent in UTC
   });
 
   it("omits time entirely when none was given, rather than sending an empty one", () => {

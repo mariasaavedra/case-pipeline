@@ -213,7 +213,7 @@ export function FoiasPage() {
               <SelectTrigger size="sm" className={`min-w-25 bg-secondary text-[13px] ${paralegal ? "border-primary bg-primary/6" : ""}`} aria-label="Paralegal">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent code="D33">
+              <SelectContent code="D34">
                 {paralegalItems.map((i) => (
                   <SelectItem key={i.value || "all"} value={i.value}>{i.label}</SelectItem>
                 ))}
