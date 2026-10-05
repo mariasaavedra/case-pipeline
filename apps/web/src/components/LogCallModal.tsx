@@ -26,6 +26,12 @@
 // create — every field, plus the entry's existing note thread in place of the
 // create-only "add a note" box — submitting through PATCH /api/call-log/:localId
 // instead of POST.
+//
+// A call can also BE something: a jail intake (a detainee's family calling) or
+// a contract request (an existing client hiring us for a new case). Never both
+// — a detainee has no Fee K yet — so the two toggles are exclusive. Either one
+// is created right after the call, from the same shared fields its own popup
+// uses (JailIntakeFields / ContractFields).
 // =============================================================================
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -47,7 +53,15 @@ import { Button } from "./ui/button";
 import { MentionTextarea } from "./MentionTextarea";
 import { ProfileNotesPreview } from "./ProfileNotesPreview";
 import { NewJailIntakeModal } from "./NewJailIntakeModal";
-import { createJailIntake } from "../api";
+import { createJailIntake, createContract } from "../api";
+import { NewContractModal } from "./NewContractModal";
+import {
+  ContractFields,
+  emptyContractFields,
+  toCreateContractInput,
+  useContractCaseTypes,
+  type ContractFieldValues,
+} from "./ContractFields";
 import {
   JailIntakeFields,
   emptyJailIntakeFields,
@@ -222,13 +236,25 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ name: string; pending: boolean; mondayItemId: string | null; intake?: { name: string; linked: boolean } } | null>(null);
+  const [done, setDone] = useState<{
+    name: string;
+    pending: boolean;
+    mondayItemId: string | null;
+    intake?: { name: string; linked: boolean };
+    contract?: { name: string; pending: boolean };
+  } | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
+  const [contractOpen, setContractOpen] = useState(false);
   // "This call is a jail intake" — filled in alongside the call and created
   // straight after it, so the intake can carry the new call's monday id. The
   // fields are the shared set, so this cannot fall behind the popup again.
   const [isIntake, setIsIntake] = useState(false);
   const [intakeFields, setIntakeFields] = useState<JailIntakeFieldValues>(emptyJailIntakeFields);
+  // "This call requests a contract" — the M11 fields, created for the linked
+  // client straight after the call. Exclusive with the intake toggle.
+  const [isContract, setIsContract] = useState(false);
+  const [contractFields, setContractFields] = useState<ContractFieldValues>(emptyContractFields);
+  const contractCaseTypes = useContractCaseTypes();
 
   // Default status once the board's real options load. In edit mode the entry's
   // own status is already the initial value, so this only fills a blank one.
@@ -347,6 +373,16 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
       setError("Add the detainee's name, or untick \u201cthis call is a jail intake\u201d.");
       return;
     }
+    // Same reasoning: a Fee K needs a client and a case type, so check before
+    // the call is logged rather than after.
+    if (isContract && !selectedProfile) {
+      setError("Link the client above, or untick \u201cthis call requests a contract\u201d.");
+      return;
+    }
+    if (isContract && !contractFields.caseType) {
+      setError("Pick the contract's case type, or untick \u201cthis call requests a contract\u201d.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -404,7 +440,22 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
           );
         }
       }
-      setDone({ name: res.name, pending: res.pending, mondayItemId: res.mondayItemId, intake: intakeResult });
+      let contractResult: { name: string; pending: boolean } | undefined;
+      if (isContract && selectedProfile) {
+        try {
+          const c = await createContract(selectedProfile.localId, toCreateContractInput(contractFields));
+          contractResult = { name: c.name, pending: c.pending };
+        } catch (contractErr) {
+          // As with the intake: the call is already logged, so keep it.
+          console.error("[log-call] contract creation failed after the call was logged:", contractErr);
+          setError(
+            contractErr instanceof Error
+              ? `The call was logged, but the contract failed: ${contractErr.message}`
+              : "The call was logged, but the contract failed.",
+          );
+        }
+      }
+      setDone({ name: res.name, pending: res.pending, mondayItemId: res.mondayItemId, intake: intakeResult, contract: contractResult });
       onLogged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : `Failed to ${isEdit ? "save the call" : "log the call"}`);
@@ -451,6 +502,8 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
     // person against a different call.
     setIsIntake(false);
     setIntakeFields(emptyJailIntakeFields);
+    setIsContract(false);
+    setContractFields(emptyContractFields);
     setDone(null);
     setError(null);
   };
@@ -489,14 +542,31 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                     : " — not linked to the call, which has no Monday id yet."}
                 </p>
               )}
+              {done.contract && (
+                <p style={{ marginBottom: 8 }}>
+                  ✓ Contract <strong>{done.contract.name}</strong>{" "}
+                  {done.contract.pending ? "queued (will sync to Monday shortly)." : "created in Monday."}
+                </p>
+              )}
+              {/* A failed intake/contract after a logged call lands here. */}
+              {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
               {/* Offered here rather than on the form: a jail intake links back
                   to the call through "link to Call Log", and the call has no
                   monday id until it has actually been created. A queued call has
                   no id yet either, so the intake is created unlinked. */}
               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                <Button type="button" variant="outline" onClick={() => setIntakeOpen(true)}>
-                  New jail intake
-                </Button>
+                {/* A call is one or the other, never both: whichever was just
+                    created hides the button for the other. */}
+                {!done.contract && (
+                  <Button type="button" variant="outline" onClick={() => setIntakeOpen(true)}>
+                    New jail intake
+                  </Button>
+                )}
+                {!done.intake && !done.contract && (
+                  <Button type="button" variant="outline" onClick={() => setContractOpen(true)}>
+                    Request contract
+                  </Button>
+                )}
                 <Button type="button" variant="outline" onClick={logAnother}>Log another call</Button>
                 <Button type="button" onClick={onClose}>Done</Button>
               </div>
@@ -608,7 +678,10 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                     <input
                       type="checkbox"
                       checked={isIntake}
-                      onChange={(e) => setIsIntake(e.target.checked)}
+                      onChange={(e) => {
+                        setIsIntake(e.target.checked);
+                        if (e.target.checked) setIsContract(false);
+                      }}
                       style={{ cursor: "pointer" }}
                     />
                     <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
@@ -627,6 +700,36 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                         The caller above becomes the intake&rsquo;s point of contact, and the call&rsquo;s Language above is reused.
                         Everything else can be filled in on the board.
                       </p>
+                    </div>
+                  )}
+
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginTop: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={isContract}
+                      onChange={(e) => {
+                        setIsContract(e.target.checked);
+                        if (e.target.checked) setIsIntake(false);
+                      }}
+                      style={{ cursor: "pointer" }}
+                    />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
+                      This call requests a contract
+                    </span>
+                  </label>
+
+                  {isContract && (
+                    <div style={{ marginTop: 10 }}>
+                      {selectedProfile ? (
+                        <p style={{ fontSize: 12, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)", marginBottom: 10 }}>
+                          New Fee K for <strong>{selectedProfile.name}</strong>
+                        </p>
+                      ) : (
+                        <p style={{ fontSize: 12, color: "var(--color-status-red)", fontFamily: "var(--font-body)", marginBottom: 10 }}>
+                          Link the client above first — the contract is created on their profile.
+                        </p>
+                      )}
+                      <ContractFields value={contractFields} onChange={setContractFields} />
                     </div>
                   )}
                 </div>
@@ -740,24 +843,30 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
                 {isEdit && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIntakeOpen(true)}
-                    style={{ marginRight: "auto" }}
-                  >
-                    New jail intake
-                  </Button>
+                  <div style={{ display: "flex", gap: 8, marginRight: "auto" }}>
+                    <Button type="button" variant="outline" onClick={() => setIntakeOpen(true)}>
+                      New jail intake
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setContractOpen(true)}>
+                      Request contract
+                    </Button>
+                  </div>
                 )}
                 <Button type="button" variant="outline" onClick={onClose}>{isEdit ? "Close" : "Cancel"}</Button>
-                <Button type="button" onClick={submit} disabled={saving || !effectiveName}>
+                <Button
+                  type="button"
+                  onClick={submit}
+                  disabled={saving || !effectiveName || (isContract && contractCaseTypes.length === 0)}
+                >
                   {isEdit
                     ? (saving ? "Saving…" : "Save")
                     : saving
                       ? "Logging…"
                       : isIntake
                         ? "Log call + intake"
-                        : "Log call"}
+                        : isContract
+                          ? "Log call + contract"
+                          : "Log call"}
                 </Button>
               </div>
             </>
@@ -771,6 +880,15 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
           callLogItemId={done?.mondayItemId ?? entry?.mondayItemId ?? null}
           initialPocName={effectiveName || undefined}
           initialPocPhone={phone.trim() || undefined}
+        />
+      )}
+      {/* M11 as-is: fixed to the linked client, or its own client search when
+          the call isn't linked to anyone. */}
+      {contractOpen && (
+        <NewContractModal
+          onClose={() => setContractOpen(false)}
+          profileLocalId={selectedProfile?.localId}
+          clientName={selectedProfile?.name}
         />
       )}
     </Dialog>
