@@ -108,6 +108,12 @@ const FOLDER_COLUMN_TITLES: Record<FolderKind, string> = { e_file: "e-file", con
 export interface PrepFolderLink {
   kind: FolderKind;
   url: string;
+  /**
+   * The link reception saw on the profile and chose to change (M18 ⋯ menu),
+   * else null. The column is overwritten only while it still holds this —
+   * a link changed in Monday meanwhile is never clobbered.
+   */
+  replaces: string | null;
 }
 
 export interface PrepBody {
@@ -125,8 +131,14 @@ export interface PrepBody {
   methodOther: string | null;
   interpreter: PrepInterpreter;
   description: string;
+  /**
+   * A Calendly client's own words as corrected by reception, else null (left
+   * as they were). Replaces the client's part of the Description; reception's
+   * part stays below it.
+   */
+  clientWrote: string | null;
   documents: PrepDocument[];
-  /** Folder links typed in for a client whose profile had none — saved to the profile. */
+  /** Folder links found, created or pasted in M18 — filling an empty column, or replacing one. */
   folderLinks: PrepFolderLink[];
 }
 
@@ -177,6 +189,10 @@ export function parsePrepBody(raw: unknown): { ok: true; body: PrepBody } | { ok
   if (description.length > PREP_DESCRIPTION_MAX) {
     return { ok: false, error: `The description is too long (max ${PREP_DESCRIPTION_MAX} characters)` };
   }
+  const clientWrote = str(b.clientWrote);
+  if (clientWrote.length > PREP_DESCRIPTION_MAX) {
+    return { ok: false, error: `What the client wrote is too long (max ${PREP_DESCRIPTION_MAX} characters)` };
+  }
 
   const rawDocs = Array.isArray(b.documents) ? b.documents : [];
   if (rawDocs.length > PREP_DOCUMENTS_MAX) return { ok: false, error: `At most ${PREP_DOCUMENTS_MAX} documents` };
@@ -203,7 +219,8 @@ export function parsePrepBody(raw: unknown): { ok: true; body: PrepBody } | { ok
     if (!isHttpUrl(url) || !/\.sharepoint\.com/i.test(new URL(url).hostname)) {
       return { ok: false, error: `The ${FOLDER_LABELS[kind]} must be a SharePoint link` };
     }
-    folderLinks.push({ kind, url });
+    const replaces = str(link.replaces);
+    folderLinks.push({ kind, url, replaces: replaces || null });
     // It is also a document the attorney should open, listed first.
     if (!seen.has(url)) {
       seen.add(url);
@@ -223,6 +240,7 @@ export function parsePrepBody(raw: unknown): { ok: true; body: PrepBody } | { ok
       methodOther: methodOther || null,
       interpreter,
       description,
+      clientWrote: clientWrote || null,
       documents,
       folderLinks,
     },
@@ -360,10 +378,13 @@ export interface PrepWriteBackStep {
  * consult is by phone, since that is the only time the field is shown).
  * Description: the appointment's Description column — for a Calendly booking
  * (`keepClient`) the client's own words stay, with reception's text below them
- * after RECEPTION_MARK (a re-prep replaces only that part). Clearing a field is not a
- * write-back: an empty box most likely means "nothing to add", not "erase".
- * A folder link only ever fills an EMPTY E-File / Consult File — a link already
- * on the profile (perhaps set in Monday since the page loaded) is never replaced.
+ * after RECEPTION_MARK (a re-prep replaces only that part); reception may also
+ * correct the client's words (`clientWrote`), which then replace theirs.
+ * Clearing a field is not a write-back: an empty box most likely means
+ * "nothing to add", not "erase".
+ * A folder link fills an EMPTY E-File / Consult File, or replaces the link
+ * reception chose to change (`replaces`) — only while the column still holds
+ * that link, so one set in Monday since the page loaded is never overwritten.
  */
 export function planPrepWriteBack(
   b: PrepBody,
@@ -385,16 +406,23 @@ export function planPrepWriteBack(
   if (b.method === "Phone" && b.phone && columns.profilePhone && !same(b.phone, current.profilePhone)) {
     steps.push({ target: "profile", field: "phone", columnId: columns.profilePhone, value: b.phone });
   }
-  if (b.description && columns.appointmentDescription) {
-    const client = current.keepClient ? splitDescription(current.appointmentDescription).client : "";
-    const value = client ? `${client}${RECEPTION_MARK}${b.description}` : b.description;
+  const clientEdit = current.keepClient ? b.clientWrote : null;
+  if ((b.description || clientEdit) && columns.appointmentDescription) {
+    const now = current.keepClient ? splitDescription(current.appointmentDescription) : { client: "", reception: "" };
+    const client = clientEdit || now.client;
+    const reception = b.description || now.reception;
+    const value = client && reception ? `${client}${RECEPTION_MARK}${reception}` : client || reception;
     if (!same(value, current.appointmentDescription)) {
       steps.push({ target: "appointment", field: "description", columnId: columns.appointmentDescription, value });
     }
   }
+  // Scheme and trailing slash don't make a different link ("x.sharepoint.com/…" is stored bare).
+  const link = (u: string | null | undefined) => (u ?? "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
   for (const f of b.folderLinks) {
     const columnId = columns.profileFolders?.[f.kind];
-    if (columnId && !(current.profileFolders?.[f.kind] ?? "").trim()) {
+    const now = current.profileFolders?.[f.kind] ?? "";
+    const free = !now.trim() || (f.replaces !== null && link(now) === link(f.replaces));
+    if (columnId && free && link(now) !== link(f.url)) {
       steps.push({ target: "profile", field: f.kind, columnId, value: f.url });
     }
   }
@@ -697,7 +725,7 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
     // A Calendly client's own words stay in the Description and lead the note.
     const apptCv = parseJson(appt.columnValues);
     const keepClient = isFromCalendly(apptCv);
-    const clientWrote = keepClient ? splitDescription(textOf(apptCv.description)).client || null : null;
+    const clientWrote = keepClient ? prep.clientWrote || splitDescription(textOf(apptCv.description)).client || null : null;
     const note = prepNote(prep, { clientWrote });
 
     let pending = false;
