@@ -84,7 +84,7 @@ async function prep(body: Record<string, unknown>) {
   const res = await fetch(`${base}/api/reception/consults/a1/prep`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ interpreter: { need: "No" }, ...body }),
   });
   return { status: res.status, json: (await res.json()) as { data?: Record<string, unknown>; error?: string } };
 }

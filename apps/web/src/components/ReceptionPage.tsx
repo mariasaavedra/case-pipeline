@@ -106,6 +106,7 @@ function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit }: 
           {!c.profile && <Tag color="missing" title="Not linked to a profile in Monday — link it before prepping">No profile</Tag>}
           {c.fromCalendly && <Tag color="later" title="Booked through Calendly">Calendly</Tag>}
           {c.language && <Tag color="court" title="Language">{c.language}</Tag>}
+          {c.lastPrep?.interpreter && <Tag color="court" title="Interpreter needed (from the prep)">Interpreter · {c.lastPrep.interpreter}</Tag>}
           {c.detainedAt && <Tag color="overdue" title="Det. Facility on the client's open court case">Detained · {c.detainedAt}</Tag>}
         </div>
         {(c.profile?.phone ?? c.phone) && (

@@ -1136,6 +1136,9 @@ export const APPT_TYPES = ["1st time", "Trial Prep", "Standard Follow up", "Init
 export type ApptType = (typeof APPT_TYPES)[number];
 export const PREP_METHODS = ["Phone", "Zoom", "Other"] as const;
 export type PrepMethod = (typeof PREP_METHODS)[number];
+/** Spanish and Portuguese are interpreted by the office; any other language, the client brings their own. */
+export const INTERPRETER_NEEDS = ["No", "Spanish", "Portuguese", "Other language"] as const;
+export type InterpreterNeed = (typeof INTERPRETER_NEEDS)[number];
 
 export interface ReceptionConsult {
   localId: string;
@@ -1154,7 +1157,11 @@ export interface ReceptionConsult {
   description: string | null;
   description2: string | null;
   profile: { localId: string; name: string; phone: string | null; eFile: string | null; consultFile: string | null } | null;
-  lastPrep: { at: string; author: string | null; apptType: string; method: string; pending: boolean } | null;
+  lastPrep: {
+    at: string; author: string | null; apptType: string; method: string; pending: boolean;
+    /** Interpreter language from the prep, null when none was needed. */
+    interpreter: string | null;
+  } | null;
   /** The folder name the consult sweep would use, or why the row's names can't build one. */
   folderName: { ok: true; folder: string; initial: string } | { ok: false; detail: string };
   /** Det. Facility on the client's open court case — pre-fills "Detained appt". */
@@ -1185,6 +1192,7 @@ export interface PrepInput {
   phone?: string;
   zoomLink?: string;
   methodOther?: string;
+  interpreter: { need: InterpreterNeed; language?: string; contact?: string };
   description: string;
   documents: Array<{ name: string; url: string }>;
   /** A folder found, created or pasted for a client whose profile had none — saved to the profile. */

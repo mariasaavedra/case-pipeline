@@ -15,6 +15,7 @@ The receptionist team's main job is preparing appointments for the attorneys. Th
 | Question | Answer |
 |---|---|
 | Prep fields | **Type of Appt** (dropdown): 1st time / Trial Prep / Standard Follow up / Initial Court follow up / Detained appt (asks where they are detained — pre-filled from the Det. Facility on the client's open court case, the same rule as P3.0's "Detained at …" pill; P17 tags those rows "Detained · facility") / Emergency consultation / Other (specify). **How to proceed** is a dropdown too. **How to proceed**: Phone (number) / Zoom (link) / Other (specify). **Documents**: e-file + relevant documents. **Description**. |
+| Needs interpreter? (2026-10-05) | Dropdown, pre-filled from the appointment's Language: **No** / **Spanish** → office, reception arranges / **Portuguese** → office, Rafael / **Other language** → client brings their own; the language and the interpreter's contact are optional text. One line in the note (`Interpreter: …`); P17 tags prepped consults "Interpreter · <language>". No notification. In the note only — no Monday column. |
 | One form or per type? | One form for every consult. |
 | Where does the note go? | Monday **Update** on the profile **and** on the appointment (pinned there), **and** an **Emails & Activities** entry on the profile. |
 | E&A type | A new **"Consult Prep Note"** type. Looked up by name in Monday; until someone creates it, entries post as the existing "Consult note". |

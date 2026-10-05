@@ -21,10 +21,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   APPT_TYPES,
+  INTERPRETER_NEEDS,
   PREP_METHODS,
   attachConsultFile,
   prepConsult,
   type ApptType,
+  type InterpreterNeed,
   type PrepMethod,
   type ReceptionConsult,
 } from "../api";
@@ -92,6 +94,26 @@ function when(c: ReceptionConsult): string {
 
 type Attach = "attaching" | "attached" | "failed";
 
+/**
+ * "Needs interpreter?" pre-filled from the appointment's Language column
+ * (labels as on the boards: "Espanol", "Portuguese", "Vietnamese"…). English and
+ * the placeholder labels leave it to reception.
+ */
+function interpreterFromLanguage(language: string | null): { need: InterpreterNeed | ""; language: string } {
+  const l = (language ?? "").trim();
+  if (/^espa[nñ]ol$|^spanish$/i.test(l)) return { need: "Spanish", language: "" };
+  if (/^portugu[eê]s(e)?$/i.test(l)) return { need: "Portuguese", language: "" };
+  if (!l || /^(english|default|preferred language)$/i.test(l)) return { need: /^english$/i.test(l) ? "No" : "", language: "" };
+  return { need: "Other language", language: l };
+}
+
+const INTERPRETER_HINT: Record<InterpreterNeed, string> = {
+  No: "",
+  Spanish: "The office interprets — reception arranges it.",
+  Portuguese: "The office interprets — Rafael.",
+  "Other language": "The client brings their own interpreter.",
+};
+
 interface Props {
   consult: ReceptionConsult;
   /** Open the appointment's focus view (M5) on top, to read the notes while prepping. */
@@ -115,6 +137,10 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   const [zoomLink, setZoomLink] = useState("");
   const [methodOther, setMethodOther] = useState("");
   const [description, setDescription] = useState(startDescription);
+  const startInterp = interpreterFromLanguage(consult.language);
+  const [interpNeed, setInterpNeed] = useState<InterpreterNeed | "">(startInterp.need);
+  const [interpLanguage, setInterpLanguage] = useState(startInterp.language);
+  const [interpContact, setInterpContact] = useState("");
 
   // A folder found, created or pasted here, for a client whose profile had none.
   const [newFolder, setNewFolder] = useState<FolderLink | null>(null);
@@ -218,6 +244,7 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   const submit = async () => {
     if (!apptType) { setError("Pick the type of appointment."); return; }
     if (!method) { setError("Pick how the consult will happen."); return; }
+    if (!interpNeed) { setError("Pick whether the client needs an interpreter."); return; }
     setSaving(true);
     setError(null);
     try {
@@ -229,6 +256,9 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
         phone: method === "Phone" ? phone : undefined,
         zoomLink: method === "Zoom" ? zoomLink : undefined,
         methodOther: method === "Other" ? methodOther : undefined,
+        interpreter: interpNeed === "Other language"
+          ? { need: interpNeed, language: interpLanguage, contact: interpContact }
+          : { need: interpNeed },
         description,
         documents: [...folders.filter((f) => includeFolder(f.url)), ...picked],
         folderLinks: newFolder ? [newFolder] : undefined,
@@ -334,6 +364,23 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                     placeholder="Specify… (e.g. in person at the office)" aria-label="Specify how the consult will happen" autoFocus
                     className="mt-2 w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
                 )}
+              </div>
+
+              {/* Needs interpreter? */}
+              <div style={{ marginBottom: 14 }}>
+                <span style={labelStyle}>Needs interpreter?</span>
+                <Dropdown options={INTERPRETER_NEEDS} value={interpNeed} onChange={setInterpNeed} label="Needs interpreter?" code="D33" />
+                {interpNeed === "Other language" && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <input type="text" value={interpLanguage} onChange={(e) => setInterpLanguage(e.target.value)} maxLength={200}
+                      placeholder="Language (optional)" aria-label="Interpreter language"
+                      className="rounded-md px-2 py-1.5 text-sm" style={{ ...fieldStyle, flex: 1, minWidth: 0 }} />
+                    <input type="text" value={interpContact} onChange={(e) => setInterpContact(e.target.value)} maxLength={200}
+                      placeholder="Interpreter's name / phone (optional)" aria-label="Interpreter contact"
+                      className="rounded-md px-2 py-1.5 text-sm" style={{ ...fieldStyle, flex: 2, minWidth: 0 }} />
+                  </div>
+                )}
+                {interpNeed && INTERPRETER_HINT[interpNeed] && <span style={hintStyle}>{INTERPRETER_HINT[interpNeed]}</span>}
               </div>
 
               {/* Documents */}

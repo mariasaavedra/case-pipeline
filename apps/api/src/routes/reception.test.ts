@@ -19,7 +19,7 @@ import {
   type PrepBody,
 } from "./reception";
 
-const base = { apptType: "1st time", method: "Phone", phone: "(913) 555-0101", description: "" };
+const base = { apptType: "1st time", method: "Phone", phone: "(913) 555-0101", interpreter: { need: "No" }, description: "" };
 
 function body(over: Record<string, unknown> = {}): PrepBody {
   const r = parsePrepBody({ ...base, ...over });
@@ -31,7 +31,8 @@ describe("parsePrepBody", () => {
   it("accepts the minimal phone prep", () => {
     expect(body()).toEqual({
       apptType: "1st time", apptTypeOther: null, detainedAt: null, method: "Phone", phone: "(913) 555-0101",
-      zoomLink: null, methodOther: null, description: "", documents: [], folderLinks: [],
+      zoomLink: null, methodOther: null, interpreter: { need: "No", language: null, contact: null },
+      description: "", documents: [], folderLinks: [],
     });
   });
 
@@ -85,6 +86,19 @@ describe("parsePrepBody", () => {
     expect(b.methodOther).toBeNull();
   });
 
+  it("asks about an interpreter: office for Spanish / Portuguese, the client's own otherwise", () => {
+    expect(parsePrepBody({ ...base, interpreter: undefined })).toEqual({ ok: false, error: "Pick whether the client needs an interpreter" });
+    expect(prepNote(body({ interpreter: { need: "Spanish" } })).text).toContain("Interpreter: Spanish — office (reception arranges)");
+    expect(prepNote(body({ interpreter: { need: "Portuguese", language: "ignored" } })).text).toContain("Interpreter: Portuguese — office (Rafael)");
+    // Other: language and contact are both optional.
+    expect(prepNote(body({ interpreter: { need: "Other language" } })).text).toContain("Interpreter: Other language — client brings their own");
+    const other = body({ interpreter: { need: "Other language", language: " Vietnamese ", contact: "Lan Tran 816-555-0100" } });
+    expect(other.interpreter).toEqual({ need: "Other language", language: "Vietnamese", contact: "Lan Tran 816-555-0100" });
+    expect(prepNote(other).text).toContain("Interpreter: Vietnamese — client brings their own (contact: Lan Tran 816-555-0100)");
+    // Typed text never becomes HTML in Monday.
+    expect(prepNote(body({ interpreter: { need: "Other language", language: "<b>x</b>" } })).html).toContain("&lt;b&gt;x&lt;/b&gt;");
+  });
+
   it("caps the description", () => {
     expect(parsePrepBody({ ...base, description: "a".repeat(PREP_DESCRIPTION_MAX + 1) }).ok).toBe(false);
   });
@@ -114,6 +128,7 @@ describe("prepNote", () => {
       [
         "Type of appt: 1st time",
         "How to proceed: Zoom — https://zoom.us/j/9",
+        "Interpreter: Not needed",
         "Documents:",
         "• Consult folder — https://x.sharepoint.com/c",
         "Description: Asks about\nhis I-130",
@@ -122,6 +137,7 @@ describe("prepNote", () => {
     expect(n.html).toBe(
       '<p><strong>Type of appt:</strong> 1st time</p>' +
       '<p><strong>How to proceed:</strong> Zoom — <a href="https://zoom.us/j/9" target="_blank" rel="noopener noreferrer">https://zoom.us/j/9</a></p>' +
+      '<p><strong>Interpreter:</strong> Not needed</p>' +
       '<p><strong>Documents:</strong></p>' +
       // The link reads as the document's name — "Consult folder" in blue, not the URL.
       '<p>• <a href="https://x.sharepoint.com/c" target="_blank" rel="noopener noreferrer">Consult folder</a></p>' +
@@ -131,7 +147,7 @@ describe("prepNote", () => {
   });
 
   it("leaves out Documents and Description when there are none", () => {
-    expect(prepNote(body()).text).toBe("Type of appt: 1st time\nHow to proceed: Phone — (913) 555-0101");
+    expect(prepNote(body()).text).toBe("Type of appt: 1st time\nHow to proceed: Phone — (913) 555-0101\nInterpreter: Not needed");
   });
 
   it("escapes typed text in the html", () => {
@@ -234,6 +250,6 @@ describe("getReceptionConsults", () => {
     prep.run("1st time", "Phone", 0, "2026-10-01 10:00:00");
     prep.run("Trial Prep", "Zoom", 1, "2026-10-02 10:00:00");
     const a1 = getReceptionConsults(db, opts).find((c) => c.localId === "a1")!;
-    expect(a1.lastPrep).toEqual({ at: "2026-10-02 10:00:00", author: "Ana", apptType: "Trial Prep", method: "Zoom", pending: true });
+    expect(a1.lastPrep).toEqual({ at: "2026-10-02 10:00:00", author: "Ana", apptType: "Trial Prep", method: "Zoom", pending: true, interpreter: null });
   });
 });
