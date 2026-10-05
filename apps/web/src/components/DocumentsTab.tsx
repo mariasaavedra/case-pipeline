@@ -30,6 +30,10 @@ import { FilePreviewModal } from "./FilePreviewModal";
 export interface PickedFile {
   name: string;
   url: string;
+  /** Where it lives in SharePoint, so it can be copied into Monday (absent for folder links). */
+  driveId?: string;
+  itemId?: string;
+  size?: number;
 }
 
 interface Props {
@@ -404,7 +408,7 @@ export function DocumentsTab({ data, pick }: Props) {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    pick.onToggle({ name: c.name, url: c.webUrl });
+                    pick.onToggle({ name: c.name, url: c.webUrl, driveId: c.parentReference?.driveId, itemId: c.id, size: c.size });
                   }}
                   className="action-btn"
                   aria-pressed={pick.selected.has(c.webUrl)}

@@ -9,8 +9,10 @@
 // (phone → profile, description → appointment). See routes/reception.ts.
 //
 // Documents: the client's e-file / consult folder links, plus files picked or
-// uploaded in M19 (the Documents tab's SharePoint browser in pick mode). A file
-// uploaded there is also attached to the profile's Files column in Monday.
+// uploaded in M19 (the Documents tab's SharePoint browser in pick mode). On save,
+// each of those files is also copied into the APPOINTMENT's Files column in
+// Monday (reception, 2026-10-05) — an upload from the browser's copy, a picked
+// file downloaded from SharePoint first.
 //
 // A client with no folder on their profile gets one here: "Find or create"
 // looks where the consult sweep looks (E-Files, Closed, then this year's
@@ -34,7 +36,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { DocumentsTab, type PickedFile } from "./DocumentsTab";
-import { findOrCreateClientFolder, folderNameOf, getGraphToken, GraphConsentRequiredError, type ClientFolderKind } from "../sharepoint/graph";
+import { downloadDriveFile, findOrCreateClientFolder, folderNameOf, getGraphToken, GraphConsentRequiredError, type ClientFolderKind } from "../sharepoint/graph";
 import { normalizeSharePointUrl } from "../sharepoint/parseLink";
 
 type FolderLink = { kind: ClientFolderKind; url: string };
@@ -92,7 +94,18 @@ function when(c: ReceptionConsult): string {
   return `${day} · ${hour % 12 === 0 ? 12 : hour % 12}:${String(m ?? 0).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
 }
 
-type Attach = "attaching" | "attached" | "failed";
+type Attach = "attaching" | "attached" | "failed" | "too-large";
+
+function AttachState({ state }: { state: Attach | undefined }) {
+  const style = { fontSize: 11, flexShrink: 0 } as const;
+  if (state === "attached") return <span style={{ ...style, color: "var(--color-status-green, var(--color-ink-muted))" }}>✓ added</span>;
+  if (state === "failed") return <span style={{ ...style, color: "var(--color-status-red)" }}>not added — the link is in the note</span>;
+  if (state === "too-large") return <span style={{ ...style, color: "var(--color-ink-faint)" }}>over 25 MB — the link is in the note</span>;
+  return <span style={{ ...style, color: "var(--color-ink-faint)" }}>adding…</span>;
+}
+
+/** Same cap as the API's PREP_FILE_MAX_BYTES. */
+const FILE_MAX_BYTES = 25 * 1024 * 1024;
 
 /** Same split as the API's splitDescription: the client's words, then "Reception: …". */
 function splitDescription(d: string | null): { client: string; reception: string } {
@@ -233,6 +246,8 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   };
   const [picked, setPicked] = useState<PickedFile[]>([]);
   const [attach, setAttach] = useState<Record<string, Attach>>({});
+  // Files uploaded here, by SharePoint URL: copied to Monday from these bytes, not re-downloaded.
+  const uploads = useRef(new Map<string, File>());
   const [browsing, setBrowsing] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -244,11 +259,33 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
     setPicked((cur) => (cur.some((p) => p.url === f.url) ? cur.filter((p) => p.url !== f.url) : [...cur, f]));
 
   const onUploaded = (file: File, item: { name: string; webUrl: string }) => {
+    uploads.current.set(item.webUrl, file);
     setPicked((cur) => (cur.some((p) => p.url === item.webUrl) ? cur : [...cur, { name: item.name, url: item.webUrl }]));
-    setAttach((a) => ({ ...a, [item.webUrl]: "attaching" }));
-    attachConsultFile(consult.localId, file)
-      .then(() => setAttach((a) => ({ ...a, [item.webUrl]: "attached" })))
-      .catch(() => setAttach((a) => ({ ...a, [item.webUrl]: "failed" })));
+  };
+
+  /** After the note is saved: copy each picked / uploaded file into the appointment's Files. */
+  const copyFilesToAppointment = async (files: PickedFile[]) => {
+    for (const f of files) {
+      setAttach((a) => ({ ...a, [f.url]: "attaching" }));
+      try {
+        const uploaded = uploads.current.get(f.url);
+        if ((uploaded?.size ?? f.size ?? 0) > FILE_MAX_BYTES) {
+          setAttach((a) => ({ ...a, [f.url]: "too-large" }));
+          continue;
+        }
+        let blob: Blob | undefined = uploaded;
+        if (!blob && f.driveId && f.itemId) blob = await downloadDriveFile(f.driveId, f.itemId);
+        if (!blob) throw new Error("No way to read this file");
+        if (blob.size > FILE_MAX_BYTES) {
+          setAttach((a) => ({ ...a, [f.url]: "too-large" }));
+          continue;
+        }
+        await attachConsultFile(consult.localId, blob, f.name);
+        setAttach((a) => ({ ...a, [f.url]: "attached" }));
+      } catch {
+        setAttach((a) => ({ ...a, [f.url]: "failed" }));
+      }
+    }
   };
 
   const phoneEdited = method === "Phone" && phone.trim() !== startPhone.trim();
@@ -278,14 +315,13 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
       });
       setDone({ pending: res.pending, wroteBack: res.wroteBack });
       onSaved();
+      void copyFilesToAppointment(picked);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save the prep note");
     } finally {
       setSaving(false);
     }
   };
-
-  const stillAttaching = Object.values(attach).some((s) => s === "attaching");
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -317,6 +353,19 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                 {done.wroteBack.includes("phone") && <li>Profile phone updated</li>}
                 {done.wroteBack.includes("description") && <li>Appointment description updated</li>}
               </ul>
+              {picked.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <p style={{ fontSize: 13, color: "var(--color-ink-muted)", marginBottom: 4 }}>Files added to the appointment's Files in Monday:</p>
+                  <ul style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 2 }}>
+                    {picked.map((f) => (
+                      <li key={f.url} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📎 {f.name}</span>
+                        <AttachState state={attach[f.url]} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <button type="button" onClick={onClose} className="mt-1 rounded-md px-3 py-1.5 text-sm"
                 style={{ background: "var(--color-amber-light)", color: "var(--color-amber)", border: "none", cursor: "pointer" }}>Done</button>
             </div>
@@ -416,9 +465,6 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                       <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-amber-dark)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         📎 {f.name}
                       </a>
-                      {attach[f.url] === "attaching" && <span style={{ fontSize: 11, color: "var(--color-ink-faint)" }}>attaching to profile…</span>}
-                      {attach[f.url] === "attached" && <span style={{ fontSize: 11, color: "var(--color-status-green, var(--color-ink-muted))" }}>✓ on profile Files</span>}
-                      {attach[f.url] === "failed" && <span style={{ fontSize: 11, color: "var(--color-status-red)" }}>not attached in Monday (still in SharePoint)</span>}
                       <button type="button" onClick={() => togglePicked(f)} aria-label={`Remove ${f.name}`}
                         style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-ink-faint)", fontSize: 14 }}>×</button>
                     </li>
@@ -493,7 +539,6 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
               {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
 
               <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 4 }}>
-                {stillAttaching && <span style={{ fontSize: 11, color: "var(--color-ink-faint)", marginRight: "auto" }}>Still attaching files…</span>}
                 <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
                 <Button type="button" onClick={submit} disabled={saving || !profile}>
                   {saving ? "Saving…" : "Save prep note"}
@@ -511,7 +556,7 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
             <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
               <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Client documents</DialogTitle>
               <DialogDescription>
-                {profile.name} · Attach files to the prep note, or upload new ones (they are also added to the profile's Files in Monday).
+                {profile.name} · Attach files to the prep note, or upload new ones. On save they are also added to the appointment's Files in Monday.
               </DialogDescription>
             </DialogHeader>
             <div className="px-5 py-4">
