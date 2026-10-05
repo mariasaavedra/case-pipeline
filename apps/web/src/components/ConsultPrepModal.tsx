@@ -282,16 +282,13 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
           <DialogDescription>
             {profile?.name ?? consult.name} · {when(consult)}
             {consult.attorney ? ` · ${consult.attorney}` : ""}
-            {onFocus && (
-              <>
-                {" · "}
-                <button type="button" onClick={onFocus}
-                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--color-amber-dark)", fontSize: "inherit" }}>
-                  Focus view — notes &amp; documents
-                </button>
-              </>
-            )}
           </DialogDescription>
+          {onFocus && (
+            <Button type="button" size="sm" variant="outline" onClick={onFocus} className="mt-2 self-start"
+              title="Opens the appointment's focus view on top — this prep stays as you left it">
+              Focus view — notes &amp; documents
+            </Button>
+          )}
         </DialogHeader>
 
         <div className="px-5 py-4">
