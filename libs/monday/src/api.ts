@@ -599,6 +599,9 @@ export async function fetchBoardItems(
             column_values {
               id
               text
+              ... on DateValue {
+                value
+              }
               ... on BoardRelationValue {
                 linked_item_ids
                 display_value
@@ -757,6 +760,9 @@ export async function fetchItem(itemId: string): Promise<MondayItem> {
         column_values {
           id
           text
+          ... on DateValue {
+            value
+          }
           ... on BoardRelationValue {
             linked_item_ids
             display_value

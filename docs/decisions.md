@@ -515,3 +515,11 @@ The daily series held **thirteen** backups where `BACKUP_KEEP` defaults to 4. De
 - **Popups above the sidebar.** `ui/dialog`, `ui/select` and `ui/popover` moved from `z-50` to `z-[70]`; the sidebar is 60 (so the phone drawer clears its 55 backdrop) and was painting over wide popups at tablet widths.
 
 **Revisit if**: the pin turns out to be refused on the live account (then drop it), or reception wants Type of Appt filterable in Monday (then add columns rather than parsing notes).
+
+## 2026-10-05 — Monday date/times: read the UTC value, convert to Central
+
+A date column's time is stored in UTC; its display `text` is rendered in the API token owner's timezone. The shared token is Rafael's account, set to America/Sao_Paulo, so the sync (which read `text`) showed every timed consult 2 hours late (3 in winter) — reported on Gerbert Yoalmo's 10:00 AM consult, shown as 12:00.
+
+- **Read:** the sync fetches `value` for `DateValue` columns only (not every column — payload) and converts with `utcToFirm` (Intl, DST-safe). Date-only values are calendar days and are never shifted.
+- **Write:** every timed write converts with `firmToUtc` / `mondayDateTime` (M10 booking, M9 jail-intake scheduling, M20). Neither had sent a timed value yet.
+- **Not chosen:** changing the token owner's Monday timezone to Central. It would have fixed reads silently, and broken again the day the token changes hands.

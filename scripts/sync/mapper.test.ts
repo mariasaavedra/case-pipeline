@@ -43,6 +43,20 @@ describe("shapeColumnValue", () => {
     });
   });
 
+  it("reads a date's time from the UTC value, in Central — not the token owner's text", () => {
+    // Gerbert Yoalmo, 2026-10-05: stored 15:00 UTC, text rendered in São Paulo.
+    const v = cv("date3__1", "2026-10-05 12:00", { value: '{"date":"2026-10-05","time":"15:00:00"}' });
+    expect(shapeColumnValue("date", v)).toEqual({ date: "2026-10-05", time: "10:00" });
+    // Winter (CST, UTC−6), and a UTC time that lands on the previous Central day.
+    expect(shapeColumnValue("date", cv("c", "x", { value: '{"date":"2026-12-01","time":"16:30:00"}' })))
+      .toEqual({ date: "2026-12-01", time: "10:30" });
+    expect(shapeColumnValue("date", cv("c", "x", { value: '{"date":"2026-10-06","time":"02:00:00"}' })))
+      .toEqual({ date: "2026-10-05", time: "21:00" });
+    // A date with no time is a calendar day — never shifted.
+    expect(shapeColumnValue("date", cv("c", "2026-09-25", { value: '{"date":"2026-09-25","changed_at":"2026-09-25T16:04:37Z"}' })))
+      .toEqual({ date: "2026-09-25" });
+  });
+
   it("shapes board_relation keeping linked ids", () => {
     const shaped = shapeColumnValue(
       "board_relation",

@@ -19,6 +19,11 @@ export interface MondayBoard {
 export interface MondayColumnValue {
   id: string;
   text: string | null;
+  /**
+   * Raw JSON value — fetched for date columns only, because their `text` is
+   * rendered in the token owner's timezone while `value` holds UTC.
+   */
+  value?: string | null;
   display_value?: string;
   linked_item_ids?: string[];
   linked_items?: MondayItem[];

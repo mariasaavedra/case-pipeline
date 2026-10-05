@@ -14,6 +14,8 @@
 // =============================================================================
 
 import type { MondayColumnValue, MondayItem } from "@case-pipeline/monday";
+// Relative, not the alias: the module stays alias-free (see above).
+import { utcToFirm } from "../../libs/core/src/firm-time";
 
 /** A resolved column: the logical config key plus the live Monday id + type. */
 export interface ResolvedColumnMeta {
@@ -41,6 +43,18 @@ export const NEXT_DATE_KEY: Record<string, string> = {
   deadlines_due_dates: "due_date",
 };
 
+/** A date column's raw JSON value: `{"date":"YYYY-MM-DD","time":"HH:MM:SS"}`, time in UTC. */
+function parseDateValue(raw: string | null | undefined): { date: string; time: string | null } | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as { date?: unknown; time?: unknown };
+    if (typeof v?.date !== "string" || !v.date) return null;
+    return { date: v.date, time: typeof v.time === "string" && v.time ? v.time : null };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Shape a single Monday column value according to its column type, matching
  * the seeder's conventions. Returns `null` for empty values (caller skips them).
@@ -63,10 +77,18 @@ export function shapeColumnValue(type: string, value: MondayColumnValue): unknow
       if (!text) return null;
       return { labels: text.split(",").map((s) => s.trim()).filter(Boolean) };
 
-    // Dates → { date } and optional { time } if Monday has a time set ("YYYY-MM-DD HH:MM")
+    // Dates → { date } and optional { time } if Monday has a time set.
+    // The time comes from the raw `value`, which is UTC, converted to Central:
+    // `text` is rendered in the token owner's timezone (São Paulo for the
+    // shared token), which put a 10:00 AM consult at "12:00".
     case "date":
     case "datetime": {
       if (!text) return null;
+      const utc = parseDateValue(value.value);
+      if (utc?.time) {
+        const firm = utcToFirm(utc.date, utc.time);
+        if (firm) return firm;
+      }
       const [date, time] = text.split(" ");
       return time ? { date, time } : { date };
     }
