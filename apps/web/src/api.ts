@@ -1243,9 +1243,14 @@ export interface PrepInput {
   methodOther?: string;
   interpreter: { need: InterpreterNeed; language?: string; contact?: string };
   description: string;
+  /** A Calendly client's words as corrected by reception — sent only when edited. */
+  clientWrote?: string;
   documents: Array<{ name: string; url: string }>;
-  /** A folder found, created or pasted for a client whose profile had none — saved to the profile. */
-  folderLinks?: Array<{ kind: "e_file" | "consult_file"; url: string }>;
+  /**
+   * A folder found, created or pasted in M18 — saved to the profile. `replaces`
+   * is the link it changes (the API only overwrites while Monday still holds it).
+   */
+  folderLinks?: Array<{ kind: "e_file" | "consult_file"; url: string; replaces?: string }>;
 }
 
 export function prepConsult(

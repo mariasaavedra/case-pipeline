@@ -14,10 +14,16 @@
 // Monday (reception, 2026-10-05) — an upload from the browser's copy, a picked
 // file downloaded from SharePoint first.
 //
-// A client with no folder on their profile gets one here: "Find or create"
-// looks where the consult sweep looks (E-Files, Closed, then this year's
-// Consults) and only creates a consult folder when none exists; or a link can
-// be pasted. Either way the link is saved to the empty profile column on save.
+// Folders live behind the Documents ⋯ menu (reception, 2026-10-05) — never
+// automatic: "Find or create" looks where the consult sweep looks (E-Files,
+// Closed, then this year's Consults) and only creates a folder when none
+// exists; "Use a different folder" takes a pasted link when the one on the
+// profile is wrong or a better one exists. Either way the link is saved to the
+// profile on save — filling an empty column, or replacing the link that was
+// there (only if Monday still holds it).
+//
+// A Calendly client's own words ("Client wrote") can be corrected too; they
+// replace the client's part of the Description, reception's part stays below.
 // =============================================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -39,7 +45,7 @@ import { DocumentsTab, type PickedFile } from "./DocumentsTab";
 import { downloadDriveFile, findOrCreateClientFolder, folderNameOf, getGraphToken, GraphConsentRequiredError, type ClientFolderKind } from "../sharepoint/graph";
 import { normalizeSharePointUrl } from "../sharepoint/parseLink";
 
-type FolderLink = { kind: ClientFolderKind; url: string };
+const FOLDER_KINDS: ClientFolderKind[] = ["e_file", "consult_file"];
 const FOLDER_LABEL: Record<ClientFolderKind, string> = { e_file: "E-File folder", consult_file: "Consult folder" };
 
 const labelStyle = {
@@ -65,6 +71,13 @@ const hintStyle = {
   marginTop: 3,
   fontFamily: "var(--font-body)",
 } as const;
+
+const menuItemStyle = {
+  display: "block", width: "100%", textAlign: "left", padding: "6px 8px", borderRadius: 6, border: "none",
+  background: "transparent", cursor: "pointer", fontFamily: "var(--font-body)", fontSize: 13, color: "var(--color-ink)",
+} as const;
+
+const menuHintStyle = { display: "block", fontSize: 11, color: "var(--color-ink-faint)", marginTop: 1 } as const;
 
 /** A required pick from a fixed list (D23 type of appt, D24 how to proceed). */
 function Dropdown<T extends string>({ options, value, onChange, label, code }: {
@@ -152,6 +165,7 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   // only, and the box is reception's part, saved below them (routes/reception.ts).
   const split = splitDescription(consult.description);
   const clientWrote = consult.fromCalendly ? split.client : "";
+  const [clientText, setClientText] = useState(clientWrote);
   const startDescription = consult.fromCalendly ? split.reception : consult.description ?? "";
 
   const [apptType, setApptType] = useState<ApptType | "">("");
@@ -168,12 +182,38 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   const [interpLanguage, setInterpLanguage] = useState(startInterp.language);
   const [interpContact, setInterpContact] = useState("");
 
-  // A folder found, created or pasted here, for a client whose profile had none.
-  const [newFolder, setNewFolder] = useState<FolderLink | null>(null);
+  // Folder links found, created or pasted here (⋯ menu) — saved to the profile on save.
+  const [changed, setChanged] = useState<Partial<Record<ClientFolderKind, string>>>({});
+  const [folderMenu, setFolderMenu] = useState(false);
+  const [pasting, setPasting] = useState(false);
   const [folderBusy, setFolderBusy] = useState(false);
   const [folderMsg, setFolderMsg] = useState<{ text: string; error: boolean } | null>(null);
   const [pasteKind, setPasteKind] = useState<ClientFolderKind>("consult_file");
   const [pasteUrl, setPasteUrl] = useState("");
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!folderMenu) return;
+    const close = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setFolderMenu(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [folderMenu]);
+
+  /** The link on the profile as loaded (raw, as Monday stores it). */
+  const original = (k: ClientFolderKind): string | null => (k === "e_file" ? profile?.eFile : profile?.consultFile) ?? null;
+  /** The link the prep will use: changed here, else the profile's. */
+  const current = (k: ClientFolderKind): string | null => changed[k] ?? original(k);
+  const sameLink = (a: string | null, b: string | null) =>
+    !!a && !!b && (normalizeSharePointUrl(a) ?? a).replace(/\/+$/, "").toLowerCase() === (normalizeSharePointUrl(b) ?? b).replace(/\/+$/, "").toLowerCase();
+
+  /** Use `url` as the client's `kind` folder; the profile's own link means "no change". */
+  const pickFolder = (kind: ClientFolderKind, url: string): boolean => {
+    if (sameLink(url, original(kind))) {
+      setChanged(({ [kind]: _drop, ...rest }) => rest);
+      return false;
+    }
+    setChanged((c) => ({ ...c, [kind]: url }));
+    return true;
+  };
 
   // The folder's own name ("VENTURA, Milton") for its link in the note, looked
   // up per link; until it arrives (or if SharePoint can't say) the link keeps
@@ -189,11 +229,14 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
       const url = normalizeSharePointUrl(raw) ?? raw;
       if (!out.some((f) => f.url === url)) out.push({ name: folderNames[url] ?? label, url });
     };
-    if (profile?.eFile) add(profile.eFile, FOLDER_LABEL.e_file);
-    if (profile?.consultFile) add(profile.consultFile, FOLDER_LABEL.consult_file);
-    if (newFolder) add(newFolder.url, FOLDER_LABEL[newFolder.kind]);
+    for (const k of FOLDER_KINDS) {
+      const url = changed[k] ?? (k === "e_file" ? profile?.eFile : profile?.consultFile);
+      if (url) add(url, FOLDER_LABEL[k]);
+    }
     return out;
-  }, [profile, newFolder, folderNames]);
+  }, [profile, changed, folderNames]);
+  /** Which kind a listed folder was changed as, if it was. */
+  const changedKind = (url: string) => FOLDER_KINDS.find((k) => changed[k] && (normalizeSharePointUrl(changed[k]!) ?? changed[k]) === url);
 
   const askedNames = useRef(new Set<string>());
   useEffect(() => {
@@ -207,29 +250,34 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   }, [folders]);
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
   const includeFolder = (url: string) => !excluded[url];
-  const noFolder = !!profile && !profile.eFile && !profile.consultFile && !newFolder;
+  const noFolder = !!profile && !current("e_file") && !current("consult_file");
   const consultYear = Number((consult.date ?? "").slice(0, 4)) || new Date().getFullYear();
 
-  const findOrCreate = async (interactive: boolean) => {
+  const findOrCreate = async (want: ClientFolderKind) => {
     if (!consult.folderName.ok) return;
+    setFolderMenu(false);
     setFolderBusy(true);
     setFolderMsg(null);
     try {
       // The Graph scope is consented separately from sign-in; a click may run its popup.
-      if (interactive) await getGraphToken(true);
+      await getGraphToken(true);
       const r = await findOrCreateClientFolder({
-        want: "consult_file", folder: consult.folderName.folder, initial: consult.folderName.initial, year: consultYear,
+        want, folder: consult.folderName.folder, initial: consult.folderName.initial, year: consultYear,
       });
       const name = r.path.split("/").pop();
-      if (name) setFolderNames((m) => ({ ...m, [r.url]: name }));
-      setNewFolder({ kind: r.kind, url: r.url });
-      setFolderMsg({ text: `${r.created ? "Created" : "Found existing"} ${r.path}`, error: false });
+      if (name) setFolderNames((m) => ({ ...m, [normalizeSharePointUrl(r.url) ?? r.url]: name }));
+      const isNew = pickFolder(r.kind, r.url);
+      setFolderMsg({
+        text: isNew
+          ? `${r.created ? "Created" : "Found existing"} ${r.path}${original(r.kind) ? ` — replaces the ${FOLDER_LABEL[r.kind]} on save` : ""}`
+          : `${r.path} is already the ${FOLDER_LABEL[r.kind]} on the profile.`,
+        error: false,
+      });
     } catch (e) {
-      if (e instanceof GraphConsentRequiredError && !interactive) {
-        setFolderMsg({ text: "SharePoint access is needed first.", error: true });
-      } else {
-        setFolderMsg({ text: e instanceof Error ? e.message : "Could not reach SharePoint", error: true });
-      }
+      setFolderMsg({
+        text: e instanceof GraphConsentRequiredError ? "SharePoint access is needed first." : e instanceof Error ? e.message : "Could not reach SharePoint",
+        error: true,
+      });
     } finally {
       setFolderBusy(false);
     }
@@ -240,9 +288,10 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
     let ok = false;
     try { ok = /\.sharepoint\.com$/i.test(new URL(url).hostname); } catch { ok = false; }
     if (!ok) { setFolderMsg({ text: "Paste a SharePoint folder link (…sharepoint.com/…).", error: true }); return; }
-    setNewFolder({ kind: pasteKind, url });
+    const isNew = pickFolder(pasteKind, url);
     setPasteUrl("");
-    setFolderMsg(null);
+    setPasting(false);
+    setFolderMsg(isNew ? null : { text: `That is already the ${FOLDER_LABEL[pasteKind]} on the profile.`, error: false });
   };
   const [picked, setPicked] = useState<PickedFile[]>([]);
   const [attach, setAttach] = useState<Record<string, Attach>>({});
@@ -289,6 +338,8 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   };
 
   const phoneEdited = method === "Phone" && phone.trim() !== startPhone.trim();
+  // An emptied box leaves the client's words as they are (no erasing).
+  const clientEdited = !!clientWrote && clientText.trim() !== "" && clientText.trim() !== clientWrote.trim();
   const descriptionEdited = description.trim() !== "" && description.trim() !== startDescription.trim();
 
   const submit = async () => {
@@ -310,8 +361,12 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
           ? { need: interpNeed, language: interpLanguage, contact: interpContact }
           : { need: interpNeed },
         description,
+        clientWrote: clientEdited ? clientText : undefined,
         documents: [...folders.filter((f) => includeFolder(f.url)), ...picked],
-        folderLinks: newFolder ? [newFolder] : undefined,
+        folderLinks: FOLDER_KINDS.flatMap((kind) => {
+          const url = changed[kind];
+          return url ? [{ kind, url, replaces: original(kind) ?? undefined }] : [];
+        }),
       });
       setDone({ pending: res.pending, wroteBack: res.wroteBack });
       onSaved();
@@ -352,6 +407,8 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                 <li>Consult Prep Note in the profile's Emails &amp; Activities</li>
                 {done.wroteBack.includes("phone") && <li>Profile phone updated</li>}
                 {done.wroteBack.includes("description") && <li>Appointment description updated</li>}
+                {done.wroteBack.includes("e_file") && <li>Profile E-File link updated</li>}
+                {done.wroteBack.includes("consult_file") && <li>Profile Consult File link updated</li>}
               </ul>
               {picked.length > 0 && (
                 <div style={{ marginBottom: 8 }}>
@@ -444,22 +501,63 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
 
               {/* Documents */}
               <div style={{ marginBottom: 14 }}>
-                <span style={labelStyle}>Documents</span>
-                <ul style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 6 }}>
-                  {folders.map((f) => (
-                    <li key={f.url} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: "var(--font-body)" }}>
-                      <input type="checkbox" checked={includeFolder(f.url)} aria-label={`Include ${f.name}`}
-                        onChange={(e) => setExcluded((m) => ({ ...m, [f.url]: !e.target.checked }))} />
-                      <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-amber-dark)" }}>📁 {f.name}</a>
-                      {newFolder?.url === f.url && (
-                        <>
-                          <span style={{ fontSize: 11, color: "var(--color-ink-faint)" }}>saved to the profile on save</span>
-                          <button type="button" onClick={() => { setNewFolder(null); setFolderMsg(null); }} aria-label="Remove this folder link"
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-ink-faint)", fontSize: 14 }}>×</button>
-                        </>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ ...labelStyle, marginBottom: 0 }}>Documents</span>
+                  {profile && (
+                    <div ref={menuRef} style={{ position: "relative" }}>
+                      <button type="button" aria-label="Folder options" aria-haspopup="menu" aria-expanded={folderMenu}
+                        title="Change or create the client's folder" disabled={folderBusy}
+                        onClick={() => setFolderMenu((o) => !o)}
+                        className="rounded-md px-2 py-0.5 text-base leading-none"
+                        style={{ color: "var(--color-ink-muted)", border: "1px solid var(--color-border-light)", background: folderMenu ? "var(--color-surface-warm)" : "transparent", cursor: "pointer" }}>
+                        ⋯
+                      </button>
+                      {folderMenu && (
+                        <div role="menu" style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 10, minWidth: 260, padding: 4, borderRadius: 8, background: "var(--color-surface)", border: "1px solid var(--color-border-light)", boxShadow: "0 6px 20px rgba(0,0,0,0.12)" }}>
+                          <button type="button" role="menuitem" style={menuItemStyle}
+                            onClick={() => { setFolderMenu(false); setPasting(true); setFolderMsg(null); }}>
+                            Use a different folder…
+                            <span style={menuHintStyle}>Paste a SharePoint link — replaces the one on the profile</span>
+                          </button>
+                          {FOLDER_KINDS.map((k) => (
+                            <button key={k} type="button" role="menuitem" style={menuItemStyle} disabled={!consult.folderName.ok}
+                              onClick={() => void findOrCreate(k)}>
+                              Find or create {k === "e_file" ? "e-file" : "consult"} folder
+                              <span style={menuHintStyle}>
+                                {consult.folderName.ok
+                                  ? k === "e_file"
+                                    ? `E-Files / ${consult.folderName.initial} / ${consult.folderName.folder} (or Closed)`
+                                    : `${consultYear} Consults / ${consult.folderName.initial} / ${consult.folderName.folder} — the e-file instead if there is one`
+                                  : `Can't name a folder (${consult.folderName.detail}) — paste the link instead`}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
                       )}
-                    </li>
-                  ))}
+                    </div>
+                  )}
+                </div>
+                <ul style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 6 }}>
+                  {folders.map((f) => {
+                    const kind = changedKind(f.url);
+                    return (
+                      <li key={f.url} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: "var(--font-body)" }}>
+                        <input type="checkbox" checked={includeFolder(f.url)} aria-label={`Include ${f.name}`}
+                          onChange={(e) => setExcluded((m) => ({ ...m, [f.url]: !e.target.checked }))} />
+                        <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-amber-dark)" }}>📁 {f.name}</a>
+                        {kind && (
+                          <>
+                            <span style={{ fontSize: 11, color: "var(--color-ink-faint)" }}>
+                              {original(kind) ? `replaces the ${FOLDER_LABEL[kind]} on save` : "saved to the profile on save"}
+                            </span>
+                            <button type="button" onClick={() => { setChanged(({ [kind]: _drop, ...rest }) => rest); setFolderMsg(null); }}
+                              aria-label="Undo this folder change" title="Undo — keep the profile's folder"
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-ink-faint)", fontSize: 14 }}>×</button>
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
                   {picked.map((f) => (
                     <li key={f.url} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: "var(--font-body)" }}>
                       <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-amber-dark)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -470,37 +568,29 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                     </li>
                   ))}
                 </ul>
-                {noFolder && (
-                  <div style={{ border: "1px dashed var(--color-border)", borderRadius: 8, padding: "10px 12px", marginBottom: 8, fontFamily: "var(--font-body)" }}>
-                    <p style={{ fontSize: 12, color: "var(--color-ink-muted)", marginBottom: 8 }}>
-                      No e-file or consult folder on this client's profile.
-                    </p>
-                    {consult.folderName.ok ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-                        <button type="button" className="action-btn" disabled={folderBusy} onClick={() => void findOrCreate(true)}>
-                          {folderBusy ? "Looking in SharePoint…" : "Find or create folder"}
-                        </button>
-                        <span style={{ fontSize: 11, color: "var(--color-ink-faint)" }}>
-                          {consultYear} Consults / {consult.folderName.initial} / {consult.folderName.folder}
-                          {" "}— uses the e-file instead if the client already has one
-                        </span>
-                      </div>
-                    ) : (
-                      <p style={{ fontSize: 11, color: "var(--color-ink-faint)", marginBottom: 8 }}>
-                        Can't name a folder from this appointment ({consult.folderName.detail}) — paste the link instead, or fix the name in Monday.
-                      </p>
-                    )}
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <select value={pasteKind} onChange={(e) => setPasteKind(e.target.value as ClientFolderKind)} aria-label="Folder type"
-                        className="rounded-md px-1.5 py-1.5 text-sm" style={fieldStyle}>
-                        <option value="consult_file">Consult folder</option>
-                        <option value="e_file">E-File folder</option>
-                      </select>
-                      <input type="url" value={pasteUrl} onChange={(e) => setPasteUrl(e.target.value)} placeholder="or paste a SharePoint link…"
-                        aria-label="SharePoint folder link" className="flex-1 min-w-0 rounded-md px-2 py-1.5 text-sm" style={fieldStyle}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPasted(); } }} />
-                      <button type="button" className="action-btn" onClick={addPasted} disabled={!pasteUrl.trim()}>Add</button>
-                    </div>
+                {noFolder && !pasting && (
+                  <p style={{ fontSize: 12, color: "var(--color-ink-muted)", marginBottom: 6, fontFamily: "var(--font-body)" }}>
+                    No e-file or consult folder on this client's profile — use ⋯ to find, create or paste one.
+                  </p>
+                )}
+                {folderBusy && (
+                  <p style={{ fontSize: 11, marginBottom: 6, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>Looking in SharePoint…</p>
+                )}
+                {pasting && (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                    <select value={pasteKind} onChange={(e) => setPasteKind(e.target.value as ClientFolderKind)} aria-label="Folder type"
+                      className="rounded-md px-1.5 py-1.5 text-sm" style={fieldStyle}>
+                      <option value="consult_file">Consult folder</option>
+                      <option value="e_file">E-File folder</option>
+                    </select>
+                    <input type="url" value={pasteUrl} onChange={(e) => setPasteUrl(e.target.value)} placeholder="Paste a SharePoint folder link…"
+                      aria-label="SharePoint folder link" className="flex-1 min-w-0 rounded-md px-2 py-1.5 text-sm" style={fieldStyle} autoFocus
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPasted(); } }} />
+                    <button type="button" className="action-btn" onClick={addPasted} disabled={!pasteUrl.trim()}>
+                      {current(pasteKind) ? "Replace" : "Add"}
+                    </button>
+                    <button type="button" onClick={() => { setPasting(false); setPasteUrl(""); setFolderMsg(null); }} aria-label="Cancel"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-ink-faint)", fontSize: 14 }}>×</button>
                   </div>
                 )}
                 {folderMsg && (
@@ -517,19 +607,21 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
 
               {/* Description */}
               {clientWrote && (
-                <div style={{ marginBottom: 8 }}>
+                <label style={{ display: "block", marginBottom: 8 }}>
                   <span style={labelStyle}>Client wrote (Calendly)</span>
-                  <p style={{ fontSize: 13, color: "var(--color-ink)", background: "var(--color-surface-warm)", borderRadius: 6, padding: "6px 10px", whiteSpace: "pre-wrap", fontFamily: "var(--font-body)" }}>
-                    {clientWrote}
-                  </p>
-                </div>
+                  <textarea value={clientText} onChange={(e) => setClientText(e.target.value)} rows={3} maxLength={5000}
+                    aria-label="What the client wrote"
+                    className="w-full rounded-md px-2 py-1.5 text-sm" style={{ ...fieldStyle, background: "var(--color-surface-warm)", resize: "vertical" }} />
+                  {clientEdited && <span style={hintStyle}>Replaces the client's words in the appointment's Description — reception's part stays below.</span>}
+                  {!clientText.trim() && <span style={hintStyle}>Left empty, the client's words stay as they are.</span>}
+                </label>
               )}
               <label style={{ display: "block", marginBottom: 12 }}>
                 <span style={labelStyle}>{clientWrote ? "Reception's description" : "Description"}</span>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={5} maxLength={5000}
                   placeholder="What the client wants to discuss, anything the attorney should know…"
                   className="w-full rounded-md px-2 py-1.5 text-sm" style={{ ...fieldStyle, resize: "vertical" }} />
-                {descriptionEdited && clientWrote && <span style={hintStyle}>Added below the client's words in the appointment's Description — theirs stay as written.</span>}
+                {descriptionEdited && clientWrote && <span style={hintStyle}>Added below the client's words in the appointment's Description.</span>}
                 {descriptionEdited && !clientWrote && startDescription && <span style={hintStyle}>The appointment's Description in Monday will be updated.</span>}
                 {consult.description2 && (
                   <span style={hintStyle}>Description 2 (from Monday): {consult.description2}</span>
@@ -561,7 +653,7 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
             </DialogHeader>
             <div className="px-5 py-4">
               <DocumentsTab
-                data={{ profile: { eFile: profile.eFile ?? (newFolder?.kind === "e_file" ? newFolder.url : null), consultFile: profile.consultFile ?? (newFolder?.kind === "consult_file" ? newFolder.url : null) } }}
+                data={{ profile: { eFile: current("e_file"), consultFile: current("consult_file") } }}
                 pick={{ selected: pickedUrls, onToggle: togglePicked, onUploaded }}
               />
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>

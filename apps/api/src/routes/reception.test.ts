@@ -33,7 +33,7 @@ describe("parsePrepBody", () => {
     expect(body()).toEqual({
       apptType: "1st time", apptTypeOther: null, detainedAt: null, method: "Phone", phone: "(913) 555-0101",
       zoomLink: null, methodOther: null, interpreter: { need: "No", language: null, contact: null },
-      description: "", documents: [], folderLinks: [],
+      description: "", clientWrote: null, documents: [], folderLinks: [],
     });
   });
 
@@ -42,7 +42,7 @@ describe("parsePrepBody", () => {
       documents: [{ name: "Passport.pdf", url: "https://x.sharepoint.com/p" }],
       folderLinks: [{ kind: "consult_file", url: "https://sharmacrawford.sharepoint.com/sites/scalconsults/x" }],
     });
-    expect(b.folderLinks).toEqual([{ kind: "consult_file", url: "https://sharmacrawford.sharepoint.com/sites/scalconsults/x" }]);
+    expect(b.folderLinks).toEqual([{ kind: "consult_file", url: "https://sharmacrawford.sharepoint.com/sites/scalconsults/x", replaces: null }]);
     expect(b.documents.map((d) => d.name)).toEqual(["Consult folder", "Passport.pdf"]);
     expect(parsePrepBody({ ...base, folderLinks: [{ kind: "e_file", url: "https://evil.example.com/x" }] }))
       .toEqual({ ok: false, error: "The E-File folder must be a SharePoint link" });
@@ -223,6 +223,36 @@ describe("planPrepWriteBack", () => {
       { target: "profile", field: "consult_file", columnId: "text_mkxphk77", value: url },
     ]);
     expect(planPrepWriteBack(b, { ...same, profileFolders: { consult_file: "https://set.in.monday/meanwhile" } }, folderCols)).toEqual([]);
+  });
+
+  it("replaces a folder reception chose to change, only while Monday still holds the old link", () => {
+    const old = "sharmacrawford.sharepoint.com/sites/efiles/Shared Documents/V/VENTURA, M";
+    const url = "https://sharmacrawford.sharepoint.com/sites/efiles/Shared Documents/V/VENTURA, Milton";
+    const b = body({ folderLinks: [{ kind: "e_file", url, replaces: old }] });
+    const folderCols = { ...cols, profileFolders: { e_file: "e_file__1", consult_file: "text_mkxphk77" } };
+    const same = { profilePhone: "(913) 555-0101", appointmentDescription: null };
+    // Stored without https:// — still the link reception saw.
+    expect(planPrepWriteBack(b, { ...same, profileFolders: { e_file: old } }, folderCols)).toEqual([
+      { target: "profile", field: "e_file", columnId: "e_file__1", value: url },
+    ]);
+    // Someone changed it in Monday since the page loaded: leave theirs.
+    expect(planPrepWriteBack(b, { ...same, profileFolders: { e_file: "https://x.sharepoint.com/other" } }, folderCols)).toEqual([]);
+    // Already the new link: nothing to write.
+    expect(planPrepWriteBack(b, { ...same, profileFolders: { e_file: url } }, folderCols)).toEqual([]);
+  });
+
+  it("lets reception correct a Calendly client's words, keeping reception's part", () => {
+    const cur = { profilePhone: "(913) 555-0101", appointmentDescription: "quiero papels\n\nReception: Bring I-94", keepClient: true };
+    expect(planPrepWriteBack(body({ clientWrote: "Quiero arreglar papeles" }), cur, cols)).toEqual([{
+      target: "appointment", field: "description", columnId: "long_text",
+      value: "Quiero arreglar papeles\n\nReception: Bring I-94",
+    }]);
+    expect(planPrepWriteBack(body({ clientWrote: "Quiero arreglar papeles", description: "New" }), cur, cols)[0]!.value)
+      .toBe("Quiero arreglar papeles\n\nReception: New");
+    // Not a Calendly booking: there is no client part to correct.
+    expect(planPrepWriteBack(body({ clientWrote: "x" }), { ...cur, keepClient: false }, cols)).toEqual([]);
+    // The corrected words lead the note.
+    expect(prepNote(body({ clientWrote: "Fixed" }), { clientWrote: "Fixed" }).text).toContain("Client wrote: Fixed");
   });
 });
 
