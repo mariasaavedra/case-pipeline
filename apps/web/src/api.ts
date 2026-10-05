@@ -19,6 +19,7 @@ export type { PreschedulingResult, PreschedulingCase, WaitLevel } from "@case-pi
 export type { PendingContractsResult, PendingContract } from "@case-pipeline/query";
 export type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness, CaseMotion, CourtMotion, MotionFlag, MotionPhase } from "@case-pipeline/query";
 export type { AddressChangesResult, AddressChange, AddressChangePhase, AddressChangeFlag } from "@case-pipeline/query";
+export type { FoiasResult, Foia, FoiaPhase, FoiaFlag } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
 export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail, MailWriteBackPlan, StepOutcome, WriteBackState, NoticeFields, FieldEdits } from "@case-pipeline/query";
@@ -626,6 +627,10 @@ export async function changeMotionStatus(
 
 export async function fetchAddressChanges(): Promise<import("@case-pipeline/query").AddressChangesResult> {
   return apiFetch("/api/address-changes");
+}
+
+export async function fetchFoias(): Promise<import("@case-pipeline/query").FoiasResult> {
+  return apiFetch("/api/foias");
 }
 
 export async function fetchPrescheduling(): Promise<PreschedulingResult> {

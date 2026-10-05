@@ -115,6 +115,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `pending-contracts.ts` | P14 Contracts: Pending Fee Ks by Contract Stage, aged from sent (else added) date, 30/60 days |
 | `court-cases.ts` | P15 Court Cases: active court cases with hearing/judge/method, Case Prep Status, readiness (Trial 60/90, MCH 14 days), data-cleanup flags |
 | `address-changes.ts` | P18 Address Changes: open changes of address by phase (paid/our turn → client/attorney → submitted → waiting on payment), aged from Date Received (7/14 days on our turn, else 30/60), next hearing for court changes, cleanup flags |
+| `foias.ts` | P19 FOIAs: open FOIA requests by phase (decide / our turn / waiting on the agency / North Pole); "Done FOIAS" group, COMPLETED, NOT PROCEEDING or a Results Received date = done; agencies quoted vs filed; inquiry due |
 | `board-columns.ts` | Per-board column schema for the in-place field editors |
 | `board-items.ts` | Per-profile board item queries + `batchGetClientBoardItems` |
 | `case-summary.ts` | Full 360° client summary + `batchGetClientCaseSummaries` |
@@ -157,6 +158,7 @@ Data reads:
 | `GET /api/pending-contracts` | P14 data: Pending Fee Ks with age level, payment link, AF/FF, stages in pipeline order |
 | `GET /api/court-cases` | P15 data: active court cases (Docket + Prep Pipeline views), stages in workflow order, Case Prep Status options |
 | `GET /api/address-changes` | P18 data: open address changes with phase, age level, next hearing, flags; the board's status labels + the Status / Date Sent column ids for write-back (via `PATCH /api/board-items/:localId/status` and `/columns`) |
+| `GET /api/foias` | P19 data: open FOIAs with phase, age (14/30 days our turn, 30/60 since filed), agencies still to file, cleanup flags; done count |
 | `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Appeal & Federal Deadlines", "I-918B Expiring", "I-918B Requests Pending" and "Mail to review" |
 | `GET /api/search` | Cross-type search: profiles, contracts, court cases, etc. |
 | `GET /api/filter-options` | Distinct values for filter dropdowns (priorities, statuses, attorneys, board types) |
