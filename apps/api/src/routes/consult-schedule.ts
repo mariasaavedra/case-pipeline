@@ -7,8 +7,9 @@
 //
 //   1. if the attorney changed: move_item_to_board into the same-named group on
 //      the new board (else Upcoming / Today's consults by date). The item keeps
-//      its id, updates and Emails & Activities. Columns are carried over by
-//      title + type, since every board has its own column ids;
+//      its id, updates and Emails & Activities. Monday carries the columns
+//      over by title + type itself (every board has its own column ids) — an
+//      explicit columns_mapping is refused, see moveItemToBoard;
 //   2. Consult Date (date + time, sent in UTC — firm-time.ts) and, after a
 //      move, the Attorney people column, on whichever board it now sits.
 //
@@ -19,7 +20,7 @@
 // Calendly is NOT updated: a client who booked through Calendly still has the
 // old slot there. The modal says so.
 //
-// `planConsultSchedule` and `mapColumnsByTitle` are pure (consult-schedule.test.ts).
+// `planConsultSchedule` and `targetGroup` are pure (consult-schedule.test.ts).
 // =============================================================================
 
 import type { Express } from "express";
@@ -32,46 +33,13 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { getBoardColumnsFor } from "@case-pipeline/query";
-import type { BoardColumn } from "@case-pipeline/query";
 import { fetchBoardStructure, fetchWorkspaceUsers } from "@case-pipeline/monday";
-import type { ColumnMapping } from "@case-pipeline/monday";
 import { loadAttorneyBoards } from "../attorney-boards.js";
 import { FIRM_TIMEZONE, mondayDateTime } from "../firm.js";
 import { TODAY_GROUP_RE, UPCOMING_GROUP_RE, type BoardGroup } from "./appointment-write.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;
-
-/**
- * Columns whose values Monday computes (or that can't be carried): mapped to
- * null. Mirrors re-fill themselves from the carried relations.
- */
-const UNCARRIED_TYPES = new Set([
-  "mirror", "lookup", "formula", "creation_log", "last_updated", "item_id",
-  "auto_number", "subtasks", "direct_doc", "name",
-]);
-
-/**
- * Every source column → the target column with the same title and type, or
- * null. Monday needs the WHOLE source list once a mapping is given; a target
- * is used at most once.
- */
-export function mapColumnsByTitle(source: BoardColumn[], target: BoardColumn[]): ColumnMapping[] {
-  const key = (c: BoardColumn) => `${c.title.trim().toLowerCase()}|${c.type}`;
-  const used = new Set<string>();
-  return source
-    .filter((c) => c.type !== "name")
-    .map((c) => {
-      if (UNCARRIED_TYPES.has(c.type)) return { source: c.columnId, target: null };
-      // Same id first (the shared columns: Consult Date, Status, Profiles…), then same title + type.
-      const t =
-        target.find((x) => x.columnId === c.columnId && x.type === c.type && !used.has(x.columnId)) ??
-        target.find((x) => key(x) === key(c) && !used.has(x.columnId));
-      if (!t) return { source: c.columnId, target: null };
-      used.add(t.columnId);
-      return { source: c.columnId, target: t.columnId };
-    });
-}
 
 export interface ScheduleInput {
   date?: unknown;
@@ -216,11 +184,6 @@ export function registerConsultScheduleRoutes(app: Express, deps: ConsultSchedul
     // 1. The move. Refused outright on failure: nothing has changed yet.
     let movedTo: string | null = null;
     if (plan.moved) {
-      const source = getBoardColumnsFor(db, appt.boardKey);
-      if (!source) {
-        res.status(409).json({ error: `Column schema for ${appt.boardKey} not synced yet — run a sync first` });
-        return;
-      }
       let groups: BoardGroup[] = [];
       try {
         groups = (await fetchBoardStructure(target.mondayBoardId)).groups ?? [];
@@ -233,10 +196,9 @@ export function registerConsultScheduleRoutes(app: Express, deps: ConsultSchedul
         res.status(502).json({ error: "Could not read the new attorney's board from Monday — try again" });
         return;
       }
-      const mapping = mapColumnsByTitle(source.columns, target.columns);
       try {
         await withTokenFallback(
-          (token) => dataSource.moveItem(target.mondayBoardId, group.id, itemId, mapping, token),
+          (token) => dataSource.moveItem(target.mondayBoardId, group.id, itemId, token),
           writeTokenOptions(req),
         );
         movedTo = group.title;

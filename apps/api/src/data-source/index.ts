@@ -20,7 +20,7 @@ import {
   moveItemToBoard,
   changeMultipleColumnValues,
 } from "@case-pipeline/monday";
-import type { ColumnMapping, CreateTimelineItemInput, UpdateMention } from "@case-pipeline/monday";
+import type { CreateTimelineItemInput, UpdateMention } from "@case-pipeline/monday";
 
 export interface DataSource {
   /** Post a note/update on an item, or a threaded reply when `parentId` is given; `mentions` notifies those users. Returns the new update id. */
@@ -37,8 +37,8 @@ export interface DataSource {
   createTimelineItem(input: CreateTimelineItemInput, token?: string): Promise<string>;
   /** Set several columns on one item at once (createItem's per-column shapes). */
   setColumnValues(boardId: string, itemId: string, columnValues: Record<string, unknown>, token?: string): Promise<void>;
-  /** Move an item to another board and group; every source column must be in the mapping. */
-  moveItem(boardId: string, groupId: string, itemId: string, mapping: ColumnMapping[], token?: string): Promise<void>;
+  /** Move an item to another board and group; Monday carries columns over by title + type. */
+  moveItem(boardId: string, groupId: string, itemId: string, token?: string): Promise<void>;
   /** Upload a file into an item's file column. Returns the new asset id. */
   addFile(itemId: string, columnId: string, fileName: string, bytes: Uint8Array, contentType: string, token?: string): Promise<string>;
 }
@@ -58,8 +58,8 @@ export const mondayDataSource: DataSource = {
   setColumnValues: async (boardId, itemId, columnValues, token) => {
     await changeMultipleColumnValues(boardId, itemId, columnValues, token);
   },
-  moveItem: async (boardId, groupId, itemId, mapping, token) => {
-    await moveItemToBoard(boardId, groupId, itemId, mapping, token);
+  moveItem: async (boardId, groupId, itemId, token) => {
+    await moveItemToBoard(boardId, groupId, itemId, token);
   },
   addFile: (itemId, columnId, fileName, bytes, contentType, token) =>
     addFileToColumn(itemId, columnId, fileName, bytes, contentType, token),

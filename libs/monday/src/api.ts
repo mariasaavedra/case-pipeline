@@ -1064,30 +1064,28 @@ export async function changeColumnValue(
   return result.data.change_column_value.id;
 }
 
-/** One source column → its column on the target board (null drops its value). */
-export interface ColumnMapping {
-  source: string;
-  target: string | null;
-}
-
 /**
  * Move an item to another board, into `groupId`. The item keeps its id, its
- * updates and its Emails & Activities. Monday requires `columnsMapping` to name
- * EVERY source column once it is given at all; a column mapped to null loses
- * its value. Returns the item id.
+ * updates and its Emails & Activities.
+ *
+ * No `columns_mapping`, on purpose: Monday then matches columns itself by
+ * title + type, which carries "First Name", "Consult SharePoint" etc. across
+ * boards whose column ids differ (verified live 2026-10-05, M ↔ R). Every
+ * explicit mapping we sent — full, partial, one pair, nulls, variables or
+ * inline, four API versions — was refused "Columns mapping is not in the
+ * expected format". Returns the item id.
  */
 export async function moveItemToBoard(
   boardId: string,
   groupId: string,
   itemId: string,
-  columnsMapping: ColumnMapping[],
   tokenOverride?: string
 ): Promise<string> {
   const result = await mondayRequest<{ data: { move_item_to_board: { id: string } } }>(
-    `mutation MoveItemToBoard($boardId: ID!, $groupId: ID!, $itemId: ID!, $mapping: [ColumnMappingInput!]) {
-       move_item_to_board(board_id: $boardId, group_id: $groupId, item_id: $itemId, columns_mapping: $mapping) { id }
+    `mutation MoveItemToBoard($boardId: ID!, $groupId: ID!, $itemId: ID!) {
+       move_item_to_board(board_id: $boardId, group_id: $groupId, item_id: $itemId) { id }
      }`,
-    { boardId, groupId, itemId, mapping: columnsMapping },
+    { boardId, groupId, itemId },
     tokenOverride
   );
   return result.data.move_item_to_board.id;
