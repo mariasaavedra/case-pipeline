@@ -17,8 +17,10 @@ import {
   createTimelineItem as mondayCreateTimelineItem,
   addFileToColumn,
   pinUpdateToTop,
+  moveItemToBoard,
+  changeMultipleColumnValues,
 } from "@case-pipeline/monday";
-import type { CreateTimelineItemInput, UpdateMention } from "@case-pipeline/monday";
+import type { ColumnMapping, CreateTimelineItemInput, UpdateMention } from "@case-pipeline/monday";
 
 export interface DataSource {
   /** Post a note/update on an item, or a threaded reply when `parentId` is given; `mentions` notifies those users. Returns the new update id. */
@@ -33,6 +35,10 @@ export interface DataSource {
   createItem(boardId: string, itemName: string, columnValues: Record<string, unknown>, token?: string, groupId?: string): Promise<string>;
   /** Create an Emails & Activities timeline entry on an item. Returns the new timeline item id. */
   createTimelineItem(input: CreateTimelineItemInput, token?: string): Promise<string>;
+  /** Set several columns on one item at once (createItem's per-column shapes). */
+  setColumnValues(boardId: string, itemId: string, columnValues: Record<string, unknown>, token?: string): Promise<void>;
+  /** Move an item to another board and group; every source column must be in the mapping. */
+  moveItem(boardId: string, groupId: string, itemId: string, mapping: ColumnMapping[], token?: string): Promise<void>;
   /** Upload a file into an item's file column. Returns the new asset id. */
   addFile(itemId: string, columnId: string, fileName: string, bytes: Uint8Array, contentType: string, token?: string): Promise<string>;
 }
@@ -49,6 +55,12 @@ export const mondayDataSource: DataSource = {
   },
   createItem: (boardId, itemName, columnValues, token, groupId) => mondayCreateItem(boardId, itemName, columnValues, token, groupId),
   createTimelineItem: (input, token) => mondayCreateTimelineItem(input, token),
+  setColumnValues: async (boardId, itemId, columnValues, token) => {
+    await changeMultipleColumnValues(boardId, itemId, columnValues, token);
+  },
+  moveItem: async (boardId, groupId, itemId, mapping, token) => {
+    await moveItemToBoard(boardId, groupId, itemId, mapping, token);
+  },
   addFile: (itemId, columnId, fileName, bytes, contentType, token) =>
     addFileToColumn(itemId, columnId, fileName, bytes, contentType, token),
 };

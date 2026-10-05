@@ -39,7 +39,7 @@ const fieldStyle = {
 } as const;
 
 /** Bookable times: every 30 minutes, 8:00 AM to 6:00 PM. */
-const TIME_SLOTS: Array<{ value: string; label: string }> = Array.from({ length: 21 }, (_, i) => {
+export const TIME_SLOTS: Array<{ value: string; label: string }> = Array.from({ length: 21 }, (_, i) => {
   const minutes = 8 * 60 + i * 30;
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;

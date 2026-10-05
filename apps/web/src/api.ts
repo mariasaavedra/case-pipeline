@@ -1213,3 +1213,27 @@ export function attachConsultFile(appointmentLocalId: string, file: File): Promi
     body: file,
   });
 }
+
+/** An attorney M20 can move a consult to — one per active appointment board. */
+export interface ReceptionAttorney {
+  boardKey: string;
+  /** The board badge (R, M, LB…). */
+  badge: string;
+  attorney: string | null;
+}
+
+export function fetchReceptionAttorneys(): Promise<ReceptionAttorney[]> {
+  return apiFetch<ReceptionAttorney[]>("/api/reception/attorneys");
+}
+
+/** Change a consult's date, time and/or attorney (a new attorney moves it to their board). */
+export function rescheduleConsult(
+  appointmentLocalId: string,
+  input: { date: string; time: string; boardKey: string },
+): Promise<{ boardKey: string; date: string; time: string | null; attorney: string | null; moved: boolean; pending: boolean }> {
+  return apiFetch(`/api/reception/consults/${encodeURIComponent(appointmentLocalId)}/schedule`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}

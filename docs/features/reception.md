@@ -40,6 +40,8 @@ The receptionist team's main job is preparing appointments for the attorneys. Th
   4. Write-back of edited fields
   5. `consult_preps` row (schema v29) — drives "Prepped" on P17
 - **M19** — the Documents tab's SharePoint browser (`DocumentsTab.tsx`) in pick mode. Uploads go to SharePoint from the browser (Graph, the user's own token); the same file is then sent to `POST /api/reception/consults/:localId/files` for the profile's Files column. Not queued: the file is already safe in SharePoint, and keeping copies of client documents on the server isn't worth it.
+- **M20** (`ConsultScheduleModal.tsx`) — `PATCH /api/reception/consults/:localId/schedule` (`routes/consult-schedule.ts`). Date + time → the appointment's Consult Date (sent in UTC, see `libs/core/src/firm-time.ts`). A different attorney → `move_item_to_board` to that attorney's board (same group title, else Upcoming / Today's consults), columns carried by id then title + type (each board has its own ids; mirrors re-fill, board-only columns such as "M Consult Note" are dropped), then the Attorney people column. A failed move is refused, never queued; a failed date write queues. Calendly is not updated. Audited as `monday.consult_rescheduled`.
+- **Document link names** — the client's folders are named after the folder itself ("VENTURA, Milton"), not "E-File folder": a path link's last segment, or Graph `/shares` for a sharing link (silent; the generic label stays when it can't).
 - **M10** — `NewAppointmentModal.tsx`, unchanged booking rules (`routes/appointment-write.ts`); new: client search when opened without a client, 30-minute slots (8:00 AM–6:00 PM), disabled payment checkbox.
 
 ## Open

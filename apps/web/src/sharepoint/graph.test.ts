@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("../auth/AuthProvider", () => ({ msalInstance: { getActiveAccount: () => null, getAllAccounts: () => [] } }));
 vi.mock("../auth/msal-config", () => ({ graphRequest: { scopes: [] } }));
 
-const { siteRequestPath, driveItemRequestPath, encodeSharingUrl } = await import("./graph");
+const { siteRequestPath, driveItemRequestPath, encodeSharingUrl, folderNameOf } = await import("./graph");
 
 /** How many ":" path-addressed segments a Graph URL uses. More than one is invalid. */
 function colonSegments(path: string): number {
@@ -47,5 +47,20 @@ describe("Graph request paths", () => {
 
   it("base64url-encodes a sharing URL for /shares", () => {
     expect(encodeSharingUrl("https://a.sharepoint.com/:f:/s/x/Abc?e=1")).toMatch(/^u![A-Za-z0-9_-]+$/);
+  });
+});
+
+describe("folderNameOf", () => {
+  it("reads a path link's folder name without asking Graph", async () => {
+    expect(await folderNameOf("sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/2026%20Consults/V/VENTURA%2C%20Milton"))
+      .toBe("VENTURA, Milton");
+  });
+
+  it("gives up quietly when a sharing link can't be resolved (not signed in here)", async () => {
+    expect(await folderNameOf("https://sharmacrawford.sharepoint.com/:f:/s/scalefiles/IgADyc1cplCBSL8e3nr5Sp1YAeMv?e=BXL3YY")).toBeNull();
+  });
+
+  it("returns null for something that isn't a SharePoint link", async () => {
+    expect(await folderNameOf("https://example.com/folder")).toBeNull();
   });
 });

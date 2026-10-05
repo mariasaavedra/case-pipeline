@@ -150,7 +150,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 | Code | Name | Notes |
 |---|---|---|
 | P17.1 | Header | Consult count, not prepped count; **+ Book Appt** → M10 (pick the client first); range (Today / Tomorrow / Next 7 days), attorney and "not prepped" filters |
-| P17.2 | Consult list | Grouped by day: time, client (→ M3), Calendly / language tags, attorney board, description, Prepped / Not prepped; **Focus** → M5; **Prep** → M18 |
+| P17.2 | Consult list | Grouped by day: time, client (→ M3), Calendly / language tags, attorney board, description, Prepped / Not prepped; **Edit** → M20; **Focus** → M5; **Prep** → M18 |
 
 ### Inside P18 Address Changes
 
@@ -250,6 +250,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M17 | Released from detention | "Released from detention" | P3.0 → **Released?** on the "Detained at …" pill | `ReleaseDetentionModal.tsx` |
 | M18 | Prep consult | "Prep consult" | P17.2 → **Prep** on a consult → D23, D24 | `ConsultPrepModal.tsx` |
 | M19 | Client documents | "Client documents" | M18 → **Browse SharePoint…** (the P3.6 browser in pick mode: Attach / upload) | `ConsultPrepModal.tsx` + `DocumentsTab.tsx` |
+| M20 | Change consult | "Change consult" | P17.2 → **Edit**. Attorney, date, time; a new attorney moves the appointment to their board in Monday. Calendly is not changed (reminder shown) | `ConsultScheduleModal.tsx` |
 
 ## Dropdowns
 

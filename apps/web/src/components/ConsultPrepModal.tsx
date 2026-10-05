@@ -18,7 +18,7 @@
 // be pasted. Either way the link is saved to the empty profile column on save.
 // =============================================================================
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   APPT_TYPES,
   PREP_METHODS,
@@ -32,7 +32,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { DocumentsTab, type PickedFile } from "./DocumentsTab";
-import { findOrCreateClientFolder, getGraphToken, GraphConsentRequiredError, type ClientFolderKind } from "../sharepoint/graph";
+import { findOrCreateClientFolder, folderNameOf, getGraphToken, GraphConsentRequiredError, type ClientFolderKind } from "../sharepoint/graph";
+import { normalizeSharePointUrl } from "../sharepoint/parseLink";
 
 type FolderLink = { kind: ClientFolderKind; url: string };
 const FOLDER_LABEL: Record<ClientFolderKind, string> = { e_file: "E-File folder", consult_file: "Consult folder" };
@@ -122,14 +123,36 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   const [pasteKind, setPasteKind] = useState<ClientFolderKind>("consult_file");
   const [pasteUrl, setPasteUrl] = useState("");
 
+  // The folder's own name ("VENTURA, Milton") for its link in the note, looked
+  // up per link; until it arrives (or if SharePoint can't say) the link keeps
+  // its generic label.
+  const [folderNames, setFolderNames] = useState<Record<string, string>>({});
+
   // The client's own folders, included by default — the attorney opens them first.
+  // Scheme-less stored links ("sharmacrawford.sharepoint.com/sites/…") get
+  // https:// so the note's link works and the API accepts it.
   const folders = useMemo<PickedFile[]>(() => {
     const out: PickedFile[] = [];
-    if (profile?.eFile) out.push({ name: "E-File folder", url: profile.eFile });
-    if (profile?.consultFile && profile.consultFile !== profile.eFile) out.push({ name: "Consult folder", url: profile.consultFile });
-    if (newFolder) out.push({ name: FOLDER_LABEL[newFolder.kind], url: newFolder.url });
+    const add = (raw: string, label: string) => {
+      const url = normalizeSharePointUrl(raw) ?? raw;
+      if (!out.some((f) => f.url === url)) out.push({ name: folderNames[url] ?? label, url });
+    };
+    if (profile?.eFile) add(profile.eFile, FOLDER_LABEL.e_file);
+    if (profile?.consultFile) add(profile.consultFile, FOLDER_LABEL.consult_file);
+    if (newFolder) add(newFolder.url, FOLDER_LABEL[newFolder.kind]);
     return out;
-  }, [profile, newFolder]);
+  }, [profile, newFolder, folderNames]);
+
+  const askedNames = useRef(new Set<string>());
+  useEffect(() => {
+    for (const f of folders) {
+      if (askedNames.current.has(f.url)) continue;
+      askedNames.current.add(f.url);
+      void folderNameOf(f.url).then((name) => {
+        if (name) setFolderNames((m) => (m[f.url] ? m : { ...m, [f.url]: name }));
+      });
+    }
+  }, [folders]);
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
   const includeFolder = (url: string) => !excluded[url];
   const noFolder = !!profile && !profile.eFile && !profile.consultFile && !newFolder;
@@ -145,6 +168,8 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
       const r = await findOrCreateClientFolder({
         want: "consult_file", folder: consult.folderName.folder, initial: consult.folderName.initial, year: consultYear,
       });
+      const name = r.path.split("/").pop();
+      if (name) setFolderNames((m) => ({ ...m, [r.url]: name }));
       setNewFolder({ kind: r.kind, url: r.url });
       setFolderMsg({ text: `${r.created ? "Created" : "Found existing"} ${r.path}`, error: false });
     } catch (e) {
