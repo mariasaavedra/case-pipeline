@@ -42,6 +42,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { DocumentsTab, type PickedFile } from "./DocumentsTab";
+import { MenuCode } from "./ScreenCode";
 import { downloadDriveFile, findOrCreateClientFolder, folderNameOf, getGraphToken, GraphConsentRequiredError, type ClientFolderKind } from "../sharepoint/graph";
 import { normalizeSharePointUrl } from "../sharepoint/parseLink";
 
@@ -532,6 +533,7 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                               </span>
                             </button>
                           ))}
+                          <MenuCode code="D35" />
                         </div>
                       )}
                     </div>

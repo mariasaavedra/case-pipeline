@@ -257,7 +257,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
 | M16 | Connect Monday.com | "Connect your Monday.com account" / "Reconnect…" / "Monday.com connected" | Opens by itself after sign-in when Monday isn't connected (any page but P11); **Not now** hides it for 12 h | `MondayConnectPrompt.tsx` |
 | M17 | Released from detention | "Released from detention" | P3.0 → **Released?** on the "Detained at …" pill | `ReleaseDetentionModal.tsx` |
-| M18 | Prep consult | "Prep consult" | P17.2 → **Prep** on a consult → D23, D24, D33 | `ConsultPrepModal.tsx` |
+| M18 | Prep consult | "Prep consult" | P17.2 → **Prep** on a consult → D23, D24, D33. **Client wrote (Calendly)** is editable: a correction replaces the client's part of the appointment's Description (reception's part stays below; emptied = unchanged). Documents → **⋯** → D35 to change or create the client's folder | `ConsultPrepModal.tsx` |
 | M19 | Client documents | "Client documents" | M18 → **Browse SharePoint…** (the P3.6 browser in pick mode: Attach / upload) | `ConsultPrepModal.tsx` + `DocumentsTab.tsx` |
 | M21 | Payment links | "Payment links" | P14.3 → ⋯ → **Payment links…**. One LawPay link per fee (AF, PF → Operating; FF → Trust), description + amounts editable; **Mark sent** (only in Needs Payment Link) sets Payment Link Sent On | `PaymentLinksModal.tsx` |
 | M22 | Generate contract | "Generate contract" | P14.3 → ⋯ → **Generate contract…**. Pick a template from SharePoint `Fee Contracts/App Templates` (staff-edited Word files with `{{tags}}`); a broken template is shown with a link to fix it; only that template's fields are shown, pre-filled from Monday; **Generate PDF** (via the user's Microsoft 365) or **Word** | `GenerateContractModal.tsx` |
@@ -301,5 +301,6 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D32 | Motion status picker | P15.5 (Motions) | `CourtCasesPage.tsx` |
 | D33 | Needs interpreter? | M18 | `ConsultPrepModal.tsx` |
 | D34 | Paralegal filter | P19.2 | `FoiasPage.tsx` |
+| D35 | Client folder menu | M18 → Documents **⋯**: **Use a different folder…** (paste a SharePoint link — replaces the profile's on save, only if Monday still holds it), **Find or create e-file folder**, **Find or create consult folder** (creates only when none exists) | `ConsultPrepModal.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.
