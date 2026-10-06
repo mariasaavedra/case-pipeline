@@ -22,7 +22,7 @@ import { CLOSED_CONTRACT_STATUSES } from "./types";
 import { listAppointmentBoardKeys } from "./appointment-boards";
 import { batchGetClientCaseSummaries } from "./case-summary";
 import { batchGetClientUpdates } from "./updates";
-import { readSharePointLinks } from "./client";
+import { readSharePointLinks, stripNameNotes } from "./client";
 
 // =============================================================================
 // Types
@@ -317,6 +317,9 @@ function buildProfileSummary(row: RawAppointmentRow): ProfileSummary {
     // Populate the SharePoint links so the appointment's Documents panel can
     // offer the profile's own e-file, not just the ones mirrored on board items.
     ...readSharePointLinks(row.profileRawColumnValues),
+    // The item name minus its notes, not First/Last: those columns are often
+    // half-filled ("Evin" for "Evin MURILLO MURILLO").
+    displayName: stripNameNotes(row.profileName!) || null,
   };
 }
 

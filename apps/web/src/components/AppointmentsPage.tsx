@@ -234,36 +234,23 @@ function AppointmentCardCompact({
           className="block text-sm font-semibold hover:underline leading-snug"
           style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
         >
-          {profile.name}
+          {profile.displayName || profile.name}
         </ClientLink>
       ) : (
         <span
           className="block text-sm font-semibold leading-snug"
           style={{ fontFamily: "var(--font-display)", color: "var(--color-ink-muted)" }}
         >
-          Unknown Client
+          {appointment.name || "Unknown Client"}
         </span>
       )}
 
-      {/* Appointment type */}
-      <p
-        className="text-xs mt-0.5 leading-snug"
-        style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}
-      >
-        {appointment.name}
-      </p>
-
-      {/* Snapshot stats */}
-      <div
-        className="flex items-center gap-3 mt-2 flex-wrap px-2 py-1.5 rounded-lg"
-        style={{ backgroundColor: "var(--color-surface-warm)" }}
-      >
-        <CompactStat label="Cases" value={snapshot.activeCaseCount} />
-        <CompactStat label="Contracts" value={snapshot.pendingContractCount} />
-        {snapshot.nextDeadline && (
+      {/* Next deadline — the one snapshot fact worth a glance on the board */}
+      {snapshot.nextDeadline && (
+        <div className="mt-1.5">
           <CompactStat label="Deadline" value={formatDate(snapshot.nextDeadline)} />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center gap-2 mt-2.5">
