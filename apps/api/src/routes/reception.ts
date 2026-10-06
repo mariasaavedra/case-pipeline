@@ -506,6 +506,21 @@ export interface ReceptionConsult {
   folderName: { ok: true; folder: string; initial: string } | { ok: false; detail: string };
   /** Det. Facility on the client's open court case — pre-fills "Detained appt". */
   detainedAt: string | null;
+  /**
+   * Other consults for the same client on the same day, on any active board —
+   * usually one booking made twice (a Monday "Create Appt" / "Appt?" button
+   * clicked on two boards). P17.2 flags them; nothing is merged or deleted.
+   */
+  sameDayCount: number;
+}
+
+/**
+ * Who a consult is for, to spot two bookings of one client on one day: the
+ * linked profile, else the item name without its "[Det …] [A…]" suffixes.
+ */
+function clientKey(c: { name: string; profile: { localId: string } | null }): string {
+  if (c.profile) return `p:${c.profile.localId}`;
+  return `n:${c.name.replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim().toLowerCase()}`;
 }
 
 function parseJson(s: string | null): Record<string, unknown> {
@@ -574,7 +589,7 @@ export function getReceptionConsults(
     )
     .all(...opts.boardKeys, opts.from, opts.to) as ConsultRow[];
 
-  return rows.map((r) => {
+  const consults = rows.map((r): ReceptionConsult => {
     const cv = parseJson(r.columnValues);
     const praw = parseJson(r.profileRaw);
     // The appointment's own First / Last Name first (what Calendly filled),
@@ -623,8 +638,15 @@ export function getReceptionConsults(
         ? { ok: true, folder: named.name.folder, initial: named.name.initial }
         : { ok: false, detail: named.detail },
       detainedAt: r.profileLocalId ? r.detainedAt : null,
+      sameDayCount: 0,
     };
   });
+
+  const perDay = new Map<string, number>();
+  const dayKey = (c: ReceptionConsult) => `${c.date}|${clientKey(c)}`;
+  for (const c of consults) perDay.set(dayKey(c), (perDay.get(dayKey(c)) ?? 0) + 1);
+  for (const c of consults) c.sameDayCount = perDay.get(dayKey(c))! - 1;
+  return consults;
 }
 
 export interface ReceptionDeps {

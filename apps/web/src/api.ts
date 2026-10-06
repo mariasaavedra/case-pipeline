@@ -1215,6 +1215,8 @@ export interface ReceptionConsult {
   folderName: { ok: true; folder: string; initial: string } | { ok: false; detail: string };
   /** Det. Facility on the client's open court case — pre-fills "Detained appt". */
   detainedAt: string | null;
+  /** Other consults for the same client on the same day (a likely double booking). */
+  sameDayCount: number;
 }
 
 export interface ReceptionConsultsResult {
