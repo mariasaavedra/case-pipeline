@@ -145,18 +145,29 @@ firing.
 
 For each Calendly consultation in the last `CONSULT_SWEEP_DAYS` days:
 
-1. **Skip** if a link is already recorded — costs zero API calls, which is why
-   this is cheap to run often.
-2. **Skip** unless the consult actually took place. Cancelled, no-show and
-   still-upcoming are left alone, and an unrecognised status is skipped rather
-   than assumed (`consult-status.ts`).
+1. **Already linked?** (Consult SharePoint, Consult File or E-File set.) Then
+   there is nothing to create — but once the consult has taken place, follow
+   the link to the folder and make sure its `CONSULT/Consultation Summary
+   <date>.docx` exists. This is the usual path: a folder is normally linked
+   *before* the consult, by an earlier sweep or by reception. Works for a
+   Consults folder or an E-File; a link into SCAL Closed is skipped. A consult
+   not yet held costs zero API calls.
+2. **Skip** a cancellation, a no-show or an unrecognised status
+   (`consult-status.ts`). An upcoming consult gets its folder now, so there is
+   somewhere to put material during the meeting; the summary waits.
 3. **Skip** if the name needs a human — a missing first name, a surname that is
    really an A-number, a reversed entry.
 4. **Look** for the folder at three exact paths, most-advanced first: SCAL
    Closed, then E-Files, then Consults. A client who has hired or closed must
    never be given a fresh consult folder.
 5. **Link** it if found, recording to E-File or Consult File depending on where
-   it lives. Otherwise **create** it in SCAL Consults and record it.
+   it lives. Otherwise **create** it in SCAL Consults and record it. Then the
+   summary, as in step 1.
+
+**The summary converges; it never churns.** It is written once. A summary the
+sweep wrote before the attorney's note existed is replaced when the note
+appears; one that already holds the note, or that a person has edited, is
+never touched again. Both are silent on later runs.
 
 Deliberately targeted rather than the full scan `--match` does: a sweep looks at
 a few days of consults, where the folder is either at the expected path or does
