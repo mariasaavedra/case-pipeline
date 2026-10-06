@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { decide, perform, ensureConsultDoc, resetSweepCaches, CONSULT_SUBFOLDER, type SweepCandidate } from "./sweep.js";
+import PizZip from "pizzip";
+import {
+  decide, perform, ensureConsultDoc, resolveLinkedFolder, resetSweepCaches, CONSULT_SUBFOLDER, type SweepCandidate,
+} from "./sweep.js";
+import { MISSING_NOTE } from "./consult-doc.js";
 import { staticAuth } from "./graph-client.js";
 
 const auth = staticAuth("t");
@@ -178,15 +182,24 @@ describe("ensureConsultDoc", () => {
   };
   const render = () => Buffer.from("DOCX");
   const ME = "svc@sharma-crawford.com";
+  const VENTURA = { site: "scalconsults", path: "2026 Consults/V/VENTURA, Milton" };
+
+  /** A minimal .docx whose body reads `text`. */
+  const docx = (text: string) => {
+    const zip = new PizZip();
+    zip.file("word/document.xml", `<w:document><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`);
+    return Buffer.from(zip.generate({ type: "uint8array" }));
+  };
 
   /** Tracks PUTs so a test can assert nothing was written. */
   const seen: string[] = [];
-  function stubFiles(existing: unknown, puts: string[] = []) {
+  function stubFiles(existing: unknown, puts: string[] = [], body = docx(MISSING_NOTE)) {
     seen.length = 0;
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = decodeURIComponent(String(input));
       seen.push(url);
       if (init?.method === "PUT") { puts.push(url); return json({ id: "f1", name: "x" }); }
+      if (url.endsWith("/content")) return new Response(new Uint8Array(body), { status: 200 });
       if (url.includes("/sites/") && url.endsWith("/drive")) return json({ id: "drive1" });
       if (/\/sites\/[^:]+:\/sites\//.test(url) && !url.includes("/drive")) return json({ id: "s1", webUrl: "w" });
       if (url.includes(".docx")) {
@@ -200,7 +213,7 @@ describe("ensureConsultDoc", () => {
 
   it("creates the CONSULT subfolder but writes no document before the consult", async () => {
     const puts = stubFiles(null);
-    const r = await ensureConsultDoc(auth, "2026 Consults/V/VENTURA, Milton", sources, render,
+    const r = await ensureConsultDoc(auth, VENTURA, sources, render,
       { writeDocument: false, account: ME });
     expect(r).toBeNull();
     expect(puts).toEqual([]);
@@ -209,7 +222,7 @@ describe("ensureConsultDoc", () => {
 
   it("writes the document once the consult has happened", async () => {
     const puts = stubFiles(null);
-    const r = await ensureConsultDoc(auth, "2026 Consults/V/VENTURA, Milton", sources, render,
+    const r = await ensureConsultDoc(auth, VENTURA, sources, render,
       { writeDocument: true, account: ME });
     expect(r).toMatchObject({ kind: "written", awaitingNote: false });
     expect(puts).toHaveLength(1);
@@ -222,7 +235,7 @@ describe("ensureConsultDoc", () => {
   it("does not rewrite while the note is still missing", async () => {
     const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
       lastModifiedBy: { user: { email: ME } } });
-    const r = await ensureConsultDoc(auth, "p", { ...sources, profile: {} }, render,
+    const r = await ensureConsultDoc(auth, VENTURA, { ...sources, profile: {} }, render,
       { writeDocument: true, account: ME });
     expect(r).toMatchObject({ kind: "unchanged" });
     expect(puts).toEqual([]);
@@ -231,16 +244,85 @@ describe("ensureConsultDoc", () => {
   it("replaces its own placeholder document once a note appears", async () => {
     const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
       lastModifiedBy: { user: { email: ME } } });
-    const r = await ensureConsultDoc(auth, "p", sources, render, { writeDocument: true, account: ME });
+    const r = await ensureConsultDoc(auth, VENTURA, sources, render, { writeDocument: true, account: ME });
     expect(r).toMatchObject({ kind: "replaced" });
     expect(puts[0]).toContain("conflictBehavior=replace");
+  });
+
+  it("does not rewrite its own document once it already holds the note", async () => {
+    const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
+      lastModifiedBy: { user: { email: ME } } }, [], docx("seen 30 min, wants I-589"));
+    const r = await ensureConsultDoc(auth, VENTURA, sources, render, { writeDocument: true, account: ME });
+    expect(r).toMatchObject({ kind: "unchanged" });
+    expect(puts).toEqual([]);
+  });
+
+  it("writes into an E-File folder too", async () => {
+    const puts = stubFiles(null);
+    const r = await ensureConsultDoc(auth, { site: "scalefiles", path: "V/VENTURA, Milton" }, sources, render,
+      { writeDocument: true, account: ME });
+    expect(r).toMatchObject({ kind: "written" });
+    expect(puts).toHaveLength(1);
+    expect(seen.some((u) => u.includes("/sites/scalefiles"))).toBe(true);
+  });
+
+  it("refuses SCAL Closed", async () => {
+    stubFiles(null);
+    await expect(ensureConsultDoc(auth, { site: "SCALClosed", path: "VENTURA, Milton" }, sources, render,
+      { writeDocument: true, account: ME })).rejects.toThrow(/SCALClosed/);
   });
 
   it("NEVER overwrites a document someone else edited", async () => {
     const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
       lastModifiedBy: { user: { email: "attorney@sharma-crawford.com" } } });
-    const r = await ensureConsultDoc(auth, "p", sources, render, { writeDocument: true, account: ME });
+    const r = await ensureConsultDoc(auth, VENTURA, sources, render, { writeDocument: true, account: ME });
     expect(r).toMatchObject({ kind: "left-alone", reason: "edited by someone else" });
     expect(puts).toEqual([]);
+  });
+});
+
+describe("resolveLinkedFolder — the folder already on the profile", () => {
+  /** Each site resolves to its own drive, so the item's driveId names the library. */
+  function stubShare(item: unknown, status = 200) {
+    resetSweepCaches();
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = decodeURIComponent(String(input));
+      if (url.includes("/shares/")) return status === 200 ? json(item) : json({ error: {} }, status);
+      const site = /\/sites\/[^:]+:\/sites\/([^/?]+)/.exec(url)?.[1];
+      if (site) return json({ id: `site-${site}`, webUrl: "w" });
+      const drive = /\/sites\/site-([^/]+)\/drive$/.exec(url)?.[1];
+      if (drive) return json({ id: `drive-${drive}` });
+      return json({ error: {} }, 500);
+    }));
+  }
+  const folder = (driveId: string, parent: string, name: string) =>
+    ({ id: "i", name, webUrl: "w", folder: {}, parentReference: { driveId, path: `/drives/${driveId}/root:${parent}` } });
+
+  it("finds a consult folder", async () => {
+    stubShare(folder("drive-scalconsults", "/2026 Consults/B", "BERMUDEZ-PAZ, Gerbert"));
+    expect(await resolveLinkedFolder(auth, "https://sp/x")).toEqual(
+      { site: "scalconsults", path: "2026 Consults/B/BERMUDEZ-PAZ, Gerbert" });
+  });
+
+  it("finds an E-File", async () => {
+    stubShare(folder("drive-scalefiles", "/V", "VENTURA, Milton - 20231"));
+    expect(await resolveLinkedFolder(auth, "https://sp/x")).toEqual(
+      { site: "scalefiles", path: "V/VENTURA, Milton - 20231" });
+  });
+
+  it("uses the client folder when the link points at its CONSULT subfolder", async () => {
+    stubShare(folder("drive-scalconsults", "/2026 Consults/V/VENTURA, Milton", "CONSULT"));
+    expect(await resolveLinkedFolder(auth, "https://sp/x")).toEqual(
+      { site: "scalconsults", path: "2026 Consults/V/VENTURA, Milton" });
+  });
+
+  it("skips SCAL Closed", async () => {
+    stubShare(folder("drive-SCALClosed", "", "VENTURA, Milton"));
+    expect(await resolveLinkedFolder(auth, "https://sp/x")).toMatchObject({ skip: expect.stringMatching(/Closed/) });
+  });
+
+  it("skips a link that no longer opens rather than failing the run", async () => {
+    stubShare(null, 404);
+    expect(await resolveLinkedFolder(auth, "https://sp/x")).toMatchObject({ skip: expect.stringMatching(/404/) });
   });
 });

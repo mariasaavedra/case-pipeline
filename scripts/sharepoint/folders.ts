@@ -75,6 +75,11 @@ function encodePath(path: string): string {
  */
 const siteCache = new Map<string, SiteDrive>();
 
+/** Forget resolved sites. For tests. */
+export function resetSiteCache(): void {
+  siteCache.clear();
+}
+
 export async function resolveSiteDrive(
   auth: GraphAuth,
   host: string,
@@ -364,11 +369,21 @@ async function uploadError(res: Response): Promise<GraphError> {
   return new GraphError(res.status, message);
 }
 
+/** Download a file's bytes. For small generated files only — it buffers the lot. */
+export async function downloadFile(auth: GraphAuth, driveId: string, itemId: string): Promise<Buffer> {
+  const token = await auth.getToken();
+  const res = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/content`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw await uploadError(res);
+  return Buffer.from(await res.arrayBuffer());
+}
+
 /** Resolve a SharePoint sharing link (…/:f:/s/site/…) to the item it points at. */
 export async function getItemBySharingUrl(
   auth: GraphAuth,
   url: string,
-): Promise<DriveItem & { parentReference?: { driveId?: string } }> {
+): Promise<DriveItem & { parentReference?: { driveId?: string; path?: string } }> {
   const encoded = "u!" + Buffer.from(url, "utf-8").toString("base64").replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-");
   return graphFetch(auth, `/shares/${encoded}/driveItem`);
 }

@@ -17,15 +17,19 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import { setApiToken, mondayRequest } from "@case-pipeline/monday";
 import { graphAuthFromEnv } from "./sharepoint/auth.js";
-import { decide, perform, ensureConsultDoc, type SweepCandidate } from "./sharepoint/sweep.js";
+import {
+  decide, perform, ensureConsultDoc, resolveLinkedFolder, isDocSite,
+  type SweepCandidate, type ConsultDocFolder, type DocOutcome,
+} from "./sharepoint/sweep.js";
 import { consultOutcome } from "./sharepoint/consult-status.js";
-import { consultFolderName, consultFolderPath } from "./sharepoint/consult-naming.js";
 import { cachedAccount } from "./sharepoint/auth.js";
 import { renderDocxTemplate } from "@case-pipeline/template";
 import type { TimelineNote } from "./sharepoint/consult-note.js";
 
 import { listAppointmentBoardKeys } from "@case-pipeline/query/appointment-boards";
 const PROFILES_BOARD_ID = "8025265377";
+/** Where the sweep creates new consult folders (scripts/sharepoint/sweep.ts). */
+const CONSULTS_SITE = "scalconsults";
 
 const arg = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const flag = (n: string) => process.argv.includes(`--${n}`);
@@ -129,24 +133,16 @@ function consultTemplate(): Buffer {
 
 /**
  * Ensure the CONSULT subfolder, and write the summary once the consult has
- * actually happened.
- *
- * Only for folders in SCAL Consults. A client whose folder has already moved to
- * E-Files or Closed has hired or finished, and putting a consult summary into
- * their case file is not this automation's business.
+ * actually happened, in whichever folder the client has: their consult folder,
+ * or their E-File if they already hired. Never in SCAL Closed.
  */
 async function maybeWriteConsultDoc(
   auth: ReturnType<typeof graphAuthFromEnv>,
   c: SweepCandidate,
-  consultPath: string,
-  actionKind: "create" | "link",
+  folder: ConsultDocFolder,
   timeline: TimelineNote[],
 ) {
-  if (actionKind === "link" && !consultPath.includes(" Consults/")) return null;
-
-  const named = consultFolderName({ firstName: c.firstName, lastName: c.lastName });
-  if (!named.ok || !c.consultDate) return null;
-  const pathInSite = consultFolderPath(Number(c.consultDate.slice(0, 4)), named.name);
+  if (!isDocSite(folder.site) || !c.consultDate) return null;
 
   const parse = (raw: string | null | undefined): Record<string, unknown> => {
     if (!raw) return {};
@@ -160,7 +156,7 @@ async function maybeWriteConsultDoc(
 
   return ensureConsultDoc(
     auth,
-    pathInSite,
+    folder,
     {
       profileName: c.profileName,
       profile: parse(c.profileJson),
@@ -200,14 +196,44 @@ async function main() {
   const tally = { linked: 0, created: 0, skipped: 0, failed: 0, docs: 0 };
   const receipt: string[] = ["action,profile,monday_item_id,path,url,detail"];
 
-  for (const c of candidates) {
-    // Skipping on the local value first keeps the common case free of API calls.
-    if (c.existingLink) {
-      tally.skipped++;
-      continue;
-    }
+  /**
+   * Log a summary that was written or replaced. "Unchanged" and "left alone"
+   * are the steady state for every linked consult on every run, so they stay
+   * quiet rather than repeating every two hours.
+   */
+  function reportDoc(doc: DocOutcome | null, c: SweepCandidate, where: string) {
+    if (!doc || doc.kind === "unchanged" || doc.kind === "left-alone") return;
+    tally.docs++;
+    console.log(`  doc-${doc.kind}  ${where}/CONSULT/${doc.name}   [${c.profileName}]`);
+    receipt.push(row([`doc-${doc.kind}`, c.profileName, c.profileMondayId, where, "", doc.name]));
+  }
 
+  for (const c of candidates) {
     try {
+      // Already linked — the usual case, since the folder is linked before the
+      // consult (by an earlier sweep, or by reception). Nothing to create; just
+      // make sure the summary is in that folder once the consult has happened.
+      if (c.existingLink) {
+        if (consultOutcome(c.apptStatus) !== "proceeded") {
+          tally.skipped++;
+          continue;
+        }
+        const folder = await resolveLinkedFolder(auth, c.existingLink);
+        if ("skip" in folder) {
+          tally.skipped++;
+          receipt.push(row(["skip", c.profileName, c.profileMondayId, "", c.existingLink, folder.skip]));
+          continue;
+        }
+        if (!apply) {
+          console.log(`  would ensure summary  ${folder.site}: ${folder.path}/CONSULT   [${c.profileName}]`);
+          continue;
+        }
+        const doc = await maybeWriteConsultDoc(auth, c, folder, notesByProfile.get(c.profileLocalId) ?? []);
+        reportDoc(doc, c, `${folder.site}: ${folder.path}`);
+        if (!doc || doc.kind === "unchanged" || doc.kind === "left-alone") tally.skipped++;
+        continue;
+      }
+
       const decision = await decide(auth, c);
       if (decision.action.kind === "skip") {
         tally.skipped++;
@@ -243,16 +269,10 @@ async function main() {
       console.log(`  ${result.outcome}  ${path}   [${c.profileName}]`);
       receipt.push(row([result.outcome, c.profileName, c.profileMondayId, path, result.url ?? "", target.label]));
 
-      // The CONSULT subfolder and its summary. Only for a folder in Consults —
-      // a client whose folder has moved to E-Files or Closed is past this stage.
-      if (kind === "create" || kind === "link") {
-        const doc = await maybeWriteConsultDoc(auth, c, path, kind, notesByProfile.get(c.profileLocalId) ?? []);
-        if (doc) {
-          tally.docs++;
-          console.log(`      CONSULT/${doc.kind === "left-alone" ? `${doc.name} — left alone (${doc.reason})` : doc.name}`);
-          receipt.push(row([`doc-${doc.kind}`, c.profileName, c.profileMondayId, path, "", "name" in doc ? doc.name : ""]));
-        }
-      }
+      // The CONSULT subfolder and its summary — in Consults or E-Files, never Closed.
+      const site = decision.action.kind === "link" ? decision.action.site : CONSULTS_SITE;
+      const doc = await maybeWriteConsultDoc(auth, c, { site, path }, notesByProfile.get(c.profileLocalId) ?? []);
+      reportDoc(doc, c, `${site}: ${path}`);
     } catch (err) {
       tally.failed++;
       const message = err instanceof Error ? err.message : String(err);
@@ -266,9 +286,12 @@ async function main() {
       `skipped ${tally.skipped}  failed ${tally.failed}`,
   );
 
-  if (apply && (tally.created || tally.linked || tally.failed)) {
-    fs.mkdirSync("output", { recursive: true });
-    const path = `output/consult-sweep-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+  if (apply && (tally.created || tally.linked || tally.docs || tally.failed)) {
+    // Under data/, the one directory mounted from the host — output/ lives in
+    // the container and vanished with every redeploy, taking the only record
+    // of what the sweep had done.
+    fs.mkdirSync("data/receipts", { recursive: true });
+    const path = `data/receipts/consult-sweep-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
     fs.writeFileSync(path, receipt.join("\n"));
     console.log(`[sweep] receipt: ${path}`);
   }

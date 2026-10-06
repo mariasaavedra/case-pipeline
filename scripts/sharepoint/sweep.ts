@@ -22,14 +22,17 @@
 
 import { consultFolderName, consultFolderPath } from "./consult-naming.js";
 import { consultOutcome } from "./consult-status.js";
+import PizZip from "pizzip";
 import {
-  resolveSiteDrive, getItemByPath, ensureFolderPath, listChildren, searchFolders,
-  uploadSmallFile, isUnmodifiedBy,
+  resolveSiteDrive, getItemByPath, ensureFolder, ensureFolderPath, listChildren, searchFolders,
+  uploadSmallFile, isUnmodifiedBy, getItemBySharingUrl, downloadFile, resetSiteCache,
 } from "./folders.js";
-import { buildConsultDocVars, isAwaitingNote, consultDocName, type ConsultDocSources } from "./consult-doc.js";
+import {
+  buildConsultDocVars, isAwaitingNote, consultDocName, MISSING_NOTE, type ConsultDocSources,
+} from "./consult-doc.js";
 import { buildFolderIndex, looseCandidates, findMatch } from "./match.js";
 import { linkTargetForSite, CONSULT_FILE, type LinkTarget } from "./link-target.js";
-import { type GraphAuth } from "./graph-client.js";
+import { GraphError, type GraphAuth } from "./graph-client.js";
 import { type FolderRef } from "./match.js";
 
 const HOST = "sharmacrawford.sharepoint.com";
@@ -160,6 +163,7 @@ let consultYearDirs: string[] | null = null;
 /** Forget discovered state. For tests, and for any long-running caller. */
 export function resetSweepCaches(): void {
   consultYearDirs = null;
+  resetSiteCache();
 }
 
 async function yearFolders(auth: GraphAuth): Promise<string[]> {
@@ -254,6 +258,61 @@ export type DocOutcome =
   | { kind: "unchanged"; name: string }
   | { kind: "left-alone"; name: string; reason: string };
 
+/** A client folder the summary goes into: which library, and the path inside it. */
+export interface ConsultDocFolder {
+  site: string;
+  path: string;
+}
+
+/** Libraries a summary may be written to. Closed files are finished with. */
+const DOC_SITES = new Set([CONSULTS, EFILES]);
+
+export function isDocSite(site: string): boolean {
+  return DOC_SITES.has(site);
+}
+
+/**
+ * Follow the folder link already on a profile (Consult File or E-File) to the
+ * folder itself.
+ *
+ * Most consults are linked BEFORE they take place — by an earlier sweep while
+ * the appointment was still Upcoming, or by reception — so this is the usual
+ * way a summary finds its folder, not the exception.
+ */
+export async function resolveLinkedFolder(
+  auth: GraphAuth,
+  url: string,
+): Promise<ConsultDocFolder | { skip: string }> {
+  let item;
+  try {
+    item = await getItemBySharingUrl(auth, url);
+  } catch (err) {
+    if (err instanceof GraphError && (err.status === 404 || err.status === 403 || err.status === 400)) {
+      return { skip: `linked folder cannot be opened (Graph ${err.status})` };
+    }
+    throw err;
+  }
+  if (!item.folder) return { skip: "link points at a file, not a folder" };
+
+  const driveId = item.parentReference?.driveId;
+  const parentPath = item.parentReference?.path;
+  if (!driveId || parentPath === undefined) return { skip: "linked folder has no location" };
+
+  let site: string | null = null;
+  for (const name of [CONSULTS, EFILES, CLOSED]) {
+    if ((await resolveSiteDrive(auth, HOST, name)).driveId === driveId) site = name;
+  }
+  if (!site) return { skip: "linked folder is outside SCAL Consults / E-Files / Closed" };
+  if (!isDocSite(site)) return { skip: "linked folder is in SCAL Closed" };
+
+  // "/drives/{id}/root:" or "/drives/{id}/root:/2026 Consults/B"
+  const under = decodeURIComponent(parentPath.replace(/^.*?root:\/?/, ""));
+  let path = under ? `${under}/${item.name}` : item.name;
+  // A link straight to the CONSULT subfolder means its parent is the client folder.
+  if (item.name === CONSULT_SUBFOLDER && under) path = under;
+  return { site, path };
+}
+
 /**
  * Ensure the CONSULT subfolder exists and holds an up-to-date summary.
  *
@@ -262,21 +321,23 @@ export type DocOutcome =
  *     somewhere to put material during the meeting;
  *   - the document is written once the consult has taken place.
  *
- * A document already carrying the attorney's note is never rewritten. One
- * written while the note was still missing IS replaced when the note appears —
- * but only if nobody has edited it since, because there is no undo for
- * overwriting an attorney's own edits.
+ * Runs on every sweep for every linked consult, so it must be cheap and must
+ * converge: a document already carrying the attorney's note is never rewritten.
+ * One written while the note was still missing IS replaced when the note
+ * appears — but only if nobody has edited it since, because there is no undo
+ * for overwriting an attorney's own edits.
  */
 export async function ensureConsultDoc(
   auth: GraphAuth,
-  consultFolderPathInSite: string,
+  folder: ConsultDocFolder,
   sources: ConsultDocSources,
   render: (vars: Record<string, string>) => Buffer,
   options: { writeDocument: boolean; account: string | null },
 ): Promise<DocOutcome | null> {
-  const drive = await resolveSiteDrive(auth, HOST, CONSULTS);
-  const subPath = `${consultFolderPathInSite}/${CONSULT_SUBFOLDER}`;
-  await ensureFolderPath(auth, drive.driveId, subPath, true);
+  if (!isDocSite(folder.site)) throw new Error(`Refusing to write a consult summary into ${folder.site}`);
+  const drive = await resolveSiteDrive(auth, HOST, folder.site);
+  const sub = await ensureFolder(auth, drive.driveId, folder.path, CONSULT_SUBFOLDER, true);
+  const subPath = sub.path;
 
   if (!options.writeDocument) return null;
 
@@ -288,19 +349,31 @@ export async function ensureConsultDoc(
   if (existing?.file) {
     // Still no note, so a rewrite would say exactly what is already there.
     if (awaitingNote) return { kind: "unchanged", name };
-    // A note has appeared since. Replace only a document the automation wrote
-    // itself — an attorney's edits have no undo.
+    // Replace only a document the automation wrote itself — an attorney's
+    // edits have no undo.
     if (!isUnmodifiedBy(existing, options.account)) {
       return { kind: "left-alone", name, reason: "edited by someone else" };
     }
-    const parent = await getItemByPath(auth, drive.driveId, subPath);
-    await uploadSmallFile(auth, drive.driveId, parent!.id, name, render(vars), "replace");
+    // Ours — but does it still stand in for a missing note? Without this check
+    // every sweep would re-upload every finished summary.
+    const content = await downloadFile(auth, drive.driveId, existing.id);
+    if (!docxMentions(content, MISSING_NOTE)) return { kind: "unchanged", name };
+    await uploadSmallFile(auth, drive.driveId, sub.item!.id, name, render(vars), "replace");
     return { kind: "replaced", name };
   }
 
-  const parent = await getItemByPath(auth, drive.driveId, subPath);
-  if (!parent?.folder) throw new Error(`${subPath} is missing after being ensured`);
-  await uploadSmallFile(auth, drive.driveId, parent.id, name, render(vars), "fail");
+  if (!sub.item?.folder) throw new Error(`${subPath} is missing after being ensured`);
+  await uploadSmallFile(auth, drive.driveId, sub.item.id, name, render(vars), "fail");
   return { kind: "written", name, awaitingNote };
 }
 
+/** Whether a .docx body contains `text`. A malformed file counts as no. */
+function docxMentions(content: Buffer, text: string): boolean {
+  try {
+    const xml = new PizZip(content).file("word/document.xml")?.asText() ?? "";
+    // Strip the run markup so a phrase split across runs still matches.
+    return xml.replace(/<[^>]+>/g, "").includes(text);
+  } catch {
+    return false;
+  }
+}
