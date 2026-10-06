@@ -283,11 +283,16 @@ describe("ensureConsultDoc", () => {
 
 describe("resolveLinkedFolder — the folder already on the profile", () => {
   /** Each site resolves to its own drive, so the item's driveId names the library. */
-  function stubShare(item: unknown, status = 200) {
+  function stubShare(item: unknown, status = 200, existing: (path: string) => unknown = () => null) {
     resetSweepCaches();
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = decodeURIComponent(String(input));
       if (url.includes("/shares/")) return status === 200 ? json(item) : json({ error: {} }, status);
+      const byPath = /\/drives\/[^/]+\/root:\/(.+)$/.exec(url)?.[1];
+      if (byPath !== undefined) {
+        const found = existing(byPath);
+        return found ? json(found) : json({ error: { code: "itemNotFound" } }, 404);
+      }
       const site = /\/sites\/[^:]+:\/sites\/([^/?]+)/.exec(url)?.[1];
       if (site) return json({ id: `site-${site}`, webUrl: "w" });
       const drive = /\/sites\/site-([^/]+)\/drive$/.exec(url)?.[1];
@@ -295,34 +300,73 @@ describe("resolveLinkedFolder — the folder already on the profile", () => {
       return json({ error: {} }, 500);
     }));
   }
+  const SHARE = "https://sharmacrawford.sharepoint.com/:f:/s/scalconsults/IgBq?e=CW";
   const folder = (driveId: string, parent: string, name: string) =>
     ({ id: "i", name, webUrl: "w", folder: {}, parentReference: { driveId, path: `/drives/${driveId}/root:${parent}` } });
 
   it("finds a consult folder", async () => {
     stubShare(folder("drive-scalconsults", "/2026 Consults/B", "BERMUDEZ-PAZ, Gerbert"));
-    expect(await resolveLinkedFolder(auth, "https://sp/x")).toEqual(
+    expect(await resolveLinkedFolder(auth, SHARE)).toEqual(
       { site: "scalconsults", path: "2026 Consults/B/BERMUDEZ-PAZ, Gerbert" });
   });
 
   it("finds an E-File", async () => {
     stubShare(folder("drive-scalefiles", "/V", "VENTURA, Milton - 20231"));
-    expect(await resolveLinkedFolder(auth, "https://sp/x")).toEqual(
+    expect(await resolveLinkedFolder(auth, SHARE)).toEqual(
       { site: "scalefiles", path: "V/VENTURA, Milton - 20231" });
   });
 
   it("uses the client folder when the link points at its CONSULT subfolder", async () => {
     stubShare(folder("drive-scalconsults", "/2026 Consults/V/VENTURA, Milton", "CONSULT"));
-    expect(await resolveLinkedFolder(auth, "https://sp/x")).toEqual(
+    expect(await resolveLinkedFolder(auth, SHARE)).toEqual(
       { site: "scalconsults", path: "2026 Consults/V/VENTURA, Milton" });
   });
 
   it("skips SCAL Closed", async () => {
     stubShare(folder("drive-SCALClosed", "", "VENTURA, Milton"));
-    expect(await resolveLinkedFolder(auth, "https://sp/x")).toMatchObject({ skip: expect.stringMatching(/Closed/) });
+    expect(await resolveLinkedFolder(auth, SHARE)).toMatchObject({ skip: expect.stringMatching(/Closed/) });
+  });
+
+  describe("plain path links — what Zapier wrote, most of the Consult File column", () => {
+    const isFolder = { id: "i", name: "x", webUrl: "w", folder: {} };
+
+    it("reads a scheme-less library path", async () => {
+      stubShare(null, 200, (p) => (p === "2026 Consults/R/R. ORTIZ FUENTES, Carlos" ? isFolder : null));
+      expect(await resolveLinkedFolder(auth,
+        "sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/2026%20Consults/R/R.%20ORTIZ%20FUENTES%2C%20Carlos",
+      )).toEqual({ site: "scalconsults", path: "2026 Consults/R/R. ORTIZ FUENTES, Carlos" });
+    });
+
+    it("reads the folder out of a web-UI ?id= link", async () => {
+      stubShare(null, 200, (p) => (p === "2026 Consults/Z/ZHAO, Mei" ? isFolder : null));
+      expect(await resolveLinkedFolder(auth,
+        "https://sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/Forms/AllItems.aspx" +
+          "?id=%2Fsites%2Fscalconsults%2FShared%20Documents%2F2026%20Consults%2FZ%2FZHAO%2C%20Mei&viewid=x",
+      )).toEqual({ site: "scalconsults", path: "2026 Consults/Z/ZHAO, Mei" });
+    });
+
+    it("skips a path whose folder is gone", async () => {
+      stubShare(null);
+      expect(await resolveLinkedFolder(auth,
+        "https://sharmacrawford.sharepoint.com/sites/scalconsults/Shared%20Documents/2026%20Consults/G/GONE, Al",
+      )).toEqual({ skip: "linked folder no longer exists" });
+    });
+
+    it("skips a path into SCAL Closed without looking it up", async () => {
+      stubShare(null);
+      expect(await resolveLinkedFolder(auth,
+        "https://sharmacrawford.sharepoint.com/sites/SCALClosed/Shared%20Documents/VENTURA, Milton",
+      )).toMatchObject({ skip: expect.stringMatching(/Closed/) });
+    });
+
+    it("skips text that is not a SharePoint link", async () => {
+      stubShare(null);
+      expect(await resolveLinkedFolder(auth, "see paper file")).toEqual({ skip: "not a SharePoint folder link" });
+    });
   });
 
   it("skips a link that no longer opens rather than failing the run", async () => {
     stubShare(null, 404);
-    expect(await resolveLinkedFolder(auth, "https://sp/x")).toMatchObject({ skip: expect.stringMatching(/404/) });
+    expect(await resolveLinkedFolder(auth, "https://sharmacrawford.sharepoint.com/:f:/s/scalconsults/Igx?e=1")).toMatchObject({ skip: expect.stringMatching(/404/) });
   });
 });
