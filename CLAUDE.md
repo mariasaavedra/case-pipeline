@@ -185,6 +185,7 @@ Writes and user/account routes:
 | `POST /api/reception/consults/:localId/files` | A file uploaded in M19 (already in SharePoint) also attached to the profile's Files column. Raw body, `?name=`, `?type=` |
 | `POST /api/contracts/:id/step` | Record a signing step on a Fee K (contracts are signed in Acrobat Pro, attorney then client): `sent_for_signature` → Atty Reviewing, `attorney_signed` → Sent to Client + Contract Sent On, `client_signed` → Needs Payment Link + Signed Contract Received On, `payment_link_sent` → Payment link sent + Payment Link Sent On. Stage + date in one Monday write; `from` stale check (409); queues on outage. Plan = `routes/contract-step.ts` |
 | `GET /api/contracts/:id/document-form`, `POST /api/contracts/:id/document-generated` | Contract generation (M22) support: Monday pre-fill (client, e-mail, address, attorney, AF/FF/PF, next hearing from the client's court case) and an audit entry (`doc.contract_generated`). The contract itself is filled **in the browser** from the firm's Word templates in SharePoint (`Fee Contracts/App Templates`, staff-edited, `{{tags}}` = `apps/web/src/lib/contract-fill.ts`) and turned into a PDF by Microsoft Graph (`convertDocxToPdf`). Nothing written to Monday |
+| `GET/POST /api/profiles/:id/documents/g28` | G-28 (M23): GET = pre-filled form (attorney from document settings, client from Monday — mailing address split by `documents/us-address.ts`, a detained client's facility address with ICE + Respondent) + the form's box sizes; POST `{input}` = the filled official USCIS PDF (`templates/forms/g-28.pdf`, pdf-lib), 400 with `problems` when something is missing or doesn't fit, audited `doc.g28_generated` (no client details). The browser downloads it and saves a copy to the client's SharePoint folder. Nothing written to Monday. Rules = `apps/api/src/documents/g28.ts` |
 | `POST /api/profiles/:id/render` | Generate a DOCX for a profile from live Monday.com data (default template `client_letter_docx`) |
 | `GET /api/auth/me` | Validate token, upsert user (first user becomes admin) |
 | `GET/PUT /api/preferences`, `PATCH /api/me/profile` | Per-user preferences and profile |
@@ -195,6 +196,7 @@ Writes and user/account routes:
 | `GET/PUT /api/settings/status-overrides` | Firm-wide status label/color overrides (PUT admin-only, audited); merged over the code base map by the web's `translateStatus` |
 | `GET /api/settings/status-catalog` | Distinct board-item statuses + counts, for the admin status-tag editor |
 | `GET/PUT /api/settings/urgency` | Urgency thresholds (criticalDays/soonDays) + whether status urgency reorders Active Cases (PUT admin-only, audited) |
+| `GET/PUT /api/settings/documents` | Firm address/phone/fax, attorneys (email, USCIS account, bar admissions) and detention facility addresses for generated forms, `data/document-settings.json` (defaults in `documents/document-settings.ts`; PUT admin-only, audited) |
 | `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only) |
 | `GET /api/admin/users/presence` | Who's online (admin-only): each active user as online (≤5 min) / idle (≤1 h) / offline, from `last_active_at`, which `requireAuth` stamps at most once a minute per user (`auth/presence.ts`). Shown in Settings → Users, polled every 30 s |
 | `/api/auth/monday`, `/callback`, `/status` | Personal Monday.com OAuth connection (`routes/monday-oauth.ts`) |
@@ -211,7 +213,7 @@ Writes and user/account routes:
 |---|---|
 | `config/` | `boards.yaml` (board & column definitions), `templates.yaml` (template variable mappings) |
 | `data/` | SQLite databases — `seed.db` (local dev, gitignored), `live.db` (real data, gitignored) |
-| `templates/` | Handlebars `.txt` and DOCX template files used by the render pipeline |
+| `templates/` | Handlebars `.txt` and DOCX template files used by the render pipeline; `templates/forms/` = official fillable PDFs (G-28) filled by `apps/api/src/documents/` |
 | `output/` | Rendered document output (gitignored) |
 | `docs/` | Architecture docs, board maps, decisions log, feature specs, nightly logs |
 | `scripts/` | One-off and utility scripts (see below) |

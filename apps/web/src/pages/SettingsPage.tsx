@@ -6,6 +6,7 @@ import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, f
 import type { AttorneyBoard, PublicUser, MondayConnectionStatus, UserPresence, PresenceStatus } from "../api";
 import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
+import { DocumentSettingsSection } from "../components/DocumentSettingsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
 import { AuditLogSection } from "../components/AuditLogSection";
 import { SectionCode } from "../components/ScreenCode";
@@ -871,7 +872,7 @@ type SettingsTab = "account" | "preferences" | "firm" | "admin";
 const TABS: { id: SettingsTab; label: string; code: string; hint: string; adminOnly?: boolean }[] = [
   { id: "account", label: "My account", code: "P11.1", hint: "Profile, board identity, Monday.com" },
   { id: "preferences", label: "Preferences", code: "P11.2", hint: "Theme, dates, language" },
-  { id: "firm", label: "Firm setup", code: "P11.3", hint: "Attorney boards, status tags, urgency", adminOnly: true },
+  { id: "firm", label: "Firm setup", code: "P11.3", hint: "Attorney boards, status tags, urgency, documents", adminOnly: true },
   { id: "admin", label: "Admin", code: "P11.4", hint: "Users, sync health, audit log", adminOnly: true },
 ];
 
@@ -947,6 +948,7 @@ export function SettingsPage({ tab }: { tab: string }) {
               <AttorneyBoardsSection />
               <StatusTagsSection />
               <UrgencySettingsSection />
+              <DocumentSettingsSection />
             </>
           )}
 
