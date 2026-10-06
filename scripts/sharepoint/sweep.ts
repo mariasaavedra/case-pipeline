@@ -33,6 +33,8 @@ import {
 import { buildFolderIndex, looseCandidates, findMatch } from "./match.js";
 import { linkTargetForSite, CONSULT_FILE, type LinkTarget } from "./link-target.js";
 import { GraphError, type GraphAuth } from "./graph-client.js";
+// The web app's parser: one definition of the link shapes the columns hold.
+import { parseSharePointLink } from "../../apps/web/src/sharepoint/parseLink.js";
 import { type FolderRef } from "./match.js";
 
 const HOST = "sharmacrawford.sharepoint.com";
@@ -283,6 +285,22 @@ export async function resolveLinkedFolder(
   auth: GraphAuth,
   url: string,
 ): Promise<ConsultDocFolder | { skip: string }> {
+  // Three shapes live in these columns: sharing links, web-UI links with the
+  // path in ?id=, and plain scheme-less library paths (what the old Zapier
+  // automation wrote — most of the Consult File column).
+  const link = parseSharePointLink(url);
+  if (!link) return { skip: "not a SharePoint folder link" };
+
+  return link.kind === "sharing" ? fromSharingLink(auth, link.url) : fromPathLink(auth, link.site, link.relPath);
+}
+
+/** The site a library name refers to, matched the way SharePoint does: case-blind. */
+function knownSite(name: string | null): string | null {
+  if (!name) return null;
+  return [CONSULTS, EFILES, CLOSED].find((s) => s.toLowerCase() === name.toLowerCase()) ?? null;
+}
+
+async function fromSharingLink(auth: GraphAuth, url: string): Promise<ConsultDocFolder | { skip: string }> {
   let item;
   try {
     item = await getItemBySharingUrl(auth, url);
@@ -302,15 +320,36 @@ export async function resolveLinkedFolder(
   for (const name of [CONSULTS, EFILES, CLOSED]) {
     if ((await resolveSiteDrive(auth, HOST, name)).driveId === driveId) site = name;
   }
-  if (!site) return { skip: "linked folder is outside SCAL Consults / E-Files / Closed" };
-  if (!isDocSite(site)) return { skip: "linked folder is in SCAL Closed" };
-
   // "/drives/{id}/root:" or "/drives/{id}/root:/2026 Consults/B"
   const under = decodeURIComponent(parentPath.replace(/^.*?root:\/?/, ""));
-  let path = under ? `${under}/${item.name}` : item.name;
+  return placed(site, under ? `${under}/${item.name}` : item.name);
+}
+
+async function fromPathLink(
+  auth: GraphAuth,
+  siteName: string | null,
+  relPath: string,
+): Promise<ConsultDocFolder | { skip: string }> {
+  const site = knownSite(siteName);
+  if (!site) return placed(null, relPath);
+  if (!isDocSite(site)) return placed(site, relPath);
+  if (!relPath) return { skip: "link points at a library, not a client folder" };
+
+  const drive = await resolveSiteDrive(auth, HOST, site);
+  const item = await getItemByPath(auth, drive.driveId, relPath);
+  if (!item) return { skip: "linked folder no longer exists" };
+  if (!item.folder) return { skip: "link points at a file, not a folder" };
+  return placed(site, relPath);
+}
+
+/** The checks both link shapes share, once the library and path are known. */
+function placed(site: string | null, path: string): ConsultDocFolder | { skip: string } {
+  if (!site) return { skip: "linked folder is outside SCAL Consults / E-Files / Closed" };
+  if (!isDocSite(site)) return { skip: "linked folder is in SCAL Closed" };
   // A link straight to the CONSULT subfolder means its parent is the client folder.
-  if (item.name === CONSULT_SUBFOLDER && under) path = under;
-  return { site, path };
+  const parts = path.split("/");
+  if (parts.length > 1 && parts[parts.length - 1] === CONSULT_SUBFOLDER) parts.pop();
+  return { site, path: parts.join("/") };
 }
 
 /**
