@@ -95,7 +95,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Address | Notes |
 |---|---|---|---|
-| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
+| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17; **Generate Doc** → M23) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
 | P3.1 | Overview tab | `/clients/:id` | Timeline of notes + note composer; date range → D5 |
 | P3.2 | Appointments tab | `/clients/:id/appointments` | **+ Book a consult** → M10 |
 | P3.3 | Contracts tab | `/clients/:id/contracts` | **+ New contract** → M11 |
@@ -221,6 +221,7 @@ Four tabs, each with its own URL (`/settings/<tab>`); `/settings` opens My accou
 | P11.3.1 | Attorney appointment boards | |
 | P11.3.2 | Status tags | |
 | P11.3.3 | Urgency | |
+| P11.3.4 | Documents | Firm address/phone/fax, attorneys (email, USCIS account, bars — first is used), detention facility addresses by Det. Facility label — what M23 fills that Monday doesn't hold |
 | P11.4 | **Admin** tab *(admin)* | `/settings/admin` |
 | P11.4.1 | Users | |
 | P11.4.2 | Sync health | |
@@ -261,6 +262,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M19 | Client documents | "Client documents" | M18 → **Browse SharePoint…** (the P3.6 browser in pick mode: Attach / upload) | `ConsultPrepModal.tsx` + `DocumentsTab.tsx` |
 | M21 | Payment links | "Payment links" | P14.3 → ⋯ → **Payment links…**. One LawPay link per fee (AF, PF → Operating; FF → Trust), description + amounts editable; **Mark sent** (only in Needs Payment Link) sets Payment Link Sent On | `PaymentLinksModal.tsx` |
 | M22 | Generate contract | "Generate contract" | P14.3 → ⋯ → **Generate contract…**. Pick a template from SharePoint `Fee Contracts/App Templates` (staff-edited Word files with `{{tags}}`); a broken template is shown with a link to fix it; only that template's fields are shown, pre-filled from Monday; **Generate PDF** (via the user's Microsoft 365) or **Word** | `GenerateContractModal.tsx` |
+| M23 | Generate document | "Generate document" | P3.0 → **Generate Doc**. Pick the document (only **G-28** so far); its fields show pre-filled — attorney from P11.3.4 (the client's Monday attorney when it matches), client from Monday (mailing address split into boxes), a detained client's facility as the address with ICE + Respondent — all editable. **Generate G-28** fills the official USCIS PDF (`templates/forms/g-28.pdf`), downloads it and saves a copy in the client's SharePoint folder (e-file first). Nothing written to Monday | `GenerateDocModal.tsx` |
 | M20 | Change consult | "Change consult" | P17.2 → **Edit**. Attorney, date, time; a new attorney moves the appointment to their board in Monday. Calendly is not changed (reminder shown) | `ConsultScheduleModal.tsx` |
 
 ## Dropdowns

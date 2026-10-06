@@ -69,6 +69,8 @@ import { registerCourtCaseWriteRoutes } from "./routes/court-case-write.js";
 import { registerMotionWriteRoutes } from "./routes/motion-write.js";
 import { registerContractStepRoutes } from "./routes/contract-step.js";
 import { registerContractDocumentRoutes } from "./routes/contract-document.js";
+import { registerDocumentRoutes } from "./routes/documents.js";
+import { initDocumentSettings } from "./documents/document-settings.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
 import { registerDetentionWriteRoutes } from "./routes/detention-write.js";
 import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
@@ -204,6 +206,7 @@ console.log(`Database loaded (DB_SOURCE=${DB_SOURCE}): ${DB_PATH}`);
 initKpiColumns(DATA_DIR);
 initStatusOverrides(DATA_DIR);
 initUrgencySettings(DATA_DIR);
+initDocumentSettings(DATA_DIR);
 
 /** Build the status → urgency map the Active Cases query consumes. */
 function statusUrgencyMap(): Record<string, Urgency> {
@@ -490,6 +493,7 @@ registerCourtCaseWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeT
 registerMotionWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractStepRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractDocumentRoutes(app, { db });
+registerDocumentRoutes(app, { db });
 
 // =============================================================================
 // Call Log — see routes/call-log.ts

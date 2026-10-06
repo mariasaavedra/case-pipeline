@@ -555,38 +555,6 @@ export async function fetchAppointments(
   return apiFetch<AppointmentsResult>(`/api/appointments${qs ? `?${qs}` : ""}`);
 }
 
-/**
- * Generate a DOCX for a profile (server renders it from live Monday.com data).
- * Resolves to the file blob + suggested filename; the caller triggers the
- * download. Throws with the server's error message on failure (e.g. 503 when
- * MONDAY_API_TOKEN isn't configured).
- */
-export async function renderProfileDoc(
-  localId: string,
-  template?: string,
-): Promise<{ blob: Blob; filename: string }> {
-  const headers = { ...(await authHeaders()), "Content-Type": "application/json" };
-  const res = await fetch(`/api/profiles/${localId}/render`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(template ? { template } : {}),
-  });
-  if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) message = body.error;
-    } catch {
-      // non-JSON error body — keep the HTTP status message
-    }
-    throw new Error(message);
-  }
-  const blob = await res.blob();
-  const disposition = res.headers.get("content-disposition") ?? "";
-  const match = /filename="([^"]+)"/.exec(disposition);
-  return { blob, filename: match?.[1] ?? "document.docx" };
-}
-
 /** What Monday knows for M22's form — ContractPrefill in apps/api/src/routes/contract-document.ts. */
 export interface ContractPrefill {
   clientName: string;
@@ -614,6 +582,88 @@ export async function logContractGenerated(
   await fetch(`/api/contracts/${encodeURIComponent(localId)}/document-generated`, {
     method: "POST", headers, body: JSON.stringify(info),
   }).catch(() => {});
+}
+
+// ---- Generated documents (M23) — apps/api/src/documents/g28.ts, routes/documents.ts ----
+
+export type G28Agency = "uscis" | "ice" | "cbp";
+export type G28ClientRole = "applicant" | "petitioner" | "requestor" | "beneficiary" | "respondent";
+export type G28UnitType = "" | "apt" | "ste" | "flr";
+
+export interface G28Address {
+  street: string; unitType: G28UnitType; unit: string; city: string; state: string; zip: string;
+  province: string; postalCode: string; country: string;
+}
+
+export interface G28Input {
+  attorney: {
+    id: string; familyName: string; givenName: string; middleName: string; uscisAccount: string;
+    address: G28Address; phone: string; mobile: string; email: string; fax: string;
+    licensingAuthority: string; barNumber: string; firmName: string; subjectToOrders: boolean;
+  };
+  matter: { agency: G28Agency; uscisForms: string; specificMatter: string; receiptNumber: string; clientRole: G28ClientRole };
+  client: {
+    familyName: string; givenName: string; middleName: string; aNumber: string; uscisAccount: string;
+    phone: string; mobile: string; email: string; address: G28Address;
+  };
+  notices: { originalsToAttorney: boolean; cardsToAttorney: boolean; i94ToClient: boolean };
+}
+
+export interface FirmInfo { name: string; street: string; suite: string; city: string; state: string; zip: string; phone: string; fax: string }
+export interface AttorneyInfo {
+  id: string; givenName: string; familyName: string; email: string; mobile: string; uscisAccount: string;
+  bars: { state: string; number: string }[]; defaultBar: string;
+}
+export interface FacilityInfo { label: string; name: string; street: string; city: string; state: string; zip: string }
+export interface DocumentSettings { firm: FirmInfo; attorneys: AttorneyInfo[]; facilities: FacilityInfo[] }
+
+export interface G28Form {
+  input: G28Input;
+  detainedAt: string | null;
+  facilityMissing: boolean;
+  profileContact: { phone: string; email: string };
+  mondayAttorney: string;
+  attorneys: AttorneyInfo[];
+  firm: FirmInfo;
+  /** Box sizes, keyed "client.address.street" etc. */
+  limits: Record<string, number>;
+}
+
+export async function fetchG28Form(profileLocalId: string): Promise<G28Form> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/documents/g28`);
+}
+
+/** The filled G-28. Throws with the server's list of problems on a 400. */
+export async function generateG28(profileLocalId: string, input: G28Input): Promise<{ blob: Blob; filename: string }> {
+  const headers = { ...(await authHeaders()), "Content-Type": "application/json" };
+  const res = await fetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/documents/g28`, {
+    method: "POST", headers, body: JSON.stringify({ input }),
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      // non-JSON error body — keep the HTTP status message
+    }
+    throw new Error(message);
+  }
+  const disposition = res.headers.get("content-disposition") ?? "";
+  const utf8 = /filename\*=UTF-8''([^;]+)/.exec(disposition)?.[1];
+  const plain = /filename="([^"]+)"/.exec(disposition)?.[1];
+  return { blob: await res.blob(), filename: utf8 ? decodeURIComponent(utf8) : plain ?? "G-28.pdf" };
+}
+
+export function fetchDocumentSettings(): Promise<DocumentSettings> {
+  return apiFetch<DocumentSettings>("/api/settings/documents");
+}
+export function updateDocumentSettings(s: DocumentSettings): Promise<DocumentSettings> {
+  return apiFetch<DocumentSettings>("/api/settings/documents", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(s),
+  });
 }
 
 export async function fetchPendingContracts(): Promise<PendingContractsResult> {
