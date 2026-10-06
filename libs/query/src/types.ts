@@ -27,7 +27,8 @@ export interface ProfileSummary {
   /**
    * "First Last" from the Profiles board's First Name / Last Name columns, with
    * the [A#] and (det in …) notes staff type into them stripped. Null when both
-   * are empty — show `name` then. Only the full client detail sets it.
+   * are empty — show `name` then. Only the full client detail sets it this way;
+   * appointments set it to `name` with those notes stripped.
    */
   displayName?: string | null;
   /**

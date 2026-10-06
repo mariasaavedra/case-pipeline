@@ -146,6 +146,14 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
   };
 }
 
+/** A name with the [A#] / (det in …) notes staff type into it removed. */
+export function stripNameNotes(name: string): string {
+  return name
+    .replace(/\[[^\]]*\]?|\([^)]*\)?/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * "First Last" from the Profiles board's name columns. Staff park notes in them
  * — "Ventura Corado [A221-455-213] (Det In Core Civic)", "Pedraza (Detained At
@@ -154,11 +162,7 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
  */
 export function readDisplayName(rawColumnValues: string | null | undefined): string | null {
   const cvs = safeParseJson(rawColumnValues);
-  const clean = (v: unknown): string =>
-    (asNonEmptyString(v) ?? "")
-      .replace(/\[[^\]]*\]?|\([^)]*\)?/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+  const clean = (v: unknown): string => stripNameNotes(asNonEmptyString(v) ?? "");
   const full = [clean(cvs.first_name), clean(cvs.last_name)].filter(Boolean).join(" ");
   return full || null;
 }
