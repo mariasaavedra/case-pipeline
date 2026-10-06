@@ -103,6 +103,14 @@ function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit }: 
           ) : (
             <span className="font-medium truncate" style={{ color: "var(--color-ink)" }}>{c.name}</span>
           )}
+          {c.sameDayCount > 0 && (
+            <Tag
+              color="overdue"
+              title={`${c.sameDayCount === 1 ? "Another consult" : `${c.sameDayCount} other consults`} for this client on this day — likely booked twice. Check Monday and delete the extra one.`}
+            >
+              Possible duplicate
+            </Tag>
+          )}
           {!c.profile && <Tag color="missing" title="Not linked to a profile in Monday — link it before prepping">No profile</Tag>}
           {c.fromCalendly && <Tag color="later" title="Booked through Calendly">Calendly</Tag>}
           {c.language && <Tag color="court" title="Language">{c.language}</Tag>}

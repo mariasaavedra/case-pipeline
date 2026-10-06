@@ -289,6 +289,19 @@ describe("getReceptionConsults", () => {
     });
   });
 
+  it("flags two consults for one client on one day, matched by profile, else by name without [ … ] tags", () => {
+    const db = seed();
+    const appt = db.prepare(
+      `INSERT INTO board_items (batch_id, local_id, board_key, name, next_date, next_time, column_values)
+       VALUES (1, ?, 'appointments_m', ?, ?, '10:00', '{}')`,
+    );
+    appt.run("u1", "Greg ORJI", "2026-10-05");
+    appt.run("u2", "Greg ORJI [Det Chase Co] [A214-938-521]", "2026-10-05");
+    appt.run("u3", "Greg ORJI", "2026-10-06");
+    const by = new Map(getReceptionConsults(db, opts).map((c) => [c.localId, c.sameDayCount]));
+    expect(Object.fromEntries(by)).toEqual({ a1: 1, a2: 1, u1: 1, u2: 1, u3: 0 });
+  });
+
   it("carries the facility from the client's open court case", () => {
     const db = seed();
     const cc = db.prepare(
