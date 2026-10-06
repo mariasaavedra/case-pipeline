@@ -287,8 +287,11 @@ async function main() {
   );
 
   if (apply && (tally.created || tally.linked || tally.docs || tally.failed)) {
-    fs.mkdirSync("output", { recursive: true });
-    const path = `output/consult-sweep-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+    // Under data/, the one directory mounted from the host — output/ lives in
+    // the container and vanished with every redeploy, taking the only record
+    // of what the sweep had done.
+    fs.mkdirSync("data/receipts", { recursive: true });
+    const path = `data/receipts/consult-sweep-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
     fs.writeFileSync(path, receipt.join("\n"));
     console.log(`[sweep] receipt: ${path}`);
   }

@@ -164,6 +164,10 @@ For each Calendly consultation in the last `CONSULT_SWEEP_DAYS` days:
    it lives. Otherwise **create** it in SCAL Consults and record it. Then the
    summary, as in step 1.
 
+**Receipts.** Any run that creates, links, writes a summary or fails leaves a
+CSV in `data/receipts/consult-sweep-<timestamp>.csv` — under `data/` because
+that is the directory mounted from the host, so receipts survive a redeploy.
+
 **The summary converges; it never churns.** It is written once. A summary the
 sweep wrote before the attorney's note existed is replaced when the note
 appears; one that already holds the note, or that a person has edited, is
