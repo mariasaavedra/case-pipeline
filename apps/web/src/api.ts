@@ -1255,7 +1255,13 @@ export interface ReceptionConsult {
   phone: string | null;
   description: string | null;
   description2: string | null;
-  profile: { localId: string; name: string; phone: string | null; eFile: string | null; consultFile: string | null } | null;
+  profile: {
+    localId: string; name: string; phone: string | null; eFile: string | null; consultFile: string | null;
+    /** Case No. ("21164") — builds the default DMS link. */
+    caseNo: string | null;
+    /** The profile's DMS URL column, as stored. */
+    dmsUrl: string | null;
+  } | null;
   lastPrep: {
     at: string; author: string | null; apptType: string; method: string; pending: boolean;
     /** Interpreter language from the prep, null when none was needed. */
@@ -1274,6 +1280,8 @@ export interface ReceptionConsultsResult {
   to: string;
   today: string;
   consults: ReceptionConsult[];
+  /** Det. Facility labels on the Court Cases board — M18's detention-center dropdown. */
+  detentionFacilities: string[];
 }
 
 export function fetchReceptionConsults(from?: string, to?: string): Promise<ReceptionConsultsResult> {
@@ -1303,7 +1311,12 @@ export interface PrepInput {
    * is the link it changes (the API only overwrites while Monday still holds it).
    */
   folderLinks?: Array<{ kind: "e_file" | "consult_file"; url: string; replaces?: string }>;
+  /** The client's DMS record, when "Has DMS?" is ticked. */
+  dmsUrl?: string;
 }
+
+/** DMS — the old CRM (cases until 2024). Same base as the API's DMS_RECORD_BASE. */
+export const DMS_RECORD_BASE = "https://sharmacrawford-cdb.innovationlawlab.org/records/";
 
 export function prepConsult(
   appointmentLocalId: string,

@@ -61,6 +61,11 @@ export function AppointmentModal({ entry, onClose }: Props) {
   const statusStyle = getStatusStyle(appointment.status);
   const priorityStyle = profile ? getPriorityStyle(profile.priority) : null;
   const [pendingUpdates, setPendingUpdates] = useState<ClientUpdate[]>([]);
+  // Emails are hidden until asked for: the focus view is for reading notes.
+  const [showEmails, setShowEmails] = useState(false);
+  const allUpdates = [...pendingUpdates, ...updates];
+  const emailCount = allUpdates.filter((u) => u.sourceType === "email").length;
+  const shownCount = showEmails ? allUpdates.length : allUpdates.length - emailCount;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -204,12 +209,25 @@ export function AppointmentModal({ entry, onClose }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x" style={{ borderColor: "var(--color-border-light)" }}>
             {/* Notes / updates */}
             <div className="px-6 py-4 space-y-4 min-w-0">
-              <h3
-                className="text-[11px] font-semibold uppercase tracking-wider"
-                style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-              >
-                Notes {pendingUpdates.length + updates.length > 0 ? `(${pendingUpdates.length + updates.length})` : ""}
-              </h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3
+                  className="text-[11px] font-semibold uppercase tracking-wider"
+                  style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+                >
+                  Notes {shownCount > 0 ? `(${shownCount})` : ""}
+                </h3>
+                {emailCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowEmails((v) => !v)}
+                    aria-pressed={showEmails}
+                    className="text-xs"
+                    style={{ color: "var(--color-status-blue)", fontFamily: "var(--font-body)", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                  >
+                    {showEmails ? "Hide emails" : `Show emails (${emailCount})`}
+                  </button>
+                )}
+              </div>
 
               {profile && (
                 <NoteComposer
@@ -219,8 +237,8 @@ export function AppointmentModal({ entry, onClose }: Props) {
                 />
               )}
 
-              {pendingUpdates.length + updates.length > 0 ? (
-                <UpdatesTimeline updates={[...pendingUpdates, ...updates]} />
+              {allUpdates.length > 0 ? (
+                <UpdatesTimeline updates={allUpdates} filter={showEmails ? "all" : "notes"} />
               ) : (
                 <p
                   className="text-sm text-center py-4"

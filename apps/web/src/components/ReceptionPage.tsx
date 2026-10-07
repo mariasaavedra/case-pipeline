@@ -331,6 +331,7 @@ export function ReceptionPage() {
       {prepping && (
         <ConsultPrepModal
           consult={prepping}
+          facilities={data?.detentionFacilities ?? []}
           onFocus={prepping.date ? () => openFocus(prepping) : undefined}
           onClose={() => setPrepping(null)}
           onSaved={load}

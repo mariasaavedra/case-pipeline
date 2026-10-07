@@ -276,10 +276,12 @@ function mondayLinkFor(u: ClientUpdate): string | null {
 interface EntryProps {
   u: ClientUpdate;
   replies: ClientUpdate[];
+  /** Other places the same note was posted (see collapseCopies). */
+  alsoOn?: string[];
   onReplyPosted?: (reply: ClientUpdate) => void;
 }
 
-function TimelineEntry({ u, replies, onReplyPosted }: EntryProps) {
+function TimelineEntry({ u, replies, alsoOn, onReplyPosted }: EntryProps) {
   const [replying, setReplying] = useState(false);
   const { time } = formatDateTime(u.createdAtSource);
   const initials = getInitials(u.authorName);
@@ -324,6 +326,15 @@ function TimelineEntry({ u, replies, onReplyPosted }: EntryProps) {
               {time}
             </span>
             {u.boardKey && <span className="board-tag">{boardDisplayName(u.boardKey)}</span>}
+            {alsoOn && alsoOn.length > 0 && (
+              <span
+                className="text-[11px]"
+                style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
+                title="The same note was posted in these places too — shown once here"
+              >
+                · also on {alsoOn.join(", ")}
+              </span>
+            )}
           </div>
           {u.title && (
             <p className="text-sm font-medium mb-0.5" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
@@ -407,6 +418,101 @@ export function threadEntries(entries: ClientUpdate[]): { roots: ClientUpdate[];
   return { roots, replies };
 }
 
+// -----------------------------------------------------------------------------
+// One note, posted to several places
+// -----------------------------------------------------------------------------
+// The app often posts one note more than once: M18's consult prep goes to the
+// profile, the appointment (pinned) and Emails & Activities; the call log and
+// sub-notes mirror into E&A. All of those copies belong to the same client, so
+// the timeline showed the same text two or three times. Copies are shown once,
+// with where else it was posted. Monday still holds every copy.
+
+/** Copies of one note land within seconds; five minutes leaves room for a queued retry. */
+const COPY_WINDOW_MS = 5 * 60 * 1000;
+/** Short texts ("Called, no answer") repeat for real; only longer ones count as copies. */
+const COPY_MIN_CHARS = 40;
+
+/**
+ * Text to compare copies by. E&A stores its own rendering of the same note —
+ * links written "url [url]", and sometimes cut short — so links are dropped,
+ * spacing collapsed, and a copy may be the start of the other.
+ */
+function copyKey(u: ClientUpdate): string {
+  return u.textBody
+    .replace(/\[https?:\/\/[^\]]*\]/g, " ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/** Which copy to show: an Update (full formatting, replies) over an E&A copy. */
+function copyRank(u: ClientUpdate): number {
+  if (u.sourceType === "update" || u.sourceType === "note") return u.boardKey ? 1 : 0;
+  if (u.sourceType === "reply") return 2;
+  if (u.sourceType === "email") return 4;
+  return 3;
+}
+
+/** Where a copy lives, for "Also on …". */
+function copyPlace(u: ClientUpdate): string {
+  if (u.sourceType === "email") return u.boardKey ? `${boardDisplayName(u.boardKey)} (email)` : "Profile (email)";
+  if (EA_ACTIVITY_TYPES.has(u.sourceType)) return "Emails & Activities";
+  return u.boardKey ? boardDisplayName(u.boardKey) : "Profile";
+}
+
+function isCopy(a: ClientUpdate, ka: string, b: ClientUpdate, kb: string): boolean {
+  if ((a.sourceType === "email") !== (b.sourceType === "email")) return false;
+  if (Math.abs(Date.parse(a.createdAtSource) - Date.parse(b.createdAtSource)) > COPY_WINDOW_MS) return false;
+  const [short, long] = ka.length <= kb.length ? [ka, kb] : [kb, ka];
+  return short.length >= COPY_MIN_CHARS && long.startsWith(short);
+}
+
+/**
+ * Fold copies of one note into the copy worth showing. Returns the kept roots
+ * (in their original order), where else each was posted, and the replies
+ * re-homed onto the kept copy.
+ */
+export function collapseCopies(
+  roots: ClientUpdate[],
+  replies: Map<string, ClientUpdate[]>,
+): { roots: ClientUpdate[]; alsoOn: Map<string, string[]>; replies: Map<string, ClientUpdate[]> } {
+  const keys = roots.map(copyKey);
+  const groupOf: number[] = roots.map((_, i) => i);
+  for (let i = 0; i < roots.length; i++) {
+    if (groupOf[i] !== i) continue;
+    for (let j = i + 1; j < roots.length; j++) {
+      if (groupOf[j] === j && isCopy(roots[i]!, keys[i]!, roots[j]!, keys[j]!)) groupOf[j] = i;
+    }
+  }
+  const groups = new Map<number, number[]>();
+  roots.forEach((_, i) => groups.set(groupOf[i]!, [...(groups.get(groupOf[i]!) ?? []), i]));
+
+  const keep = new Set<number>();
+  const alsoOn = new Map<string, string[]>();
+  const merged = new Map(replies);
+  for (const members of groups.values()) {
+    const best = members.reduce((a, b) => (copyRank(roots[b]!) < copyRank(roots[a]!) ? b : a));
+    keep.add(best);
+    if (members.length === 1) continue;
+    const kept = roots[best]!;
+    const places = new Set<string>();
+    const threaded: ClientUpdate[] = [...(replies.get(kept.localId) ?? [])];
+    for (const m of members) {
+      if (m === best) continue;
+      const place = copyPlace(roots[m]!);
+      if (place !== copyPlace(kept)) places.add(place);
+      threaded.push(...(replies.get(roots[m]!.localId) ?? []));
+      merged.delete(roots[m]!.localId);
+    }
+    if (places.size > 0) alsoOn.set(kept.localId, [...places]);
+    if (threaded.length > 0) {
+      merged.set(kept.localId, threaded.sort((a, b) => a.createdAtSource.localeCompare(b.createdAtSource)));
+    }
+  }
+  return { roots: roots.filter((_, i) => keep.has(i)), alsoOn, replies: merged };
+}
+
 const PAGE_SIZE = 30;
 
 interface Props {
@@ -441,7 +547,10 @@ export function UpdatesTimeline({ updates, filter = "all", last30Days = false, l
   }, [updates, filter, last30Days]);
 
   // Pagination counts threads, so a reply never shows without its parent.
-  const { roots, replies } = useMemo(() => threadEntries(filtered), [filtered]);
+  const { roots, replies, alsoOn } = useMemo(() => {
+    const threaded = threadEntries(filtered);
+    return collapseCopies(threaded.roots, threaded.replies);
+  }, [filtered]);
 
   const paginated = roots.slice(0, visibleCount);
   const hasMore = roots.length > visibleCount;
@@ -485,6 +594,7 @@ export function UpdatesTimeline({ updates, filter = "all", last30Days = false, l
                 key={u.localId}
                 u={u}
                 replies={replies.get(u.localId) ?? []}
+                alsoOn={alsoOn.get(u.localId)}
                 onReplyPosted={onReplyPosted}
               />
             ))}

@@ -245,7 +245,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M2 | Log a call | "Log a call" / "Edit call" | Top bar **+ Log call** (every page); P10 → pencil on a row | `LogCallModal.tsx` |
 | M3 | Client case | The client's name (360 header) | Any client name outside P2 — opens over the current page as `?client=<id>`, Back closes it (`ClientPeek.tsx`); inside M2 → "View profile" after picking a linked client (opens on top of M2); P10 → a row's client | `ClientCaseModal.tsx` |
 | M4 | Call notes | "Notes — *name*" | P10 → notes on a row | `CallNotesModal.tsx` |
-| M5 | Appointment detail | The client's name | P4 → click an appointment / **Focus**; P17.2 → **Focus**; M18 → "Focus view — notes & documents" (opens on top) | `AppointmentModal.tsx` |
+| M5 | Appointment detail | The client's name | P4 → click an appointment / **Focus**; P17.2 → **Focus**; M18 → "Focus view — notes & documents" (opens on top). Emails hidden until **Show emails (N)**; a note posted to several places shows once, "· also on …" | `AppointmentModal.tsx` |
 | M6 | Client notes | The client's name | P4 → "Open in modal" under a row's notes | `NotesModal.tsx` |
 | M7 | Day agenda | The date | P7 → click a day | `CalendarPage.tsx` (`DayModal`) |
 | M8 | New jail intake | "New jail intake" | P9 → **+ New intake**. Intake status (New Detainee / Payment link sent. Waiting on payment) + optional POC e-mail — the same fields as M2's "this call is a jail intake" | `NewJailIntakeModal.tsx` |
@@ -258,7 +258,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
 | M16 | Connect Monday.com | "Connect your Monday.com account" / "Reconnect…" / "Monday.com connected" | Opens by itself after sign-in when Monday isn't connected (any page but P11); **Not now** hides it for 12 h | `MondayConnectPrompt.tsx` |
 | M17 | Released from detention | "Released from detention" | P3.0 → **Released?** on the "Detained at …" pill | `ReleaseDetentionModal.tsx` |
-| M18 | Prep consult | "Prep consult" | P17.2 → **Prep** on a consult → D23, D24, D33. **Client wrote (Calendly)** is editable: a correction replaces the client's part of the appointment's Description (reception's part stays below; emptied = unchanged). Documents → **⋯** → D35 to change or create the client's folder | `ConsultPrepModal.tsx` |
+| M18 | Prep consult | "Prep consult" | P17.2 → **Prep** on a consult → D23, D24, D33. **Client wrote (Calendly)** is editable: a correction replaces the client's part of the appointment's Description (reception's part stays below; emptied = unchanged). Documents → **⋯** → D35 to change or create the client's folder. **Detained appt** → D36 detention center. **Has DMS?** (optional) → DMS URL (profile's, else built from Case No.), added to the note and saved to an empty profile DMS URL | `ConsultPrepModal.tsx` |
 | M19 | Client documents | "Client documents" | M18 → **Browse SharePoint…** (the P3.6 browser in pick mode: Attach / upload) | `ConsultPrepModal.tsx` + `DocumentsTab.tsx` |
 | M21 | Payment links | "Payment links" | P14.3 → ⋯ → **Payment links…**. One LawPay link per fee (AF, PF → Operating; FF → Trust), description + amounts editable; **Mark sent** (only in Needs Payment Link) sets Payment Link Sent On | `PaymentLinksModal.tsx` |
 | M22 | Generate contract | "Generate contract" | P14.3 → ⋯ → **Generate contract…**. Pick a template from SharePoint `Fee Contracts/App Templates` (staff-edited Word files with `{{tags}}`); a broken template is shown with a link to fix it; only that template's fields are shown, pre-filled from Monday; **Generate PDF** (via the user's Microsoft 365) or **Word** | `GenerateContractModal.tsx` |
@@ -304,5 +304,6 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D33 | Needs interpreter? | M18 | `ConsultPrepModal.tsx` |
 | D34 | Paralegal filter | P19.2 | `FoiasPage.tsx` |
 | D35 | Client folder menu | M18 → Documents **⋯**: **Use a different folder…** (paste a SharePoint link — replaces the profile's on save, only if Monday still holds it), **Find or create e-file folder**, **Find or create consult folder** (creates only when none exists) | `ConsultPrepModal.tsx` |
+| D36 | Detention center | M18 → Type of appt **Detained appt**: the Court Cases board's Det. Facility labels (synced) + **Other** (free text). Pre-filled from the client's open court case | `ConsultPrepModal.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.
