@@ -111,8 +111,21 @@ describe("planJailIntakeWrite", () => {
       text_mkkg24xy: "Kay County",
       dup__of_first_name2__1: "088-467-122",
       text2: "316-869-3861",
-      status_1__1: { label: "Spanish" },
+      status_1__1: { label: "Espanol" },
     });
+  });
+
+  it("translates the Call Log's language labels to this board's", () => {
+    // Monday rejects a label the column lacks: the Call Log says "Spanish" and
+    // "Portugese", Jail Intakes has "Espanol" and "Portuguese".
+    const label = (language: string) => {
+      const out = plan({ ...full, language });
+      if (!("plan" in out)) throw new Error("expected a plan");
+      return out.plan.columnValues["status_1__1"];
+    };
+    expect(label("Spanish")).toEqual({ label: "Espanol" });
+    expect(label("Portugese")).toEqual({ label: "Portuguese" });
+    expect(label("English")).toEqual({ label: "English" });
   });
 
   it("puts the description in the board's own Description column", () => {
