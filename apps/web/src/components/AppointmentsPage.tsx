@@ -709,6 +709,11 @@ export function AppointmentsPage() {
     setData((d) => d && { ...d, entries: d.entries.map((e) => (e.localId === localId ? { ...e, status } : e)) });
   };
 
+  // On a phone the texts may wrap; elsewhere each keeps to one line ("…", full text on hover).
+  const oneLine = layout === "narrow"
+    ? {}
+    : { whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" };
+
   const navBtn = {
     width: 40, height: 40, border: "none", background: "transparent", borderRadius: 8, color: "var(--color-ink-muted)", cursor: "pointer",
   } as const;
@@ -720,18 +725,20 @@ export function AppointmentsPage() {
         <>
         {/* P4.1 — header */}
         <SectionCode code="P4.1" />
-        <div className="flex flex-wrap items-end justify-between gap-4 mb-4">
-          <div className="flex flex-col gap-1">
+        {/* Two fixed columns, one line per text: a longer name or summary on
+            another attorney's day must not push the controls (and everything
+            under them) somewhere else. On a phone it stacks instead. */}
+        <div className="grid items-end gap-4 mb-4"
+          style={{ gridTemplateColumns: layout === "narrow" ? "minmax(0, 1fr)" : "minmax(0, 1fr) auto" }}>
+          <div className="flex flex-col gap-1 min-w-0">
             <span style={{ fontSize: 13, color: "var(--color-ink-muted)" }}>{formatLongDate(day)}{day === today ? "" : day < today ? " (past)" : ""}</span>
-            <h1 style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 32, letterSpacing: "-0.01em" }}>{title}</h1>
-            <span style={{ fontSize: 15, color: "var(--color-ink-muted)" }}>{loading && !data ? "Loading…" : summary}</span>
-            {updatedAt && (
-              <span style={{ fontSize: 12, color: "var(--color-ink-faint)" }} title="Refreshes every minute, so reception's prep shows here without reloading">
-                Updated {updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · stays in step with Receptionists
-              </span>
-            )}
+            <h1 title={title} style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 32, letterSpacing: "-0.01em", ...oneLine }}>{title}</h1>
+            <span title={summary} style={{ fontSize: 15, color: "var(--color-ink-muted)", ...oneLine }}>{loading && !data ? "Loading…" : summary}</span>
+            <span style={{ fontSize: 12, color: "var(--color-ink-faint)", minHeight: 18, ...oneLine }} title="Refreshes every minute, so reception's prep shows here without reloading">
+              {updatedAt ? `Updated ${updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · stays in step with Receptionists` : ""}
+            </span>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3" style={{ flexWrap: layout === "narrow" ? "wrap" : "nowrap" }}>
             <div className="flex items-center gap-1" style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 4 }}>
               <button type="button" aria-label="Previous day" style={navBtn} onClick={() => setDate(addDays(day, -1))}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M10 3L5 8l5 5" /></svg>
