@@ -14,6 +14,7 @@
 //      profile's Phone column, the description to the appointment's
 //      Description column — and a folder link typed in for a client that had
 //      none to the profile's E-File / Consult File (empty columns only).
+//      A DMS link (old CRM, "Has DMS?") goes to an empty profile DMS URL.
 //
 // Same rails as every other write: personal Monday token first, durable queue
 // on outage, audit entry. A consult_preps row (schema v29) is what lets P17
@@ -116,6 +117,25 @@ export interface PrepFolderLink {
   replaces: string | null;
 }
 
+/**
+ * DMS — the firm's old CRM, used for cases until 2024. A record's page is
+ * `<base><case no. digits>` (case 21-164 → …/records/21164), which is also
+ * what the profile's DMS URL column holds when set.
+ */
+export const DMS_RECORD_BASE = "https://sharmacrawford-cdb.innovationlawlab.org/records/";
+export const DMS_URL_MAX = 500;
+
+/** The DMS record link for a case number ("21-164", "DMS 24144" → digits), else null. */
+export function dmsUrlFor(caseNo: string | null | undefined): string | null {
+  const digits = (caseNo ?? "").replace(/\D/g, "");
+  return digits ? `${DMS_RECORD_BASE}${digits}` : null;
+}
+
+/** A DMS link that points at a record (some profiles hold ".../records/" with no number). */
+export function isDmsRecordUrl(u: string | null | undefined): boolean {
+  return /\/records\/\d+/.test(u ?? "");
+}
+
 export interface PrepBody {
   apptType: ApptType;
   /** The "specify" text when apptType is Other, else null. */
@@ -140,6 +160,8 @@ export interface PrepBody {
   documents: PrepDocument[];
   /** Folder links found, created or pasted in M18 — filling an empty column, or replacing one. */
   folderLinks: PrepFolderLink[];
+  /** The client's DMS record when reception ticked "Has DMS?", else null. */
+  dmsUrl: string | null;
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
@@ -228,6 +250,10 @@ export function parsePrepBody(raw: unknown): { ok: true; body: PrepBody } | { ok
     }
   }
 
+  const dmsUrl = str(b.dmsUrl);
+  if (dmsUrl && !isHttpUrl(dmsUrl)) return { ok: false, error: "The DMS link must start with https://" };
+  if (dmsUrl.length > DMS_URL_MAX) return { ok: false, error: "The DMS link is too long" };
+
   return {
     ok: true,
     body: {
@@ -243,6 +269,7 @@ export function parsePrepBody(raw: unknown): { ok: true; body: PrepBody } | { ok
       clientWrote: clientWrote || null,
       documents,
       folderLinks,
+      dmsUrl: dmsUrl || null,
     },
   };
 }
@@ -281,6 +308,7 @@ export function methodLabel(b: PrepBody): string {
  *   Type of appt: 1st time
  *   How to proceed: Zoom — https://zoom.us/j/…
  *   Interpreter: Portuguese — office (Rafael)
+ *   DMS: https://sharmacrawford-cdb.innovationlawlab.org/records/21164   (when ticked)
  *   Documents:
  *   • Consult folder                      (a link named after the document)
  *   Description: <description>
@@ -322,6 +350,7 @@ export function prepNote(b: PrepBody, opts: { clientWrote?: string | null } = {}
     `How to proceed: ${methodLabel(b)}`,
     `Interpreter: ${interpreterLabel(b)}`,
   ];
+  if (b.dmsUrl) text.push(`DMS: ${b.dmsUrl}`);
   if (b.documents.length > 0) {
     text.push("Documents:", ...b.documents.map((d) => `• ${d.name} — ${d.url}`));
   }
@@ -339,6 +368,7 @@ export function prepNote(b: PrepBody, opts: { clientWrote?: string | null } = {}
     `<p><strong>How to proceed:</strong> ${how}</p>`,
     `<p><strong>Interpreter:</strong> ${escapeHtml(interpreterLabel(b))}</p>`,
   ];
+  if (b.dmsUrl) html.push(`<p><strong>DMS:</strong> ${link(b.dmsUrl, b.dmsUrl)}</p>`);
   if (b.documents.length > 0) {
     html.push(`<p><strong>Documents:</strong></p>`, ...b.documents.map((d) => `<p>• ${link(d.url, d.name)}</p>`));
   }
@@ -367,7 +397,7 @@ export const PREP_TITLE_FALLBACK = "Consult prep";
 
 export interface PrepWriteBackStep {
   target: "profile" | "appointment";
-  field: "phone" | "description" | FolderKind;
+  field: "phone" | "description" | "dms_url" | FolderKind;
   columnId: string;
   value: string;
 }
@@ -385,6 +415,8 @@ export interface PrepWriteBackStep {
  * A folder link fills an EMPTY E-File / Consult File, or replaces the link
  * reception chose to change (`replaces`) — only while the column still holds
  * that link, so one set in Monday since the page loaded is never overwritten.
+ * A DMS link goes to the profile's DMS URL when that is empty or points at no
+ * record (".../records/" — some profiles hold that); a real one is never replaced.
  */
 export function planPrepWriteBack(
   b: PrepBody,
@@ -392,6 +424,7 @@ export function planPrepWriteBack(
     profilePhone: string | null;
     appointmentDescription: string | null;
     profileFolders?: Partial<Record<FolderKind, string | null>>;
+    profileDmsUrl?: string | null;
     /** Keep the client's words in the Description (a Calendly booking). */
     keepClient?: boolean;
   },
@@ -399,6 +432,7 @@ export function planPrepWriteBack(
     profilePhone: string | null;
     appointmentDescription: string | null;
     profileFolders?: Partial<Record<FolderKind, string | null>>;
+    profileDmsUrl?: string | null;
   },
 ): PrepWriteBackStep[] {
   const steps: PrepWriteBackStep[] = [];
@@ -425,6 +459,9 @@ export function planPrepWriteBack(
     if (columnId && free && link(now) !== link(f.url)) {
       steps.push({ target: "profile", field: f.kind, columnId, value: f.url });
     }
+  }
+  if (b.dmsUrl && columns.profileDmsUrl && !isDmsRecordUrl(current.profileDmsUrl) && link(current.profileDmsUrl) !== link(b.dmsUrl)) {
+    steps.push({ target: "profile", field: "dms_url", columnId: columns.profileDmsUrl, value: b.dmsUrl });
   }
   return steps;
 }
@@ -492,6 +529,10 @@ export interface ReceptionConsult {
     phone: string | null;
     eFile: string | null;
     consultFile: string | null;
+    /** Case No. ("21164") — builds the default DMS link. */
+    caseNo: string | null;
+    /** The profile's DMS URL column, as stored. */
+    dmsUrl: string | null;
   } | null;
   lastPrep: {
     at: string; author: string | null; apptType: string; method: string; pending: boolean;
@@ -620,6 +661,8 @@ export function getReceptionConsults(
             phone: r.profilePhone,
             eFile: textOf(praw.e_file),
             consultFile: textOf(praw.consult_file),
+            caseNo: textOf(praw.case_no),
+            dmsUrl: textOf(praw.dms_url),
           }
         : null,
       lastPrep: r.prepAt
@@ -647,6 +690,17 @@ export function getReceptionConsults(
   for (const c of consults) perDay.set(dayKey(c), (perDay.get(dayKey(c)) ?? 0) + 1);
   for (const c of consults) c.sameDayCount = perDay.get(dayKey(c))! - 1;
   return consults;
+}
+
+/**
+ * The detention centers reception picks from for a "Detained appt": the
+ * Det. Facility labels on the Court Cases board, as synced — a facility added
+ * in Monday shows up here with no release. "Other" (free text) is the form's.
+ */
+export function getDetentionFacilities(db: DatabaseInstance): string[] {
+  const col = getBoardColumnsFor(db, "court_cases")?.columns.find((c) => c.title.trim().toLowerCase() === "det. facility");
+  const labels = (col?.options ?? []).map((o) => o.label.trim()).filter(Boolean);
+  return [...new Set(labels)].sort((a, b) => a.localeCompare(b));
 }
 
 export interface ReceptionDeps {
@@ -692,7 +746,7 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
       boardKeys: activeBoardKeys(),
       boardBadges: new Map(boards.map((b) => [b.boardKey, b.displayName])),
     });
-    res.json({ data: { from, to, today, consults } });
+    res.json({ data: { from, to, today, consults, detentionFacilities: getDetentionFacilities(db) } });
   });
 
   app.post("/api/reception/consults/:localId/prep", requireAuth, async (req, res) => {
@@ -839,6 +893,7 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
     const descCol = colByTitle(apptSchema, "description", ["long_text", "text"]);
     const profileRaw = parseJson(appt.profileRaw);
     const folderCol = (kind: FolderKind) => colByTitle(profileSchema, FOLDER_COLUMN_TITLES[kind], ["text", "link"]);
+    const dmsCol = colByTitle(profileSchema, "dms url", ["text"]);
     const steps = planPrepWriteBack(
       prep,
       {
@@ -846,6 +901,7 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
         appointmentDescription: textOf(apptCv.description),
         keepClient,
         profileFolders: { e_file: textOf(profileRaw.e_file), consult_file: textOf(profileRaw.consult_file) },
+        profileDmsUrl: textOf(profileRaw.dms_url),
       },
       {
         profilePhone: phoneCol?.type === "text" ? phoneCol.columnId : null,
@@ -855,6 +911,7 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
           e_file: folderCol("e_file")?.type === "text" ? folderCol("e_file")!.columnId : null,
           consult_file: folderCol("consult_file")?.type === "text" ? folderCol("consult_file")!.columnId : null,
         },
+        profileDmsUrl: dmsCol?.columnId ?? null,
       },
     );
     for (const step of steps) {
@@ -903,6 +960,7 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
         apptType: apptTypeLabel(prep),
         method: prep.method,
         documents: prep.documents.length,
+        dms: !!prep.dmsUrl,
         wroteBack: steps.map((s) => s.field),
         queued: failures,
       },

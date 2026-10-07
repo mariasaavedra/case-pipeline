@@ -24,11 +24,17 @@
 //
 // A Calendly client's own words ("Client wrote") can be corrected too; they
 // replace the client's part of the Description, reception's part stays below.
+//
+// A "Detained appt" picks the detention center from the Court Cases board's
+// Det. Facility labels (D36), "Other" for one not on the list. "Has DMS?"
+// (the old CRM, cases until 2024) adds the client's DMS record to the note —
+// the profile's DMS URL, else one built from the Case No.
 // =============================================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   APPT_TYPES,
+  DMS_RECORD_BASE,
   INTERPRETER_NEEDS,
   PREP_METHODS,
   attachConsultFile,
@@ -80,7 +86,7 @@ const menuItemStyle = {
 
 const menuHintStyle = { display: "block", fontSize: 11, color: "var(--color-ink-faint)", marginTop: 1 } as const;
 
-/** A required pick from a fixed list (D23 type of appt, D24 how to proceed). */
+/** A required pick from a fixed list (D23 type of appt, D24 how to proceed, D36 detention center). */
 function Dropdown<T extends string>({ options, value, onChange, label, code }: {
   options: readonly T[]; value: T | ""; onChange: (v: T) => void; label: string; code: string;
 }) {
@@ -150,8 +156,20 @@ const INTERPRETER_HINT: Record<InterpreterNeed, string> = {
   "Other language": "The client brings their own interpreter.",
 };
 
+/** "Other" in the detention-center list: a place typed in. */
+const OTHER_FACILITY = "Other";
+
+/** The DMS link to start from: the profile's (when it names a record), else one built from the Case No. */
+function defaultDmsUrl(profile: ReceptionConsult["profile"]): string {
+  if (profile?.dmsUrl && /\/records\/\d+/.test(profile.dmsUrl)) return profile.dmsUrl;
+  const digits = (profile?.caseNo ?? "").replace(/\D/g, "");
+  return digits ? `${DMS_RECORD_BASE}${digits}` : DMS_RECORD_BASE;
+}
+
 interface Props {
   consult: ReceptionConsult;
+  /** Det. Facility labels on the Court Cases board, for "Detained appt". */
+  facilities: string[];
   /** Open the appointment's focus view (M5) on top, to read the notes while prepping. */
   onFocus?: () => void;
   onClose: () => void;
@@ -159,7 +177,7 @@ interface Props {
   onSaved: () => void;
 }
 
-export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) {
+export function ConsultPrepModal({ consult, facilities, onFocus, onClose, onSaved }: Props) {
   const profile = consult.profile;
   const startPhone = profile?.phone ?? consult.phone ?? "";
   // A Calendly booking's Description is the client's own words: they stay, read
@@ -172,7 +190,16 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
   const [apptType, setApptType] = useState<ApptType | "">("");
   const [apptTypeOther, setApptTypeOther] = useState("");
   // Pre-filled from the client's open court case; reception checks it, not types it.
-  const [detainedAt, setDetainedAt] = useState(consult.detainedAt ?? "");
+  // A facility not on the list (renamed, or typed in Monday) starts as Other.
+  const facilityOptions = useMemo(() => [...facilities.filter((f) => f !== OTHER_FACILITY), OTHER_FACILITY], [facilities]);
+  const startFacility = consult.detainedAt
+    ? facilities.includes(consult.detainedAt) ? consult.detainedAt : OTHER_FACILITY
+    : "";
+  const [facility, setFacility] = useState(startFacility);
+  const [facilityOther, setFacilityOther] = useState(startFacility === OTHER_FACILITY ? consult.detainedAt ?? "" : "");
+  const detainedAt = facility === OTHER_FACILITY ? facilityOther : facility;
+  const [hasDms, setHasDms] = useState(false);
+  const [dmsUrl, setDmsUrl] = useState(() => defaultDmsUrl(profile));
   const [method, setMethod] = useState<PrepMethod | "">("");
   const [phone, setPhone] = useState(startPhone);
   const [zoomLink, setZoomLink] = useState("");
@@ -345,6 +372,11 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
 
   const submit = async () => {
     if (!apptType) { setError("Pick the type of appointment."); return; }
+    if (apptType === "Detained appt" && !detainedAt.trim()) {
+      setError(facility === OTHER_FACILITY ? "Type where the client is detained." : "Pick where the client is detained.");
+      return;
+    }
+    if (hasDms && !/\/records\/\d+/.test(dmsUrl)) { setError("Add the client's DMS record number to the link, or untick Has DMS."); return; }
     if (!method) { setError("Pick how the consult will happen."); return; }
     if (!interpNeed) { setError("Pick whether the client needs an interpreter."); return; }
     setSaving(true);
@@ -368,6 +400,7 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
           const url = changed[kind];
           return url ? [{ kind, url, replaces: original(kind) ?? undefined }] : [];
         }),
+        dmsUrl: hasDms ? dmsUrl.trim() : undefined,
       });
       setDone({ pending: res.pending, wroteBack: res.wroteBack });
       onSaved();
@@ -410,6 +443,7 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                 {done.wroteBack.includes("description") && <li>Appointment description updated</li>}
                 {done.wroteBack.includes("e_file") && <li>Profile E-File link updated</li>}
                 {done.wroteBack.includes("consult_file") && <li>Profile Consult File link updated</li>}
+                {done.wroteBack.includes("dms_url") && <li>Profile DMS URL saved</li>}
               </ul>
               {picked.length > 0 && (
                 <div style={{ marginBottom: 8 }}>
@@ -450,9 +484,14 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                     className="mt-2 w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
                 )}
                 {apptType === "Detained appt" && (
-                  <input type="text" value={detainedAt} onChange={(e) => setDetainedAt(e.target.value)} maxLength={200}
-                    placeholder="Where are they detained? (e.g. Chase Co. (KS))" aria-label="Where is the client detained" autoFocus
-                    className="mt-2 w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
+                  <div className="mt-2">
+                    <Dropdown options={facilityOptions} value={facility} onChange={setFacility} label="Detention center" code="D36" />
+                    {facility === OTHER_FACILITY && (
+                      <input type="text" value={facilityOther} onChange={(e) => setFacilityOther(e.target.value)} maxLength={200}
+                        placeholder="Where are they detained?" aria-label="Where is the client detained" autoFocus
+                        className="mt-2 w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
+                    )}
+                  </div>
                 )}
                 {apptType === "Detained appt" && consult.detainedAt && detainedAt.trim() === consult.detainedAt && (
                   <span style={hintStyle}>From the client's open court case (Det. Facility) — change it if they have moved.</span>
@@ -498,6 +537,30 @@ export function ConsultPrepModal({ consult, onFocus, onClose, onSaved }: Props) 
                   </div>
                 )}
                 {interpNeed && INTERPRETER_HINT[interpNeed] && <span style={hintStyle}>{INTERPRETER_HINT[interpNeed]}</span>}
+              </div>
+
+              {/* Has DMS? — the old CRM, cases until 2024 */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: "var(--font-body)", color: "var(--color-ink)", cursor: "pointer" }}>
+                  <input type="checkbox" checked={hasDms} onChange={(e) => setHasDms(e.target.checked)} disabled={!profile} />
+                  Has DMS?
+                  <span style={{ fontSize: 11, color: "var(--color-ink-faint)" }}>(optional — cases until 2024)</span>
+                </label>
+                {hasDms && (
+                  <>
+                    <input type="url" value={dmsUrl} onChange={(e) => setDmsUrl(e.target.value)} maxLength={500}
+                      placeholder={`${DMS_RECORD_BASE}21164`} aria-label="DMS URL"
+                      className="mt-2 w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
+                    <span style={hintStyle}>
+                      {profile?.dmsUrl && /\/records\/\d+/.test(profile.dmsUrl)
+                        ? "From the client's profile (DMS URL)."
+                        : profile?.caseNo
+                          ? `Built from Case No. ${profile.caseNo} — saved to the profile's DMS URL.`
+                          : "No Case No. on the profile — add the record number at the end."}
+                      {" "}Added to the prep note.
+                    </span>
+                  </>
+                )}
               </div>
 
               {/* Documents */}

@@ -154,6 +154,15 @@ export function getAppointments(
       .map((r) => [r.profileLocalId, buildProfileSummary(r)])
   );
   const caseSummaryMap = batchGetClientCaseSummaries(db, profileIds, profileMap, updatesMap);
+  // The focus view (M5) hides emails by default, so its 20 notes are fetched
+  // on their own: a busy inbox would otherwise push every note out of the
+  // newest 20. Emails ride along from the newest 20 of everything.
+  const notesMap = batchGetClientUpdates(db, profileIds, 20, ["update", "reply", "note", "activity", "custom"]);
+  const entryUpdates = (profileLocalId: string) => {
+    const notes = notesMap.get(profileLocalId) ?? [];
+    const emails = (updatesMap.get(profileLocalId) ?? []).slice(0, 20).filter((u) => u.sourceType === "email");
+    return [...notes, ...emails].sort((a, b) => b.createdAtSource.localeCompare(a.createdAtSource));
+  };
 
   const defaultSnapshot: AppointmentSnapshot = {
     activeCaseCount: 0,
@@ -180,7 +189,7 @@ export function getAppointments(
         ? (snapshotMap.get(profileLocalId) ?? defaultSnapshot)
         : defaultSnapshot,
       updates: profileLocalId
-        ? (updatesMap.get(profileLocalId) ?? []).slice(0, 20)
+        ? entryUpdates(profileLocalId)
         : [],
       caseSummary: profileLocalId ? (caseSummaryMap.get(profileLocalId) ?? null) : null,
     };
