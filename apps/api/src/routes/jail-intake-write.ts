@@ -51,6 +51,17 @@ const INITIAL_STATUS = "New Detainee";
 export const INTAKE_CREATE_STATUSES = [INITIAL_STATUS, "Payment link sent. Waiting on payment"] as const;
 
 /** Loose on purpose — it only catches a phone number or a name typed in the wrong box. */
+/**
+ * The language comes from the Call Log, whose Language labels differ from this
+ * board's: the Call Log has "Spanish" and "Portugese", Jail Intakes has
+ * "Espanol" and "Portuguese". Monday refuses a label the column lacks, so an
+ * unmapped "Spanish" failed the whole create (2026-10-07).
+ */
+const INTAKE_LANGUAGE_LABELS: Record<string, string> = {
+  Spanish: "Espanol",
+  Portugese: "Portuguese",
+};
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** config/boards.yaml keys this route writes. */
@@ -174,7 +185,7 @@ export function planJailIntakeWrite(
   }
 
   const language = str(input.language);
-  if (language) set("language", { label: language });
+  if (language) set("language", { label: INTAKE_LANGUAGE_LABELS[language] ?? language });
 
   const status = str(input.status) || INITIAL_STATUS;
   if (!(INTAKE_CREATE_STATUSES as readonly string[]).includes(status)) {
