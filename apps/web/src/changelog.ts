@@ -14,6 +14,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-07",
+    title: "Appointments is now your day",
+    items: [
+      "Appointments opens on your own calendar for today: one row per client, with the time first. The next one is marked, and any that already started without an outcome say “Needs outcome”. The tabs at the top show another attorney's day.",
+      "Click a client to see what reception prepared (type of appointment, Zoom or phone, interpreter, what the client wrote) and the documents reception picked for the consult. The Notes and E-file / Consult file tabs have the rest.",
+      "After the consult, change the status (click it for every status, or use a quick outcome like Hire or Send G-review link) — it changes right away. A detainee consult is marked Detained, and its quick outcomes are Det Hire / Det No Hire. Write your consult note and press Save consult note; it goes on the client's profile as a Consult note, and the Consultation Summary (with your note) is written to the client's CONSULT folder in SharePoint right away. + New contract opens the contract form with the client already filled in.",
+      "The page refreshes itself every minute, so what reception prepares shows up without reloading.",
+      "Admins: link each attorney to their board in Settings → Users → Attorney board, so the page opens on the right calendar.",
+    ],
+  },
+  {
     date: "2026-10-02",
     title: "Arrange the sidebar your way",
     items: [

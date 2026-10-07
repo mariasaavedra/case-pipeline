@@ -316,6 +316,17 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    // P4 My Day opens on the signed-in attorney's own appointment board. The
+    // board's Attorney column is too sparsely filled to match on, so the link is
+    // to the board itself (attorney-boards.json boardKey), set by an admin.
+    version: 12,
+    up: () => {
+      if (!columnExists("users", "attorney_board")) {
+        usersDb.exec(`ALTER TABLE users ADD COLUMN attorney_board TEXT`);
+      }
+    },
+  },
 ];
 
 const TARGET_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
@@ -382,4 +393,6 @@ export interface UserRow {
   // v10 — personal Monday token rejected by Monday (needs re-consent)
   monday_token_rejected_at: string | null;
   monday_token_error: string | null;
+  // v12 — the attorney appointment board P4 My Day opens on (boardKey)
+  attorney_board: string | null;
 }

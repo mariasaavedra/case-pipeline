@@ -29,6 +29,7 @@ export const AUDIT_FAMILIES: { group: string; options: AuditActionFamily[] }[] =
       { value: "monday.contract_created", label: "Contracts created" },
       { value: "monday.jail_intake_created", label: "Jail intakes created" },
       { value: "monday.client_released", label: "Released from detention" },
+      { value: "monday.consult_note_posted", label: "Consult notes" },
     ],
   },
   {
@@ -107,6 +108,8 @@ export function describeAudit(action: string, metadata: unknown): AuditDescripti
       const where = Array.isArray(m.facilities) ? m.facilities.filter((f) => typeof f === "string").join(", ") : null;
       return d(`Marked released${where ? ` from ${where}` : ""}`, str(m.releasedOn) ? `Released ${m.releasedOn}` : null);
     }
+    case "monday.consult_note_posted":
+      return d("Wrote a consult note", m.queued ? "Queued — Monday was unreachable" : null);
     case "doc.generated":
       return d("Generated a document", str(m.template) ? `Template ${quoted(m.template)}` : null);
     case "mail.scan":

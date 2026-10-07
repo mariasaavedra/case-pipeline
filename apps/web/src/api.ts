@@ -2,7 +2,7 @@
 // API Client — Typed fetch wrappers
 // =============================================================================
 
-import type { SearchResult, ClientCaseSummary, ClientUpdate, KpiCard, KpiCardDetail, TypedSearchResult, SearchType, BoardStatusOptions, BoardColumns } from "@case-pipeline/query/types";
+import type { SearchResult, ClientCaseSummary, ProfileSummary, ClientUpdate, KpiCard, KpiCardDetail, TypedSearchResult, SearchType, BoardStatusOptions, BoardColumns } from "@case-pipeline/query/types";
 import type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
@@ -762,6 +762,8 @@ export interface AttorneyBoard {
   boardKey: string;
   mondayBoardId: string;
   displayName: string;
+  /** The attorney's full name as Monday's Attorney column has it, when set. */
+  attorneyName?: string;
   active: boolean;
 }
 
@@ -973,6 +975,8 @@ export interface PublicUser {
   timezone: string | null;
   active: number;
   paralegal_link: string | null;
+  /** The attorney appointment board P4 My Day opens on (boardKey). */
+  attorney_board: string | null;
   phone_ext: string | null;
   login_count: number;
   last_active_at: string | null;
@@ -1128,7 +1132,7 @@ export function fetchUserPresence(): Promise<UserPresence[]> {
 }
 export function updateAdminUser(
   id: number,
-  patch: { job_title?: string | null; paralegal_link?: string | null; active?: boolean },
+  patch: { job_title?: string | null; paralegal_link?: string | null; attorney_board?: string | null; active?: boolean },
 ): Promise<PublicUser> {
   return apiFetch<PublicUser>(`/api/admin/users/${id}`, {
     method: "PATCH",
@@ -1267,6 +1271,83 @@ export interface ReceptionConsult {
   detainedAt: string | null;
   /** Other consults for the same client on the same day (a likely double booking). */
   sameDayCount: number;
+}
+
+// ---- P4 My Day -------------------------------------------------------------
+
+/** What reception prepared for a consult (M18), as P4 shows it. */
+export interface MyDayPrep {
+  at: string;
+  author: string | null;
+  pending: boolean;
+  apptType: string;
+  method: "Phone" | "Zoom" | "Other";
+  /** The number, the Zoom link, or the "specify" text. */
+  methodDetail: string | null;
+  interpreter: string;
+  interpreterNeeded: boolean;
+  description: string;
+  documents: Array<{ name: string; url: string }>;
+}
+
+export interface MyDayEntry {
+  localId: string;
+  mondayItemId: string | null;
+  boardKey: string;
+  name: string;
+  status: string | null;
+  date: string | null;
+  time: string | null;
+  language: string | null;
+  phone: string | null;
+  clientWrote: string | null;
+  description: string | null;
+  detainedAt: string | null;
+  sameDayCount: number;
+  prep: MyDayPrep | null;
+  profile: ProfileSummary | null;
+  updates: ClientUpdate[];
+  caseSummary: ClientCaseSummary | null;
+}
+
+export interface MyDayResult {
+  date: string;
+  today: string;
+  boardKey: string | null;
+  /** The caller's own board (linked in Settings → Users, else matched by name). */
+  myBoard: string | null;
+  boards: Array<{ boardKey: string; displayName: string; attorneyName: string | null }>;
+  entries: MyDayEntry[];
+}
+
+export function fetchMyDay(board?: string, date?: string): Promise<MyDayResult> {
+  const params = new URLSearchParams();
+  if (board) params.set("board", board);
+  if (date) params.set("date", date);
+  const qs = params.toString();
+  return apiFetch<MyDayResult>(`/api/my-day${qs ? `?${qs}` : ""}`);
+}
+
+/**
+ * What became of the post-consult process (the Consultation Summary in the
+ * client's SharePoint CONSULT folder) the note starts: "disabled" when the
+ * server has consult folders switched off.
+ */
+export type ConsultSummaryStart = "started" | "already-running" | "disabled" | "failed";
+
+/**
+ * The attorney's consult note → a "Consult note" E&A entry on the client's
+ * profile, which also starts the post-consult process.
+ */
+export function postConsultNote(
+  appointmentLocalId: string,
+  note: string,
+): Promise<{ posted: true; pending: boolean; summary: ConsultSummaryStart }> {
+  return apiFetch(`/api/appointments/${encodeURIComponent(appointmentLocalId)}/consult-note`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+  });
 }
 
 export interface ReceptionConsultsResult {

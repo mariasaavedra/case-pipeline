@@ -6,6 +6,14 @@
 //   npm run consult:sweep                 # dry run, last 45 days
 //   npm run consult:sweep -- --apply      # act
 //   npm run consult:sweep -- --days=90 --apply
+//   npm run consult:sweep -- --appointment=<localId> --apply   # one consult (P4)
+//
+// One-consult mode is what P4 runs the moment an attorney saves a consult note
+// (apps/api/src/routes/my-day.ts): that appointment only, Calendly or not, with
+// the note handed over in CONSULT_NOTE_TEXT / _AUTHOR / _DATE — it has just been
+// posted to Monday, so live.db won't hold it until the next E&A sync. A note
+// being written is proof the consult took place, so only a cancellation or
+// no-show status stops the summary.
 //
 // Runs against live.db to find candidates, then verifies each one against
 // SharePoint and Monday directly before doing anything. It is safe to run
@@ -64,6 +72,44 @@ function loadCandidates(db: Database.Database, days: number): SweepCandidate[] {
       ORDER BY consultDate DESC
     `)
     .all(...boards, since) as SweepCandidate[];
+}
+
+/** One appointment, whatever its board marks it as (P4's consult note). */
+function loadOne(db: Database.Database, appointmentLocalId: string): SweepCandidate[] {
+  return db
+    .prepare(`
+      SELECT
+        bi.profile_local_id                                   AS profileLocalId,
+        p.monday_item_id                                      AS profileMondayId,
+        p.name                                                AS profileName,
+        json_extract(p.raw_column_values, '$.first_name')     AS firstName,
+        json_extract(p.raw_column_values, '$.last_name')      AS lastName,
+        COALESCE(json_extract(bi.column_values, '$.consult_date.date'), bi.next_date) AS consultDate,
+        bi.status                                             AS apptStatus,
+        p.raw_column_values                                   AS profileJson,
+        bi.column_values                                      AS apptJson,
+        COALESCE(
+          NULLIF(TRIM(COALESCE(json_extract(bi.column_values, '$.consult_sharepoint'), '')), ''),
+          NULLIF(TRIM(COALESCE(json_extract(p.raw_column_values, '$.consult_file'), '')), ''),
+          NULLIF(TRIM(COALESCE(json_extract(p.raw_column_values, '$.e_file'), '')), '')
+        )                                                     AS existingLink
+      FROM board_items bi
+      JOIN profiles p ON p.local_id = bi.profile_local_id
+      WHERE bi.local_id = ? AND bi.board_key LIKE 'appointments\\_%' ESCAPE '\\'
+    `)
+    .all(appointmentLocalId) as SweepCandidate[];
+}
+
+/** The note P4 just posted, which live.db does not hold yet. */
+function noteFromEnv(): TimelineNote | null {
+  const text = process.env.CONSULT_NOTE_TEXT?.trim();
+  if (!text) return null;
+  return {
+    activityType: "Consult note",
+    text,
+    author: process.env.CONSULT_NOTE_AUTHOR?.trim() || null,
+    date: process.env.CONSULT_NOTE_DATE?.trim() || new Date().toISOString().slice(0, 10),
+  };
 }
 
 /**
@@ -141,6 +187,7 @@ async function maybeWriteConsultDoc(
   c: SweepCandidate,
   folder: ConsultDocFolder,
   timeline: TimelineNote[],
+  happened: (status: string | null) => boolean,
 ) {
   if (!isDocSite(folder.site) || !c.consultDate) return null;
 
@@ -167,7 +214,7 @@ async function maybeWriteConsultDoc(
     },
     (vars) => renderDocxTemplate(consultTemplate(), vars),
     // The document waits for the consultation to have taken place.
-    { writeDocument: consultOutcome(c.apptStatus) === "proceeded", account: cachedAccount() },
+    { writeDocument: happened(c.apptStatus), account: cachedAccount() },
   );
 }
 
@@ -177,8 +224,17 @@ async function main() {
   const dbPath = (arg("db") ?? "live") === "live" ? "data/live.db" : "data/seed.db";
 
   const db = new Database(dbPath, { readonly: true });
-  const candidates = loadCandidates(db, days);
+  const one = arg("appointment");
+  const candidates = one ? loadOne(db, one) : loadCandidates(db, days);
   const notesByProfile = loadTimelineNotes(db, [...new Set(candidates.map((c) => c.profileLocalId))]);
+  const fresh = one ? noteFromEnv() : null;
+  if (fresh && candidates[0]) {
+    notesByProfile.set(candidates[0].profileLocalId, [...(notesByProfile.get(candidates[0].profileLocalId) ?? []), fresh]);
+  }
+  // Whether the consultation took place. One-consult mode comes with a note,
+  // which says it did unless the status says it never happened.
+  const happened = (status: string | null) =>
+    fresh ? consultOutcome(status) !== "did-not-happen" : consultOutcome(status) === "proceeded";
 
   const token = process.env.MONDAY_API_TOKEN?.trim();
   if (apply) {
@@ -190,7 +246,10 @@ async function main() {
   }
 
   const auth = graphAuthFromEnv();
-  console.log(`[sweep] ${candidates.length} Calendly consults in the last ${days} days`);
+  console.log(one
+    ? `[sweep] one consult: ${candidates[0]?.profileName ?? `appointment ${one} not found`}${fresh ? " (with the note just saved)" : ""}`
+    : `[sweep] ${candidates.length} Calendly consults in the last ${days} days`);
+  if (one && !candidates.length) process.exitCode = 1;
   console.log(`[sweep] ${apply ? "APPLY" : "dry run"} — ${auth.describe()}`);
 
   const tally = { linked: 0, created: 0, skipped: 0, failed: 0, docs: 0 };
@@ -214,7 +273,7 @@ async function main() {
       // consult (by an earlier sweep, or by reception). Nothing to create; just
       // make sure the summary is in that folder once the consult has happened.
       if (c.existingLink) {
-        if (consultOutcome(c.apptStatus) !== "proceeded") {
+        if (!happened(c.apptStatus)) {
           tally.skipped++;
           continue;
         }
@@ -228,13 +287,13 @@ async function main() {
           console.log(`  would ensure summary  ${folder.site}: ${folder.path}/CONSULT   [${c.profileName}]`);
           continue;
         }
-        const doc = await maybeWriteConsultDoc(auth, c, folder, notesByProfile.get(c.profileLocalId) ?? []);
+        const doc = await maybeWriteConsultDoc(auth, c, folder, notesByProfile.get(c.profileLocalId) ?? [], happened);
         reportDoc(doc, c, `${folder.site}: ${folder.path}`);
         if (!doc || doc.kind === "unchanged" || doc.kind === "left-alone") tally.skipped++;
         continue;
       }
 
-      const decision = await decide(auth, c);
+      const decision = await decide(auth, c, { noteWritten: !!fresh });
       if (decision.action.kind === "skip") {
         tally.skipped++;
         receipt.push(row(["skip", c.profileName, c.profileMondayId, "", "", decision.action.reason]));
@@ -271,7 +330,7 @@ async function main() {
 
       // The CONSULT subfolder and its summary — in Consults or E-Files, never Closed.
       const site = decision.action.kind === "link" ? decision.action.site : CONSULTS_SITE;
-      const doc = await maybeWriteConsultDoc(auth, c, { site, path }, notesByProfile.get(c.profileLocalId) ?? []);
+      const doc = await maybeWriteConsultDoc(auth, c, { site, path }, notesByProfile.get(c.profileLocalId) ?? [], happened);
       reportDoc(doc, c, `${site}: ${path}`);
     } catch (err) {
       tally.failed++;

@@ -109,9 +109,18 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Notes |
 |---|---|---|
-| P4.1 | Controls | Board/list, attorney focus, date range, detail level |
-| P4.2 | Attorney boards | One column per attorney, or one attorney full width |
-| P4.3 | Appointment list | List view, grouped by date. Click an appointment → M5 |
+"My Day" (2026-10-07): one attorney's appointments for one day. Opens on the
+signed-in attorney's board (Settings → Users → **Attorney board**, else matched
+by name); the board tabs switch to another attorney.
+
+| Code | Name | Notes |
+|---|---|---|
+| P4.1 | Header | Greeting, the day's summary, ‹ Today › and a date picker, one tab per attorney board ("(you)" on your own), progress bar |
+| P4.2 | *Attorney boards* | Retired 2026-10-07 (the all-attorneys board view) |
+| P4.3 | *Appointment list* | Retired 2026-10-07 (the list view) |
+| P4.4 | The day | One row per appointment: time, client, type, Prepped / Not prepped, and Next / Needs outcome / the outcome; a "now" line. Layout follows the page's width: three columns on a laptop; on a tablet the day is a narrow column of times beside P4.5 and P4.6; on a phone the day is one screen and a client opens as the next (**← All appointments** goes back) |
+| P4.5 | The client | Time · type of appt, then Zoom / phone / interpreter / detained pills (each fact once), **Open full file**; tabs **Consult prep** (who prepped and when, reception's description, Client wrote, and **Documents**: only the files reception picked in M18), **Notes**, **E-file / Consult file** (the client's SharePoint folders; a file → M12) |
+| P4.6 | After the consult | **Status** → D6 (every label on the board, in Monday's colors) and **Quick outcome** buttons: Hire, No Hire, No Hire for Now, Hold for Docs, No Action Needed, Send G-review link (as the board spells them; one the board lacks is left out); both change the status at once. A **detainee consult** (prepped as "Detained appt", status "…(detainee)", or a Det. Facility on the open court case) is flagged — red **Detained** tag on its P4.4 row and a banner here — and its Hire / No Hire become **Det Hire / Det No Hire**. **Consult note** (E&A "Consult note" on the profile), **Save consult note**, which also starts the post-consult process (Consultation Summary into the client's CONSULT folder); **+ New contract** → M11 with the client picked |
 
 ### Inside P5 Active Cases
 
@@ -223,7 +232,7 @@ Four tabs, each with its own URL (`/settings/<tab>`); `/settings` opens My accou
 | P11.3.3 | Urgency | |
 | P11.3.4 | Documents | Firm address/phone/fax, attorneys (email, USCIS account, bars — first is used), detention facility addresses by Det. Facility label — what M23 fills that Monday doesn't hold |
 | P11.4 | **Admin** tab *(admin)* | `/settings/admin` |
-| P11.4.1 | Users | |
+| P11.4.1 | Users | Per user: paralegal name (My Cases), **attorney board** (P4 opens on it), role, disable |
 | P11.4.2 | Sync health | |
 | P11.4.3 | Audit log: filter by what / who / dates, grouped by day, client names link to their page | |
 
@@ -245,14 +254,14 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M2 | Log a call | "Log a call" / "Edit call" | Top bar **+ Log call** (every page); P10 → pencil on a row | `LogCallModal.tsx` |
 | M3 | Client case | The client's name (360 header) | Any client name outside P2 — opens over the current page as `?client=<id>`, Back closes it (`ClientPeek.tsx`); inside M2 → "View profile" after picking a linked client (opens on top of M2); P10 → a row's client | `ClientCaseModal.tsx` |
 | M4 | Call notes | "Notes — *name*" | P10 → notes on a row | `CallNotesModal.tsx` |
-| M5 | Appointment detail | The client's name | P4 → click an appointment / **Focus**; P17.2 → **Focus**; M18 → "Focus view — notes & documents" (opens on top) | `AppointmentModal.tsx` |
-| M6 | Client notes | The client's name | P4 → "Open in modal" under a row's notes | `NotesModal.tsx` |
+| M5 | Appointment detail | The client's name | P17.2 → **Focus**; M18 → "Focus view — notes & documents" (opens on top) | `AppointmentModal.tsx` |
+| M6 | *Client notes* | — | Retired 2026-10-07 with the old P4 (notes are P4.5's Notes tab) | — |
 | M7 | Day agenda | The date | P7 → click a day | `CalendarPage.tsx` (`DayModal`) |
 | M8 | New jail intake | "New jail intake" | P9 → **+ New intake**. Intake status (New Detainee / Payment link sent. Waiting on payment) + optional POC e-mail — the same fields as M2's "this call is a jail intake" | `NewJailIntakeModal.tsx` |
 | M9 | Jail intake detail | The detainee's name | P9 → click an intake. The status chip changes the status (D6). A paid intake ("Needs to be scheduled") shows **Book consult**: attorney + date + time → saved to Monday, then a link to press Create Appt there | `JailIntakeDetailModal.tsx` |
 | M10 | Book a consult | "Book a consult" | P3.2; P17.1 **+ Book Appt** (starts with a client search). 30-minute time slots; "Needs to pay?" shown disabled (under construction) | `NewAppointmentModal.tsx` |
-| M11 | New contract | "New contract (Fee K)" | P3.3; P14.1 (starts with a client search) | `NewContractModal.tsx` |
-| M12 | File preview | The file name | P3.6; the documents section of M5 | `FilePreviewModal.tsx` |
+| M11 | New contract | "New contract (Fee K)" | P3.3; P4.6 **+ New contract**; P14.1 (starts with a client search) | `NewContractModal.tsx` |
+| M12 | File preview | The file name | P3.6; P4.5 Documents; the documents section of M5 | `FilePreviewModal.tsx` |
 | M13 | Entry editor | The entry's name | P3.8 (admin) | `EntryEditorModal.tsx` |
 | M14 | What's new | Changelog | Version badge on P1 Home / P0 Sign in | `VersionBadge.tsx` |
 | M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
@@ -274,7 +283,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D3 | Relief card menu | P3.0 → Relief card | `ClientSnapshot.tsx` |
 | D4 | Next action card menu | P3.0 → Next action card | `ClientSnapshot.tsx` |
 | D5 | Timeline date range | P3.1 → date range filter | `TimelineFilters.tsx` |
-| D6 | Status picker | P10 row status; M13; M9 intake status | `StatusEditor.tsx` |
+| D6 | Status picker | P10 row status; M13; M9 intake status; P4.6 appointment status | `StatusEditor.tsx` |
 | D7 | Highlighted For picker | P10 row | `HighlightedForEditor.tsx` |
 | D8 | Status filter | P2.3 | `FilterBar.tsx` |
 | D9 | Attorney filter | P2.3 | `FilterBar.tsx` |

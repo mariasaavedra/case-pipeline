@@ -164,6 +164,18 @@ For each Calendly consultation in the last `CONSULT_SWEEP_DAYS` days:
    it lives. Otherwise **create** it in SCAL Consults and record it. Then the
    summary, as in step 1.
 
+**Right after an attorney's note (P4).** Saving a consult note on P4
+Appointments runs the sweep for that one appointment at once
+(`npm run consult:sweep -- --appointment=<localId> --apply`, started by
+`apps/api/src/consult-summary.ts`) instead of waiting up to two hours. The
+note is handed over in `CONSULT_NOTE_TEXT` / `_AUTHOR` / `_DATE`, because it
+was just posted to Monday and live.db won't hold it until the next E&A sync.
+That run takes the appointment whether or not it came from Calendly, and treats
+the note as proof the consult took place: only a cancellation or no-show status
+stops it. Everything else is the same path — find / link / create the folder,
+write the summary once, never touch a document someone edited. Off unless
+`CONSULT_FOLDERS=on`.
+
 **Receipts.** Any run that creates, links, writes a summary or fails leaves a
 CSV in `data/receipts/consult-sweep-<timestamp>.csv` — under `data/` because
 that is the directory mounted from the host, so receipts survive a redeploy.

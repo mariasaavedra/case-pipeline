@@ -42,6 +42,7 @@ function UsersSection() {
   const { user } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [boardPeople, setBoardPeople] = useState<string[]>([]);
+  const [attyBoards, setAttyBoards] = useState<AttorneyBoard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<number | null>(null);
@@ -65,6 +66,7 @@ function UsersSection() {
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
     getParalegals().then(setBoardPeople).catch(() => {});
+    fetchAttorneyBoards().then((b) => setAttyBoards(b.filter((x) => x.active))).catch(() => {});
   }, []);
 
   async function toggleRole(target: UserRow) {
@@ -85,7 +87,7 @@ function UsersSection() {
     }
   }
 
-  async function patchUser(target: UserRow, patch: { paralegal_link?: string | null; active?: boolean }) {
+  async function patchUser(target: UserRow, patch: { paralegal_link?: string | null; attorney_board?: string | null; active?: boolean }) {
     setUpdating(target.id);
     try {
       const updated = await updateAdminUser(target.id, patch);
@@ -102,7 +104,8 @@ function UsersSection() {
       <h2 style={styles.sectionTitle}>Users<SectionCode code="P11.4.1" inline /></h2>
       <p style={styles.sectionDesc}>
         Users sign in with their firm Microsoft account (created as a regular user on first login).
-        Promote to admin, link them to their board name for “My Cases”, or disable access here.
+        Promote to admin, link them to their board name for “My Cases”, link an attorney to the
+        appointment board Appointments opens on for them, or disable access here.
       </p>
 
       {error && <div style={styles.errorBox}>{error}</div>}
@@ -187,6 +190,23 @@ function UsersSection() {
                 ))}
                 {u.paralegal_link && !boardPeople.includes(u.paralegal_link) && (
                   <option value={u.paralegal_link}>{u.paralegal_link}</option>
+                )}
+              </select>
+
+              {/* Admin-assigned attorney board (P4 Appointments opens on it) */}
+              <select
+                value={u.attorney_board ?? ""}
+                onChange={(e) => patchUser(u, { attorney_board: e.target.value || null })}
+                disabled={updating === u.id}
+                style={{ ...styles.select, maxWidth: 150 }}
+                title="The attorney appointment board Appointments opens on for this user"
+              >
+                <option value="">— attorney board —</option>
+                {attyBoards.map((b) => (
+                  <option key={b.boardKey} value={b.boardKey}>{b.attorneyName ?? b.displayName} ({b.displayName})</option>
+                ))}
+                {u.attorney_board && !attyBoards.some((b) => b.boardKey === u.attorney_board) && (
+                  <option value={u.attorney_board}>{u.attorney_board}</option>
                 )}
               </select>
 
