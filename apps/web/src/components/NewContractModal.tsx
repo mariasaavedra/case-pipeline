@@ -31,9 +31,11 @@ interface Props {
   profileLocalId?: string;
   clientName?: string;
   onClose: () => void;
+  /** Told once the contract is created (or queued), e.g. so P4 can show it. */
+  onCreated?: (contract: { name: string; pending: boolean }) => void;
 }
 
-export function NewContractModal({ profileLocalId, clientName, onClose }: Props) {
+export function NewContractModal({ profileLocalId, clientName, onClose, onCreated }: Props) {
   const clientFixed = profileLocalId != null;
   const [client, setClient] = useState<{ localId: string; name: string } | null>(
     profileLocalId != null ? { localId: profileLocalId, name: clientName ?? "" } : null,
@@ -73,6 +75,7 @@ export function NewContractModal({ profileLocalId, clientName, onClose }: Props)
     try {
       const res = await createContract(client.localId, toCreateContractInput(fields));
       setDone({ name: res.name, pending: res.pending });
+      onCreated?.({ name: res.name, pending: res.pending });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create contract");
     } finally {

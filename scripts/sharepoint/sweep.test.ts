@@ -94,6 +94,17 @@ describe("decide — what the sweep will do", () => {
     }
   });
 
+  it("trusts an attorney's fresh consult note over an unrecognised status, but never over a no-show", async () => {
+    // P4: the note is proof the consult took place, whatever the board says.
+    stubGraph(() => false);
+    for (const status of ["Some New Label", "Scheduled by Staff", null]) {
+      const d = await decide(auth, candidate({ apptStatus: status }), { noteWritten: true });
+      expect(d.action.kind, `${status}`).toBe("create");
+    }
+    const noShow = await decide(auth, candidate({ apptStatus: "Cancelled/No Show" }), { noteWritten: true });
+    expect(noShow.action.kind).toBe("skip");
+  });
+
   it("DOES make a folder for a consult that is merely upcoming", async () => {
     // The attorney needs somewhere to put material during the meeting. The
     // document waits until the consult has actually taken place.

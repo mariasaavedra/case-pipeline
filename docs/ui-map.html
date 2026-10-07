@@ -118,11 +118,12 @@ const PAGES = [
     { code:"P3.7", name:"Relations tab" },
     { code:"P3.8", name:"Debug tab", admin:true, pops:[ { code:"M13", name:"Entry editor", pops:[ { code:"D6", name:"Status picker" } ] } ] } ] },
   { code:"P4", name:"Appointments", path:"/appointments", items:[
-    { code:"P4.1", name:"Controls", note:"board/list, attorney focus, range, detail" },
-    { code:"P4.2", name:"Attorney boards", note:"one column per attorney, or one full width" },
-    { code:"P4.3", name:"Appointment list", note:"list view, grouped by date" } ], pops:[
-    { code:"M5", name:"Appointment detail", note:"click an appointment; has notes and documents", pops:[ { code:"M12", name:"File preview" } ] },
-    { code:"M6", name:"Client notes", note:"“Open in modal” under a row’s notes" } ] },
+    { code:"P4.1", name:"Header", note:"greeting, ‹ Today ›, one tab per attorney board" },
+    { code:"P4.4", name:"The day", note:"one row per appointment: Next / Needs outcome / outcome" },
+    { code:"P4.5", name:"The client", note:"tabs: Consult prep (with the documents reception picked), Notes, E-file / Consult file" },
+    { code:"P4.6", name:"After the consult", note:"status picker + quick outcome, consult note, + New contract" } ], pops:[
+    { code:"M11", name:"New contract", note:"+ New contract, client already picked" },
+    { code:"M12", name:"File preview", note:"a file in the Documents tab" } ] },
   { code:"P5", name:"Active Cases", path:"/active-cases", items:[
     { code:"P5.1", name:"Header", note:"open / overdue / missing-date counts" },
     { code:"P5.2", name:"Summary table", note:"paralegal rows × urgency counts; click to filter P5.3" },

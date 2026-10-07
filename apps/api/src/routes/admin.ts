@@ -90,6 +90,7 @@ export function handleAdminUpdateUser(req: Request, res: Response): void {
   };
   strField("job_title", "job_title");
   strField("paralegal_link", "paralegal_link");
+  strField("attorney_board", "attorney_board");
 
   if ("active" in body) {
     const active = body.active === true || body.active === 1 ? 1 : 0;

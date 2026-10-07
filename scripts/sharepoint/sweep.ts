@@ -78,7 +78,11 @@ export interface SweepDecision {
  * and asserted in tests — this is the part that, wrong, puts a folder in a
  * client area or a bad URL on a client record.
  */
-export async function decide(auth: GraphAuth, c: SweepCandidate): Promise<SweepDecision> {
+export async function decide(
+  auth: GraphAuth,
+  c: SweepCandidate,
+  opts: { noteWritten?: boolean } = {},
+): Promise<SweepDecision> {
   const skip = (reason: string): SweepDecision => ({ candidate: c, action: { kind: "skip", reason } });
 
   if (c.existingLink) return skip("already recorded");
@@ -87,9 +91,10 @@ export async function decide(auth: GraphAuth, c: SweepCandidate): Promise<SweepD
 
   // A booked consult earns its folder now, so the attorney has somewhere to put
   // things during the meeting. A cancellation or no-show still earns nothing,
-  // and an unrecognised status is still not guessed at.
+  // and an unrecognised status is still not guessed at — unless the attorney
+  // has just written their consult note (P4), which is proof it took place.
   const outcome = consultOutcome(c.apptStatus);
-  if (outcome !== "proceeded" && outcome !== "not-yet") {
+  if (outcome !== "proceeded" && outcome !== "not-yet" && !(opts.noteWritten && outcome !== "did-not-happen")) {
     return skip(`consult ${outcome} (${c.apptStatus ?? "no status"})`);
   }
 

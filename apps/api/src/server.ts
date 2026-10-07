@@ -75,6 +75,7 @@ import { registerProfileWriteRoutes } from "./routes/profile-write.js";
 import { registerDetentionWriteRoutes } from "./routes/detention-write.js";
 import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
 import { registerReceptionRoutes } from "./routes/reception.js";
+import { registerMyDayRoutes } from "./routes/my-day.js";
 import { registerConsultScheduleRoutes } from "./routes/consult-schedule.js";
 import { registerJailIntakeWriteRoutes } from "./routes/jail-intake-write.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
@@ -483,6 +484,7 @@ registerAppointmentWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writ
 registerJailIntakeWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerDetentionWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerReceptionRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerMyDayRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerConsultScheduleRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 
 // =============================================================================

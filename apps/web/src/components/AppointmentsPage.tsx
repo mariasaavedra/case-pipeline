@@ -1,1239 +1,883 @@
 // =============================================================================
-// Appointments Page — Attorney Daily View
+// P4 Appointments — "My Day", one attorney's appointments for one day
 // =============================================================================
 //
-// TODO(monday-write): When editing is enabled, add to each appointment card:
-//   - "Update Status" dropdown (sends PATCH to Monday.com API)
-//   - "Add Note" text input (creates update via Monday.com API)
-//   - "Reschedule" date picker (updates consult_date via Monday.com API)
-// These actions should optimistically update the local UI, then sync to Monday.com.
+// Built for the attorney, not the front desk (P17 is reception's view across
+// attorneys). Three columns:
+//
+//   P4.4 the day        — one row per appointment: time, client, type, Prepped,
+//                         and a tag (Next / Needs outcome / the outcome).
+//   P4.5 the client     — tabs: Consult prep (M18's card + what the client
+//                         wrote + their file), Notes (the timeline), Documents
+//                         (the SharePoint e-file / consult folder browser).
+//   P4.6 after consult  — outcome buttons (the board's own status labels),
+//                         consult note (E&A "Consult note" on the profile),
+//                         and + New contract (M11, client already picked).
+//
+// It opens on the signed-in attorney's board (Settings → Users → Attorney
+// board, else matched by name); the board tabs switch to another attorney.
 // =============================================================================
 
-import { useState, useEffect, useCallback } from "react";
-import { fetchAppointments } from "../api";
-import type { AppointmentsResult, AppointmentEntry, ClientUpdate } from "../api";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { fetchMyDay, changeBoardItemStatus, postConsultNote } from "../api";
+import type { MyDayResult, MyDayEntry } from "../api";
 import { Link } from "./Link";
-import { ClientLink } from "./ClientPeek";
 import { UpdatesTimeline } from "./UpdatesTimeline";
-import { NotesModal } from "./NotesModal";
-import { AppointmentModal } from "./AppointmentModal";
-import { boardDisplayName, appointmentBoardInitials } from "@case-pipeline/query/types";
+import { DocumentsTab } from "./DocumentsTab";
+import { NewContractModal } from "./NewContractModal";
 import { clientPath } from "../router";
 import { SectionCode } from "./ScreenCode";
-
-type DetailLevel = "minimal" | "snapshot" | "full";
-type DateRange = "day" | "week" | "upcoming" | "all" | "calendar";
-type ViewMode = "board" | "list";
-
-const DETAIL_LABELS: { id: DetailLevel; label: string }[] = [
-  { id: "minimal", label: "Minimal" },
-  { id: "snapshot", label: "Snapshot" },
-  { id: "full", label: "Full" },
-];
-
-const RANGE_LABELS: { id: DateRange; label: string }[] = [
-  { id: "day", label: "Today" },
-  { id: "week", label: "This Week" },
-  { id: "upcoming", label: "Upcoming" },
-  { id: "all", label: "All" },
-  { id: "calendar", label: "Pick Date" },
-];
-
-// Color palette cycles for dynamically registered attorney boards.
-// Known boards get a stable slot; unknown ones cycle through the palette.
-const ATTORNEY_PALETTE = [
-  { color: "var(--color-amber)",        bg: "var(--color-amber-light)" },
-  { color: "var(--color-status-blue)",  bg: "var(--color-status-blue-bg)" },
-  { color: "var(--color-status-green)", bg: "var(--color-status-green-bg)" },
-  { color: "var(--color-status-red)",   bg: "var(--color-status-red-bg)" },
-];
-
-function getAttorneyMeta(boardKey: string, index: number) {
-  const slot = ATTORNEY_PALETTE[index % ATTORNEY_PALETTE.length]!;
-  const initial = appointmentBoardInitials(boardKey);
-  return { initial, ...slot };
-}
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatTime(timeStr: string | null): string {
-  if (!timeStr) return "";
-  const [hStr, mStr] = timeStr.split(":");
-  const h = parseInt(hStr ?? "0", 10);
-  const m = mStr ?? "00";
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${m} ${ampm}`;
-}
-
-function getPriorityStyle(priority: string | null): { bg: string; text: string } {
-  switch (priority?.toLowerCase()) {
-    case "high":
-      return { bg: "var(--color-status-red-bg)", text: "var(--color-status-red)" };
-    case "medium":
-      return { bg: "var(--color-status-yellow-bg)", text: "var(--color-status-yellow)" };
-    case "low":
-      return { bg: "var(--color-status-green-bg)", text: "var(--color-status-green)" };
-    default:
-      return { bg: "var(--color-surface-warm)", text: "var(--color-ink-muted)" };
-  }
-}
-
-function getStatusStyle(status: string | null): { bg: string; text: string } {
-  const s = status?.toLowerCase() ?? "";
-  if (s.includes("done") || s.includes("complete")) {
-    return { bg: "var(--color-status-green-bg)", text: "var(--color-status-green)" };
-  }
-  if (s.includes("cancel") || s.includes("no show")) {
-    return { bg: "var(--color-status-red-bg)", text: "var(--color-status-red)" };
-  }
-  if (s.includes("confirm") || s.includes("scheduled")) {
-    return { bg: "var(--color-status-blue-bg)", text: "var(--color-status-blue)" };
-  }
-  return { bg: "var(--color-status-yellow-bg)", text: "var(--color-status-yellow)" };
-}
+import { StatusEditor } from "./StatusEditor";
+import { useBoardStatusOptions } from "../StatusOptionsProvider";
+import { useAuth } from "../auth/useAuth";
+import {
+  formatTime, formatLongDate, addDays, rowStates, nowLineIndex, defaultSelection, outcomeLabels,
+  fileKind, prepStamp, isHttpUrl, detaineeReason, summaryLine, layoutFor, firstName, type RowState, type Layout,
+} from "../lib/my-day";
 
 // =============================================================================
-// URL ↔ State Sync
+// URL + remembered board
 // =============================================================================
 
-function getUrlParam(key: string): string | null {
+const BOARD_PREF = "my-day-board";
+/** How often P4 re-reads the day, so reception's prep shows without a reload. */
+const REFRESH_MS = 60_000;
+
+function urlParam(key: string): string | null {
   return new URL(window.location.href).searchParams.get(key);
 }
 
-function syncUrlParams(params: Record<string, string>) {
+function syncUrl(board: string | null, date: string | null) {
   const url = new URL(window.location.href);
-  const defaults: Record<string, string> = { attorney: "all", range: "day", focus: "all" };
-  for (const [k, v] of Object.entries(params)) {
-    if (v && v !== defaults[k]) {
-      url.searchParams.set(k, v);
-    } else {
-      url.searchParams.delete(k);
-    }
-  }
-  const newPath = url.pathname + url.search;
-  if (window.location.pathname + window.location.search !== newPath) {
-    window.history.replaceState(null, "", newPath);
-  }
+  if (board) url.searchParams.set("board", board); else url.searchParams.delete("board");
+  if (date) url.searchParams.set("date", date); else url.searchParams.delete("date");
+  const next = url.pathname + url.search;
+  if (window.location.pathname + window.location.search !== next) window.history.replaceState(null, "", next);
 }
 
-function loadPreference(key: string, fallback: string): string {
+function remembered(): string | null {
+  try { return localStorage.getItem(BOARD_PREF); } catch { return null; }
+}
+function remember(board: string | null) {
   try {
-    return localStorage.getItem(key) ?? fallback;
-  } catch {
-    return fallback;
-  }
+    if (board) localStorage.setItem(BOARD_PREF, board); else localStorage.removeItem(BOARD_PREF);
+  } catch { /* private window */ }
 }
 
-function savePreference(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {}
+/** "HH:MM" now, re-read every minute so rows move from Next to Needs outcome. */
+function useClock(): string {
+  const read = () => new Date().toTimeString().slice(0, 5);
+  const [now, setNow] = useState(read);
+  useEffect(() => {
+    const t = setInterval(() => setNow(read()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
+/**
+ * The page's own width, not the window's: the sidebar (open, collapsed or
+ * hidden on a phone) changes how much room the columns really have.
+ */
+function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number | null] {
+  const ref = useRef<T | null>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setWidth(Math.round(e!.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, width];
 }
 
 // =============================================================================
-// Compact Card (Board Mode)
+// Small pieces
 // =============================================================================
 
-function CompactStat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex items-center gap-1">
-      <span
-        className="text-[10px]"
-        style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-      >
-        {label}
-      </span>
-      <span
-        className="text-[11px] font-semibold"
-        style={{ color: "var(--color-ink)", fontFamily: "var(--font-mono)" }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
+const card = {
+  background: "var(--color-card)",
+  border: "1px solid var(--color-border)",
+  borderRadius: 16,
+} as const;
 
-function AppointmentCardCompact({
-  entry,
-  onFocus,
-}: {
-  entry: AppointmentEntry;
-  onFocus: (entry: AppointmentEntry) => void;
-}) {
-  const { appointment, profile, snapshot } = entry;
-  const priorityStyle = profile ? getPriorityStyle(profile.priority) : null;
-  const statusStyle = getStatusStyle(appointment.status);
+const eyebrow = {
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase" as const,
+  color: "var(--color-ink-muted)",
+  fontFamily: "var(--font-body)",
+};
 
+const TAG: Record<RowState | "status", { bg: string; fg: string }> = {
+  done: { bg: "var(--color-status-green-bg)", fg: "var(--color-status-green)" },
+  "needs-outcome": { bg: "var(--color-amber-light)", fg: "var(--color-amber-dark)" },
+  next: { bg: "var(--color-amber)", fg: "#ffffff" },
+  later: { bg: "transparent", fg: "var(--color-ink-muted)" },
+  status: { bg: "var(--color-surface-warm)", fg: "var(--color-ink-muted)" },
+};
+
+function Mini({ children, bg, fg, border }: { children: React.ReactNode; bg: string; fg: string; border?: boolean }) {
   return (
-    <div
-      className="card"
+    <span
+      className="inline-flex items-center whitespace-nowrap"
       style={{
-        padding: "12px 14px",
-        overflow: "hidden",
-        borderLeft: "3px solid transparent",
-        borderLeftColor: statusStyle.text,
+        height: 22, padding: "0 8px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: bg, color: fg,
+        border: border ? "1px solid var(--color-border)" : "none", fontFamily: "var(--font-body)",
       }}
     >
-      {/* Status + priority row */}
-      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-        {appointment.status && (
-          <span
-            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-            style={{
-              backgroundColor: statusStyle.bg,
-              color: statusStyle.text,
-              fontFamily: "var(--font-body)",
-            }}
-          >
-            {appointment.status}
-          </span>
-        )}
-        {profile?.priority && priorityStyle && (
-          <span
-            className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
-            style={{
-              backgroundColor: priorityStyle.bg,
-              color: priorityStyle.text,
-              fontFamily: "var(--font-body)",
-            }}
-          >
-            {profile.priority}
-          </span>
-        )}
-        {appointment.nextDate && (
-          <span
-            className="text-[10px] ml-auto"
-            style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono)" }}
-          >
-            {formatDate(appointment.nextDate)}
-            {appointment.nextTime && (
-              <span
-                className="ml-1 font-semibold"
-                style={{ color: "var(--color-amber)" }}
-              >
-                · {formatTime(appointment.nextTime)}
-              </span>
-            )}
-          </span>
-        )}
-      </div>
-
-      {/* Client name */}
-      {profile ? (
-        <ClientLink
-          clientId={profile.localId}
-          className="block text-sm font-semibold hover:underline leading-snug"
-          style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
-        >
-          {profile.displayName || profile.name}
-        </ClientLink>
-      ) : (
-        <span
-          className="block text-sm font-semibold leading-snug"
-          style={{ fontFamily: "var(--font-display)", color: "var(--color-ink-muted)" }}
-        >
-          {appointment.name || "Unknown Client"}
-        </span>
-      )}
-
-      {/* Next deadline — the one snapshot fact worth a glance on the board */}
-      {snapshot.nextDeadline && (
-        <div className="mt-1.5">
-          <CompactStat label="Deadline" value={formatDate(snapshot.nextDeadline)} />
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center gap-2 mt-2.5">
-        <button
-          onClick={() => onFocus(entry)}
-          className="text-[11px] font-medium px-2.5 py-1 rounded-lg transition-colors"
-          style={{
-            color: "var(--color-ink-muted)",
-            backgroundColor: "var(--color-surface-warm)",
-            border: "1px solid var(--color-border-light)",
-            cursor: "pointer",
-            fontFamily: "var(--font-body)",
-          }}
-        >
-          Focus
-        </button>
-        {profile && (
-          <Link
-            href={clientPath(profile.localId)}
-            className="text-[11px] font-medium px-2.5 py-1 rounded-lg"
-            style={{
-              color: "var(--color-amber)",
-              backgroundColor: "var(--color-amber-light)",
-              textDecoration: "none",
-              fontFamily: "var(--font-body)",
-            }}
-          >
-            View 360 →
-          </Link>
-        )}
-      </div>
-    </div>
+      {children}
+    </span>
   );
 }
 
-// =============================================================================
-// Attorney Column (Board Mode)
-// =============================================================================
-
-function AttorneyColumn({
-  boardKey,
-  index,
-  entries,
-  onFocus,
-}: {
-  boardKey: string;
-  index: number;
-  entries: AppointmentEntry[];
-  onFocus: (entry: AppointmentEntry) => void;
-}) {
-  const meta = getAttorneyMeta(boardKey, index);
-  const displayName = boardDisplayName(boardKey)
-    .replace("Appointments (", "")
-    .replace(")", "");
-
+function Pill({ children, tone = "plain" }: { children: React.ReactNode; tone?: "plain" | "purple" | "red" | "amber" }) {
+  const colors = {
+    plain: { bg: "var(--color-surface-warm)", fg: "var(--color-ink)" },
+    purple: { bg: "var(--color-status-purple-bg)", fg: "var(--color-status-purple)" },
+    red: { bg: "var(--color-status-red-bg)", fg: "var(--color-status-red)" },
+    amber: { bg: "var(--color-amber-light)", fg: "var(--color-amber-dark)" },
+  }[tone];
   return (
-    <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-      {/* Column header */}
-      <div
-        className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl mb-3"
-        style={{
-          backgroundColor: meta?.bg ?? "var(--color-surface-warm)",
-          border: "1px solid var(--color-border-light)",
-        }}
-      >
-        <div
-          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: meta?.color ?? "var(--color-ink-faint)" }}
-        >
-          <span
-            className="font-bold text-white"
-            style={{ fontSize: "10px", fontFamily: "var(--font-body)" }}
-          >
-            {meta?.initial ?? boardKey.toUpperCase()}
-          </span>
-        </div>
-        <span
-          className="text-sm font-semibold flex-1"
-          style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
-        >
-          {displayName}
-        </span>
-        <span
-          className="text-[11px] font-bold px-2 py-0.5 rounded-full"
-          style={{
-            backgroundColor: "white",
-            color: meta?.color ?? "var(--color-ink-faint)",
-            fontFamily: "var(--font-mono)",
-            boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
-          }}
-        >
-          {entries.length}
-        </span>
-      </div>
-
-      {/* Cards */}
-      <div className="space-y-2">
-        {entries.length > 0 ? (
-          entries.map((entry, i) => (
-            <div
-              key={entry.appointment.localId}
-              className={`animate-in animate-in-delay-${Math.min(i + 1, 5)}`}
-            >
-              <AppointmentCardCompact entry={entry} onFocus={onFocus} />
-            </div>
-          ))
-        ) : (
-          <div
-            className="px-4 py-8 text-center rounded-xl"
-            style={{
-              backgroundColor: "var(--color-surface-warm)",
-              border: "1px dashed var(--color-border-light)",
-            }}
-          >
-            <p
-              className="text-xs"
-              style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-            >
-              No appointments
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
+    <span
+      className="inline-flex items-center gap-1.5"
+      style={{ minHeight: 34, padding: "0 12px", borderRadius: 999, fontSize: 13, fontWeight: 500, background: colors.bg, color: colors.fg, fontFamily: "var(--font-body)" }}
+    >
+      {children}
+    </span>
   );
 }
 
+function rowTag(entry: MyDayEntry, state: RowState): { label: string; bg: string; fg: string; border?: boolean } {
+  if (state === "done") return { label: entry.status ?? "Done", ...TAG.done };
+  if (state === "needs-outcome") return { label: "Needs outcome", ...TAG["needs-outcome"] };
+  if (state === "next") return { label: "Next", ...TAG.next };
+  return { label: entry.status ?? "Later", ...TAG.later, border: true };
+}
+
 // =============================================================================
-// Full Appointment Card (List Mode)
+// P4.4 — the day
 // =============================================================================
 
-function AppointmentCard({
-  entry,
-  detail,
-  defaultExpanded,
-  onOpenNotesModal,
-  onFocus,
+function DayList({
+  entries, states, nowAt, now, selected, onSelect,
 }: {
-  entry: AppointmentEntry;
-  detail: DetailLevel;
-  defaultExpanded: boolean;
-  onOpenNotesModal: (updates: ClientUpdate[], title: string) => void;
-  onFocus: (entry: AppointmentEntry) => void;
+  entries: MyDayEntry[]; states: RowState[]; nowAt: number; now: string; selected: string | null; onSelect: (id: string) => void;
 }) {
-  const [timelineOpen, setTimelineOpen] = useState(defaultExpanded);
-  const [showAllNotes, setShowAllNotes] = useState(false);
-  const { appointment, profile, snapshot, updates, caseSummary } = entry;
-  const priorityStyle = profile ? getPriorityStyle(profile.priority) : null;
-  const statusStyle = getStatusStyle(appointment.status);
-
+  const nowLabel = formatTime(now).full;
+  const nowLine = (
+    <div className="flex items-center gap-2.5" style={{ padding: "6px 16px", background: "var(--color-status-yellow-bg)" }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--color-amber)" }}>{nowLabel}</span>
+      <div style={{ flex: 1, height: 2, background: "var(--color-amber)", borderRadius: 2 }} />
+      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-amber)", fontFamily: "var(--font-body)" }}>now</span>
+    </div>
+  );
   return (
-    <div className="card card-elevated" style={{ overflow: "hidden" }}>
-      {/* Card header */}
-      <div
-        className="flex items-start justify-between gap-4 px-5 py-4"
-        style={{ borderBottom: "1px solid var(--color-border-light)" }}
-      >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            {/* Date + Time */}
-            {appointment.nextDate && (
-              <span
-                className="text-xs font-medium"
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  color: "var(--color-ink-muted)",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                {formatDate(appointment.nextDate)}
-                {appointment.nextTime && (
-                  <span
-                    className="ml-1.5 font-semibold"
-                    style={{ color: "var(--color-amber)" }}
-                  >
-                    · {formatTime(appointment.nextTime)}
-                  </span>
-                )}
-              </span>
-            )}
-
-            {/* Status badge */}
-            {appointment.status && (
-              <span
-                className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                style={{
-                  backgroundColor: statusStyle.bg,
-                  color: statusStyle.text,
-                  fontFamily: "var(--font-body)",
-                }}
-              >
-                {appointment.status}
-              </span>
-            )}
-
-            {/* Attorney board tag */}
-            <span className="board-tag">
-              {boardDisplayName(appointment.boardKey)}
-            </span>
-          </div>
-
-          {/* Client name + priority */}
-          <div className="flex items-center gap-2">
-            {profile ? (
-              <ClientLink
-                clientId={profile.localId}
-                className="text-base font-semibold hover:underline"
-                style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
-              >
-                {profile.name}
-              </ClientLink>
-            ) : (
-              <span
-                className="text-base font-semibold"
-                style={{ fontFamily: "var(--font-display)", color: "var(--color-ink-muted)" }}
-              >
-                Unknown Client
-              </span>
-            )}
-
-            {profile?.priority && priorityStyle && (
-              <span
-                className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
-                style={{
-                  backgroundColor: priorityStyle.bg,
-                  color: priorityStyle.text,
-                  fontFamily: "var(--font-body)",
-                }}
-              >
-                {profile.priority}
-              </span>
-            )}
-          </div>
-
-          {/* Appointment type / name */}
-          <p
-            className="text-sm mt-0.5"
-            style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}
-          >
-            {appointment.name}
-          </p>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={() => onFocus(entry)}
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-            style={{
-              color: "var(--color-ink-muted)",
-              backgroundColor: "var(--color-surface-warm)",
-              fontFamily: "var(--font-body)",
-              border: "1px solid var(--color-border-light)",
-              cursor: "pointer",
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="8" cy="8" r="5" />
-              <circle cx="8" cy="8" r="1.5" fill="currentColor" />
-            </svg>
-            Focus
-          </button>
-
-          {profile && (
-            <Link
-              href={clientPath(profile.localId)}
-              className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+    <div style={{ ...card, overflow: "hidden" }}>
+      {entries.map((e, i) => {
+        const t = formatTime(e.time);
+        const state = states[i]!;
+        const tag = rowTag(e, state);
+        const isSel = e.localId === selected;
+        // Where they're detained is on the Detained tag and the client panel, not here too.
+        const type = e.prep?.apptType.split(" — ")[0] ?? e.language ?? null;
+        return (
+          <div key={e.localId}>
+            {i === nowAt && nowLine}
+            <button
+              type="button"
+              onClick={() => onSelect(e.localId)}
+              aria-current={isSel ? "true" : undefined}
+              className="w-full flex items-start gap-3 text-left transition-colors"
               style={{
-                color: "var(--color-amber)",
-                backgroundColor: "var(--color-amber-light)",
-                fontFamily: "var(--font-body)",
+                padding: "14px 16px",
                 border: "none",
-                textDecoration: "none",
+                borderBottom: "1px solid var(--color-border-light)",
+                background: isSel ? "var(--color-amber-light)" : "var(--color-card)",
+                boxShadow: isSel ? "inset 4px 0 0 var(--color-amber)" : "none",
+                opacity: state === "done" && !isSel ? 0.6 : 1,
+                cursor: "pointer",
+                color: "var(--color-ink)",
               }}
             >
-              View 360
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M6 3l5 5-5 5" />
-              </svg>
+              <div className="flex flex-col flex-none" style={{ width: 56 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 19, fontWeight: 600, letterSpacing: "-0.02em" }}>{t.clock}</span>
+                <span style={{ fontSize: 12, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>{t.ampm}</span>
+              </div>
+              <div className="flex-1 min-w-0 flex flex-col gap-0.5" style={{ fontFamily: "var(--font-body)" }}>
+                <span className="truncate" style={{ fontSize: 15, fontWeight: 600 }}>{e.profile?.name ?? e.name}</span>
+                {type && <span className="truncate" style={{ fontSize: 13, color: "var(--color-ink-muted)" }}>{type}{e.prep ? ` · ${e.prep.method}` : ""}</span>}
+                <span className="flex flex-wrap gap-1.5 mt-1">
+                  {e.prep
+                    ? <Mini bg="var(--color-status-green-bg)" fg="var(--color-status-green)">Prepped</Mini>
+                    : <Mini bg="var(--color-status-gray-bg)" fg="var(--color-ink-muted)">Not prepped</Mini>}
+                  <Mini bg={tag.bg} fg={tag.fg} border={tag.border}>{tag.label}</Mini>
+                  {detaineeReason(e) && <Mini bg="var(--color-status-red-bg)" fg="var(--color-status-red)">Detained</Mini>}
+                </span>
+              </div>
+            </button>
+          </div>
+        );
+      })}
+      {nowAt === entries.length && nowLine}
+    </div>
+  );
+}
+
+/**
+ * P4.4 on a tablet: the day as a narrow column of times (with a first name and
+ * a dot for done / needs outcome), so the client and the actions get the room.
+ */
+function DayRail({
+  entries, states, nowAt, selected, onSelect,
+}: {
+  entries: MyDayEntry[]; states: RowState[]; nowAt: number; selected: string | null; onSelect: (id: string) => void;
+}) {
+  const dot: Record<RowState, string> = {
+    done: "var(--color-status-green)", "needs-outcome": "var(--color-amber)", next: "var(--color-amber)", later: "var(--color-border)",
+  };
+  const nowMark = <div aria-hidden="true" style={{ height: 2, margin: "2px 8px", background: "var(--color-amber)", borderRadius: 2 }} />;
+  return (
+    <nav aria-label="Appointments" className="flex flex-col gap-1" style={{ ...card, padding: 6 }}>
+      {entries.map((e, i) => {
+        const t = formatTime(e.time);
+        const on = e.localId === selected;
+        const state = states[i]!;
+        const first = firstName(e.profile?.name ?? e.name);
+        return (
+          <div key={e.localId}>
+            {i === nowAt && nowMark}
+            <button type="button" onClick={() => onSelect(e.localId)} aria-current={on ? "true" : undefined}
+              aria-label={`${t.full} ${e.profile?.name ?? e.name}${state === "needs-outcome" ? ", needs outcome" : ""}${detaineeReason(e) ? ", detained" : ""}`}
+              className="w-full flex flex-col items-center gap-0.5"
+              style={{
+                padding: "10px 4px", borderRadius: 10, cursor: "pointer", border: "none",
+                background: on ? "var(--color-amber)" : "transparent", color: on ? "#ffffff" : "var(--color-ink)",
+                opacity: state === "done" && !on ? 0.6 : 1,
+              }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 600 }}>{t.clock}</span>
+              <span style={{ fontSize: 11, opacity: 0.85 }}>{t.ampm}</span>
+              <span className="truncate" style={{ maxWidth: "100%", fontSize: 12, fontWeight: 500 }}>{first}</span>
+              <span className="flex gap-1" aria-hidden="true">
+                <span style={{ width: 8, height: 8, borderRadius: 4, background: on ? "#ffffff" : dot[state] }} />
+                {detaineeReason(e) && <span style={{ width: 8, height: 8, borderRadius: 4, background: "var(--color-status-red)" }} />}
+              </span>
+            </button>
+          </div>
+        );
+      })}
+      {nowAt === entries.length && nowMark}
+    </nav>
+  );
+}
+
+// =============================================================================
+// P4.5 — the client
+// =============================================================================
+
+type Tab = "prep" | "notes" | "docs";
+
+function ClientPanel({ entry, tab, setTab }: { entry: MyDayEntry; tab: Tab; setTab: (t: Tab) => void }) {
+  const t = formatTime(entry.time);
+  const prep = entry.prep;
+  const docs = prep?.documents ?? [];
+  const detained = detaineeReason(entry);
+  // Each fact once: type in the subtitle, how / interpreter / detention as pills.
+  const type = prep ? prep.apptType.split(" — ")[0] : null;
+  const zoom = prep?.method === "Zoom" && isHttpUrl(prep.methodDetail) ? prep.methodDetail : null;
+  const phone = prep?.method === "Phone" ? prep.methodDetail : entry.phone;
+  const tabs: Array<{ id: Tab; label: string }> = [
+    { id: "prep", label: "Consult prep" },
+    { id: "notes", label: `Notes (${entry.updates.length})` },
+    { id: "docs", label: "E-file / Consult file" },
+  ];
+
+  return (
+    <div style={{ ...card, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div className="flex flex-col gap-3" style={{ padding: "20px 20px 0" }}>
+        <div className="flex flex-wrap justify-between items-start gap-3">
+          <div className="flex flex-col gap-1 min-w-0">
+            <span style={{ fontSize: 13, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>
+              {t.full}{type ? ` · ${type}` : ""}
+            </span>
+            <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 26, lineHeight: 1.2, overflowWrap: "anywhere" }}>
+              {entry.profile?.name ?? entry.name}
+            </span>
+          </div>
+          {entry.profile && (
+            <Link href={clientPath(entry.profile.localId)}
+              className="inline-flex items-center gap-1.5 flex-none"
+              style={{ height: 40, padding: "0 14px", borderRadius: 10, background: "var(--color-surface-warm)", border: "1px solid var(--color-border)", color: "var(--color-ink)", textDecoration: "none", fontSize: 14, fontWeight: 500, fontFamily: "var(--font-body)" }}>
+              Open full file
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M6 3l5 5-5 5" /></svg>
             </Link>
           )}
         </div>
+
+        <div className="flex flex-wrap gap-2">
+          {zoom ? (
+            <a href={zoom} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1.5"
+              style={{ minHeight: 34, padding: "0 12px", borderRadius: 999, background: "var(--color-status-blue)", color: "var(--color-card)", textDecoration: "none", fontSize: 13, fontWeight: 600, fontFamily: "var(--font-body)" }}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="1.5" y="4" width="9" height="8" rx="1.5" /><path d="M10.5 7l4-2.5v7l-4-2.5" /></svg>
+              Join Zoom
+            </a>
+          ) : prep?.method === "Zoom" && <Pill>Zoom (no link yet)</Pill>}
+          {phone && <Pill><span style={{ fontFamily: "var(--font-mono)" }}>{phone}</span></Pill>}
+          {prep?.method === "Other" && prep.methodDetail && <Pill>{prep.methodDetail}</Pill>}
+          {prep
+            ? <Pill tone={prep.interpreterNeeded ? "purple" : "plain"}>{prep.interpreterNeeded ? `Interpreter: ${prep.interpreter}` : "No interpreter"}</Pill>
+            : entry.language && <Pill>{entry.language}</Pill>}
+          {detained && <Pill tone="red">{detained}</Pill>}
+          {entry.sameDayCount > 0 && <Pill tone="amber">Booked {entry.sameDayCount + 1}× today</Pill>}
+        </div>
+
+        <div role="tablist" className="flex gap-1 overflow-x-auto" style={{ borderBottom: "1px solid var(--color-border)", margin: "4px -20px 0", padding: "0 20px", scrollbarWidth: "none" }}>
+          {tabs.map((x) => {
+            const on = tab === x.id;
+            return (
+              <button key={x.id} type="button" role="tab" aria-selected={on} onClick={() => setTab(x.id)}
+                style={{
+                  height: 44, padding: "0 12px", border: "none", background: "transparent", cursor: "pointer", flex: "none",
+                  whiteSpace: "nowrap", fontSize: 14, fontWeight: 600, marginBottom: -1, fontFamily: "var(--font-body)",
+                  color: on ? "var(--color-ink)" : "var(--color-ink-muted)",
+                  borderBottom: `2px solid ${on ? "var(--color-amber)" : "transparent"}`,
+                }}>
+                {x.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Snapshot section — visible in "snapshot" and "full" modes */}
-      {detail !== "minimal" && (
-        <div
-          className="px-5 py-3 flex items-center gap-4 flex-wrap"
-          style={{
-            backgroundColor: "var(--color-surface-warm)",
-            borderBottom: "1px solid var(--color-border-light)",
-          }}
-        >
-          <SnapshotStat label="Active Cases" value={snapshot.activeCaseCount} />
-          <SnapshotStat label="Pending Contracts" value={snapshot.pendingContractCount} />
-          {snapshot.nextDeadline && (
-            <SnapshotStat label="Next Deadline" value={formatDate(snapshot.nextDeadline)} />
-          )}
-          {profile?.phone && (
-            <SnapshotStat label="Phone" value={profile.phone} />
-          )}
-          {profile?.email && (
-            <SnapshotStat label="Email" value={profile.email} />
-          )}
-        </div>
-      )}
-
-      {/* Full case summary — only in "full" mode */}
-      {detail === "full" && caseSummary && (
-        <div
-          className="px-5 py-3"
-          style={{ borderBottom: "1px solid var(--color-border-light)" }}
-        >
-          <div className="flex flex-wrap gap-4">
-            {/* Active contracts */}
-            {caseSummary.contracts.active.length > 0 && (
-              <div className="flex-1 min-w-[200px]">
-                <h4
-                  className="text-[11px] font-semibold uppercase tracking-wider mb-2"
-                  style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-                >
-                  Active Contracts ({caseSummary.contracts.active.length})
-                </h4>
-                {caseSummary.contracts.active.map((c) => (
-                  <div key={c.localId} className="flex items-center gap-2 mb-1">
-                    <span
-                      className="text-xs"
-                      style={{ fontFamily: "var(--font-body)", color: "var(--color-ink)" }}
-                    >
-                      {c.caseType}
-                    </span>
-                    <span className="board-tag">{c.status}</span>
-                  </div>
-                ))}
+      {tab === "prep" && (
+        <div className="flex flex-col gap-5" style={{ padding: "20px 24px 24px", fontFamily: "var(--font-body)" }}>
+          {prep ? (
+            <div style={{ border: "1px solid var(--color-border)", borderRadius: 14, overflow: "hidden" }}>
+              <div style={{ padding: "8px 16px", background: "var(--color-surface-warm)", fontSize: 12, color: "var(--color-ink-muted)" }}>
+                {prepStamp(prep.at, prep.author)}{prep.pending ? " · still syncing to Monday" : ""}
               </div>
-            )}
-
-            {/* Board items by type */}
-            {Object.entries(caseSummary.boardItems).map(([boardKey, items]) => (
-              <div key={boardKey} className="flex-1 min-w-[200px]">
-                <h4
-                  className="text-[11px] font-semibold uppercase tracking-wider mb-2"
-                  style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-                >
-                  {boardDisplayName(boardKey)} ({items.length})
-                </h4>
-                {items.slice(0, 3).map((item) => (
-                  <div key={item.localId} className="flex items-center gap-2 mb-1">
-                    <span
-                      className="text-xs"
-                      style={{ fontFamily: "var(--font-body)", color: "var(--color-ink)" }}
-                    >
-                      {item.name}
-                    </span>
-                    {item.status && <span className="board-tag">{item.status}</span>}
-                  </div>
-                ))}
-                {items.length > 3 && (
-                  <span
-                    className="text-[11px]"
-                    style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-                  >
-                    +{items.length - 3} more
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Timeline toggle */}
-      {updates.length > 0 && (
-        <div>
-          <div
-            className="flex items-center"
-            style={{
-              borderBottom: timelineOpen ? "1px solid var(--color-border-light)" : "none",
-            }}
-          >
-            <button
-              onClick={() => setTimelineOpen(!timelineOpen)}
-              className="flex items-center gap-2 px-5 py-2.5 text-left flex-1"
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                style={{
-                  transform: timelineOpen ? "rotate(90deg)" : "none",
-                  transition: "transform 0.15s ease",
-                  color: "var(--color-ink-faint)",
-                }}
-              >
-                <path d="M6 3l5 5-5 5" />
-              </svg>
-              <span
-                className="text-xs font-medium"
-                style={{ color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}
-              >
-                Recent Notes ({updates.length})
-              </span>
-            </button>
-
-            {timelineOpen && updates.length > 2 && (
-              <div className="flex items-center gap-2 pr-5">
-                <button
-                  onClick={() => setShowAllNotes(!showAllNotes)}
-                  className="text-[11px] font-medium px-2 py-1 rounded transition-colors"
-                  style={{
-                    color: "var(--color-amber)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    fontFamily: "var(--font-body)",
-                  }}
-                >
-                  {showAllNotes ? "Collapse" : "Show all"}
-                </button>
-                <button
-                  onClick={() =>
-                    onOpenNotesModal(updates, profile?.name ?? "Client Notes")
-                  }
-                  className="text-[11px] font-medium px-2 py-1 rounded transition-colors"
-                  style={{
-                    color: "var(--color-amber)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    fontFamily: "var(--font-body)",
-                  }}
-                >
-                  Open in modal
-                </button>
-              </div>
-            )}
-          </div>
-
-          {timelineOpen && (
-            <div
-              className="px-5 py-3"
-              style={showAllNotes ? {} : { maxHeight: 400, overflowY: "auto" }}
-            >
-              <UpdatesTimeline updates={updates} last30Days />
+              {prep.description && <PrepBlock label="Description (reception)" text={prep.description} />}
+              {entry.clientWrote && <PrepBlock label="Client wrote (Calendly)" text={`“${entry.clientWrote}”`} italic warm />}
+              {!prep.description && !entry.clientWrote && (
+                <p style={{ margin: 0, padding: "14px 16px", fontSize: 14, color: "var(--color-ink-muted)" }}>Reception left no description.</p>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1" style={{ border: "1px dashed var(--color-border)", borderRadius: 14, padding: "18px 16px" }}>
+              <span style={{ fontSize: 15, fontWeight: 500 }}>Reception hasn't prepped this one yet</span>
+              <span style={{ fontSize: 14, color: "var(--color-ink-muted)" }}>Their description, type of appointment, method and interpreter show here once they do (Receptionists → Prep).</span>
+              {entry.clientWrote && <p style={{ margin: "8px 0 0", fontSize: 14, fontStyle: "italic" }}>Client wrote: “{entry.clientWrote}”</p>}
+              {!entry.clientWrote && entry.description && <p style={{ margin: "8px 0 0", fontSize: 14 }}>{entry.description}</p>}
             </div>
           )}
+
+          <div className="flex flex-col gap-2">
+            <span style={eyebrow}>Documents</span>
+            {docs.length === 0 ? (
+              <span style={{ fontSize: 14, color: "var(--color-ink-muted)" }}>
+                {prep ? "Reception didn't pick any documents for this consult." : "Documents reception picks during prep show here."}
+                {entry.profile ? " The client's folders are under E-file / Consult file." : ""}
+              </span>
+            ) : (
+              <div style={{ border: "1px solid var(--color-border)", borderRadius: 12, overflow: "hidden" }}>
+                {docs.map((d, i) => (
+                  <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
+                    className="flex items-center gap-3 transition-colors hover:bg-[var(--color-surface-warm)]"
+                    style={{ padding: "12px 14px", borderTop: i === 0 ? "none" : "1px solid var(--color-border-light)", color: "var(--color-ink)", textDecoration: "none" }}>
+                    <span className="inline-flex items-center justify-center flex-none"
+                      style={{ width: 40, height: 28, borderRadius: 6, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", background: "var(--color-surface-warm)", color: "var(--color-ink-muted)" }}>
+                      {fileKind(d.name)}
+                    </span>
+                    <span className="flex-1 min-w-0 truncate" style={{ fontSize: 14, fontWeight: 500 }}>{d.name}</span>
+                    <span style={{ fontSize: 12, color: "var(--color-ink-muted)", whiteSpace: "nowrap" }}>Open ↗</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "notes" && (
+        <div style={{ padding: "12px 24px 24px" }}>
+          {entry.updates.length === 0
+            ? <p style={{ fontSize: 14, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>No notes yet for this client.</p>
+            : <UpdatesTimeline updates={entry.updates} />}
+        </div>
+      )}
+
+      {tab === "docs" && (
+        <div style={{ padding: "12px 24px 24px" }}>
+          {entry.profile
+            ? <DocumentsTab data={entry.caseSummary ?? { profile: entry.profile }} />
+            : <p style={{ fontSize: 14, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>No client profile, so no folders to show.</p>}
         </div>
       )}
     </div>
   );
 }
 
-function SnapshotStat({ label, value }: { label: string; value: string | number }) {
+function PrepBlock({ label, text, italic, warm }: { label: string; text: string; italic?: boolean; warm?: boolean }) {
   return (
-    <div className="flex flex-col">
-      <span
-        className="text-[10px] font-semibold uppercase tracking-wider"
-        style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-      >
-        {label}
-      </span>
-      <span
-        className="text-sm font-medium"
-        style={{ color: "var(--color-ink)", fontFamily: "var(--font-mono)" }}
-      >
-        {value}
-      </span>
+    <div className="flex flex-col gap-1" style={{ padding: "14px 16px", borderBottom: "1px solid var(--color-border-light)", background: warm ? "var(--color-surface)" : undefined }}>
+      <span style={{ fontSize: 12, color: "var(--color-ink-muted)" }}>{label}</span>
+      <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5, whiteSpace: "pre-line", fontStyle: italic ? "italic" : "normal" }}>{text}</p>
     </div>
   );
 }
 
 // =============================================================================
-// View Mode Toggle Icons
+// P4.6 — after the consult
 // =============================================================================
 
-function IconBoard() {
+function AfterConsult({
+  entry, note, setNote, onStatusChanged, contract, onContract,
+}: {
+  entry: MyDayEntry;
+  note: string;
+  setNote: (v: string) => void;
+  onStatusChanged: (status: string) => void;
+  contract: { name: string; pending: boolean } | null;
+  onContract: () => void;
+}) {
+  const options = useBoardStatusOptions(entry.boardKey);
+  const detained = detaineeReason(entry);
+  const buttons = useMemo(() => outcomeLabels(options?.options.map((o) => o.label) ?? [], !!detained), [options, detained]);
+  const [statusBusy, setStatusBusy] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // A different appointment starts clean.
+  useEffect(() => { setMsg(null); }, [entry.localId]);
+
+  const hired = /^(det )?hire$/i.test(entry.status ?? "");
+
+  // An outcome button is a shortcut for the status picker: it writes at once.
+  const setOutcome = async (label: string) => {
+    if (label === entry.status) return;
+    setStatusBusy(label);
+    setMsg(null);
+    try {
+      const r = await changeBoardItemStatus(entry.localId, label);
+      onStatusChanged(label);
+      setMsg({ ok: true, text: `Status set to ${label}.${r.pending ? " Monday was slow, so it's queued and will go through shortly." : ""}` });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Couldn't change the status" });
+    } finally {
+      setStatusBusy(null);
+    }
+  };
+
+  const saveNote = async () => {
+    if (!note.trim()) {
+      setMsg({ ok: false, text: "Write the consult note first." });
+      return;
+    }
+    if (!entry.profile) {
+      setMsg({ ok: false, text: "This appointment isn't linked to a client profile, so the note has nowhere to go." });
+      return;
+    }
+    setSaving(true);
+    setMsg(null);
+    try {
+      const r = await postConsultNote(entry.localId, note.trim());
+      setNote("");
+      setMsg({
+        ok: true,
+        text: [
+          "Consult note logged on the profile (shows in Notes after the next sync).",
+          r.pending ? "Monday was slow, so it's queued and will go through shortly." : null,
+          summaryLine(r.summary),
+        ].filter(Boolean).join(" "),
+      });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Couldn't save the note" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const btn = (on: boolean) => ({
+    minHeight: 44, padding: "8px 10px", borderRadius: 10, fontSize: 14, fontWeight: 500, cursor: "pointer",
+    fontFamily: "var(--font-body)",
+    background: on ? "var(--color-ink)" : "var(--color-card)",
+    color: on ? "var(--color-card)" : "var(--color-ink)",
+    border: `1px solid ${on ? "var(--color-ink)" : "var(--color-border)"}`,
+  });
+
   return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="1" y="1" width="6" height="14" rx="1" />
-      <rect x="9" y="1" width="6" height="14" rx="1" />
-    </svg>
+    <div className="flex flex-col gap-4" style={{ ...card, padding: "22px 22px 24px", fontFamily: "var(--font-body)" }}>
+      <span style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600 }}>After the consult</span>
+
+      {detained && (
+        <div role="note" className="flex flex-col gap-0.5"
+          style={{ borderRadius: 10, padding: "10px 12px", background: "var(--color-status-red-bg)", color: "var(--color-status-red)" }}>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>Detainee consult</span>
+          <span style={{ fontSize: 13 }}>Hire and No Hire are recorded as Det Hire / Det No Hire.</span>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <span style={{ fontSize: 14, fontWeight: 600 }}>Status</span>
+          {/* D6 — every label on this board, in Monday's colors; writes at once. */}
+          <StatusEditor
+            key={entry.localId}
+            boardKey={entry.boardKey}
+            boardItemLocalId={entry.localId}
+            status={entry.status}
+            onChanged={onStatusChanged}
+          />
+        </div>
+        {!options ? (
+          <span style={{ fontSize: 13, color: "var(--color-ink-muted)" }}>This board's statuses haven't synced yet, so the status can't be changed here.</span>
+        ) : buttons.length > 0 && (
+          <>
+            <span style={{ fontSize: 12, color: "var(--color-ink-muted)" }}>Quick outcome</span>
+            <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+              {buttons.map((l) => (
+                <button key={l} type="button" aria-pressed={entry.status === l} disabled={statusBusy !== null}
+                  onClick={() => setOutcome(l)} style={{ ...btn(entry.status === l), opacity: statusBusy && statusBusy !== l ? 0.6 : 1 }}>
+                  {statusBusy === l ? "Saving…" : l}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label htmlFor="p4-consult-note" style={{ fontSize: 14, fontWeight: 600 }}>Consult note</label>
+        <textarea
+          id="p4-consult-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={5000}
+          placeholder="What did you discuss? What happens next?"
+          style={{ minHeight: 140, resize: "vertical", border: "1px solid var(--color-border)", borderRadius: 10, padding: 12, fontSize: 15, lineHeight: 1.5, color: "var(--color-ink)", background: "var(--color-card)", fontFamily: "var(--font-body)" }}
+        />
+        <span style={{ fontSize: 12, color: "var(--color-ink-muted)" }}>Logged on the client's profile as a Consult note.</span>
+      </div>
+
+      <button type="button" onClick={saveNote} disabled={saving}
+        style={{ height: 46, border: "none", borderRadius: 10, background: "var(--color-amber)", color: "#ffffff", fontSize: 15, fontWeight: 600, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
+        {saving ? "Saving…" : "Save consult note"}
+      </button>
+      {msg && (
+        <div role={msg.ok ? "status" : "alert"}
+          style={{ borderRadius: 10, padding: "10px 12px", fontSize: 14, lineHeight: 1.45, background: msg.ok ? "var(--color-status-green-bg)" : "var(--color-status-red-bg)", color: msg.ok ? "var(--color-status-green)" : "var(--color-status-red)" }}>
+          {msg.text}
+        </div>
+      )}
+
+      <div style={{ height: 1, background: "var(--color-border-light)" }} />
+
+      <div className="flex flex-col gap-2">
+        <span style={{ fontSize: 14, fontWeight: 600 }}>Contract</span>
+        {contract ? (
+          <div className="flex flex-col gap-1" style={{ border: "1px solid var(--color-status-green)", background: "var(--color-status-green-bg)", borderRadius: 10, padding: 12, color: "var(--color-status-green)" }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{contract.pending ? "Contract queued" : "Contract created"}: {contract.name}</span>
+            <Link href="/contracts" style={{ fontSize: 13, fontWeight: 500, color: "var(--color-status-green)" }}>Open Contracts</Link>
+          </div>
+        ) : (
+          <>
+            <button type="button" onClick={onContract} disabled={!entry.profile}
+              style={{ ...btn(hired), height: 46, fontSize: 15, fontWeight: 600, cursor: entry.profile ? "pointer" : "not-allowed", opacity: entry.profile ? 1 : 0.5 }}>
+              + New contract
+            </button>
+            <span style={{ fontSize: 12, color: "var(--color-ink-muted)" }}>
+              {!entry.profile
+                ? "Link this appointment to a client profile first."
+                : hired ? "Hired — start their Fee K now." : "Opens the New contract form with this client already picked."}
+            </span>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
-function IconList() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M3 4h10M3 8h10M3 12h10" />
-    </svg>
-  );
-}
-
 // =============================================================================
-// Main Page
+// Page
 // =============================================================================
 
 export function AppointmentsPage() {
-  const [viewMode, setViewMode] = useState<ViewMode>(
-    () => (loadPreference("appointments-view", "board") as ViewMode),
-  );
-  const [attorney, setAttorney] = useState<string>(() =>
-    getUrlParam("attorney") ?? loadPreference("appointments-attorney", "all"),
-  );
-  const [range, setRange] = useState<DateRange>(() =>
-    (getUrlParam("range") as DateRange) ?? "day",
-  );
-  const [calendarDate, setCalendarDate] = useState<string>(() => {
-    const today = new Date();
-    return today.toISOString().slice(0, 10);
-  });
-  const [detail, setDetail] = useState<DetailLevel>(() =>
-    (loadPreference("appointments-detail", "snapshot") as DetailLevel),
-  );
-  // Which attorney board is in focus. "all" = overview (big picture, current
-  // multi-column layout); a boardKey = dedicated full-width view of that board.
-  const [focusBoard, setFocusBoard] = useState<string>(() =>
-    getUrlParam("focus") ?? loadPreference("appointments-focus", "all"),
-  );
-
-  const [data, setData] = useState<AppointmentsResult | null>(null);
+  const { user } = useAuth();
+  const now = useClock();
+  const [board, setBoard] = useState<string | null>(() => urlParam("board") ?? remembered());
+  const [date, setDate] = useState<string | null>(() => urlParam("date"));
+  const [data, setData] = useState<MyDayResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("prep");
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [contracts, setContracts] = useState<Record<string, { name: string; pending: boolean }>>({});
+  const [contractFor, setContractFor] = useState<MyDayEntry | null>(null);
+  const [pageRef, pageWidth] = useWidth<HTMLDivElement>();
+  const layout: Layout = layoutFor(pageWidth);
+  /** On a phone the day and the client are two screens; this is "showing the client". */
+  const [phoneDetail, setPhoneDetail] = useState(false);
 
-  // Notes modal state
-  const [modalNotes, setModalNotes] = useState<ClientUpdate[] | null>(null);
-  const [modalTitle, setModalTitle] = useState("");
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
-  // Focus modal state
-  const [focusedEntry, setFocusedEntry] = useState<AppointmentEntry | null>(null);
-
-  const openNotesModal = useCallback((updates: ClientUpdate[], title: string) => {
-    setModalNotes(updates);
-    setModalTitle(title);
-  }, []);
-
-  const closeNotesModal = useCallback(() => {
-    setModalNotes(null);
-  }, []);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Board mode always fetches all attorneys so all columns can be populated
-      const attorneyFilter = viewMode === "list" && attorney !== "all" ? attorney : undefined;
-      // Calendar mode sends the picked date as "day" range
-      const apiRange = range === "calendar" ? "day" : range;
-      const apiDate = range === "calendar" ? calendarDate : undefined;
-      const result = await fetchAppointments(attorneyFilter, apiRange, apiDate);
-      setData(result);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
+  /** `quiet` = a background refresh: no dimming, and a failure keeps what's shown. */
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) {
+      setLoading(true);
+      setError(null);
     }
-  }, [attorney, range, calendarDate, viewMode]);
+    try {
+      // An unknown remembered board falls back server-side; the page shows
+      // whichever board came back (data.boardKey), not the one asked for.
+      setData(await fetchMyDay(board ?? undefined, date ?? undefined));
+      setUpdatedAt(new Date());
+      if (quiet) setError(null);
+    } catch (e) {
+      if (!quiet) setError((e as Error).message);
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  }, [board, date]);
 
+  useEffect(() => { load(); }, [load]);
+
+  // In step with Receptionists (P17/M18): both read the same prep records and
+  // appointment rows, so what reception preps, edits or reschedules shows here
+  // within a minute — and at once when the attorney comes back to the tab. The
+  // selected client, open tab and any half-written note are kept.
   useEffect(() => {
-    load();
+    const refresh = () => { if (document.visibilityState === "visible") void load(true); };
+    const t = setInterval(refresh, REFRESH_MS);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [load]);
 
-  // Sync state → URL + localStorage
   useEffect(() => {
-    syncUrlParams({ attorney, range, focus: focusBoard });
-    savePreference("appointments-attorney", attorney);
-    savePreference("appointments-detail", detail);
-    savePreference("appointments-view", viewMode);
-    savePreference("appointments-focus", focusBoard);
-  }, [attorney, range, detail, viewMode, focusBoard]);
+    if (!data) return;
+    // Only a board other than the caller's own, and a day other than today, go in the URL.
+    const shown = data.boardKey;
+    syncUrl(shown && shown !== data.myBoard ? shown : null, date && date !== data.today ? date : null);
+    // Remembered only for staff with no board of their own: an attorney who
+    // peeks at a colleague's day still opens on their own next time.
+    remember(data.myBoard ? null : shown);
+  }, [data, date]);
 
-  const attorneys = data?.attorneys ?? [];
+  const today = data?.today ?? new Date().toISOString().slice(0, 10);
+  const day = date ?? today;
+  const entries = useMemo(() => data?.entries ?? [], [data]);
+  const states = useMemo(() => rowStates(entries, today, now), [entries, today, now]);
+  const nowAt = nowLineIndex(entries, today, now);
 
-  // A remembered filter that is no longer an option (e.g. an old "A, B"
-  // combination chip) would show nothing — fall back to All.
+  // Keep a valid selection: the next one up after a load, or when the old one is gone.
   useEffect(() => {
-    if (data && attorney !== "all" && !data.attorneys.includes(attorney)) setAttorney("all");
-  }, [data, attorney]);
+    if (!entries.some((e) => e.localId === selected)) setSelected(defaultSelection(entries, states));
+  }, [entries, states, selected]);
 
-  // Group entries by date for list mode (week view)
-  const entriesByDate: Record<string, AppointmentEntry[]> = {};
-  if (data) {
-    for (const entry of data.entries) {
-      const dateKey = entry.appointment.nextDate ?? "No Date";
-      (entriesByDate[dateKey] ??= []).push(entry);
-    }
-  }
-  const dateKeys = Object.keys(entriesByDate).sort();
+  const entry = entries.find((e) => e.localId === selected) ?? null;
+  const clientScreen = layout === "narrow" && phoneDetail && !!entry;
+  const boardMeta = data?.boards.find((b) => b.boardKey === data.boardKey) ?? null;
+  const mine = !!data?.boardKey && data.boardKey === data.myBoard;
+  const firstName = (user?.name ?? "").split(/\s+/)[0] ?? "";
+  const hour = parseInt(now.slice(0, 2), 10);
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const title = mine
+    ? `${greeting}${firstName ? `, ${firstName}` : ""}`
+    : boardMeta ? `${boardMeta.attorneyName ?? `Attorney ${boardMeta.displayName}`}’s day` : "Appointments";
 
-  // Group entries by boardKey for board mode
-  const entriesByBoard: Record<string, AppointmentEntry[]> = {};
-  if (data) {
-    for (const entry of data.entries) {
-      const key = entry.appointment.boardKey;
-      (entriesByBoard[key] ??= []).push(entry);
-    }
-  }
+  const needs = states.filter((s) => s === "needs-outcome").length;
+  const doneCount = states.filter((s) => s === "done").length;
+  const nextIdx = states.indexOf("next");
+  const next = nextIdx === -1 ? null : entries[nextIdx]!;
+  const summary = entries.length === 0
+    ? "Nothing on the calendar."
+    : [
+        `${entries.length} appointment${entries.length === 1 ? "" : "s"}`,
+        next ? `next: ${next.profile?.name ?? next.name} at ${formatTime(next.time).full}` : null,
+        needs ? `${needs} still need${needs === 1 ? "s" : ""} an outcome` : null,
+      ].filter(Boolean).join(" · ");
 
-  const totalCount = data?.entries.length ?? 0;
+  const updateStatus = (localId: string, status: string | null) => {
+    setData((d) => d && { ...d, entries: d.entries.map((e) => (e.localId === localId ? { ...e, status } : e)) });
+  };
+
+  const navBtn = {
+    width: 40, height: 40, border: "none", background: "transparent", borderRadius: 8, color: "var(--color-ink-muted)", cursor: "pointer",
+  } as const;
 
   return (
-    <div className="animate-in">
-      {/* Page header */}
-      <div className="mb-5">
-        <h1
-          className="text-2xl mb-1"
-          style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
-        >
-          Appointments
-        </h1>
-        <p className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-          {range === "day" ? "Today's" : range === "week" ? "This week's" : range === "upcoming" ? "Upcoming" : range === "calendar" ? formatDate(calendarDate) : "All"} schedule
-          {viewMode === "list" && attorney !== "all" ? ` for ${attorney}` : ""}.
-        </p>
-      </div>
-
-      {/* Controls */}
-      <SectionCode code="P4.1" />
-      <div
-        className="flex items-center gap-4 flex-wrap mb-5 px-4 py-3 rounded-xl"
-        style={{
-          backgroundColor: "var(--color-surface-warm)",
-          border: "1px solid var(--color-border-light)",
-        }}
-      >
-        {/* View mode toggle */}
-        <div className="flex items-center gap-1 mr-1">
-          <button
-            onClick={() => setViewMode("board")}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            style={{
-              backgroundColor: viewMode === "board" ? "var(--color-amber)" : "transparent",
-              color: viewMode === "board" ? "white" : "var(--color-ink-muted)",
-              border: viewMode === "board" ? "none" : "1px solid var(--color-border-light)",
-              cursor: "pointer",
-              fontFamily: "var(--font-body)",
-            }}
-            title="Board view — all attorneys"
-          >
-            <IconBoard />
-            Board
-          </button>
-          <button
-            onClick={() => setViewMode("list")}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            style={{
-              backgroundColor: viewMode === "list" ? "var(--color-amber)" : "transparent",
-              color: viewMode === "list" ? "white" : "var(--color-ink-muted)",
-              border: viewMode === "list" ? "none" : "1px solid var(--color-border-light)",
-              cursor: "pointer",
-              fontFamily: "var(--font-body)",
-            }}
-            title="List view — filter by attorney"
-          >
-            <IconList />
-            List
-          </button>
-        </div>
-
-        {/* Divider */}
-        <div style={{ width: 1, height: 20, backgroundColor: "var(--color-border-light)" }} />
-
-        {/* Attorney focus — Overview (all) or one attorney's board full-width */}
-        {data && data.boardKeys.length > 0 && (
-          <div className="flex items-center gap-1 flex-wrap">
-            <button
-              onClick={() => setFocusBoard("all")}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-              style={{
-                backgroundColor: focusBoard === "all" ? "var(--color-amber)" : "transparent",
-                color: focusBoard === "all" ? "white" : "var(--color-ink-muted)",
-                border: focusBoard === "all" ? "none" : "1px solid var(--color-border-light)",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
-              }}
-              title="Overview — all attorneys"
-            >
-              Overview
-            </button>
-            {data.boardKeys.map((bk, i) => {
-              const meta = getAttorneyMeta(bk, i);
-              const selected = focusBoard === bk;
-              return (
-                <button
-                  key={bk}
-                  onClick={() => setFocusBoard(bk)}
-                  className="w-8 h-8 rounded-lg text-xs font-bold transition-colors flex items-center justify-center"
-                  style={{
-                    backgroundColor: selected ? meta.color : "transparent",
-                    color: selected ? "white" : "var(--color-ink-muted)",
-                    border: selected ? "none" : "1px solid var(--color-border-light)",
-                    cursor: "pointer",
-                    fontFamily: "var(--font-body)",
-                  }}
-                  title={boardDisplayName(bk).replace("Appointments (", "").replace(")", "")}
-                >
-                  {meta.initial}
-                </button>
-              );
-            })}
+    <div ref={pageRef} className="animate-in" style={{ fontFamily: "var(--font-body)", color: "var(--color-ink)" }}>
+      {/* On a phone with a client open, the client gets the whole screen. */}
+      {!clientScreen && (
+        <>
+        {/* P4.1 — header */}
+        <SectionCode code="P4.1" />
+        <div className="flex flex-wrap items-end justify-between gap-4 mb-4">
+          <div className="flex flex-col gap-1">
+            <span style={{ fontSize: 13, color: "var(--color-ink-muted)" }}>{formatLongDate(day)}{day === today ? "" : day < today ? " (past)" : ""}</span>
+            <h1 style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 32, letterSpacing: "-0.01em" }}>{title}</h1>
+            <span style={{ fontSize: 15, color: "var(--color-ink-muted)" }}>{loading && !data ? "Loading…" : summary}</span>
+            {updatedAt && (
+              <span style={{ fontSize: 12, color: "var(--color-ink-faint)" }} title="Refreshes every minute, so reception's prep shows here without reloading">
+                Updated {updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · stays in step with Receptionists
+              </span>
+            )}
           </div>
-        )}
-
-        {/* Divider */}
-        <div style={{ width: 1, height: 20, backgroundColor: "var(--color-border-light)" }} />
-
-        {/* Attorney selector — list mode only */}
-        {viewMode === "list" && (
-          <div className="flex items-center gap-2">
-            <span
-              className="text-[11px] font-semibold uppercase tracking-wider"
-              style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-            >
-              Attorney
-            </span>
-            <div className="flex gap-1">
-              <button
-                className={`filter-chip ${attorney === "all" ? "filter-chip-active" : ""}`}
-                onClick={() => setAttorney("all")}
-              >
-                All
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1" style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 4 }}>
+              <button type="button" aria-label="Previous day" style={navBtn} onClick={() => setDate(addDays(day, -1))}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M10 3L5 8l5 5" /></svg>
               </button>
-              {attorneys.map((a) => (
-                <button
-                  key={a}
-                  className={`filter-chip ${attorney === a ? "filter-chip-active" : ""}`}
-                  onClick={() => setAttorney(a)}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Range toggle */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-          >
-            Range
-          </span>
-          <div className="flex gap-1 flex-wrap">
-            {RANGE_LABELS.map((r) => (
-              <button
-                key={r.id}
-                className={`filter-chip ${range === r.id ? "filter-chip-active" : ""}`}
-                onClick={() => setRange(r.id)}
-              >
-                {r.label}
+              <button type="button" onClick={() => setDate(null)}
+                style={{ height: 40, padding: "0 14px", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", background: day === today ? "var(--color-amber-light)" : "transparent", color: day === today ? "var(--color-amber-dark)" : "var(--color-ink)" }}>
+                Today
               </button>
-            ))}
-          </div>
-          {range === "calendar" && (
-            <input
-              type="date"
-              value={calendarDate}
-              onChange={(e) => setCalendarDate(e.target.value)}
-              style={{
-                padding: "4px 10px",
-                borderRadius: "8px",
-                border: "1px solid var(--color-amber)",
-                backgroundColor: "var(--color-card)",
-                color: "var(--color-ink)",
-                fontFamily: "var(--font-mono)",
-                fontSize: "12px",
-                cursor: "pointer",
-                outline: "none",
-              }}
-            />
-          )}
-        </div>
-
-        {/* Detail level — list mode only */}
-        {viewMode === "list" && (
-          <div className="flex items-center gap-2">
-            <span
-              className="text-[11px] font-semibold uppercase tracking-wider"
-              style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-            >
-              Detail
-            </span>
-            <div className="flex gap-1">
-              {DETAIL_LABELS.map((d) => (
-                <button
-                  key={d.id}
-                  className={`filter-chip ${detail === d.id ? "filter-chip-active" : ""}`}
-                  onClick={() => setDetail(d.id)}
-                >
-                  {d.label}
-                </button>
-              ))}
+              <button type="button" aria-label="Next day" style={navBtn} onClick={() => setDate(addDays(day, 1))}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M6 3l5 5-5 5" /></svg>
+              </button>
+              <input type="date" aria-label="Pick a date" value={day} onChange={(e) => e.target.value && setDate(e.target.value)}
+                style={{ height: 40, border: "none", background: "transparent", color: "var(--color-ink-muted)", fontSize: 13, padding: "0 6px", fontFamily: "var(--font-body)" }} />
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div
-          className="px-4 py-3 rounded-lg mb-5 text-sm"
-          style={{
-            backgroundColor: "var(--color-status-red-bg)",
-            color: "var(--color-status-red)",
-            border: "1px solid rgba(153,27,27,0.15)",
-            fontFamily: "var(--font-body)",
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading && (
-        <div className="py-20 flex flex-col items-center gap-3 animate-in">
-          <div className="flex gap-1">
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: "var(--color-amber)", animation: "pulse-subtle 1s ease-in-out infinite" }}
-            />
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: "var(--color-amber)", animation: "pulse-subtle 1s ease-in-out 0.2s infinite" }}
-            />
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: "var(--color-amber)", animation: "pulse-subtle 1s ease-in-out 0.4s infinite" }}
-            />
-          </div>
-          <span className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-            Loading appointments…
-          </span>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!loading && data && totalCount === 0 && (
-        <div className="py-20 flex flex-col items-center gap-4 animate-in">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center"
-            style={{ backgroundColor: "var(--color-amber-light)" }}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-amber)" strokeWidth="1.5">
-              <rect x="3" y="4" width="18" height="18" rx="2" />
-              <path d="M3 10h18M8 2v4M16 2v4" />
-            </svg>
-          </div>
-          <div className="text-center">
-            <p
-              className="text-lg mb-1"
-              style={{ fontFamily: "var(--font-display)", color: "var(--color-ink)" }}
-            >
-              No appointments found
-            </p>
-            <p className="text-sm" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}>
-              {viewMode === "list" && attorney !== "all"
-                ? `No appointments for ${attorney} ${range === "day" ? "today" : range === "calendar" ? `on ${formatDate(calendarDate)}` : range === "week" ? "this week" : ""}.`
-                : `No appointments ${range === "day" ? "today" : range === "calendar" ? `on ${formatDate(calendarDate)}` : range === "week" ? "this week" : "found"}.`}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Dedicated Mode — one attorney's board, full width ──────────────── */}
-      {!loading && data && (focusBoard !== "all" || viewMode === "board") && <SectionCode code="P4.2" />}
-      {!loading && data && focusBoard !== "all" && (
-        <div style={{ maxWidth: 720, margin: "0 auto" }}>
-          <AttorneyColumn
-            boardKey={focusBoard}
-            index={Math.max(0, data.boardKeys.indexOf(focusBoard))}
-            entries={entriesByBoard[focusBoard] ?? []}
-            onFocus={setFocusedEntry}
-          />
-        </div>
-      )}
-
-      {/* ── Board Mode ─────────────────────────────────────────────────────── */}
-      {!loading && data && focusBoard === "all" && viewMode === "board" && (
-        <div style={{ overflowX: "auto", paddingBottom: 8 }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: `repeat(${data.boardKeys.length || 1}, minmax(280px, 1fr))`,
-              gap: "16px",
-              alignItems: "start",
-              minWidth: `${(data.boardKeys.length || 1) * 296}px`,
-            }}
-          >
-            {data.boardKeys.map((boardKey, index) => (
-              <AttorneyColumn
-                key={boardKey}
-                boardKey={boardKey}
-                index={index}
-                entries={entriesByBoard[boardKey] ?? []}
-                onFocus={setFocusedEntry}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── List Mode ──────────────────────────────────────────────────────── */}
-      {!loading && data && focusBoard === "all" && viewMode === "list" && totalCount > 0 && <SectionCode code="P4.3" />}
-      {!loading && data && focusBoard === "all" && viewMode === "list" && totalCount > 0 && (
-        <div className="space-y-6">
-          {dateKeys.map((dateKey) => (
-            <div key={dateKey}>
-              {/* Date group header (shown when multiple dates) */}
-              {dateKeys.length > 1 && (
-                <div className="flex items-center gap-3 mb-3">
-                  <span
-                    className="text-[11px] font-semibold uppercase tracking-wider"
-                    style={{ color: "var(--color-amber)", fontFamily: "var(--font-body)" }}
-                  >
-                    {formatDate(dateKey)}
-                  </span>
-                  <span
-                    className="text-[11px] font-medium px-2 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: "var(--color-amber-light)",
-                      color: "var(--color-amber)",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    {entriesByDate[dateKey]!.length}
-                  </span>
-                  <div className="flex-1 h-px" style={{ backgroundColor: "var(--color-border-light)" }} />
-                </div>
-              )}
-
-              {/* Cards */}
-              <div className="space-y-3">
-                {entriesByDate[dateKey]!.map((entry, i) => (
-                  <div key={entry.appointment.localId} className={`animate-in animate-in-delay-${Math.min(i + 1, 5)}`}>
-                    <AppointmentCard
-                      entry={entry}
-                      detail={detail}
-                      defaultExpanded={false}
-                      onOpenNotesModal={openNotesModal}
-                      onFocus={setFocusedEntry}
-                    />
-                  </div>
-                ))}
+            {data && data.boards.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Attorney calendar">
+                {data.boards.map((b) => {
+                  const on = b.boardKey === data.boardKey;
+                  return (
+                    <button key={b.boardKey} type="button" aria-pressed={on} title={b.attorneyName ?? undefined}
+                      onClick={() => setBoard(b.boardKey)}
+                      style={{
+                        height: 40, padding: "0 14px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer",
+                        background: on ? "var(--color-ink)" : "var(--color-card)", color: on ? "var(--color-card)" : "var(--color-ink)",
+                        border: `1px solid ${on ? "var(--color-ink)" : "var(--color-border)"}`,
+                      }}>
+                      {b.displayName}{b.boardKey === data.myBoard ? " (you)" : ""}
+                    </button>
+                  );
+                })}
               </div>
+            )}
+          </div>
+        </div>
+
+        {entries.length > 0 && (
+          <div className="flex items-center gap-1.5 mb-5" aria-label={`${doneCount} of ${entries.length} done`}>
+            {states.map((s, i) => (
+              <div key={entries[i]!.localId} style={{ height: 8, flex: "1 1 0", maxWidth: 72, borderRadius: 4, background: s === "done" ? "var(--color-status-green)" : s === "needs-outcome" ? "var(--color-amber)" : "var(--color-border)" }} />
+            ))}
+            <span style={{ marginLeft: 8, fontSize: 13, color: "var(--color-ink-muted)", whiteSpace: "nowrap" }}>{doneCount} of {entries.length} done</span>
+          </div>
+        )}
+
+        {data && !data.myBoard && data.boards.length > 0 && (
+          <p style={{ fontSize: 13, color: "var(--color-ink-muted)", marginBottom: 12 }}>
+            Showing {boardMeta?.displayName ?? "an attorney"}’s calendar. An admin can make one open by default for you in Settings → Users → Attorney board.
+          </p>
+        )}
+        </>
+      )}
+
+      {error && (
+        <div role="alert" style={{ ...card, padding: 16, color: "var(--color-status-red)", background: "var(--color-status-red-bg)", marginBottom: 16 }}>
+          Couldn't load appointments: {error}
+        </div>
+      )}
+
+      {data && data.boards.length === 0 && (
+        <div style={{ ...card, padding: "48px 24px", textAlign: "center" }}>
+          <p style={{ fontFamily: "var(--font-display)", fontSize: 22, margin: 0 }}>No attorney boards set up</p>
+          <p style={{ fontSize: 14, color: "var(--color-ink-muted)" }}>An admin adds them in Settings → Attorney boards.</p>
+        </div>
+      )}
+
+      {data && data.boards.length > 0 && entries.length === 0 && !loading && (
+        <div style={{ ...card, padding: "56px 24px", textAlign: "center" }}>
+          <p style={{ fontFamily: "var(--font-display)", fontSize: 22, margin: 0 }}>No appointments {day === today ? "today" : "this day"}</p>
+          <p style={{ fontSize: 14, color: "var(--color-ink-muted)", marginTop: 6 }}>Use the arrows to look at another day.</p>
+        </div>
+      )}
+
+      {entries.length > 0 && (() => {
+        const select = (id: string) => {
+          setSelected(id);
+          if (layout === "narrow") {
+            setPhoneDetail(true);
+            pageRef.current?.scrollIntoView?.({ block: "start" });
+          }
+        };
+        const client = entry && (
+          <div style={{ minWidth: 0 }}>
+            <SectionCode code="P4.5" />
+            <ClientPanel entry={entry} tab={tab} setTab={setTab} />
+          </div>
+        );
+        const after = entry && (
+          <div style={{ minWidth: 0 }}>
+            <SectionCode code="P4.6" />
+            <AfterConsult
+              entry={entry}
+              note={notes[entry.localId] ?? ""}
+              setNote={(v) => setNotes((n) => ({ ...n, [entry.localId]: v }))}
+              onStatusChanged={(status) => updateStatus(entry.localId, status)}
+              contract={contracts[entry.localId] ?? null}
+              onContract={() => setContractFor(entry)}
+            />
+          </div>
+        );
+        const dim = { opacity: loading ? 0.6 : 1, transition: "opacity 0.15s" };
+
+        if (layout === "narrow") {
+          return phoneDetail && entry ? (
+            <div className="flex flex-col gap-4" style={dim}>
+              <button type="button" onClick={() => setPhoneDetail(false)}
+                className="inline-flex items-center gap-1.5 self-start"
+                style={{ height: 44, padding: "0 14px", borderRadius: 10, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-ink)", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M10 3L5 8l5 5" /></svg>
+                All appointments
+              </button>
+              {client}
+              {after}
             </div>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div style={dim}>
+              <SectionCode code="P4.4" />
+              <DayList entries={entries} states={states} nowAt={nowAt} now={now} selected={selected} onSelect={select} />
+            </div>
+          );
+        }
 
-      {/* Summary footer */}
-      {!loading && data && totalCount > 0 && (
-        <div
-          className="mt-6 text-center text-xs"
-          style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-body)" }}
-        >
-          {totalCount} appointment{totalCount !== 1 ? "s" : ""}
-          {viewMode === "list" && attorney !== "all" ? ` for ${attorney}` : ""}
-          {range === "day" ? " today" : range === "week" ? " this week" : range === "upcoming" ? " upcoming" : range === "calendar" ? ` on ${formatDate(calendarDate)}` : ""}
-        </div>
-      )}
+        return (
+          <div className="grid items-start gap-4" style={{
+            ...dim,
+            gridTemplateColumns: layout === "wide"
+              ? "minmax(250px, 320px) minmax(0, 1fr) minmax(290px, 360px)"
+              : "92px minmax(0, 1fr) minmax(270px, 320px)",
+          }}>
+            <div style={{ minWidth: 0 }}>
+              <SectionCode code="P4.4" />
+              {layout === "wide"
+                ? <DayList entries={entries} states={states} nowAt={nowAt} now={now} selected={selected} onSelect={select} />
+                : <DayRail entries={entries} states={states} nowAt={nowAt} selected={selected} onSelect={select} />}
+            </div>
+            {client}
+            {after}
+          </div>
+        );
+      })()}
 
-      {/* Notes modal */}
-      {modalNotes && (
-        <NotesModal
-          updates={modalNotes}
-          title={modalTitle}
-          onClose={closeNotesModal}
-        />
-      )}
-
-      {/* Focus modal */}
-      {focusedEntry && (
-        <AppointmentModal
-          entry={focusedEntry}
-          onClose={() => setFocusedEntry(null)}
+      {contractFor?.profile && (
+        <NewContractModal
+          profileLocalId={contractFor.profile.localId}
+          clientName={contractFor.profile.name}
+          onClose={() => setContractFor(null)}
+          onCreated={(c) => setContracts((m) => ({ ...m, [contractFor.localId]: c }))}
         />
       )}
     </div>
