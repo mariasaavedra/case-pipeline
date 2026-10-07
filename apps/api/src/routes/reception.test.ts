@@ -16,6 +16,9 @@ import {
   planPrepWriteBack,
   splitDescription,
   getReceptionConsults,
+  getDetentionFacilities,
+  dmsUrlFor,
+  isDmsRecordUrl,
   PREP_DESCRIPTION_MAX,
   type PrepBody,
 } from "./reception";
@@ -33,7 +36,7 @@ describe("parsePrepBody", () => {
     expect(body()).toEqual({
       apptType: "1st time", apptTypeOther: null, detainedAt: null, method: "Phone", phone: "(913) 555-0101",
       zoomLink: null, methodOther: null, interpreter: { need: "No", language: null, contact: null },
-      description: "", clientWrote: null, documents: [], folderLinks: [],
+      description: "", clientWrote: null, documents: [], folderLinks: [], dmsUrl: null,
     });
   });
 
@@ -159,6 +162,38 @@ describe("prepNote", () => {
   });
 });
 
+describe("DMS link", () => {
+  const url = "https://sharmacrawford-cdb.innovationlawlab.org/records/21164";
+
+  it("builds the record link from the case number", () => {
+    expect(dmsUrlFor("21164")).toBe(url);
+    expect(dmsUrlFor("21-164")).toBe(url);
+    expect(dmsUrlFor("DMS 21164")).toBe(url);
+    expect(dmsUrlFor("")).toBeNull();
+    expect(dmsUrlFor(null)).toBeNull();
+    expect(isDmsRecordUrl(url)).toBe(true);
+    expect(isDmsRecordUrl("https://sharmacrawford-cdb.innovationlawlab.org/records/")).toBe(false);
+  });
+
+  it("is optional, must be a link, and goes in the note after the interpreter", () => {
+    expect(body().dmsUrl).toBeNull();
+    expect(parsePrepBody({ ...base, dmsUrl: "records/21164" })).toEqual({ ok: false, error: "The DMS link must start with https://" });
+    const n = prepNote(body({ dmsUrl: url }));
+    expect(n.text).toBe(`Type of appt: 1st time\nHow to proceed: Phone — (913) 555-0101\nInterpreter: Not needed\nDMS: ${url}`);
+    expect(n.html).toContain(`<p><strong>DMS:</strong> <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></p>`);
+  });
+
+  it("fills the profile's DMS URL when empty or pointing at no record, never replaces a real one", () => {
+    const cols = { profilePhone: null, appointmentDescription: null, profileDmsUrl: "text_mkkvfjrh" };
+    const step = { target: "profile", field: "dms_url", columnId: "text_mkkvfjrh", value: url };
+    const cur = (profileDmsUrl: string | null) => ({ profilePhone: null, appointmentDescription: null, profileDmsUrl });
+    expect(planPrepWriteBack(body({ dmsUrl: url }), cur(null), cols)).toEqual([step]);
+    expect(planPrepWriteBack(body({ dmsUrl: url }), cur("https://sharmacrawford-cdb.innovationlawlab.org/records/"), cols)).toEqual([step]);
+    expect(planPrepWriteBack(body({ dmsUrl: url }), cur("https://sharmacrawford-cdb.innovationlawlab.org/records/20001"), cols)).toEqual([]);
+    expect(planPrepWriteBack(body(), cur(null), cols)).toEqual([]);
+  });
+});
+
 describe("planPrepWriteBack", () => {
   const cols = { profilePhone: "phone7__1", appointmentDescription: "long_text" };
 
@@ -264,7 +299,7 @@ describe("getReceptionConsults", () => {
     db.prepare(
       `INSERT INTO profiles (batch_id, local_id, monday_item_id, name, phone, raw_column_values)
        VALUES (1, 'p1', '111', 'Silvia Estrada', '+1 913', ?)`,
-    ).run(JSON.stringify({ consult_file: "https://x.sharepoint.com/c" }));
+    ).run(JSON.stringify({ consult_file: "https://x.sharepoint.com/c", case_no: "21164" }));
     const appt = db.prepare(
       `INSERT INTO board_items (batch_id, local_id, monday_item_id, board_key, name, next_date, next_time, attorney, profile_local_id, column_values)
        VALUES (1, ?, ?, ?, 'Silvia Estrada', ?, ?, 'Michael', 'p1', ?)`,
@@ -283,7 +318,7 @@ describe("getReceptionConsults", () => {
     const a1 = list[1]!;
     expect(a1).toMatchObject({
       board: "M", language: "Espanol", fromCalendly: true, description: "Asks",
-      profile: { localId: "p1", name: "Silvia Estrada", consultFile: "https://x.sharepoint.com/c", eFile: null },
+      profile: { localId: "p1", name: "Silvia Estrada", consultFile: "https://x.sharepoint.com/c", eFile: null, caseNo: "21164", dmsUrl: null },
       lastPrep: null,
       detainedAt: null,
     });
@@ -313,6 +348,16 @@ describe("getReceptionConsults", () => {
     cc.run("c-new", "Court Case", JSON.stringify({ det_facility: { label: "Chase Co. (KS)" } }), "2026-09-01");
     const list = getReceptionConsults(db, opts);
     expect(list.find((c) => c.localId === "a1")!.detainedAt).toBe("Chase Co. (KS)");
+  });
+
+  it("offers the Court Cases board's Det. Facility labels as the detention centers", () => {
+    const db = seed();
+    expect(getDetentionFacilities(db)).toEqual([]);
+    db.prepare(
+      `INSERT INTO board_columns (board_key, monday_board_id, column_id, title, type, options, position)
+       VALUES ('court_cases', '1', 'color_x', 'Det. Facility', 'status', ?, 1)`,
+    ).run(JSON.stringify([{ index: 0, label: "Greene Co. (MO)" }, { index: 1, label: "Chase Co. (KS)" }, { index: 2, label: "" }]));
+    expect(getDetentionFacilities(db)).toEqual(["Chase Co. (KS)", "Greene Co. (MO)"]);
   });
 
   it("shows the latest prep", () => {
