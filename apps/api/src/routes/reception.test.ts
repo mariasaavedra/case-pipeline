@@ -350,6 +350,29 @@ describe("getReceptionConsults", () => {
     expect(list.find((c) => c.localId === "a1")!.detainedAt).toBe("Chase Co. (KS)");
   });
 
+  it("links the client's Drive upload folder: the Monday column first, else the newest folder the intake job matched", () => {
+    const db = seed();
+    const folder = db.prepare(
+      `INSERT INTO drive_folders (drive_folder_id, name, url, folder_path, drive_created_at, match_status, appointment_local_id)
+       VALUES (?, 'Consult Documents …', ?, 'OCTOBER / …', ?, ?, ?)`,
+    );
+    folder.run("old", "https://drive.google.com/drive/folders/old", "2026-09-28T10:00:00Z", "matched", "a1");
+    folder.run("new", "https://drive.google.com/drive/folders/new", "2026-09-30T10:00:00Z", "matched", "a1");
+    folder.run("odd", "https://drive.google.com/drive/folders/odd", "2026-10-01T10:00:00Z", "ambiguous", "a2");
+    db.prepare(`UPDATE board_items SET column_values = ? WHERE local_id = 'a3'`)
+      .run(JSON.stringify({ google_drive_folder: "https://drive.google.com/drive/folders/typed" }));
+    const by = new Map(getReceptionConsults(db, { ...opts, to: "2026-10-31" }).map((c) => [c.localId, c.driveFolder]));
+    expect(by.get("a1")).toBe("https://drive.google.com/drive/folders/new");
+    expect(by.get("a2")).toBeNull();
+    expect(by.get("a3")).toBe("https://drive.google.com/drive/folders/typed");
+  });
+
+  it("ignores a Drive column that is not a link", () => {
+    const db = seed();
+    db.prepare(`UPDATE board_items SET column_values = ? WHERE local_id = 'a2'`).run(JSON.stringify({ google_drive_folder: "javascript:alert(1)" }));
+    expect(getReceptionConsults(db, opts).find((c) => c.localId === "a2")!.driveFolder).toBeNull();
+  });
+
   it("offers the Court Cases board's Det. Facility labels as the detention centers", () => {
     const db = seed();
     expect(getDetentionFacilities(db)).toEqual([]);

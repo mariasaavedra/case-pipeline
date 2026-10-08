@@ -505,6 +505,7 @@ interface ConsultRow {
   prepInterpNeed: string | null;
   prepInterpLanguage: string | null;
   detainedAt: string | null;
+  driveFolder: string | null;
 }
 
 export interface ReceptionConsult {
@@ -548,6 +549,13 @@ export interface ReceptionConsult {
   /** Det. Facility on the client's open court case — pre-fills "Detained appt". */
   detainedAt: string | null;
   /**
+   * The Google Drive folder the client was sent to upload documents to: the
+   * appointment's "Google Drive Folder" column, else the newest folder the
+   * Drive intake job matched to it (drive_folders — before the next sync, or
+   * on a board without the column).
+   */
+  driveFolder: string | null;
+  /**
    * Other consults for the same client on the same day, on any active board —
    * usually one booking made twice (a Monday "Create Appt" / "Appt?" button
    * clicked on two boards). P17.2 flags them; nothing is merged or deleted.
@@ -581,6 +589,11 @@ function textOf(v: unknown): string | null {
     return ((v as { label: string }).label).trim() || null;
   }
   return null;
+}
+
+/** A text column's value when it is an http(s) link (safe for an href), else null. */
+function httpUrlOf(v: string | null): string | null {
+  return v && /^https?:\/\/\S+$/i.test(v) ? v : null;
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -617,7 +630,10 @@ export function getReceptionConsults(
                   AND cc.deleted_at IS NULL
                   AND COALESCE(json_extract(cc.column_values, '$.det_facility.label'), '') <> ''
                 ORDER BY COALESCE(cc.updated_at_source, cc.created_at) DESC
-                LIMIT 1) AS detainedAt
+                LIMIT 1) AS detainedAt,
+              (SELECT df.url FROM drive_folders df
+                WHERE df.appointment_local_id = bi.local_id AND df.match_status = 'matched'
+                ORDER BY df.drive_created_at DESC LIMIT 1) AS driveFolder
          FROM board_items bi
          LEFT JOIN profiles p ON p.local_id = bi.profile_local_id AND p.deleted_at IS NULL
          LEFT JOIN consult_preps cp ON cp.id = (
@@ -681,6 +697,7 @@ export function getReceptionConsults(
         ? { ok: true, folder: named.name.folder, initial: named.name.initial }
         : { ok: false, detail: named.detail },
       detainedAt: r.profileLocalId ? r.detainedAt : null,
+      driveFolder: httpUrlOf(textOf(cv.google_drive_folder)) ?? r.driveFolder,
       sameDayCount: 0,
     };
   });

@@ -2565,6 +2565,11 @@ boards:
       consult_sharepoint:
         resolve: by_id
         id: text_mkn3br7k
+      # The client's Google Drive upload folder (Zapier makes it at booking).
+      # Filled by the Drive intake job (scripts/drive-intake.ts) when empty.
+      google_drive_folder:
+        resolve: by_id
+        id: text_mm7rexc6
       files:
         resolve: by_id
         id: file_mknrt3bq
@@ -2742,6 +2747,11 @@ boards:
       consult_sharepoint:
         resolve: by_id
         id: text_mkn3gp82
+      # The client's Google Drive upload folder (Zapier makes it at booking).
+      # Filled by the Drive intake job (scripts/drive-intake.ts) when empty.
+      google_drive_folder:
+        resolve: by_id
+        id: text_mm7r7pjv
       link_to_profiles:
         resolve: by_id
         id: board_relation_mknznp7x
@@ -2951,6 +2961,11 @@ boards:
       consult_sharepoint:
         resolve: by_id
         id: text_mkn3gp82
+      # The client's Google Drive upload folder (Zapier makes it at booking).
+      # Filled by the Drive intake job (scripts/drive-intake.ts) when empty.
+      google_drive_folder:
+        resolve: by_id
+        id: text_mm7r98xa
       link_to_profiles:
         resolve: by_id
         id: board_relation_mknznp7x
@@ -3508,6 +3523,11 @@ boards:
       consult_sharepoint:
         resolve: by_id
         id: text_mkn3jmhc
+      # The client's Google Drive upload folder (Zapier makes it at booking).
+      # Filled by the Drive intake job (scripts/drive-intake.ts) when empty.
+      google_drive_folder:
+        resolve: by_id
+        id: text_mm7rxe19
       link_to_profiles:
         resolve: by_id
         id: board_relation_mknzm1as
