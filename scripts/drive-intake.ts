@@ -25,15 +25,23 @@
 //
 // Each step is stamped in drive_intake_files separately, so a failure in one
 // does not repeat the other. Nothing in Drive is moved, renamed or deleted.
+//
+// Per upload folder ("Consult Documents …", with or without files in it):
+//   5. Match it to the appointment the same way and record its link in
+//      drive_folders (M18 shows it). Write the link to the appointment's
+//      "Google Drive Folder" column when empty (scripts/drive/folder-links.ts).
+//      Folders made since --links-since (default: the same day as --since).
 // =============================================================================
 
 import Database from "better-sqlite3";
 import fs from "node:fs";
-import { addFileToUpdate, createUpdate, fetchItemAssets, setApiToken } from "@case-pipeline/monday";
+import { loadBoardsConfig } from "@case-pipeline/config";
+import { addFileToUpdate, changeSimpleColumnValue, createUpdate, fetchItem, fetchItemAssets, setApiToken } from "@case-pipeline/monday";
 import { driveClientFromEnv, FOLDER_MIME, type DriveClient, type DriveFile } from "./drive/drive-client.js";
-import { isMonthFolder, readContext } from "./drive/folder-names.js";
+import { isMonthFolder, parseUploadFolder, readContext } from "./drive/folder-names.js";
 import { matchUpload, WINDOW_DAYS, type AppointmentRow, type MatchResult } from "./drive/match.js";
 import { resolveDestination, type ClientLinks, type Destination } from "./drive/destination.js";
+import { columnDecision, driveFolderUrl, newestPerAppointment } from "./drive/folder-links.js";
 import { graphAuthFromEnv } from "./sharepoint/auth.js";
 import { listChildren, uploadFile } from "./sharepoint/folders.js";
 import type { GraphAuth } from "./sharepoint/graph-client.js";
@@ -148,6 +156,164 @@ function updateBody(files: DriveFile[], dest: Destination | null): string {
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+}
+
+// ---- Upload folder links --------------------------------------------------------
+
+interface LinkedFolder {
+  id: string;
+  name: string;
+  createdTime: string;
+  folderPath: string;
+  appointmentLocalId: string;
+  appt: AppointmentRow | null;
+  fromLedger: boolean;
+}
+
+/** The "Google Drive Folder" column per appointment board, from config/boards.yaml. */
+async function driveColumns(): Promise<Map<string, { boardId: string; columnId: string }>> {
+  const out = new Map<string, { boardId: string; columnId: string }>();
+  for (const [key, board] of Object.entries(await loadBoardsConfig())) {
+    const col = board.columns.google_drive_folder;
+    if (col?.resolve === "by_id" && col.id) out.set(key, { boardId: String(board.id), columnId: col.id });
+  }
+  return out;
+}
+
+async function linkFolders(o: {
+  db: Database.Database;
+  drive: DriveClient;
+  rootId: string;
+  since: string;
+  apply: boolean;
+  appointments: AppointmentRow[];
+  folderCache: Map<string, DriveFile>;
+  receipt: string[];
+}) {
+  const tally = { written: 0, already: 0, kept: 0, noColumn: 0, review: 0, failed: 0 };
+  const hasTable = !!o.db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'drive_folders'`).get();
+  if (!hasTable && o.apply) {
+    console.error("[drive] drive_folders is missing — the database is older than schema v31. Start the API once to migrate it.");
+    tally.failed++;
+    return tally;
+  }
+
+  const ledger = hasTable
+    ? (o.db.prepare(`SELECT drive_folder_id AS id, name, drive_created_at AS createdTime, folder_path AS folderPath,
+                            appointment_local_id AS appointmentLocalId, match_status AS status, monday_done_at AS doneAt
+                       FROM drive_folders`).all() as Array<{
+        id: string; name: string; createdTime: string; folderPath: string;
+        appointmentLocalId: string | null; status: string; doneAt: string | null;
+      }>)
+    : [];
+  const done = new Set(ledger.filter((r) => r.doneAt).map((r) => r.id));
+
+  const folders = (
+    await o.drive.list(
+      `mimeType = '${FOLDER_MIME}' and trashed = false and name contains 'Consult Documents' and createdTime >= '${o.since}T00:00:00'`,
+    )
+  ).filter((f) => parseUploadFolder(f.name) && !done.has(f.id));
+
+  const record = o.db.prepare(`
+    INSERT INTO drive_folders
+      (drive_folder_id, name, url, folder_path, drive_created_at, match_status, match_detail,
+       appointment_local_id, appointment_monday_id, profile_local_id)
+    VALUES (@id, @name, @url, @path, @created, @status, @detail, @appt, @apptMonday, @profile)
+    ON CONFLICT(drive_folder_id) DO UPDATE SET
+      name = excluded.name, folder_path = excluded.folder_path,
+      match_status = excluded.match_status, match_detail = excluded.match_detail,
+      appointment_local_id = excluded.appointment_local_id,
+      appointment_monday_id = excluded.appointment_monday_id,
+      profile_local_id = excluded.profile_local_id,
+      updated_at = datetime('now')`);
+  const finish = (id: string, note: string) =>
+    o.db.prepare(`UPDATE drive_folders SET monday_done_at = datetime('now'), monday_note = ?, last_error = NULL, updated_at = datetime('now') WHERE drive_folder_id = ?`)
+      .run(note, id);
+  const fail = (id: string, message: string) =>
+    o.db.prepare(`UPDATE drive_folders SET last_error = ?, updated_at = datetime('now') WHERE drive_folder_id = ?`).run(message, id);
+
+  // Match this run's folders; earlier matched ones come from the ledger.
+  const matched: LinkedFolder[] = ledger
+    .filter((r) => r.status === "matched" && r.appointmentLocalId)
+    .map((r) => ({ ...r, appointmentLocalId: r.appointmentLocalId!, appt: null, fromLedger: true }));
+  for (const folder of folders) {
+    const ancestors = await ancestorsOf(o.drive, o.rootId, folder, o.folderCache);
+    if (!ancestors || !isMonthFolder(ancestors[0])) continue;
+    const path = [...ancestors, folder.name];
+    const placed = readContext(path);
+    const match: MatchResult = placed.ok ? matchUpload(placed.context, o.appointments) : { kind: "unmatched", detail: placed.reason };
+    const appt = match.kind === "matched" ? match.appointment : null;
+    if (o.apply) {
+      record.run({
+        id: folder.id, name: folder.name, url: driveFolderUrl(folder.id), path: path.join(" / "),
+        created: folder.createdTime, status: match.kind, detail: match.detail,
+        appt: appt?.localId ?? null, apptMonday: appt?.mondayItemId ?? null, profile: appt?.profileLocalId ?? null,
+      });
+    }
+    if (!appt) {
+      tally.review++;
+      console.log(`  review  folder ${folder.name} — ${match.kind}: ${match.detail}`);
+      o.receipt.push(row([folder.name, path.join(" / "), `folder-${match.kind}`, "", "", "", match.detail]));
+      continue;
+    }
+    const prior = matched.findIndex((m) => m.id === folder.id);
+    if (prior >= 0) matched.splice(prior, 1);
+    matched.push({ id: folder.id, name: folder.name, createdTime: folder.createdTime, folderPath: path.join(" / "), appointmentLocalId: appt.localId, appt, fromLedger: false });
+  }
+
+  const columns = await driveColumns();
+  const newest = newestPerAppointment(matched);
+  for (const f of matched) {
+    // An earlier booking of an appointment that has a newer folder: nothing to write.
+    if (!f.fromLedger && newest.get(f.appointmentLocalId)!.id !== f.id && o.apply) finish(f.id, "superseded");
+  }
+
+  for (const f of newest.values()) {
+    if (f.fromLedger || !f.appt) continue; // written (or decided) on an earlier run
+    const appt = f.appt;
+    const who = `${appt.name} (${appt.boardKey}, ${appt.consultDate})`;
+    const url = driveFolderUrl(f.id);
+    const olderIds = new Set(matched.filter((m) => m.appointmentLocalId === f.appointmentLocalId && m.id !== f.id).map((m) => m.id));
+    const column = columns.get(appt.boardKey);
+
+    if (!column || !appt.mondayItemId) {
+      tally.noColumn++;
+      if (o.apply) finish(f.id, "no-column");
+      console.log(`  link    ${who}: ${url} — kept in the app only (no "Google Drive Folder" column on ${appt.boardKey})`);
+      o.receipt.push(row([f.name, f.folderPath, "folder-local-only", who, "", appt.mondayItemId, url]));
+      continue;
+    }
+
+    try {
+      // Monday's value, not the synced copy: Zapier or reception may have set it since.
+      const current = o.apply
+        ? ((await fetchItem(appt.mondayItemId)).column_values.find((c) => c.id === column.columnId)?.text ?? null)
+        : localColumnText(o.db, appt.localId, "google_drive_folder");
+      const decision = columnDecision(current, f.id, olderIds);
+      if (decision === "write" && o.apply) await changeSimpleColumnValue(column.boardId, appt.mondayItemId, column.columnId, url);
+      if (o.apply) finish(f.id, decision === "write" ? "written" : decision);
+      if (decision === "write") tally.written++;
+      else if (decision === "already-set") tally.already++;
+      else tally.kept++;
+      const verb = decision === "write" ? (o.apply ? "linked" : "would link") : decision === "already-set" ? "already linked" : `kept "${current}"`;
+      console.log(`  ${verb}  ${who}  →  ${url}`);
+      o.receipt.push(row([f.name, f.folderPath, `folder-${decision}`, who, "", appt.mondayItemId, url]));
+    } catch (err) {
+      tally.failed++;
+      const message = err instanceof Error ? err.message : String(err);
+      if (o.apply) fail(f.id, message);
+      console.error(`  FAILED  folder link → ${who}: ${message}`);
+      o.receipt.push(row([f.name, f.folderPath, "folder-failed", who, "", appt.mondayItemId, message]));
+    }
+  }
+  return tally;
+}
+
+function localColumnText(db: Database.Database, localId: string, key: string): string | null {
+  const r = db.prepare(`SELECT json_extract(column_values, '$.' || ?) AS v FROM board_items WHERE local_id = ?`).get(key, localId) as
+    | { v: unknown }
+    | undefined;
+  return typeof r?.v === "string" ? r.v : null;
 }
 
 // ---- Main -----------------------------------------------------------------------
@@ -380,7 +546,25 @@ async function main() {
       ` · waiting for a folder ${tally.waiting} · for review ${tally.review} · failed ${tally.failed}`,
   );
 
-  if (planned.length) {
+  // 5. Upload folder links. Harmless to backfill (nothing is copied), so the
+  // window can start earlier than the files'.
+  const linksSince = arg("links-since") ?? process.env.DRIVE_LINKS_SINCE?.trim() ?? since;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(linksSince)) {
+    console.error("--links-since / DRIVE_LINKS_SINCE must be YYYY-MM-DD.");
+    process.exit(1);
+  }
+  const links = await linkFolders({
+    db, drive, rootId, since: linksSince, apply, folderCache, receipt,
+    appointments: linksSince < since ? loadAppointments(db, linksSince) : appointments,
+  });
+  console.log(
+    `[drive] folder links since ${linksSince}: ${apply ? "written" : "to write"} ${links.written}` +
+      ` · already set ${links.already} · other link kept ${links.kept} · app only ${links.noColumn}` +
+      ` · for review ${links.review} · failed ${links.failed}`,
+  );
+  tally.failed += links.failed;
+
+  if (receipt.length > 1) {
     fs.mkdirSync("output", { recursive: true });
     const path = `output/drive-intake-${apply ? "" : "plan-"}${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
     fs.writeFileSync(path, receipt.join("\n"));

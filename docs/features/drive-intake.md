@@ -1,6 +1,6 @@
 # Drive Intake
 
-**Status:** built, off by default (`DRIVE_INTAKE=on` to schedule) · **Last updated:** 2026-10-02
+**Status:** built, off by default (`DRIVE_INTAKE=on` to schedule) · **Last updated:** 2026-10-08
 
 ## Goal
 
@@ -46,6 +46,16 @@ Per matched file, two independent steps, each stamped in `drive_intake_files` (s
 
 The job never creates a **client** folder: the consult sweep does that when the consult is booked. A client with no recorded folder yet is counted as *waiting* and picked up on a later run.
 
+## Folder links
+
+Every run also lists the **upload folders** ("Consult Documents …"), even those with nothing in them yet, matches each one to its appointment the same way (`scripts/drive/folder-links.ts`), and records it in `drive_folders` (schema v31).
+
+- **Monday:** the link goes in the appointment's **Google Drive Folder** text column (R `text_mm7rxe19`, M `text_mm7r7pjv`, LB `text_mm7rexc6`, CR `text_mm7r98xa`; WH has none, so the link stays in the app only). It is written only when the column is empty, or when it holds an earlier booking's folder for the same appointment. A link someone typed is never replaced. The value is re-read from Monday before each write.
+- **Reschedules:** one appointment can match several folders. The newest wins, because it's the one the client was sent last. The older ones are marked `superseded`.
+- **M18:** Documents shows "📤 Client's Google Drive uploads". It uses the column if it's set, otherwise the newest matched folder, so the link appears before the next sync. It is not added to the prep note, because the uploads are copied into SharePoint anyway.
+- **Window:** folders made since `--links-since` / `DRIVE_LINKS_SINCE`, which defaults to `DRIVE_INTAKE_SINCE`. Backfilling is harmless because nothing is copied: `npm run drive:intake -- --apply --links-since=2026-09-01`.
+- Unmatched/ambiguous folders are listed for review in the receipt CSV (`folder-unmatched`, `folder-ambiguous`) and retried every run.
+
 **Never touched:** anything in Drive (read-only scope), files uploaded before `DRIVE_INTAKE_SINCE` (reception already copied those), Google Docs/Sheets (not files), anything over 200 MB.
 
 ## Setup (once)
@@ -68,4 +78,3 @@ SharePoint uses the same signed-in Graph token as the consult sweep; Monday uses
 ## Later
 
 - Alerts group "Drive uploads to review" from `drive_intake_files` where `match_status` is `unmatched`/`ambiguous`, with a pick-the-appointment action.
-- Show the client's Drive folder link on the appointment (the "Google Drive Folder" text columns already exist on R, M, LB, CR — empty).

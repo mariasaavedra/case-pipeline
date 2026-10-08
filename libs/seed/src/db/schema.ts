@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 30;
+export const SCHEMA_VERSION = 31;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -477,6 +477,29 @@ CREATE TABLE IF NOT EXISTS drive_intake_files (
 );
 CREATE INDEX IF NOT EXISTS idx_drive_intake_status ON drive_intake_files(match_status);
 CREATE INDEX IF NOT EXISTS idx_drive_intake_appt ON drive_intake_files(appointment_local_id);
+
+-- Drive upload folders (v31+): one row per "Consult Documents …" folder Zapier
+-- made, matched to its appointment, and whether its link was written to the
+-- appointment's "Google Drive Folder" column. M18 shows the link.
+-- Local-only — NOT rebuilt by sync; the intake job re-finds folders anyway.
+CREATE TABLE IF NOT EXISTS drive_folders (
+    drive_folder_id        TEXT PRIMARY KEY,
+    name                   TEXT NOT NULL,
+    url                    TEXT NOT NULL,
+    folder_path            TEXT NOT NULL,
+    drive_created_at       TEXT,
+    match_status           TEXT NOT NULL,         -- matched | unmatched | ambiguous
+    match_detail           TEXT,
+    appointment_local_id   TEXT,
+    appointment_monday_id  TEXT,
+    profile_local_id       TEXT,
+    monday_done_at         TEXT,
+    monday_note            TEXT,                  -- written | already-set | other-link-kept | no-column
+    last_error             TEXT,
+    first_seen_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_drive_folders_appt ON drive_folders(appointment_local_id);
 
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_profiles_batch ON profiles(batch_id);
@@ -1371,6 +1394,30 @@ export function initializeSchema(db: Database): void {
         );
         CREATE INDEX IF NOT EXISTS idx_drive_intake_status ON drive_intake_files(match_status);
         CREATE INDEX IF NOT EXISTS idx_drive_intake_appt ON drive_intake_files(appointment_local_id);
+      `);
+    }
+
+    // Migration v30 → v31: Drive upload folder links. New table only.
+    if (fromVersion < 31) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS drive_folders (
+            drive_folder_id        TEXT PRIMARY KEY,
+            name                   TEXT NOT NULL,
+            url                    TEXT NOT NULL,
+            folder_path            TEXT NOT NULL,
+            drive_created_at       TEXT,
+            match_status           TEXT NOT NULL,
+            match_detail           TEXT,
+            appointment_local_id   TEXT,
+            appointment_monday_id  TEXT,
+            profile_local_id       TEXT,
+            monday_done_at         TEXT,
+            monday_note            TEXT,
+            last_error             TEXT,
+            first_seen_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_drive_folders_appt ON drive_folders(appointment_local_id);
       `);
     }
 

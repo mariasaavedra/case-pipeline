@@ -623,6 +623,15 @@ export function ConsultPrepModal({ consult, facilities, onFocus, onClose, onSave
                       </li>
                     );
                   })}
+                  {consult.driveFolder && (
+                    <li style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: "var(--font-body)" }}>
+                      {/* Not in the prep note: the intake job copies these uploads into the client's SharePoint folder. */}
+                      <span style={{ width: 13 }} aria-hidden />
+                      <a href={consult.driveFolder} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-amber-dark)" }}>
+                        📤 Client's Google Drive uploads
+                      </a>
+                    </li>
+                  )}
                   {picked.map((f) => (
                     <li key={f.url} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: "var(--font-body)" }}>
                       <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-amber-dark)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
