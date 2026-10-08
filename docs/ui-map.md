@@ -160,7 +160,7 @@ by name); the board tabs switch to another attorney.
 | Code | Name | Notes |
 |---|---|---|
 | P17.1 | Header | Consult count, not prepped count; **+ Book Appt** → M10 (pick the client first); range (Today / Tomorrow / Next 7 days), attorney and "not prepped" filters |
-| P17.2 | Consult list | Grouped by day: time, client (→ M3), Calendly / language tags, attorney board, description, Prepped / Not prepped; **Edit** → M20; **Focus** → M5; **Prep** → M18 |
+| P17.2 | Consult list | Grouped by day: time, client (→ M3), Calendly / language tags, attorney board, description, Prepped / Not prepped; a "No profile" row has **Link client** → M24; **Edit** → M20; **Focus** → M5; **Prep** → M18 |
 
 ### Inside P18 Address Changes
 
@@ -272,6 +272,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M21 | Payment links | "Payment links" | P14.3 → ⋯ → **Payment links…**. One LawPay link per fee (AF, PF → Operating; FF → Trust), description + amounts editable; **Mark sent** (only in Needs Payment Link) sets Payment Link Sent On | `PaymentLinksModal.tsx` |
 | M22 | Generate contract | "Generate contract" | P14.3 → ⋯ → **Generate contract…**. Pick a template from SharePoint `Fee Contracts/App Templates` (staff-edited Word files with `{{tags}}`); a broken template is shown with a link to fix it; only that template's fields are shown, pre-filled from Monday; **Generate PDF** (via the user's Microsoft 365) or **Word** | `GenerateContractModal.tsx` |
 | M23 | Generate document | "Generate document" | P3.0 → **Generate Doc**. Pick the document (only **G-28** so far); its fields show pre-filled — attorney from P11.3.4 (the client's Monday attorney when it matches), client from Monday (mailing address split into boxes), a detained client's facility as the address with ICE + Respondent — all editable. **Generate G-28** fills the official USCIS PDF (`templates/forms/g-28.pdf`), downloads it and saves a copy in the client's SharePoint folder (e-file first). Nothing written to Monday | `GenerateDocModal.tsx` |
+| M24 | Link client | "Link client" | P17.2 → **Link client** on a "No profile" row. Profile search pre-filled with the client's name from the appointment; **Link** sets the appointment's Profiles column in Monday (queued on an outage). Only unlinked consults — changing a link stays in Monday | `ConsultLinkModal.tsx` |
 | M20 | Change consult | "Change consult" | P17.2 → **Edit**. Attorney, date, time; a new attorney moves the appointment to their board in Monday. Calendly is not changed (reminder shown) | `ConsultScheduleModal.tsx` |
 
 ## Dropdowns

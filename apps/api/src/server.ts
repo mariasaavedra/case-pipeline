@@ -77,6 +77,7 @@ import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
 import { registerReceptionRoutes } from "./routes/reception.js";
 import { registerMyDayRoutes } from "./routes/my-day.js";
 import { registerConsultScheduleRoutes } from "./routes/consult-schedule.js";
+import { registerConsultLinkRoutes } from "./routes/consult-link.js";
 import { registerJailIntakeWriteRoutes } from "./routes/jail-intake-write.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { REPO_ROOT } from "./paths.js";
@@ -486,6 +487,7 @@ registerDetentionWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeT
 registerReceptionRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerMyDayRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerConsultScheduleRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerConsultLinkRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 
 // =============================================================================
 // Board item write-back (status + columns) — see routes/board-item-write.ts

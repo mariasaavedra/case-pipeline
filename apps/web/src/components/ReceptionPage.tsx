@@ -7,6 +7,7 @@ import { SectionCode } from "./ScreenCode";
 import { Tag, PersonChip, ListSection } from "./caseBoardParts";
 import { ConsultPrepModal } from "./ConsultPrepModal";
 import { ConsultScheduleModal } from "./ConsultScheduleModal";
+import { ConsultLinkModal } from "./ConsultLinkModal";
 import { NewAppointmentModal } from "./NewAppointmentModal";
 import { Button } from "./ui/button";
 
@@ -17,6 +18,7 @@ import { Button } from "./ui/button";
 // the consults on every active attorney board (Calendly-booked or added by
 // staff), day by day, each marked Prepped / Not prepped. "Prep" opens M18;
 // "Edit" opens M20 (date, time, attorney — a new attorney moves it to their board);
+// "Link client" on a "No profile" row opens M24 (connect it to its profile);
 // "+ Book Appt" opens M10 with a client search, for a consult that is not on a
 // board yet. "Focus" opens the same focus view as P4 (M5: notes, documents,
 // note composer) over the page — also from inside M18, so the notes can be read
@@ -71,13 +73,14 @@ function preppedOn(at: string): string {
 // Consult list (P17.2)
 // =============================================================================
 
-function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit }: {
+function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit, onLink }: {
   c: ReceptionConsult;
   attorneyActive: boolean;
   onAttorney: (name: string) => void;
   onPrep: (c: ReceptionConsult) => void;
   onFocus: (c: ReceptionConsult) => void;
   onEdit: (c: ReceptionConsult) => void;
+  onLink: (c: ReceptionConsult) => void;
 }) {
   const prepped = c.lastPrep !== null;
   return (
@@ -111,7 +114,20 @@ function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit }: 
               Possible duplicate
             </Tag>
           )}
-          {!c.profile && <Tag color="missing" title="Not linked to a profile in Monday — link it before prepping">No profile</Tag>}
+          {!c.profile && (
+            <>
+              <Tag color="missing" title="Not linked to a profile in Monday — link it before prepping">No profile</Tag>
+              <button
+                type="button"
+                onClick={() => onLink(c)}
+                className="text-xs font-semibold hover:underline"
+                style={{ color: "var(--color-amber)", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                title="Find the client's profile and connect this consult to it in Monday"
+              >
+                Link client
+              </button>
+            </>
+          )}
           {c.fromCalendly && <Tag color="later" title="Booked through Calendly">Calendly</Tag>}
           {c.language && <Tag color="court" title="Language">{c.language}</Tag>}
           {c.lastPrep?.interpreter && <Tag color="court" title="Interpreter needed (from the prep)">Interpreter · {c.lastPrep.interpreter}</Tag>}
@@ -179,6 +195,7 @@ export function ReceptionPage() {
   const [prepping, setPrepping] = useState<ReceptionConsult | null>(null);
   const [editing, setEditing] = useState<ReceptionConsult | null>(null);
   const [booking, setBooking] = useState(false);
+  const [linking, setLinking] = useState<ReceptionConsult | null>(null);
   const [focused, setFocused] = useState<AppointmentEntry | null>(null);
   const [focusError, setFocusError] = useState<string | null>(null);
 
@@ -314,6 +331,7 @@ export function ReceptionPage() {
                     onPrep={setPrepping}
                     onFocus={openFocus}
                     onEdit={setEditing}
+                    onLink={setLinking}
                   />
                 ))}
               </ListSection>
@@ -339,6 +357,7 @@ export function ReceptionPage() {
       )}
       {/* After M18 so it stacks on top when opened from inside the prep popup. */}
       {focused && <AppointmentModal entry={focused} onClose={() => setFocused(null)} />}
+      {linking && <ConsultLinkModal consult={linking} onClose={() => setLinking(null)} onLinked={load} />}
       {editing && <ConsultScheduleModal consult={editing} onClose={() => setEditing(null)} onSaved={load} />}
       {booking && <NewAppointmentModal onClose={() => setBooking(false)} onBooked={load} />}
     </div>

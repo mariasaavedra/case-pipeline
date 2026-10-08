@@ -30,6 +30,7 @@ export const AUDIT_FAMILIES: { group: string; options: AuditActionFamily[] }[] =
       { value: "monday.jail_intake_created", label: "Jail intakes created" },
       { value: "monday.client_released", label: "Released from detention" },
       { value: "monday.consult_note_posted", label: "Consult notes" },
+      { value: "monday.consult_profile_linked", label: "Consults linked to a client" },
     ],
   },
   {
@@ -110,6 +111,8 @@ export function describeAudit(action: string, metadata: unknown): AuditDescripti
     }
     case "monday.consult_note_posted":
       return d("Wrote a consult note", m.queued ? "Queued — Monday was unreachable" : null);
+    case "monday.consult_profile_linked":
+      return d("Linked a consult to its client", m.queued ? "Queued — Monday was unreachable" : null);
     case "doc.generated":
       return d("Generated a document", str(m.template) ? `Template ${quoted(m.template)}` : null);
     case "mail.scan":
