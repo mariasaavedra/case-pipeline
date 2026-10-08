@@ -1436,6 +1436,18 @@ export function fetchReceptionAttorneys(): Promise<ReceptionAttorney[]> {
   return apiFetch<ReceptionAttorney[]>("/api/reception/attorneys");
 }
 
+/** Connect an unlinked consult to a client's profile (writes the appointment's Profiles column). */
+export function linkConsultProfile(
+  appointmentLocalId: string,
+  profileLocalId: string,
+): Promise<{ profileLocalId: string; profileName: string; pending: boolean }> {
+  return apiFetch(`/api/reception/consults/${encodeURIComponent(appointmentLocalId)}/profile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ profileLocalId }),
+  });
+}
+
 /** Change a consult's date, time and/or attorney (a new attorney moves it to their board). */
 export function rescheduleConsult(
   appointmentLocalId: string,
