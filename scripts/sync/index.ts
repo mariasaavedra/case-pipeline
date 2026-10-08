@@ -25,12 +25,18 @@
 // that exists, pass 4 remains a full walk — use --skip-timeline for a fast
 // column-only refresh, and --full periodically to catch deletions and E&A.
 //
+// Nor connect-boards changes: linking an item (e.g. an appointment to its
+// profile) leaves updated_at alone too. --items= re-reads named items by id on
+// top of the incremental pass; the webhook processor passes the items its
+// events named.
+//
 // Usage:
 //   MONDAY_API_TOKEN=... npm run sync:live                  # incremental
 //   npm run sync:live -- --full                             # full walk + deletions
 //   npm run sync:live -- --skip-timeline                    # columns only (fast)
 //   npm run sync:live -- --max-items=200   # cap items per board (debugging)
 //   npm run sync:live -- --boards=profiles,fee_ks,court_cases
+//   npm run sync:live -- --boards=appointments_m --items=12916371963,12799280972
 //
 // Column reshaping is handled by ./mapper (unit-tested in mapper.test.ts).
 // =============================================================================
@@ -43,6 +49,7 @@ import {
   setApiToken,
   fetchBoardStructure,
   fetchAllBoardItems,
+  fetchItemsByIds,
   fetchItemUpdatesBatch,
   fetchTimelineBatch,
   fetchCustomActivities,
@@ -196,6 +203,7 @@ function parseArgs() {
   let full = false;
   let skipTimeline = false;
   let forcePresync = false;
+  let itemIds: string[] = [];
   for (const arg of args) {
     if (arg.startsWith("--max-items=")) maxItems = parseInt(arg.split("=")[1] ?? "") || maxItems;
     else if (arg.startsWith("--page-size=")) pageSize = parseInt(arg.split("=")[1] ?? "") || pageSize;
@@ -203,8 +211,9 @@ function parseArgs() {
     else if (arg === "--full") full = true;
     else if (arg === "--skip-timeline") skipTimeline = true;
     else if (arg === "--presync") forcePresync = true;
+    else if (arg.startsWith("--items=")) itemIds = (arg.split("=")[1] ?? "").split(",").map((s) => s.trim()).filter((s) => /^\d+$/.test(s));
   }
-  return { maxItems, pageSize, onlyBoards, full, skipTimeline, forcePresync };
+  return { maxItems, pageSize, onlyBoards, full, skipTimeline, forcePresync, itemIds };
 }
 
 // =============================================================================
@@ -244,7 +253,7 @@ async function main() {
   }
   setApiToken(token);
 
-  const { maxItems, pageSize, onlyBoards, full, skipTimeline, forcePresync } = parseArgs();
+  const { maxItems, pageSize, onlyBoards, full, skipTimeline, forcePresync, itemIds } = parseArgs();
 
   const dataDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../data");
   fs.mkdirSync(dataDir, { recursive: true });
@@ -422,6 +431,28 @@ async function main() {
     const row = readWatermark.get(board) as { last_updated_at: string | null } | undefined;
     return row?.last_updated_at ?? null;
   }
+  // --items=: specific items (the webhook processor passes the ones its events
+  // named) re-read by id and merged into their board's incremental pass. An
+  // incremental read only sees items whose updated_at moved, and Monday leaves
+  // updated_at alone when a connect-boards column changes — so without this a
+  // profile linked to an appointment stays unlinked here until the nightly
+  // full walk. Fetched lazily, once, on the first incremental board.
+  let extraItemsByBoard: Map<string, MondayItem[]> | null = null;
+  async function extraItemsFor(boardId: string): Promise<MondayItem[]> {
+    if (itemIds.length === 0) return [];
+    if (!extraItemsByBoard) {
+      extraItemsByBoard = new Map();
+      for (const item of await fetchItemsByIds(itemIds)) {
+        const id = item.board?.id;
+        if (!id) continue;
+        const list = extraItemsByBoard.get(id) ?? [];
+        list.push(item);
+        extraItemsByBoard.set(id, list);
+      }
+    }
+    return extraItemsByBoard.get(boardId) ?? [];
+  }
+
   /** Boards that actually ran incrementally this run — never reconcilable. */
   const incrementalBoards = new Set<string>();
   const fetchedCounts: Record<string, number> = {};
@@ -516,6 +547,11 @@ async function main() {
         truncations.push({ board: key, detail });
       },
     });
+    if (since) {
+      const seen = new Set(items.map((i) => i.id));
+      const extra = (await extraItemsFor(config.id)).filter((i) => !seen.has(i.id));
+      if (extra.length > 0) items.push(...extra);
+    }
     process.stdout.write(`\r  ${key}: ${items.length} ${since ? "changed" : "items"} ✓\n`);
     fetchedCounts[key] = items.length;
     return { config, resolved, items };
