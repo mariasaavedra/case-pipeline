@@ -743,6 +743,59 @@ export async function fetchAllBoardItems(
   return items;
 }
 
+/**
+ * Fetches specific items by id, with the same fields as a board page plus the
+ * owning board's id. Unlike an incremental board read this ignores updated_at —
+ * which matters because Monday does not bump updated_at when a connect-boards
+ * (board-relation) column changes, so a newly linked profile never shows up in
+ * a "changed since" read. Deleted/inaccessible ids are simply absent.
+ */
+export async function fetchItemsByIds(ids: string[]): Promise<MondayItem[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const out: MondayItem[] = [];
+  const query = `
+    query ($ids: [ID!], $limit: Int!) {
+      items(ids: $ids, limit: $limit) {
+        id
+        name
+        updated_at
+        board {
+          id
+          name
+        }
+        group {
+          id
+          title
+        }
+        column_values {
+          id
+          text
+          ... on DateValue {
+            value
+          }
+          ... on BoardRelationValue {
+            linked_item_ids
+            display_value
+          }
+          ... on MirrorValue {
+            display_value
+          }
+        }
+      }
+    }
+  `;
+  // Monday caps items(ids:) at 100 per call.
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    const result = await mondayRequest<{ data: { items: MondayItem[] } }>(query, {
+      ids: chunk,
+      limit: chunk.length,
+    });
+    out.push(...(result.data.items ?? []));
+  }
+  return out;
+}
+
 export async function fetchItem(itemId: string): Promise<MondayItem> {
   const query = `
     query ($itemId: [ID!]) {

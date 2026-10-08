@@ -130,6 +130,10 @@ describe("processWebhookEvents", () => {
 
     expect(runTargetedSync).toHaveBeenCalledTimes(1);
     expect(runTargetedSync.mock.calls[0]![0]).toEqual(["court_cases", "fee_ks"]);
+    // The named items are re-read by id: a connect-boards change (an
+    // appointment linked to its profile) doesn't move Monday's updated_at, so
+    // the board's incremental read alone would never see it.
+    expect(runTargetedSync.mock.calls[0]![1]).toEqual(["1", "2", "3"]);
     expect(stats.processed).toBe(3);
     for (const id of [a, b, c]) expect(eventRow(db, id).status).toBe("processed");
     db.close();

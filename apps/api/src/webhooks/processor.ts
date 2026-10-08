@@ -11,7 +11,9 @@
 //      and upsert them into client_updates (an edit updates the stored body).
 //   3. Everything else (column changes, new items, renames, restores): the
 //      board is marked dirty and ONE targeted incremental sync runs for all
-//      dirty boards (`sync:live --skip-timeline --boards=…`). This reuses the
+//      dirty boards (`sync:live --skip-timeline --boards=… --items=…`; the
+//      items the events named are re-read by id, since a connect-boards change
+//      doesn't move the updated_at watermark). This reuses the
 //      battle-tested sync pipeline — mapper, upsert, watermark — instead of
 //      re-implementing per-table writes here.
 //
@@ -93,11 +95,13 @@ export interface WebhookProcessorDeps {
   /** Resolve a Monday board id to its boards.yaml key (null = untracked). */
   boardKeyForId: (mondayBoardId: string) => string | null;
   /**
-   * Run one incremental sync limited to these board keys. Resolves true when
+   * Run one incremental sync limited to these board keys, also re-reading these
+   * items by id (Monday doesn't bump updated_at on a connect-boards change, so
+   * an incremental read alone misses a newly linked profile). Resolves true when
    * the sync ran to completion, false when it was skipped because another sync
    * is in flight (events stay pending and retry next tick). Rejects on failure.
    */
-  runTargetedSync: (boardKeys: string[]) => Promise<boolean>;
+  runTargetedSync: (boardKeys: string[], itemIds: string[]) => Promise<boolean>;
 }
 
 interface EventRow {
@@ -484,8 +488,9 @@ export async function processWebhookEvents(db: Database, deps: WebhookProcessorD
   if (refreshByBoard.size > 0) {
     const boards = [...refreshByBoard.keys()];
     const affected = [...refreshByBoard.values()].flat();
+    const itemIds = [...new Set(affected.map((r) => r.monday_item_id).filter((id): id is string => !!id))];
     try {
-      const ran = await deps.runTargetedSync(boards);
+      const ran = await deps.runTargetedSync(boards, itemIds);
       if (ran) {
         for (const row of affected) {
           markProcessed.run(stamp(), row.id);

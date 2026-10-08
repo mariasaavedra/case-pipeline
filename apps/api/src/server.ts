@@ -599,8 +599,12 @@ const server = app.listen(PORT, HOST, () => {
           .then((boardKeyForId) => {
             startWebhookProcessor(db, {
               boardKeyForId,
-              runTargetedSync: (boards) =>
-                runSync("webhook", ["--skip-timeline", `--boards=${boards.join(",")}`]),
+              runTargetedSync: (boards, itemIds) =>
+                runSync("webhook", [
+                  "--skip-timeline",
+                  `--boards=${boards.join(",")}`,
+                  ...(itemIds.length ? [`--items=${itemIds.join(",")}`] : []),
+                ]),
             });
           })
           .catch((e) => console.error("[webhooks] processor not started:", e));
