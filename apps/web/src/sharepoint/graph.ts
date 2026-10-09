@@ -206,6 +206,22 @@ export async function resolveFolder(folder: SharePointFolder): Promise<ResolvedI
 }
 
 /**
+ * A file (or folder) link → its full driveItem, for M12's preview. Full
+ * representation (no $select) so an image keeps its download URL.
+ */
+export async function resolveFileLink(url: string): Promise<{ driveId: string; item: DriveItem }> {
+  const link = parseSharePointLink(url);
+  if (!link) throw new GraphError(400, "Not a SharePoint link");
+  if (link.kind === "sharing") {
+    const item = await graphFetch<DriveItem>(`/shares/${encodeSharingUrl(link.url)}/driveItem`);
+    return { driveId: toResolved(item).driveId, item };
+  }
+  const driveId = await driveIdFor(link.host, link.sitePath);
+  const item = await graphFetch<DriveItem>(driveItemRequestPath(driveId, link.relPath));
+  return { driveId, item };
+}
+
+/**
  * A client folder's own name ("VENTURA, Milton", "MELO, Martin 21-153") for
  * naming its link in a note. A path link carries it as its last segment, so no
  * request is made; a sharing link (most E-File links) is opaque and asks Graph,

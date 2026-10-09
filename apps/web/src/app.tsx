@@ -215,6 +215,9 @@ function App() {
 
   const route = matchRoute(pathname);
   const isClientDetail = route.page === "client-detail";
+  // P4 is three columns side by side; on a big screen it uses the whole width.
+  const fullWidth = route.page === "appointments";
+  const widthCap = fullWidth ? "max-w-none" : "max-w-6xl";
   const underConstruction = UNDER_CONSTRUCTION_PAGES.has(route.page) && user?.role !== "admin";
   // Phones: drawer is off-canvas, content takes the full width.
   // Tablets (641–1024px): sidebar is a forced 60px icon rail.
@@ -293,7 +296,7 @@ function App() {
             borderBottom: "1px solid rgba(255,255,255,0.06)",
           }}
         >
-          <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-5">
+          <div className={`${widthCap} mx-auto px-6 py-3 flex items-center gap-5`}>
             <MobileMenuButton onOpen={() => setMobileMenuOpen(true)} />
 
             {client ? (
@@ -321,7 +324,7 @@ function App() {
         </header>
 
         {/* Main content */}
-        <main className={client ? "" : "max-w-6xl mx-auto px-6 py-6"}>
+        <main className={client ? "" : `${widthCap} mx-auto px-6 py-6`}>
           {error && (
             <div
               className="animate-in px-4 py-3 rounded-lg mb-5 text-sm"
