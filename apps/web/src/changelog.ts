@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-09",
+    title: "Contracts: client folders, fees and colours",
+    items: [
+      "Each Contract Stage group now shows in its Monday colour, and the summary table at the top is gone.",
+      "The ⋯ menu on a contract has E-file / Consult file: browse the client's SharePoint folders and open files without leaving the page.",
+      "Click the fees (or ⋯ → Edit fees) to change AF, FF or PF. It saves to the contract on Monday.",
+      "Once a payment link is sent, the row says “Link sent” with the date.",
+    ],
+  },
+  {
     date: "2026-10-07",
     title: "Appointments is now your day",
     items: [

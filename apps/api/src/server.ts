@@ -68,6 +68,7 @@ import { registerBoardItemWriteRoutes } from "./routes/board-item-write.js";
 import { registerCourtCaseWriteRoutes } from "./routes/court-case-write.js";
 import { registerMotionWriteRoutes } from "./routes/motion-write.js";
 import { registerContractStepRoutes } from "./routes/contract-step.js";
+import { registerContractFeesRoutes } from "./routes/contract-fees.js";
 import { registerContractDocumentRoutes } from "./routes/contract-document.js";
 import { registerDocumentRoutes } from "./routes/documents.js";
 import { initDocumentSettings } from "./documents/document-settings.js";
@@ -496,6 +497,7 @@ registerBoardItemWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeT
 registerCourtCaseWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerMotionWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractStepRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerContractFeesRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractDocumentRoutes(app, { db });
 registerDocumentRoutes(app, { db });
 

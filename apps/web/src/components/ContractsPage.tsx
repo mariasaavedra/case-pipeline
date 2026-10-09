@@ -6,6 +6,8 @@ import { SectionCode } from "./ScreenCode";
 import { NewContractModal } from "./NewContractModal";
 import { PaymentLinksModal } from "./PaymentLinksModal";
 import { GenerateContractModal } from "./GenerateContractModal";
+import { EditFeesModal } from "./EditFeesModal";
+import { ClientFilesModal } from "./ClientFilesModal";
 import { createPortal } from "react-dom";
 import { menuBoxStyle, useAnchoredMenu } from "./anchored-menu";
 import { Button } from "./ui/button";
@@ -19,8 +21,10 @@ import { formatDue, PersonChip, FormChip, ListSection, waitFg } from "./caseBoar
 // summary table, was removed 2026-10-09). A contract's age counts from the day it
 // was sent, or from the day it was added when it hasn't been sent yet — Monday
 // doesn't record when a stage changed. Each stage group wears its Monday colour. See docs/features/prescheduling-and-contracts.md.
-// Each row's ⋯ menu: Generate contract (M22, PDF from the firm's templates),
-// Payment links (M21, LawPay) and the next signing step (contracts are signed in
+// Each row's ⋯ menu: E-file / Consult file (M26, the client's SharePoint
+// folders), Generate contract (M22, PDF from the firm's templates), Payment
+// links (M21, LawPay), Edit fees (M25, also a click on the fees) and the next
+// signing step (contracts are signed in
 // Acrobat Pro, attorney first, then the client) — see
 // docs/features/contract-signing.md.
 
@@ -43,12 +47,15 @@ const menuItemStyle: React.CSSProperties = {
   background: "transparent", cursor: "pointer", fontFamily: "var(--font-body)", fontSize: 13, color: "var(--color-ink)",
 };
 
-/** The row's ⋯ menu: generate the contract, payment links, and the next signing step. */
-function RowMenu({ c, onStep, onGenerate, onPaymentLinks }: {
+/** The row's ⋯ menu: the client's folders, generate the contract, payment links,
+ *  fees, and the next signing step. */
+function RowMenu({ c, onStep, onFiles, onGenerate, onPaymentLinks, onFees }: {
   c: PendingContract;
   onStep: (step: ContractStep) => Promise<void>;
+  onFiles: () => void;
   onGenerate: () => void;
   onPaymentLinks: () => void;
+  onFees: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -94,8 +101,12 @@ function RowMenu({ c, onStep, onGenerate, onPaymentLinks }: {
             </div>
           ) : (
             <>
+              {c.clientLocalId && (
+                <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onFiles)}>E-file / Consult file…</button>
+              )}
               <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onGenerate)}>Generate contract…</button>
               <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onPaymentLinks)}>Payment links…</button>
+              <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onFees)}>Edit fees…</button>
               {step && (
                 <>
                   <div style={{ borderTop: "1px solid var(--color-border-light)", margin: "4px 0" }} />
@@ -122,11 +133,13 @@ interface RowProps {
   filter: Filter;
   onAttorney: (name: string) => void;
   onStep: (c: PendingContract, step: ContractStep) => Promise<void>;
+  onFiles: (c: PendingContract) => void;
   onGenerate: (c: PendingContract) => void;
   onPaymentLinks: (c: PendingContract) => void;
+  onFees: (c: PendingContract) => void;
 }
 
-function ContractRow({ c, filter, onAttorney, onStep, onGenerate, onPaymentLinks }: RowProps) {
+function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPaymentLinks, onFees }: RowProps) {
   return (
     <li
       className="grid gap-x-4 gap-y-1.5 px-4 py-3 items-center grid-cols-1 md:grid-cols-[minmax(0,2fr)_11rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto]"
@@ -173,14 +186,17 @@ function ContractRow({ c, filter, onAttorney, onStep, onGenerate, onPaymentLinks
 
       {/* Payment link */}
       <div className="text-xs min-w-0" style={{ color: c.paymentLinkSentOn ? "var(--color-ink-muted)" : "var(--color-ink-faint)" }}>
-        {c.paymentLinkSentOn ? `Payment link ${formatDue(c.paymentLinkSentOn)}` : "No payment link"}
+        {c.paymentLinkSentOn ? `Link sent ${formatDue(c.paymentLinkSentOn)}` : "No payment link"}
       </div>
 
-      {/* Fees */}
-      <div className="text-xs tabular-nums min-w-0" style={{ color: "var(--color-ink-muted)" }}>
+      {/* Fees — click to edit (M25) */}
+      <button type="button" onClick={() => onFees(c)} title="Edit fees"
+        className="text-xs tabular-nums min-w-0 text-left rounded px-1 -mx-1 hover:bg-[var(--color-surface-warm)]"
+        style={{ color: "var(--color-ink-muted)", cursor: "pointer", background: "none", border: "none" }}>
         {c.attorneyFee !== null && <div>AF {money(c.attorneyFee)}</div>}
         {c.filingFee !== null && <div>FF {money(c.filingFee)}</div>}
-      </div>
+        {c.attorneyFee === null && c.filingFee === null && <div style={{ color: "var(--color-ink-faint)" }}>Add fees</div>}
+      </button>
 
       {/* People */}
       <div className="flex items-center gap-1.5 flex-wrap min-w-0">
@@ -196,7 +212,8 @@ function ContractRow({ c, filter, onAttorney, onStep, onGenerate, onPaymentLinks
 
       {/* ⋯ actions */}
       <div className="md:justify-self-end">
-        <RowMenu c={c} onStep={(step) => onStep(c, step)} onGenerate={() => onGenerate(c)} onPaymentLinks={() => onPaymentLinks(c)} />
+        <RowMenu c={c} onStep={(step) => onStep(c, step)} onFiles={() => onFiles(c)} onGenerate={() => onGenerate(c)}
+          onPaymentLinks={() => onPaymentLinks(c)} onFees={() => onFees(c)} />
       </div>
     </li>
   );
@@ -209,6 +226,8 @@ export function ContractsPage() {
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState<PendingContract | null>(null);
   const [generating, setGenerating] = useState<PendingContract | null>(null);
+  const [editingFees, setEditingFees] = useState<PendingContract | null>(null);
+  const [browsing, setBrowsing] = useState<PendingContract | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = () =>
@@ -252,6 +271,19 @@ export function ContractsPage() {
       </div>
       {creating && <NewContractModal onClose={() => setCreating(false)} />}
       {generating && <GenerateContractModal contract={generating} onClose={() => setGenerating(null)} />}
+      {editingFees && (
+        <EditFeesModal
+          contract={editingFees}
+          onSaved={(pending) => {
+            setNotice(`${editingFees.clientName}: fees saved${pending ? " (queued — Monday will update shortly)" : ""}`);
+            void load();
+          }}
+          onClose={() => setEditingFees(null)}
+        />
+      )}
+      {browsing?.clientLocalId && (
+        <ClientFilesModal clientLocalId={browsing.clientLocalId} clientName={browsing.clientName} onClose={() => setBrowsing(null)} />
+      )}
       {paying && (
         <PaymentLinksModal
           contract={paying}
@@ -313,7 +345,8 @@ export function ContractsPage() {
               return inStage.length > 0 ? (
                 <ListSection key={s} title={s} count={inStage.length} tone={null} color={data.stageColors[s]}>
                   {inStage.map((c) => (
-                    <ContractRow key={c.localId} c={c} filter={filter} onAttorney={pickAttorney} onStep={takeStep} onGenerate={setGenerating} onPaymentLinks={setPaying} />
+                    <ContractRow key={c.localId} c={c} filter={filter} onAttorney={pickAttorney} onStep={takeStep}
+                      onFiles={setBrowsing} onGenerate={setGenerating} onPaymentLinks={setPaying} onFees={setEditingFees} />
                   ))}
                 </ListSection>
               ) : null;

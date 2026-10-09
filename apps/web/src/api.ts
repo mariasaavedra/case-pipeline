@@ -685,6 +685,22 @@ export async function recordContractStep(
   });
 }
 
+export type ContractFees = { af: number | null; ff: number | null; pf: number | null };
+
+/** Change a Fee K's AF / FF / PF (only the ones that changed are written; null
+ * clears). `from` is what the user saw — 409 if Monday changed since. */
+export async function updateContractFees(
+  localId: string,
+  fees: Partial<ContractFees>,
+  from: Partial<ContractFees>,
+): Promise<{ localId: string; fees: Partial<ContractFees>; pending: boolean }> {
+  return apiFetch(`/api/contracts/${encodeURIComponent(localId)}/fees`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fees, from }),
+  });
+}
+
 export async function fetchCourtCases(): Promise<CourtCasesResult> {
   return apiFetch<CourtCasesResult>("/api/court-cases");
 }
