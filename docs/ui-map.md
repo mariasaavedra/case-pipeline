@@ -143,7 +143,7 @@ by name); the board tabs switch to another attorney.
 | Code | Name | Notes |
 |---|---|---|
 | P14.1 | Header | Pending count, older than 60 days, not sent yet; colour legend; **+ New contract** → M11 (pick the client first) |
-| P14.3 | Contract list | Grouped by Contract Stage (P14.2, the summary table, was removed 2026-10-09); click an attorney chip to filter: age, payment link, AF/FF, attorneys, assistant. Each row's **⋯** menu: **Generate contract…** → M22, **Payment links…** → M21, and the next signing step (Mark sent in Acrobat → attorney signed → client signed), which asks to confirm, then moves the stage and stamps its date on Monday |
+| P14.3 | Contract list | Grouped by Contract Stage, each group in its Monday colour; click an attorney chip to filter: age, payment link ("Link sent Apr 30" once sent), AF/FF (click → M25), attorneys, assistant. Each row's **⋯** menu: **E-file / Consult file…** → M26, **Generate contract…** → M22, **Payment links…** → M21, **Edit fees…** → M25, and the next signing step (Mark sent in Acrobat → attorney signed → client signed), which asks to confirm, then moves the stage and stamps its date on Monday |
 
 ### Inside P15 Court Cases
 
@@ -272,6 +272,8 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M22 | Generate contract | "Generate contract" | P14.3 → ⋯ → **Generate contract…**. Pick a template from SharePoint `Fee Contracts/App Templates` (staff-edited Word files with `{{tags}}`); a broken template is shown with a link to fix it; only that template's fields are shown, pre-filled from Monday; **Generate PDF** (via the user's Microsoft 365) or **Word** | `GenerateContractModal.tsx` |
 | M23 | Generate document | "Generate document" | P3.0 → **Generate Doc**. Pick the document (only **G-28** so far); its fields show pre-filled — attorney from P11.3.4 (the client's Monday attorney when it matches), client from Monday (mailing address split into boxes), a detained client's facility as the address with ICE + Respondent — all editable. **Generate G-28** fills the official USCIS PDF (`templates/forms/g-28.pdf`), downloads it and saves a copy in the client's SharePoint folder (e-file first). Nothing written to Monday | `GenerateDocModal.tsx` |
 | M24 | Link client | "Link client" | P17.2 → **Link client** on a "No profile" row. Profile search pre-filled with the client's name from the appointment; **Link** sets the appointment's Profiles column in Monday (queued on an outage). Only unlinked consults — changing a link stays in Monday | `ConsultLinkModal.tsx` |
+| M25 | Edit fees | "Edit fees" | P14.3 → ⋯ → **Edit fees…**, or click the fees. AF / FF / PF; only changed fees are written to the Fee K on Monday (empty clears); refused if Monday changed since; queued on an outage | `EditFeesModal.tsx` |
+| M26 | Client files | "E-file / Consult file" | P14.3 → ⋯ → **E-file / Consult file…**. The client's SharePoint e-file / consult folders browsed in place (same browser as P4.5); a file → M12 | `ClientFilesModal.tsx` |
 | M20 | Change consult | "Change consult" | P17.2 → **Edit**. Attorney, date, time; a new attorney moves the appointment to their board in Monday. Calendly is not changed (reminder shown) | `ConsultScheduleModal.tsx` |
 
 ## Dropdowns

@@ -134,7 +134,12 @@ const PAGES = [
     { code:"P13.3", name:"Case list", note:"filter chips + cases by days since hire" } ] },
   { code:"P14", name:"Contracts", path:"/contracts", items:[
     { code:"P14.1", name:"Header", note:"pending / older than 60 days / not sent yet" },
-    { code:"P14.3", name:"Contract list", note:"grouped by Contract Stage" } ] },
+    { code:"P14.3", name:"Contract list", note:"grouped by Contract Stage, Monday colours; ⋯ menu per row" } ], pops:[
+    { code:"M21", name:"Payment links", note:"⋯ → Payment links…" },
+    { code:"M22", name:"Generate contract", note:"⋯ → Generate contract…" },
+    { code:"M25", name:"Edit fees", note:"⋯ → Edit fees…, or click the fees" },
+    { code:"M26", name:"Client files", note:"⋯ → E-file / Consult file…", pops:[
+      { code:"M12", name:"File preview", note:"a file" } ] } ] },
   { code:"P6", name:"My Cases", path:"/my-cases", items:[
     { code:"P6.1", name:"Case list", note:"also the “link your identity” and “no cases” states" } ] },
   { code:"P7", name:"Calendar", path:"/calendar", items:[
