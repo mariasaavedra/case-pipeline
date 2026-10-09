@@ -51,6 +51,9 @@ export interface PendingContractsResult {
   contracts: PendingContract[];
   /** Contract Stages with at least one contract, in pipeline order. */
   stages: string[];
+  /** Each Contract Stage's colour in Monday (hex), from the synced board schema.
+   *  Missing when the schema hasn't been synced or the label isn't in it. */
+  stageColors: Record<string, string>;
   thresholds: { waitingDays: number; lateDays: number };
 }
 
@@ -269,5 +272,21 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
     (a, b) => stageRank(a) - stageRank(b) || a.localeCompare(b),
   );
 
-  return { contracts, stages, thresholds: { waitingDays, lateDays } };
+  return { contracts, stages, stageColors: getStageColors(db), thresholds: { waitingDays, lateDays } };
+}
+
+/** Contract Stage label → its Monday colour, from the synced Fee Ks column schema. */
+function getStageColors(db: Database): Record<string, string> {
+  const row = db
+    .prepare("SELECT options FROM board_columns WHERE board_key = 'fee_ks' AND column_id = ?")
+    .get(FEE_K_COLUMN_IDS.contractStage.id) as { options: string | null } | undefined;
+  const colors: Record<string, string> = {};
+  try {
+    for (const o of (row?.options ? JSON.parse(row.options) : []) as { label?: unknown; color?: unknown }[]) {
+      if (typeof o.label === "string" && typeof o.color === "string" && o.color) colors[o.label.trim()] = o.color;
+    }
+  } catch {
+    // Unreadable schema: groups fall back to the neutral heading.
+  }
+  return colors;
 }

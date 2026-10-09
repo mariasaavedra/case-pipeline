@@ -143,8 +143,7 @@ by name); the board tabs switch to another attorney.
 | Code | Name | Notes |
 |---|---|---|
 | P14.1 | Header | Pending count, older than 60 days, not sent yet; colour legend; **+ New contract** → M11 (pick the client first) |
-| P14.2 | Summary table | Attorney rows × Contract Stage; cell colour = oldest contract (days since sent, else added); click to filter P14.3 |
-| P14.3 | Contract list | Grouped by Contract Stage: age, payment link, AF/FF, attorneys, assistant. Each row's **⋯** menu: **Generate contract…** → M22, **Payment links…** → M21, and the next signing step (Mark sent in Acrobat → attorney signed → client signed), which asks to confirm, then moves the stage and stamps its date on Monday |
+| P14.3 | Contract list | Grouped by Contract Stage (P14.2, the summary table, was removed 2026-10-09); click an attorney chip to filter: age, payment link, AF/FF, attorneys, assistant. Each row's **⋯** menu: **Generate contract…** → M22, **Payment links…** → M21, and the next signing step (Mark sent in Acrobat → attorney signed → client signed), which asks to confirm, then moves the stage and stamps its date on Monday |
 
 ### Inside P15 Court Cases
 

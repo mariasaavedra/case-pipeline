@@ -37,7 +37,7 @@ A new query module, `libs/query/src/prescheduling.ts`, will read the Paid Fee Ks
 ## Contracts page — Pending Fee Ks
 
 - **Grouped by Contract Stage:** Needs to be sent · Ready to be sent · Sent to Client · Payment link sent · Client coming to the office · 7 Days before Expiry · Needs to be Amended · HOLD · Needs Refund…
-- **Summary table:** attorney rows × Contract Stage. A cell's colour is the oldest contract in it: days since sent, or since added if not sent yet. Green under 30, yellow 30+, red 60+.
+- **Summary table:** removed 2026-10-09 (was P14.2, attorney rows × Contract Stage). Each row's age is still coloured: days since sent, or since added if not sent yet. Green under 30, yellow 30+, red 60+.
 - **Contract rows** show: client (plus the Monday item name when it differs, which exposes "(copy)" duplicates), Contract for, age, payment link date, AF/FF, attorneys, assistant.
 - **Thresholds:** 7 / 14 days was tried first. Most pending contracts are 30+ days old, so everything went red. 30 / 60 matches Prescheduling. Monday doesn't record when a stage changed, so the age is time in the pipeline, not time in the current stage.
 

@@ -96,6 +96,21 @@ describe("getPendingContracts", () => {
     db.close();
   });
 
+  test("stage colours come from the synced Contract Stage column", () => {
+    const db = freshDb();
+    expect(get(db).stageColors).toEqual({});
+    db.prepare(
+      `INSERT INTO board_columns (board_key, monday_board_id, column_id, title, type, options, position, updated_at)
+       VALUES ('fee_ks', '1', 'deal_stage', 'Contract Stage', 'status', ?, 0, '2026-10-09')`,
+    ).run(JSON.stringify([
+      { index: 0, label: "Needs Payment Link", color: "#e484bd", border: "#e484bd" },
+      { index: 1, label: "HOLD ", color: "#9d50dd", border: "#9238af" },
+      { index: 2, label: "No colour", color: null, border: null },
+    ]));
+    expect(get(db).stageColors).toEqual({ "Needs Payment Link": "#e484bd", HOLD: "#9d50dd" });
+    db.close();
+  });
+
   test("attorneys split, stray e-mail fragments dropped; fees parsed", () => {
     const db = freshDb();
     insertFeeK(db, { localId: "a", attorney: "William Hanna, Michael Sharma-Crawford", af: 4000, ff: "2325", contractFor: ["I-130"] });
