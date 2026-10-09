@@ -62,6 +62,9 @@ vi.mock("../StatusOptionsProvider", () => ({
 }));
 vi.mock("./UpdatesTimeline", () => ({ UpdatesTimeline: () => <div>timeline</div> }));
 vi.mock("./DocumentsTab", () => ({ DocumentsTab: () => <div>sharepoint browser</div> }));
+const resolveFileLink = vi.fn();
+vi.mock("../sharepoint/graph", () => ({ resolveFileLink: (url: string) => resolveFileLink(url) }));
+vi.mock("./FilePreviewModal", () => ({ FilePreviewModal: ({ item }: { item: { name: string } }) => <div>M12 {item.name}</div> }));
 vi.mock("./NewContractModal", () => ({
   NewContractModal: ({ clientName, onCreated }: { clientName: string; onCreated: (c: { name: string; pending: boolean }) => void }) => (
     <div>
@@ -91,6 +94,8 @@ async function render() {
 
 const button = (text: string) =>
   Array.from(el.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
+const docButton = (name: string) =>
+  Array.from(el.querySelectorAll("button")).find((b) => b.textContent?.includes(name)) as HTMLButtonElement;
 const click = async (b: Element) => { await act(async () => { (b as HTMLElement).click(); }); };
 
 describe("AppointmentsPage (P4 My Day)", () => {
@@ -192,10 +197,17 @@ describe("AppointmentsPage (P4 My Day)", () => {
 
   it("lists only the documents reception picked, and nothing from the rest of the file", async () => {
     await render();
-    const link = el.querySelector('a[href="https://sp/nta.pdf"]');
-    expect(link?.textContent).toContain("Notice to Appear.pdf");
-    expect(link?.textContent).toContain("PDF");
+    const doc = docButton("Notice to Appear.pdf");
+    expect(doc?.textContent).toContain("PDF");
     expect(el.textContent).not.toContain("In their file");
+  });
+
+  it("opens a picked document in M12 instead of a new tab", async () => {
+    resolveFileLink.mockResolvedValue({ driveId: "d", item: { id: "i", name: "Notice to Appear.pdf", webUrl: "https://sp/nta.pdf" } });
+    await render();
+    await click(docButton("Notice to Appear.pdf"));
+    expect(resolveFileLink).toHaveBeenCalledWith("https://sp/nta.pdf");
+    expect(el.textContent).toContain("M12 Notice to Appear.pdf");
   });
 
   it("opens New contract (M11) for the client and shows it once created", async () => {

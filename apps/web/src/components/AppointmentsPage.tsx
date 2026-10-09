@@ -24,6 +24,8 @@ import type { MyDayResult, MyDayEntry } from "../api";
 import { Link } from "./Link";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { DocumentsTab } from "./DocumentsTab";
+import { FilePreviewModal } from "./FilePreviewModal";
+import { resolveFileLink, type DriveItem } from "../sharepoint/graph";
 import { NewContractModal } from "./NewContractModal";
 import { clientPath } from "../router";
 import { SectionCode } from "./ScreenCode";
@@ -192,7 +194,7 @@ function DayList({
               aria-current={isSel ? "true" : undefined}
               className="w-full flex items-start gap-3 text-left transition-colors"
               style={{
-                padding: "14px 16px",
+                padding: "10px 12px",
                 border: "none",
                 borderBottom: "1px solid var(--color-border-light)",
                 background: isSel ? "var(--color-amber-light)" : "var(--color-card)",
@@ -202,13 +204,13 @@ function DayList({
                 color: "var(--color-ink)",
               }}
             >
-              <div className="flex flex-col flex-none" style={{ width: 56 }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 19, fontWeight: 600, letterSpacing: "-0.02em" }}>{t.clock}</span>
+              <div className="flex flex-col flex-none" style={{ width: 44 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 600, letterSpacing: "-0.02em" }}>{t.clock}</span>
                 <span style={{ fontSize: 12, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>{t.ampm}</span>
               </div>
               <div className="flex-1 min-w-0 flex flex-col gap-0.5" style={{ fontFamily: "var(--font-body)" }}>
-                <span className="truncate" style={{ fontSize: 15, fontWeight: 600 }}>{e.profile?.name ?? e.name}</span>
-                {type && <span className="truncate" style={{ fontSize: 13, color: "var(--color-ink-muted)" }}>{type}{e.prep ? ` · ${e.prep.method}` : ""}</span>}
+                <span className="truncate" style={{ fontSize: 14, fontWeight: 600 }}>{e.profile?.name ?? e.name}</span>
+                {type && <span className="truncate" style={{ fontSize: 12, color: "var(--color-ink-muted)" }}>{type}{e.prep ? ` · ${e.prep.method}` : ""}</span>}
                 <span className="flex flex-wrap gap-1.5 mt-1">
                   {e.prep
                     ? <Mini bg="var(--color-status-green-bg)" fg="var(--color-status-green)">Prepped</Mini>
@@ -288,6 +290,23 @@ function ClientPanel({ entry, tab, setTab }: { entry: MyDayEntry; tab: Tab; setT
   const type = prep ? prep.apptType.split(" — ")[0] : null;
   const zoom = prep?.method === "Zoom" && isHttpUrl(prep.methodDetail) ? prep.methodDetail : null;
   const phone = prep?.method === "Phone" ? prep.methodDetail : entry.phone;
+  // A picked document opens in M12 over the page, not in a new tab. A folder
+  // (reception can pick the client's folder itself) goes to the folder browser.
+  const [preview, setPreview] = useState<{ driveId: string; item: DriveItem } | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+  const openDoc = async (url: string) => {
+    setOpening(url);
+    try {
+      const found = await resolveFileLink(url);
+      if (found.item.folder) setTab("docs");
+      else setPreview(found);
+    } catch {
+      // No SharePoint consent yet, no access, or not a SharePoint link: open it as before.
+      window.open(url, "_blank", "noreferrer");
+    } finally {
+      setOpening(null);
+    }
+  };
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: "prep", label: "Consult prep" },
     { id: "notes", label: `Notes (${entry.updates.length})` },
@@ -384,16 +403,16 @@ function ClientPanel({ entry, tab, setTab }: { entry: MyDayEntry; tab: Tab; setT
             ) : (
               <div style={{ border: "1px solid var(--color-border)", borderRadius: 12, overflow: "hidden" }}>
                 {docs.map((d, i) => (
-                  <a key={d.url} href={d.url} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-3 transition-colors hover:bg-[var(--color-surface-warm)]"
-                    style={{ padding: "12px 14px", borderTop: i === 0 ? "none" : "1px solid var(--color-border-light)", color: "var(--color-ink)", textDecoration: "none" }}>
+                  <button key={d.url} type="button" onClick={() => void openDoc(d.url)} disabled={opening === d.url}
+                    className="w-full flex items-center gap-3 text-left transition-colors hover:bg-[var(--color-surface-warm)]"
+                    style={{ padding: "12px 14px", border: "none", borderTop: i === 0 ? "none" : "1px solid var(--color-border-light)", background: "transparent", color: "var(--color-ink)", cursor: "pointer", fontFamily: "var(--font-body)" }}>
                     <span className="inline-flex items-center justify-center flex-none"
                       style={{ width: 40, height: 28, borderRadius: 6, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", background: "var(--color-surface-warm)", color: "var(--color-ink-muted)" }}>
                       {fileKind(d.name)}
                     </span>
                     <span className="flex-1 min-w-0 truncate" style={{ fontSize: 14, fontWeight: 500 }}>{d.name}</span>
-                    <span style={{ fontSize: 12, color: "var(--color-ink-muted)", whiteSpace: "nowrap" }}>Open ↗</span>
-                  </a>
+                    <span style={{ fontSize: 12, color: "var(--color-ink-muted)", whiteSpace: "nowrap" }}>{opening === d.url ? "Opening…" : "View"}</span>
+                  </button>
                 ))}
               </div>
             )}
@@ -416,6 +435,8 @@ function ClientPanel({ entry, tab, setTab }: { entry: MyDayEntry; tab: Tab; setT
             : <p style={{ fontSize: 14, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>No client profile, so no folders to show.</p>}
         </div>
       )}
+
+      {preview && <FilePreviewModal driveId={preview.driveId} item={preview.item} onClose={() => setPreview(null)} />}
     </div>
   );
 }
@@ -864,7 +885,7 @@ export function AppointmentsPage() {
           <div className="grid items-start gap-4" style={{
             ...dim,
             gridTemplateColumns: layout === "wide"
-              ? "minmax(250px, 320px) minmax(0, 1fr) minmax(290px, 360px)"
+              ? "minmax(200px, 240px) minmax(0, 1fr) minmax(290px, 380px)"
               : "92px minmax(0, 1fr) minmax(270px, 320px)",
           }}>
             <div style={{ minWidth: 0 }}>
