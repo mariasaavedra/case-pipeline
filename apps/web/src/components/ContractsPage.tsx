@@ -9,16 +9,16 @@ import { GenerateContractModal } from "./GenerateContractModal";
 import { createPortal } from "react-dom";
 import { menuBoxStyle, useAnchoredMenu } from "./anchored-menu";
 import { Button } from "./ui/button";
-import { formatDue, PersonChip, FormChip, CountTable, ListSection, WAIT_TONE, worstWait, waitFg } from "./caseBoardParts";
+import { formatDue, PersonChip, FormChip, ListSection, waitFg } from "./caseBoardParts";
 
 // =============================================================================
 // P14 Contracts
 // =============================================================================
 // Pending Fee Ks: drafted, sent or waiting on payment. The step before P13
-// Prescheduling. Summary table (attorney × Contract Stage) on top, list grouped
-// by Contract Stage below. A contract's age counts from the day it was sent, or
-// from the day it was added when it hasn't been sent yet — Monday doesn't record
-// when a stage changed. See docs/features/prescheduling-and-contracts.md.
+// Prescheduling. One list grouped by Contract Stage (P14.2, the attorney × stage
+// summary table, was removed 2026-10-09). A contract's age counts from the day it
+// was sent, or from the day it was added when it hasn't been sent yet — Monday
+// doesn't record when a stage changed. Each stage group wears its Monday colour. See docs/features/prescheduling-and-contracts.md.
 // Each row's ⋯ menu: Generate contract (M22, PDF from the firm's templates),
 // Payment links (M21, LawPay) and the next signing step (contracts are signed in
 // Acrobat Pro, attorney first, then the client) — see
@@ -115,7 +115,6 @@ function RowMenu({ c, onStep, onGenerate, onPaymentLinks }: {
 
 interface Filter {
   attorney: string | null;
-  stage: string | null;
 }
 
 interface RowProps {
@@ -206,7 +205,7 @@ function ContractRow({ c, filter, onAttorney, onStep, onGenerate, onPaymentLinks
 export function ContractsPage() {
   const [data, setData] = useState<PendingContractsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>({ attorney: null, stage: null });
+  const [filter, setFilter] = useState<Filter>({ attorney: null });
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState<PendingContract | null>(null);
   const [generating, setGenerating] = useState<PendingContract | null>(null);
@@ -228,13 +227,9 @@ export function ContractsPage() {
   };
 
   const all = data?.contracts ?? [];
-  const visible = all.filter(
-    (c) =>
-      (filter.attorney === null || attorneysOf(c).includes(filter.attorney)) &&
-      (filter.stage === null || stageOf(c) === filter.stage),
-  );
+  const visible = all.filter((c) => filter.attorney === null || attorneysOf(c).includes(filter.attorney));
   const t = data?.thresholds;
-  const pickAttorney = (name: string) => setFilter((f) => ({ ...f, attorney: f.attorney === name ? null : name }));
+  const pickAttorney = (name: string) => setFilter((f) => ({ attorney: f.attorney === name ? null : name }));
 
   return (
     <div>
@@ -294,33 +289,14 @@ export function ContractsPage() {
 
       {data && all.length > 0 && (
         <>
-          <SectionCode code="P14.2" />
-          <CountTable
-            items={all}
-            rowHeader="Attorney"
-            rowsOf={attorneysOf}
-            lastRow={NO_ATTORNEY}
-            columns={data.stages}
-            colOf={stageOf}
-            cellTone={(cs) => WAIT_TONE[worstWait(cs.map((c) => c.ageLevel))]}
-            cellTitle={(cs) => `Oldest: ${Math.max(...cs.map((c) => c.ageDays ?? 0))} days`}
-            selected={{ row: filter.attorney, col: filter.stage }}
-            onPick={(s) => setFilter({ attorney: s.row, stage: s.col })}
-          />
-
           {/* Filter bar */}
-          <div className="flex items-center gap-2 flex-wrap mt-5 mb-3">
+          <div className="flex items-center gap-2 flex-wrap mb-3">
             <span className="text-sm font-medium" style={{ color: "var(--color-ink)" }}>
               {visible.length} contract{visible.length !== 1 ? "s" : ""}
             </span>
             {filter.attorney && (
-              <button type="button" className="filter-chip filter-chip-active" onClick={() => setFilter({ ...filter, attorney: null })}>
+              <button type="button" className="filter-chip filter-chip-active" onClick={() => setFilter({ attorney: null })}>
                 {filter.attorney} ×
-              </button>
-            )}
-            {filter.stage && (
-              <button type="button" className="filter-chip filter-chip-active" onClick={() => setFilter({ ...filter, stage: null })}>
-                {filter.stage} ×
               </button>
             )}
           </div>
@@ -335,7 +311,7 @@ export function ContractsPage() {
             {data.stages.map((s) => {
               const inStage = visible.filter((c) => stageOf(c) === s);
               return inStage.length > 0 ? (
-                <ListSection key={s} title={s} count={inStage.length} tone={null}>
+                <ListSection key={s} title={s} count={inStage.length} tone={null} color={data.stageColors[s]}>
                   {inStage.map((c) => (
                     <ContractRow key={c.localId} c={c} filter={filter} onAttorney={pickAttorney} onStep={takeStep} onGenerate={setGenerating} onPaymentLinks={setPaying} />
                   ))}

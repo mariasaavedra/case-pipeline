@@ -213,6 +213,7 @@ export function ListSection({
   count,
   note,
   tone,
+  color,
   children,
 }: {
   title: React.ReactNode;
@@ -220,10 +221,13 @@ export function ListSection({
   note?: string;
   /** --urgency-* token for the heading; null = neutral. */
   tone: string | null;
+  /** A Monday label colour (hex): shown as a bar down the section's left edge
+   *  and a pill around the title, the way Monday shows the label. */
+  color?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="card overflow-hidden">
+    <section className="card overflow-hidden" style={color ? { borderLeft: `4px solid ${color}` } : undefined}>
       <h2
         className="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide"
         style={{
@@ -231,7 +235,11 @@ export function ListSection({
           background: tone ? `var(--urgency-${tone}-bg)` : "var(--color-surface-warm)",
         }}
       >
-        {title}
+        {color ? (
+          <span className="status-pill" style={{ background: color, color: "#fff" }}>{title}</span>
+        ) : (
+          title
+        )}
         <span className="font-medium" style={{ color: "var(--color-ink-muted)" }}>· {count}</span>
         {note && (
           <span className="ml-auto normal-case tracking-normal font-normal" style={{ color: "var(--color-ink-muted)" }}>
