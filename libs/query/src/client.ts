@@ -142,6 +142,7 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
     ...profile,
     ...readSharePointLinks(rawColumnValues),
     displayName: readDisplayName(rawColumnValues),
+    dmsUrl: readDmsUrl(rawColumnValues),
     detainedAt: getDetainedAt(db, localId),
   };
 }
@@ -218,6 +219,26 @@ export function readSharePointLinks(rawColumnValues: string | null | undefined):
   // on the case boards, and reading it here silently returned null for every
   // client that had only ever been a consult.
   return { eFile: asNonEmptyString(cvs.e_file), consultFile: asNonEmptyString(cvs.consult_file) };
+}
+
+/**
+ * The client's page in DMS — what the office calls the Innovation Law Lab case
+ * database — from the Profiles "DMS" text column (text_mkkvfjrh, config key
+ * `dms_url`). Cases opened up to the end of 2024 have one; newer ones don't.
+ * Only an https link on the DMS host counts: the web opens it in a window, so
+ * a stray note or a `javascript:` value in the column must never get through.
+ */
+export const DMS_HOST = "sharmacrawford-cdb.innovationlawlab.org";
+
+export function readDmsUrl(rawColumnValues: string | null | undefined): string | null {
+  const value = asNonEmptyString(safeParseJson(rawColumnValues).dms_url);
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === DMS_HOST ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 function safeParseJson(value: string | null | undefined): Record<string, unknown> {

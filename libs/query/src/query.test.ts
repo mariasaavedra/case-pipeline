@@ -294,6 +294,28 @@ describe("getClientProfile", () => {
     db.close();
   });
 
+  test("dmsUrl is the DMS link, and only an https link on the DMS host", () => {
+    const db = freshDb();
+    const batchId = insertBatch(db);
+    const withDms = (localId: string, dms_url: unknown) => {
+      insertProfile(db, batchId, { localId, name: localId });
+      run(db, "UPDATE profiles SET raw_column_values = ? WHERE local_id = ?", [JSON.stringify({ dms_url }), localId]);
+    };
+    withDms("ok", " https://sharmacrawford-cdb.innovationlawlab.org/records/23205 ");
+    withDms("http", "http://sharmacrawford-cdb.innovationlawlab.org/records/1");
+    withDms("other", "https://example.com/records/1");
+    withDms("script", "javascript:alert(1)");
+    withDms("note", "DMS");
+    withDms("empty", "");
+    insertProfile(db, batchId, { localId: "none", name: "none" });
+
+    expect(getClientProfile(db, "ok")!.dmsUrl).toBe("https://sharmacrawford-cdb.innovationlawlab.org/records/23205");
+    for (const id of ["http", "other", "script", "note", "empty", "none"]) {
+      expect(getClientProfile(db, id)!.dmsUrl).toBeNull();
+    }
+    db.close();
+  });
+
   test("displayName is First + Last with bracketed notes stripped", () => {
     const db = freshDb();
     const batchId = insertBatch(db);
