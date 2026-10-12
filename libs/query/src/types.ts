@@ -32,6 +32,12 @@ export interface ProfileSummary {
    */
   displayName?: string | null;
   /**
+   * The client's page in DMS (Innovation Law Lab), from the Profiles "DMS"
+   * column. Null when there is none — expected for cases opened from 2025 on.
+   * Only the full client detail sets it.
+   */
+  dmsUrl?: string | null;
+  /**
    * The facility (e.g. "Greene Co. (MO)") on the client's open court case —
    * one still in the "Court Case" group. Null when there is none: a Withdrew /
    * Ordered Removed / Granted case's facility is history, not where they are.

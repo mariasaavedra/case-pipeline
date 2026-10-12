@@ -5,7 +5,6 @@ import { WatchlistPin } from "./WatchlistPin";
 import { DialogTitle } from "./ui/dialog";
 import { SectionCode } from "./ScreenCode";
 import { ReleaseDetentionModal } from "./ReleaseDetentionModal";
-import { mondayItemUrl, MONDAY_PROFILES_BOARD_ID } from "../config";
 import { formatANumber } from "@case-pipeline/core";
 
 const PRIORITY_STYLES: Record<string, { dot: string; label: string; bg: string; text: string }> = {
@@ -25,7 +24,8 @@ interface Props {
   profile: ProfileSummary;
   /**
    * "page" is the 360 view's sticky header. "popup" is the same header inside a
-   * dialog (M3 Client case): not sticky, no document/relations actions, and the
+   * dialog (M3 Client case): not sticky, its ⋯ menu has only the DMS / Monday
+   * links (no document/relations actions), and the
    * name is the dialog's title so screen readers announce it.
    */
   variant?: "page" | "popup";
@@ -132,32 +132,11 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
               <div className="client-header-actions flex-shrink-0 ml-auto flex items-center gap-3">
                 {/* Pinning keys off the Monday id, so a profile without one can't be pinned. */}
                 {profile.mondayItemId && <WatchlistPin mondayItemId={profile.mondayItemId} />}
-                {profile.mondayItemId && (
-                  <a
-                    href={mondayItemUrl(MONDAY_PROFILES_BOARD_ID, profile.mondayItemId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-colors"
-                    style={{
-                      color: "var(--color-ink-muted)",
-                      backgroundColor: "var(--color-surface-warm)",
-                      border: "1px solid var(--color-border-light)",
-                      textDecoration: "none",
-                      fontFamily: "var(--font-body)",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-                      <polyline points="15 3 21 3 21 9" />
-                      <line x1="10" y1="14" x2="21" y2="3" />
-                    </svg>
-                    Monday.com
-                  </a>
-                )}
-                {!isPopup && data && onViewRelations && (
-                  <ActionButtons data={data} onViewRelations={onViewRelations} />
-                )}
+                <ActionButtons
+                  profile={profile}
+                  data={isPopup ? undefined : data}
+                  onViewRelations={isPopup ? undefined : onViewRelations}
+                />
               </div>
             </div>
 

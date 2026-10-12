@@ -95,7 +95,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Address | Notes |
 |---|---|---|---|
-| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17; **Generate Doc** → M23) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
+| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17; **Watch** + a **⋯** menu → D37, whose **Generate document…** → M23) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
 | P3.1 | Overview tab | `/clients/:id` | Timeline of notes + note composer; date range → D5 |
 | P3.2 | Appointments tab | `/clients/:id/appointments` | **+ Book a consult** → M10 |
 | P3.3 | Contracts tab | `/clients/:id/contracts` | **+ New contract** → M11 |
@@ -316,5 +316,6 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D34 | Paralegal filter | P19.2 | `FoiasPage.tsx` |
 | D35 | Client folder menu | M18 → Documents **⋯**: **Use a different folder…** (paste a SharePoint link — replaces the profile's on save, only if Monday still holds it), **Find or create e-file folder**, **Find or create consult folder** (creates only when none exists) | `ConsultPrepModal.tsx` |
 | D36 | Detention center | M18 → Type of appt **Detained appt**: the Court Cases board's Det. Facility labels (synced) + **Other** (free text). Pre-filled from the client's open court case | `ConsultPrepModal.tsx` |
+| D37 | Client actions menu | P3.0 → **⋯** (also in the M3 header, links only): **Open in DMS** (only when the profile has a DMS link — Innovation Law Lab, cases up to end of 2024; opens one reusable window, DMS can't be embedded), **Open in Monday.com**, **Copy client summary**, **Generate document…** (→ M23), **Relations** | `ActionButtons.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.
