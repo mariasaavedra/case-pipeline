@@ -22,8 +22,9 @@
 // =============================================================================
 
 import { useEffect, useState } from "react";
-import { getClient } from "../api";
-import type { ClientCaseSummary } from "../api";
+import { fetchClientUpdates, getClient } from "../api";
+import type { ClientCaseSummary, ClientUpdate } from "../api";
+import type { TimelineFilter } from "./TimelineFilters";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { DocumentsTab } from "./DocumentsTab";
 import { ContractsTab } from "./ContractsTab";
@@ -59,12 +60,20 @@ export function ClientCaseModal({
   const [data, setData] = useState<ClientCaseSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("notes");
+  // Emails start hidden: mid-call the reader wants what was said and decided,
+  // and a busy inbox buries it. "All" brings them back.
+  const [notesFilter, setNotesFilter] = useState<TimelineFilter>("notes");
+  // The summary carries only the newest 50 entries of every kind, so the
+  // filtered feed is fetched server-side — filtering those 50 in the browser
+  // could leave a client with a busy inbox showing almost no notes.
+  const [feed, setFeed] = useState<ClientUpdate[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setData(null);
     setError(null);
     setPanel("notes");
+    setNotesFilter("notes");
     getClient(profileLocalId)
       .then((summary) => {
         if (!cancelled) setData(summary);
@@ -76,6 +85,21 @@ export function ClientCaseModal({
       cancelled = true;
     };
   }, [profileLocalId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFeed(null);
+    fetchClientUpdates(profileLocalId, { category: notesFilter, limit: 500 })
+      .then((rows) => {
+        if (!cancelled) setFeed(rows);
+      })
+      .catch(() => {
+        /* fall back to the summary's newest page, filtered below */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileLocalId, notesFilter]);
 
   const contractCount = data ? data.contracts.active.length + data.contracts.closed.length : 0;
 
@@ -164,7 +188,23 @@ export function ClientCaseModal({
             <div className="flex-1 overflow-y-auto px-6 py-4">
               {panel === "notes" ? (
                 <div role="tabpanel" id="case-panel-notes" aria-labelledby="case-tab-notes">
-                  <UpdatesTimeline updates={data?.updates ?? []} loading={data === null} />
+                  <div className="flex items-center gap-2 pb-3" role="group" aria-label="Timeline filter">
+                    {(["notes", "all"] as const).map((id) => (
+                      <button
+                        key={id}
+                        className={`filter-chip ${notesFilter === id ? "filter-chip-active" : ""}`}
+                        onClick={() => setNotesFilter(id)}
+                        aria-pressed={notesFilter === id}
+                      >
+                        {id === "notes" ? "Notes" : "All (with emails)"}
+                      </button>
+                    ))}
+                  </div>
+                  <UpdatesTimeline
+                    updates={feed ?? data?.updates ?? []}
+                    filter={notesFilter}
+                    loading={feed === null && data === null}
+                  />
                 </div>
               ) : panel === "documents" ? (
                 <div role="tabpanel" id="case-panel-documents" aria-labelledby="case-tab-documents">
