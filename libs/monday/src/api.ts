@@ -1176,13 +1176,15 @@ export async function createItem(
   itemName: string,
   columnValues: Record<string, unknown>,
   tokenOverride?: string,
-  groupId?: string
+  groupId?: string,
+  /** Let a dropdown/status value add a label the column doesn't have yet. */
+  createLabelsIfMissing = false
 ): Promise<string> {
   const result = await mondayRequest<{ data: { create_item: { id: string } } }>(
-    `mutation CreateItem($boardId: ID!, $itemName: String!, $columnValues: JSON, $groupId: String) {
-       create_item(board_id: $boardId, item_name: $itemName, column_values: $columnValues, group_id: $groupId, create_labels_if_missing: false) { id }
+    `mutation CreateItem($boardId: ID!, $itemName: String!, $columnValues: JSON, $groupId: String, $createLabels: Boolean) {
+       create_item(board_id: $boardId, item_name: $itemName, column_values: $columnValues, group_id: $groupId, create_labels_if_missing: $createLabels) { id }
      }`,
-    { boardId, itemName, columnValues: JSON.stringify(columnValues), groupId: groupId ?? null },
+    { boardId, itemName, columnValues: JSON.stringify(columnValues), groupId: groupId ?? null, createLabels: createLabelsIfMissing },
     tokenOverride
   );
   return result.data.create_item.id;

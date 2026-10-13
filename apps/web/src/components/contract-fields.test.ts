@@ -26,6 +26,16 @@ describe("toCreateContractInput", () => {
   });
 });
 
+describe("toCreateContractInput — new case type", () => {
+  test("a new case type is flagged so Monday adds the label", () => {
+    expect(toCreateContractInput({ ...emptyContractFields, caseType: "T Visa", newCaseType: true })).toMatchObject({
+      caseType: "T Visa",
+      newCaseType: true,
+    });
+    expect(toCreateContractInput({ ...emptyContractFields, caseType: "I-130" })).not.toHaveProperty("newCaseType");
+  });
+});
+
 describe("contractNoteHeader", () => {
   test("matches the API's For/Fees header, blanks as $0.00", () => {
     expect(contractNoteHeader({ ...emptyContractFields, af: "1500" })).toBe("For: ___\nFees: $1,500.00 AF $0.00 FF");

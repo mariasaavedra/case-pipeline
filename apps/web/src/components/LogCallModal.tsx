@@ -69,6 +69,7 @@ import {
   toCreateJailIntakeInput,
   type JailIntakeFieldValues,
 } from "./JailIntakeFields";
+import { useBoardColumnsMeta } from "../BoardColumnsProvider";
 
 interface Props {
   onClose: () => void;
@@ -254,6 +255,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
   // client straight after the call. Exclusive with the intake toggle.
   const [isContract, setIsContract] = useState(false);
   const [contractFields, setContractFields] = useState<ContractFieldValues>(emptyContractFields);
+  const { refresh: refreshColumns } = useBoardColumnsMeta();
   const contractCaseTypes = useContractCaseTypes();
 
   // Default status once the board's real options load. In edit mode the entry's
@@ -444,6 +446,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
       if (isContract && selectedProfile) {
         try {
           const c = await createContract(selectedProfile.localId, toCreateContractInput(contractFields));
+          if (contractFields.newCaseType) refreshColumns();
           contractResult = { name: c.name, pending: c.pending };
         } catch (contractErr) {
           // As with the intake: the call is already logged, so keep it.
