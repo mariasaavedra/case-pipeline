@@ -4,10 +4,14 @@
 // Case type (the Fee Ks "Contract for..." dropdown, real options) + AF/FF/PF
 // amounts + the contract note (its fixed For/Fees header previewed). Rendered
 // by M11 (New contract) and by M2's "this call requests a contract" section, so
-// a field added here reaches both. See contract-fields.ts.
+// a field added here reaches both. See contract-fields.ts. "+ New" (button or
+// the list's second item) types a case type the dropdown doesn't have yet;
+// Monday adds it when the Fee K is created.
 // =============================================================================
 
+import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Button } from "./ui/button";
 import { useBoardColumns } from "../BoardColumnsProvider";
 import { contractNoteHeader, type ContractFieldValues } from "./contract-fields";
 
@@ -45,8 +49,22 @@ interface Props {
 
 export function ContractFields({ value, onChange }: Props) {
   const options = useContractCaseTypes();
+  const NEW = "__new__";
+  // "+ New" swaps the dropdown for a text box; `typed` is what's in it.
+  const [adding, setAdding] = useState(!!value.newCaseType);
+  const [typed, setTyped] = useState(value.newCaseType ? value.caseType : "");
   // See KpiDetailModal: `items` is what lets the closed trigger show a label.
-  const caseTypeItems = [{ value: "", label: "Select…" }, ...options.map((o) => ({ value: o, label: o }))];
+  const caseTypeItems = [{ value: "", label: "Select…" }, { value: NEW, label: "+ New case type…" }, ...options.map((o) => ({ value: o, label: o }))];
+  /** Typed text → caseType: an existing label (any case) is that label, else new. */
+  const typeNew = (text: string) => {
+    setTyped(text);
+    const t = text.trim().replace(/\s+/g, " ");
+    const match = options.find((o) => o.toLowerCase() === t.toLowerCase());
+    onChange({ ...value, caseType: match ?? t, newCaseType: !match && t !== "" });
+  };
+  const startAdding = () => { setAdding(true); typeNew(""); };
+  const stopAdding = () => { setAdding(false); setTyped(""); onChange({ ...value, caseType: "", newCaseType: false }); };
+  const typedMatch = adding && typed.trim() !== "" && !value.newCaseType ? value.caseType : null;
   const set = (k: keyof ContractFieldValues) => (v: string) => onChange({ ...value, [k]: v });
 
   const numInput = (k: "af" | "ff" | "pf", label: string) => (
@@ -63,16 +81,35 @@ export function ContractFields({ value, onChange }: Props) {
         <span style={labelStyle}>Case type (Contract for…)</span>
         {options.length === 0 ? (
           <span style={{ fontSize: 12, color: "var(--color-status-red)" }}>Fee Ks options not synced yet — run a sync first.</span>
+        ) : adding ? (
+          <>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input aria-label="New case type" value={typed} maxLength={60} autoFocus placeholder="e.g. T Visa"
+                onChange={(e) => typeNew(e.target.value)}
+                className="flex-1 min-w-0 rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
+              <Button type="button" size="xs" variant="ghost" onClick={stopAdding}>Cancel</Button>
+            </div>
+            <span style={{ display: "block", fontSize: 11, color: "var(--color-ink-faint)", marginTop: 2, fontFamily: "var(--font-body)" }}>
+              {value.newCaseType
+                ? `"${value.caseType}" will be added to Monday's "Contract for…" list for every contract.`
+                : typedMatch ? `Already on the list — this uses "${typedMatch}".` : "Type a case type that isn't on the list."}
+            </span>
+          </>
         ) : (
-          <Select items={caseTypeItems} value={value.caseType} onValueChange={(v) => set("caseType")(v ?? "")}>
-            <SelectTrigger aria-label="Case type (Contract for…)" size="sm" className="w-full border-border-light bg-surface">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent code="D15" className="w-[var(--anchor-width)]">
-              <SelectItem value="">Select…</SelectItem>
-              {caseTypeItems.slice(1).map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Select items={caseTypeItems} value={value.caseType}
+              onValueChange={(v) => (v === NEW ? startAdding() : onChange({ ...value, caseType: v ?? "", newCaseType: false }))}>
+              <SelectTrigger aria-label="Case type (Contract for…)" size="sm" className="flex-1 min-w-0 border-border-light bg-surface">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent code="D15" className="w-[var(--anchor-width)]">
+                <SelectItem value="">Select…</SelectItem>
+                {/* Second, not last: the list is long (129 labels on 2026-10-13). */}
+                {caseTypeItems.slice(1).map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button type="button" size="xs" variant="outline" className="shrink-0" onClick={startAdding}>+ New</Button>
+          </div>
         )}
       </div>
 

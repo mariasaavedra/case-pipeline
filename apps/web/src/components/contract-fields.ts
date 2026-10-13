@@ -9,8 +9,10 @@
 // =============================================================================
 
 export interface ContractFieldValues {
-  /** A label from the Fee Ks "Contract for…" dropdown. */
+  /** A label from the Fee Ks "Contract for…" dropdown — or a new one (below). */
   caseType: string;
+  /** `caseType` is not on the dropdown yet: Monday adds it on create. */
+  newCaseType?: boolean;
   af: string;
   ff: string;
   pf: string;
@@ -33,6 +35,7 @@ function fee(v: string): number | null {
 export function toCreateContractInput(v: ContractFieldValues) {
   return {
     caseType: v.caseType,
+    ...(v.newCaseType ? { newCaseType: true } : {}),
     af: fee(v.af),
     ff: fee(v.ff),
     pf: fee(v.pf),

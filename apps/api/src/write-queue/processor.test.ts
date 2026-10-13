@@ -259,6 +259,20 @@ describe("write-queue processor", () => {
     db.close();
   });
 
+  it("a queued Fee K with a new case type still asks Monday to add the label", async () => {
+    const db = freshDb();
+    createItemMock.mockResolvedValue("999");
+
+    enqueueWrite(db, {
+      opType: "create_item",
+      payload: { boardId: "board-1", itemName: "Ana — T Visa", columnValues: { dropdown_x: { labels: ["T Visa"] } }, createLabelsIfMissing: true },
+    });
+    await drainWriteQueue(db, { token: "tok" });
+
+    expect(createItemMock).toHaveBeenCalledWith("board-1", "Ana — T Visa", { dropdown_x: { labels: ["T Visa"] } }, "tok", undefined, true);
+    db.close();
+  });
+
   it("a queued new dropdown label still asks Monday to create it", async () => {
     const db = freshDb();
     changeColumnValueMock.mockResolvedValue("123");

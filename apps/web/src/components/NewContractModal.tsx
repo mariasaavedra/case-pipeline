@@ -25,6 +25,7 @@ import {
   useContractCaseTypes,
   type ContractFieldValues,
 } from "./ContractFields";
+import { useBoardColumnsMeta } from "../BoardColumnsProvider";
 
 interface Props {
   /** Omit both to let the user pick the client first (P14). */
@@ -62,6 +63,7 @@ export function NewContractModal({ profileLocalId, clientName, onClose, onCreate
   }, [query]);
 
   const caseTypes = useContractCaseTypes();
+  const { refresh: refreshColumns } = useBoardColumnsMeta();
   const [fields, setFields] = useState<ContractFieldValues>(emptyContractFields);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +76,7 @@ export function NewContractModal({ profileLocalId, clientName, onClose, onCreate
     setError(null);
     try {
       const res = await createContract(client.localId, toCreateContractInput(fields));
+      if (fields.newCaseType) refreshColumns();
       setDone({ name: res.name, pending: res.pending });
       onCreated?.({ name: res.name, pending: res.pending });
     } catch (e) {

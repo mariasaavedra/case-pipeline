@@ -30,6 +30,7 @@ import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
 import { parseNoteBody } from "./note-write.js";
 import { planReply } from "./note-replies.js";
+import { addLocalDropdownLabel, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
 
 /**
  * "Contract note" — the firm's existing E&A activity type (queried from the
@@ -300,6 +301,9 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
   // Open Forms entries when present). Columns are resolved by title from the synced
   // schema (no hardcoded ids). Surcharges are intentionally NOT set here — they're
   // a post-signing decision. Same rails: personal token, queue fallback, audit.
+  // A case type the dropdown doesn't have is refused unless the client marks it
+  // new (`newCaseType`, "+ New" in ContractFields) — then Monday adds the label
+  // (create_labels_if_missing) and the local schema gets it straight away.
   //
   // The new Fee K also gets a note (contractNoteText: For/Fees header + the
   // optional description), twice on the item itself: as an update and as a
@@ -313,8 +317,8 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       return;
     }
     const localId = String(req.params.localId);
-    const body = req.body as { caseType?: unknown; af?: unknown; ff?: unknown; pf?: unknown; description?: unknown };
-    const caseType = (body.caseType ?? "").toString().trim();
+    const body = req.body as { caseType?: unknown; newCaseType?: unknown; af?: unknown; ff?: unknown; pf?: unknown; description?: unknown };
+    let caseType = (body.caseType ?? "").toString().trim().replace(/\s+/g, " ");
     const description = parseContractDescription(body.description);
     const num = (v: unknown): number | null => {
       if (v === "" || v == null) return null;
@@ -357,8 +361,16 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       res.status(409).json({ error: "Could not resolve the 'Contract for...' column on Fee Ks" });
       return;
     }
-    if (caseTypeCol.options.length > 0 && !caseTypeCol.options.some((o) => o.label === caseType)) {
+    // A "new" one that only differs in case is the existing label.
+    const existing = caseTypeCol.options.find((o) => o.label.toLowerCase() === caseType.toLowerCase());
+    if (existing) caseType = existing.label;
+    const newLabel = caseTypeCol.options.length > 0 && !existing;
+    if (newLabel && body.newCaseType !== true) {
       res.status(400).json({ error: "caseType is not a valid option", allowed: caseTypeCol.options.map((o) => o.label) });
+      return;
+    }
+    if (newLabel && caseType.length > MAX_CASE_TYPE_LABEL) {
+      res.status(400).json({ error: `A case type can be at most ${MAX_CASE_TYPE_LABEL} characters` });
       return;
     }
 
@@ -406,17 +418,18 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
 
     try {
       const outcome = await withTokenFallback(
-        (token) => dataSource.createItem(schema.mondayBoardId, itemName, columnValues, token),
+        (token) => dataSource.createItem(schema.mondayBoardId, itemName, columnValues, token, undefined, newLabel),
         writeTokenOptions(req),
       );
       await Promise.all([postFeeKUpdate(outcome.result), postFeeKActivity(outcome.result)]);
       auditFromReq(req, "monday.contract_created", {
         targetType: "profile", targetId: localId, targetMondayId: profile.monday_item_id,
         metadata: {
-          feeKItemId: outcome.result, caseType, af, ff, pf, name: itemName, hasDescription: !!description,
+          feeKItemId: outcome.result, caseType, ...(newLabel ? { newCaseType: true } : {}), af, ff, pf, name: itemName, hasDescription: !!description,
           usedPersonalToken: outcome.usedPersonalToken, fellBackToSharedToken: outcome.fellBackToSharedToken,
         },
       });
+      if (newLabel) addLocalDropdownLabel(db, "fee_ks", caseTypeCol.columnId, caseType);
       res.json({ data: { feeKItemId: outcome.result, name: itemName, pending: false } });
     } catch (err) {
       console.error("[write-back] createItem failed; queueing for retry:", err);
@@ -425,12 +438,13 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
         mondayItemId: profile.monday_item_id, authorOid: req.user?.oid ?? null,
         // Neither note can be posted until the item exists — the queue posts
         // `note` and `activity` right after the retried create_item succeeds.
-        payload: { boardId: schema.mondayBoardId, itemName, columnValues, note, activity },
+        payload: { boardId: schema.mondayBoardId, itemName, columnValues, note, activity, ...(newLabel ? { createLabelsIfMissing: true } : {}) },
       });
       auditFromReq(req, "monday.contract_created", {
         targetType: "profile", targetId: localId, targetMondayId: profile.monday_item_id,
-        metadata: { caseType, af, ff, pf, name: itemName, hasDescription: !!description, queued: true },
+        metadata: { caseType, ...(newLabel ? { newCaseType: true } : {}), af, ff, pf, name: itemName, hasDescription: !!description, queued: true },
       });
+      if (newLabel) addLocalDropdownLabel(db, "fee_ks", caseTypeCol.columnId, caseType);
       res.status(202).json({ data: { name: itemName, pending: true } });
     }
   });

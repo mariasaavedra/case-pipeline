@@ -168,9 +168,11 @@ async function dispatch(row: QueueRow, token?: string): Promise<string | undefin
       const columnValues = (payload.columnValues ?? {}) as Record<string, unknown>;
       if (!boardId || !itemName) throw new Error("create_item requires boardId and itemName");
       const groupId = payload.groupId ? String(payload.groupId) : undefined;
-      const newItemId = groupId
-        ? await createItem(boardId, itemName, columnValues, token, groupId)
-        : await createItem(boardId, itemName, columnValues, token);
+      const newItemId = payload.createLabelsIfMissing === true
+        ? await createItem(boardId, itemName, columnValues, token, groupId, true)
+        : groupId
+          ? await createItem(boardId, itemName, columnValues, token, groupId)
+          : await createItem(boardId, itemName, columnValues, token);
       // An optional note (e.g. a Call Log entry's comment) can only be posted
       // once the item exists. Best-effort: the item itself is already created
       // by this point, so a failure here must not throw — that would retry

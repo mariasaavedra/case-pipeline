@@ -41,7 +41,7 @@ const FEE_KEYS = Object.keys(FEE_COLUMNS) as FeeKey[];
 /** The most a fee can be — guards against a typo with extra zeros. */
 const MAX_FEE = 1_000_000;
 /** The longest new case type label. */
-const MAX_LABEL = 60;
+export const MAX_CASE_TYPE_LABEL = 60;
 
 export interface ContractFeesRow {
   monday_item_id: string | null;
@@ -166,8 +166,8 @@ export function planContractFees(
       if (body.newCaseType !== true) {
         return { rejection: { status: 400, error: `"${caseType}" is not a case type on Monday`, allowed: col.options.map((o) => o.label) } };
       }
-      if (caseType.length > MAX_LABEL) {
-        return { rejection: { status: 400, error: `A case type can be at most ${MAX_LABEL} characters` } };
+      if (caseType.length > MAX_CASE_TYPE_LABEL) {
+        return { rejection: { status: 400, error: `A case type can be at most ${MAX_CASE_TYPE_LABEL} characters` } };
       }
       newLabel = { columnId: col.columnId, label: caseType };
     }
@@ -177,6 +177,19 @@ export function planContractFees(
     from.caseType = currentType;
   }
   return { plan: { mondayItemId: item.monday_item_id, mondayBoardId: schema.mondayBoardId, from, to, values, local, ...(newLabel ? { newLabel } : {}) } };
+}
+
+/** Append a label Monday just created to the synced column's options, so the
+ *  pickers offer it before the next sync (which rewrites the options anyway). */
+export function addLocalDropdownLabel(db: DatabaseInstance, boardKey: string, columnId: string, label: string): void {
+  const row = db.prepare("SELECT options FROM board_columns WHERE board_key = ? AND column_id = ?")
+    .get(boardKey, columnId) as { options: string | null } | undefined;
+  if (!row) return;
+  let options: unknown[] = [];
+  try { const parsed: unknown = JSON.parse(row.options ?? "[]"); if (Array.isArray(parsed)) options = parsed; } catch { /* keep [] */ }
+  if (options.some((o) => (o as { label?: unknown })?.label === label)) return;
+  db.prepare("UPDATE board_columns SET options = ? WHERE board_key = ? AND column_id = ?")
+    .run(JSON.stringify([...options, { label }]), boardKey, columnId);
 }
 
 export interface ContractFeesDeps {
@@ -220,14 +233,7 @@ export function registerContractFeesRoutes(app: Express, deps: ContractFeesDeps)
           .run(isJson ? JSON.stringify(value) : value, localId);
       }
       // A new case type joins the local options, so M11 / M25 offer it before the next sync.
-      if (newLabel) {
-        const row = db.prepare("SELECT options FROM board_columns WHERE board_key = ? AND column_id = ?")
-          .get(BOARD_KEY, newLabel.columnId) as { options: string | null } | undefined;
-        let options: unknown[] = [];
-        try { const parsed: unknown = JSON.parse(row?.options ?? "[]"); if (Array.isArray(parsed)) options = parsed; } catch { /* keep [] */ }
-        db.prepare("UPDATE board_columns SET options = ? WHERE board_key = ? AND column_id = ?")
-          .run(JSON.stringify([...options, { label: newLabel.label }]), BOARD_KEY, newLabel.columnId);
-      }
+      if (newLabel) addLocalDropdownLabel(db, BOARD_KEY, newLabel.columnId, newLabel.label);
     };
     const audit = (extra: Record<string, unknown>) =>
       auditFromReq(req, "monday.contract_fees", {

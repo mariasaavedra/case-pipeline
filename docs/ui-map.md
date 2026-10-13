@@ -259,7 +259,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M8 | New jail intake | "New jail intake" | P9 → **+ New intake**. Intake status (New Detainee / Payment link sent. Waiting on payment) + optional POC e-mail — the same fields as M2's "this call is a jail intake" | `NewJailIntakeModal.tsx` |
 | M9 | Jail intake detail | The detainee's name | P9 → click an intake. The status chip changes the status (D6). A paid intake ("Needs to be scheduled") shows **Book consult**: attorney + date + time → saved to Monday, then a link to press Create Appt there | `JailIntakeDetailModal.tsx` |
 | M10 | Book a consult | "Book a consult" | P3.2; P17.1 **+ Book Appt** (starts with a client search). 30-minute time slots; "Needs to pay?" shown disabled (under construction) | `NewAppointmentModal.tsx` |
-| M11 | New contract | "New contract (Fee K)" | P3.3; P4.6 **+ New contract**; P14.1 (starts with a client search) | `NewContractModal.tsx` |
+| M11 | New contract | "New contract (Fee K)" | P3.3; P4.6 **+ New contract**; P14.1 (starts with a client search). Case type: pick from the list, or **+ New** to type one Monday adds to the "Contract for…" list (same in M2's contract section) | `NewContractModal.tsx` |
 | M12 | File preview | The file name | P3.6; P4.5 Documents; the documents section of M5 | `FilePreviewModal.tsx` |
 | M13 | Entry editor | The entry's name | P3.8 (admin) | `EntryEditorModal.tsx` |
 | M14 | What's new | Changelog | Version badge on P1 Home / P0 Sign in | `VersionBadge.tsx` |

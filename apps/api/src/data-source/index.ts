@@ -32,7 +32,7 @@ export interface DataSource {
   /** Set a JSON-valued column (people, board_relation, …) on an existing item. */
   setColumnValueJson(boardId: string, itemId: string, columnId: string, value: Record<string, unknown>, token?: string): Promise<void>;
   /** Create an item with column values, optionally in a specific group. Returns the new item id. */
-  createItem(boardId: string, itemName: string, columnValues: Record<string, unknown>, token?: string, groupId?: string): Promise<string>;
+  createItem(boardId: string, itemName: string, columnValues: Record<string, unknown>, token?: string, groupId?: string, createLabelsIfMissing?: boolean): Promise<string>;
   /** Create an Emails & Activities timeline entry on an item. Returns the new timeline item id. */
   createTimelineItem(input: CreateTimelineItemInput, token?: string): Promise<string>;
   /** Set several columns on one item at once (createItem's per-column shapes). */
@@ -53,7 +53,8 @@ export const mondayDataSource: DataSource = {
   setColumnValueJson: async (boardId, itemId, columnId, value, token) => {
     await changeColumnValue(boardId, itemId, columnId, value, token);
   },
-  createItem: (boardId, itemName, columnValues, token, groupId) => mondayCreateItem(boardId, itemName, columnValues, token, groupId),
+  createItem: (boardId, itemName, columnValues, token, groupId, createLabelsIfMissing) =>
+    mondayCreateItem(boardId, itemName, columnValues, token, groupId, createLabelsIfMissing),
   createTimelineItem: (input, token) => mondayCreateTimelineItem(input, token),
   setColumnValues: async (boardId, itemId, columnValues, token, createLabelsIfMissing) => {
     await changeMultipleColumnValues(boardId, itemId, columnValues, token, createLabelsIfMissing);
