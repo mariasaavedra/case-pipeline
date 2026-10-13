@@ -23,7 +23,8 @@ import { formatDue, PersonChip, FormChip, ListSection, waitFg } from "./caseBoar
 // doesn't record when a stage changed. Each stage group wears its Monday colour. See docs/features/prescheduling-and-contracts.md.
 // Each row's ⋯ menu: E-file / Consult file (M26, the client's SharePoint
 // folders), Generate contract (M22, PDF from the firm's templates), Payment
-// links (M21, LawPay), Edit fees (M25, also a click on the fees) and the next
+// links (M21, LawPay), Edit fees / Change case type (M25, also a click on the
+// fees or the case type) and the next
 // signing step (contracts are signed in
 // Acrobat Pro, attorney first, then the client) — see
 // docs/features/contract-signing.md.
@@ -49,13 +50,14 @@ const menuItemStyle: React.CSSProperties = {
 
 /** The row's ⋯ menu: the client's folders, generate the contract, payment links,
  *  fees, and the next signing step. */
-function RowMenu({ c, onStep, onFiles, onGenerate, onPaymentLinks, onFees }: {
+function RowMenu({ c, onStep, onFiles, onGenerate, onPaymentLinks, onFees, onCaseType }: {
   c: PendingContract;
   onStep: (step: ContractStep) => Promise<void>;
   onFiles: () => void;
   onGenerate: () => void;
   onPaymentLinks: () => void;
   onFees: () => void;
+  onCaseType: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -106,6 +108,7 @@ function RowMenu({ c, onStep, onFiles, onGenerate, onPaymentLinks, onFees }: {
               )}
               <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onGenerate)}>Generate contract…</button>
               <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onPaymentLinks)}>Payment links…</button>
+              <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onCaseType)}>Change case type…</button>
               <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onFees)}>Edit fees…</button>
               {step && (
                 <>
@@ -137,9 +140,10 @@ interface RowProps {
   onGenerate: (c: PendingContract) => void;
   onPaymentLinks: (c: PendingContract) => void;
   onFees: (c: PendingContract) => void;
+  onCaseType: (c: PendingContract) => void;
 }
 
-function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPaymentLinks, onFees }: RowProps) {
+function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPaymentLinks, onFees, onCaseType }: RowProps) {
   return (
     <li
       className="grid gap-x-4 gap-y-1.5 px-4 py-3 items-center grid-cols-1 md:grid-cols-[minmax(0,2fr)_11rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto]"
@@ -154,17 +158,22 @@ function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPay
         ) : (
           <span className="font-medium truncate block" style={{ color: "var(--color-ink)" }}>{c.clientName}</span>
         )}
-        {(c.contractFor.length > 0 || c.itemName !== c.clientName) && (
-          <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-            {c.contractFor.map((f) => <FormChip key={f} label={f} />)}
+        <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+            {/* Case type — click to change (M25) */}
+            <button type="button" onClick={() => onCaseType(c)} title="Change case type"
+              className="flex items-center gap-1.5 shrink-0 rounded hover:bg-[var(--color-surface-warm)]"
+              style={{ cursor: "pointer", background: "none", border: "none", padding: 0 }}>
+              {c.contractFor.length > 0
+                ? c.contractFor.map((f) => <FormChip key={f} label={f} />)
+                : <span className="text-xs" style={{ color: "var(--color-ink-faint)" }}>Add case type</span>}
+            </button>
             {/* The item name tells apart two contracts for one client (and shows Monday "(copy)" duplicates). */}
             {c.itemName !== c.clientName && (
               <span className="text-sm truncate" style={{ color: "var(--color-ink-faint)" }} title={c.itemName}>
                 {c.itemName}
               </span>
             )}
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Age */}
@@ -213,7 +222,7 @@ function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPay
       {/* ⋯ actions */}
       <div className="md:justify-self-end">
         <RowMenu c={c} onStep={(step) => onStep(c, step)} onFiles={() => onFiles(c)} onGenerate={() => onGenerate(c)}
-          onPaymentLinks={() => onPaymentLinks(c)} onFees={() => onFees(c)} />
+          onPaymentLinks={() => onPaymentLinks(c)} onFees={() => onFees(c)} onCaseType={() => onCaseType(c)} />
       </div>
     </li>
   );
@@ -226,7 +235,7 @@ export function ContractsPage() {
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState<PendingContract | null>(null);
   const [generating, setGenerating] = useState<PendingContract | null>(null);
-  const [editingFees, setEditingFees] = useState<PendingContract | null>(null);
+  const [editing, setEditing] = useState<{ c: PendingContract; focus: "fees" | "caseType" } | null>(null);
   const [browsing, setBrowsing] = useState<PendingContract | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -271,14 +280,15 @@ export function ContractsPage() {
       </div>
       {creating && <NewContractModal onClose={() => setCreating(false)} />}
       {generating && <GenerateContractModal contract={generating} onClose={() => setGenerating(null)} />}
-      {editingFees && (
+      {editing && (
         <EditFeesModal
-          contract={editingFees}
+          contract={editing.c}
+          focus={editing.focus}
           onSaved={(pending) => {
-            setNotice(`${editingFees.clientName}: fees saved${pending ? " (queued — Monday will update shortly)" : ""}`);
+            setNotice(`${editing.c.clientName}: contract saved${pending ? " (queued — Monday will update shortly)" : ""}`);
             void load();
           }}
-          onClose={() => setEditingFees(null)}
+          onClose={() => setEditing(null)}
         />
       )}
       {browsing?.clientLocalId && (
@@ -346,7 +356,8 @@ export function ContractsPage() {
                 <ListSection key={s} title={s} count={inStage.length} tone={null} color={data.stageColors[s]}>
                   {inStage.map((c) => (
                     <ContractRow key={c.localId} c={c} filter={filter} onAttorney={pickAttorney} onStep={takeStep}
-                      onFiles={setBrowsing} onGenerate={setGenerating} onPaymentLinks={setPaying} onFees={setEditingFees} />
+                      onFiles={setBrowsing} onGenerate={setGenerating} onPaymentLinks={setPaying}
+                      onFees={(c) => setEditing({ c, focus: "fees" })} onCaseType={(c) => setEditing({ c, focus: "caseType" })} />
                   ))}
                 </ListSection>
               ) : null;

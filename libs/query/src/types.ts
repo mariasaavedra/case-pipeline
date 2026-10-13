@@ -88,7 +88,7 @@ export interface ContractSummary {
   tone: StatusTone;
   /** Annual fee paid, in dollars (parsed from Monday). Null when unset. */
   af: number | null;
-  /** Processing fee paid, in dollars. Null when unset. */
+  /** Postage fee paid, in dollars. Null when unset. */
   pf: number | null;
   /** What the contract becomes (it_will_go_to): "Open Forms", "Court Cases", … */
   goesTo: string | null;

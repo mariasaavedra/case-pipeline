@@ -166,7 +166,7 @@ export class FeeKFactory {
         continue;
       }
 
-      // Processing Fee
+      // Postage Fee
       if (key === "pf") {
         if (type === "numbers") {
           values[key] = data.pf.toString();

@@ -253,9 +253,24 @@ describe("write-queue processor", () => {
 
     expect(synced).toBe(1);
     expect(changeColumnValueMock).toHaveBeenCalledWith(
-      "board-9", "123", "people__1", { personsAndTeams: [{ id: 42, kind: "person" }] }, "tok",
+      "board-9", "123", "people__1", { personsAndTeams: [{ id: 42, kind: "person" }] }, "tok", false,
     );
     expect(queueRow(db).status).toBe("synced");
+    db.close();
+  });
+
+  it("a queued new dropdown label still asks Monday to create it", async () => {
+    const db = freshDb();
+    changeColumnValueMock.mockResolvedValue("123");
+
+    enqueueWrite(db, {
+      opType: "change_column_json",
+      mondayItemId: "123",
+      payload: { boardId: "board-9", columnId: "dropdown_x", value: { labels: ["T Visa"] }, createLabelsIfMissing: true },
+    });
+    await drainWriteQueue(db, { token: "tok" });
+
+    expect(changeColumnValueMock).toHaveBeenCalledWith("board-9", "123", "dropdown_x", { labels: ["T Visa"] }, "tok", true);
     db.close();
   });
 

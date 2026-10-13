@@ -1105,13 +1105,15 @@ export async function changeColumnValue(
   itemId: string,
   columnId: string,
   value: Record<string, unknown>,
-  tokenOverride?: string
+  tokenOverride?: string,
+  /** Let a dropdown/status value add a label the column doesn't have yet. */
+  createLabelsIfMissing = false
 ): Promise<string> {
   const result = await mondayRequest<{ data: { change_column_value: { id: string } } }>(
-    `mutation ChangeColumnValue($boardId: ID!, $itemId: ID!, $columnId: String!, $value: JSON!) {
-       change_column_value(board_id: $boardId, item_id: $itemId, column_id: $columnId, value: $value) { id }
+    `mutation ChangeColumnValue($boardId: ID!, $itemId: ID!, $columnId: String!, $value: JSON!, $createLabels: Boolean) {
+       change_column_value(board_id: $boardId, item_id: $itemId, column_id: $columnId, value: $value, create_labels_if_missing: $createLabels) { id }
      }`,
-    { boardId, itemId, columnId, value: JSON.stringify(value) },
+    { boardId, itemId, columnId, value: JSON.stringify(value), createLabels: createLabelsIfMissing },
     tokenOverride
   );
   return result.data.change_column_value.id;
@@ -1149,13 +1151,15 @@ export async function changeMultipleColumnValues(
   boardId: string,
   itemId: string,
   columnValues: Record<string, unknown>,
-  tokenOverride?: string
+  tokenOverride?: string,
+  /** Let a dropdown/status value add a label the column doesn't have yet. */
+  createLabelsIfMissing = false
 ): Promise<string> {
   const result = await mondayRequest<{ data: { change_multiple_column_values: { id: string } } }>(
-    `mutation ChangeMultiple($boardId: ID!, $itemId: ID!, $values: JSON!) {
-       change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $values, create_labels_if_missing: false) { id }
+    `mutation ChangeMultiple($boardId: ID!, $itemId: ID!, $values: JSON!, $createLabels: Boolean) {
+       change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $values, create_labels_if_missing: $createLabels) { id }
      }`,
-    { boardId, itemId, values: JSON.stringify(columnValues) },
+    { boardId, itemId, values: JSON.stringify(columnValues), createLabels: createLabelsIfMissing },
     tokenOverride
   );
   return result.data.change_multiple_column_values.id;

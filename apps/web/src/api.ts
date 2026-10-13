@@ -687,17 +687,19 @@ export async function recordContractStep(
 
 export type ContractFees = { af: number | null; ff: number | null; pf: number | null };
 
-/** Change a Fee K's AF / FF / PF (only the ones that changed are written; null
- * clears). `from` is what the user saw — 409 if Monday changed since. */
+/** Change a Fee K's AF / FF / PF and/or its case type ("Contract for…"; one
+ * label, replacing what was there; `newCaseType` = add it to the dropdown).
+ * Only what changed is written; a null fee clears. `from` is what the user
+ * saw — 409 if Monday changed since. */
 export async function updateContractFees(
   localId: string,
-  fees: Partial<ContractFees>,
-  from: Partial<ContractFees>,
-): Promise<{ localId: string; fees: Partial<ContractFees>; pending: boolean }> {
+  change: { fees?: Partial<ContractFees>; caseType?: string; newCaseType?: boolean },
+  from: Partial<ContractFees> & { caseType?: string[] },
+): Promise<{ localId: string; fees: Partial<ContractFees>; caseType?: string; pending: boolean }> {
   return apiFetch(`/api/contracts/${encodeURIComponent(localId)}/fees`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fees, from }),
+    body: JSON.stringify({ ...change, from }),
   });
 }
 

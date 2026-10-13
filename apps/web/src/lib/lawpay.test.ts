@@ -9,7 +9,7 @@ describe("lawPayLink", () => {
     );
   });
 
-  it("sends filing fees to Trust and processing fees to Operating", () => {
+  it("sends filing fees to Trust and postage fees to Operating", () => {
     expect(lawPayLink("Murray Osorio Habeas", "FF", 405)).toMatch(/^https:\/\/secure\.lawpay\.com\/pages\/scal\/trust\?amount=405&/);
     expect(lawPayLink("Murray Osorio Habeas", "PF", 50)).toMatch(/\/scal\/operating\?amount=50&.*-%20PF%2050$/);
   });
