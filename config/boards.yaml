@@ -2366,6 +2366,12 @@ boards:
       ff_surcharge_fee:
         resolve: by_id
         id: numeric_mm0gc5x9
+      payment_method:
+        resolve: by_id
+        id: dropdown_mm7v5eeb
+      poc_full_name_for_fee_ks:
+        resolve: by_id
+        id: text_mm7xyv8e
       link_to_activities:
         resolve: by_id
         id: link_to_activities_mkm0qqyf

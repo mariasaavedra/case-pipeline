@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-13",
+    title: "Contracts: the Fee K fills in more by itself",
+    items: [
+      "For a detained client, the Fee K's “POC Full Name for Fee Ks” is now filled from the Jail Intake's point of contact, without the relationship or phone number (“Ana Torres - Wife” becomes “Ana Torres”). If the intake has no name in it, the field is left for you.",
+      "When the Payment Method is “CREDIT Card - Surcharge Applies”, the AF and FF Surcharge Fees are filled at 3%. Debit, cash and split payments get no surcharge.",
+      "Only empty fields are filled. Anything someone typed is never changed, and this works for Fee Ks made with Monday's Create Fee K button too.",
+      "Contracts now says “Missing: …” on a contract with no case type, AF, attorney, e-mail or address. Click “missing info” at the top to see only those.",
+    ],
+  },
+  {
     date: "2026-10-09",
     title: "Contracts: client folders, fees and colours",
     items: [

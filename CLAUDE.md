@@ -77,6 +77,7 @@ See `.env.example` for the full list. Key variables:
 | `PROFILES_BOARD_ID` | No | Override board ID from `config/boards.yaml` |
 | `CONTRACTS_BOARD_ID` | No | Override board ID from `config/boards.yaml` |
 | `MONDAY_API_VERSION` | No (default: `2024-10`) | Monday.com API version |
+| `FEE_K_AUTOFILL` | No | `on` fills empty Fee K columns on Monday every 15 min: POC Full Name from the Jail Intake, AF/FF Surcharge (3%) when paid by credit card. Needs `FEE_K_AUTOFILL_SINCE`. See `docs/features/fee-k-autofill.md` |
 | `MONDAY_WEBHOOK_SECRET` | No | Enables the Monday webhook receiver + processor (near-real-time mirror refresh). See `docs/webhooks.md` |
 
 tsx/Node loads `.env` automatically via `--env-file` flag in the sync command. For other scripts, ensure `.env` is present at the repo root.
@@ -112,7 +113,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `appeal-deadlines.ts` | "Appeal & Federal Deadlines" alert group: BIA appeal clock on court cases "REMOVED - Appealing?" / recently "Ordered Removed" (30 days from the removal date in the item name, else last hearing), Appeals board appeal/brief due with nothing filed, Litigation due within 14 days |
 | `u-visa-certifications.ts` | Alert groups "I-918B Expiring" (signed certification expiring within 45 days or expired ≤60 days ago, no U visa / I-918 Open Form sent since signing; Expiration Date else signed + 6 months) and "I-918B Requests Pending" (90+ days since the hire date, unsigned). The I-918B board is not in `DEADLINE_BOARDS` |
 | `prescheduling.ts` | P13 Prescheduling: Paid Fee Ks by PS Stage, days since hire (30/60), "not cooperating" (reminder 14+ days, no evidence since), North Pole parked |
-| `pending-contracts.ts` | P14 Contracts: Pending Fee Ks by Contract Stage, aged from sent (else added) date, 30/60 days; `CONTRACT_STEPS` = the Acrobat signing + payment-link steps |
+| `pending-contracts.ts` | P14 Contracts: Pending Fee Ks by Contract Stage, aged from sent (else added) date, 30/60 days; `CONTRACT_STEPS` = the Acrobat signing + payment-link steps; `missing` = empty Contract for / AF / Attorney / E-mail / Address |
 | `court-cases.ts` | P15 Court Cases: active court cases with hearing/judge/method, Case Prep Status, readiness (Trial 60/90, MCH 14 days), data-cleanup flags |
 | `address-changes.ts` | P18 Address Changes: open changes of address by phase (paid/our turn → client/attorney → submitted → waiting on payment), aged from Date Received (7/14 days on our turn, else 30/60), next hearing for court changes, cleanup flags |
 | `foias.ts` | P19 FOIAs: open FOIA requests by phase (decide / our turn / waiting on the agency / North Pole); "Done FOIAS" group, COMPLETED, NOT PROCEEDING or a Results Received date = done; agencies quoted vs filed; inquiry due |
@@ -239,6 +240,7 @@ Run with `tsx scripts/<name>.ts`:
 | `mail-probe.ts` | What the mail reader makes of real PDFs, page by page (fields, split), with no DB. `npm run mail:probe -- scan.pdf [--text]`. Keep real scans out of the repo. |
 | `sharepoint-links.ts` | Index every client folder in SCAL Consults / E-Files / Closed into `sp_folders` (schema v28), then propose a folder for each profile with an empty E-File / Consult File (case no. + surname, name + consult year, name). `npm run sharepoint:links -- --db=live` is read-only and writes a plan CSV to `output/`; `--apply` writes **high**-confidence links only (`--include-medium` adds medium, `--limit=N` for a trial), empty columns only, re-checked against Monday first, with a receipt CSV. Rules: `scripts/sharepoint/profile-links.ts`. See `docs/features/sharepoint-catalog.md`. |
 | `tag-contract-template.ts` | Turn a contract draft's Word form fields ("Client Name", "AF", "multiply AF by .03"…) into `{{tags}}`, keeping formatting. One-off helper for existing drafts; new templates just get tags typed in. `npx tsx scripts/tag-contract-template.ts in.docx out.docx` |
+| `fee-k-autofill.ts` | What the Fee K auto-fill would write (POC Full Name from the Jail Intake, 3% card surcharges), empty columns only. `npm run feek:autofill -- --since=YYYY-MM-DD` is a dry run; `--apply` writes. Same code as the `FEE_K_AUTOFILL=on` schedule (`apps/api/src/fee-k-autofill.ts`). See `docs/features/fee-k-autofill.md`. |
 | `setup-webhooks.ts` | Register/list/remove Monday.com webhooks for all tracked boards. `npm run webhooks:setup -- --url=https://<host>` (requires the API deployed with `MONDAY_WEBHOOK_SECRET` first). |
 | `sync-config/` | Internal sync logic called by `npm run dev:cli -- sync`. |
 | `preflight.sh` | Checks Node 22+, npm, and data directory writability. |

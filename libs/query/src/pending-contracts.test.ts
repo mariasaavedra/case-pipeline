@@ -33,6 +33,8 @@ interface FeeKOpts {
   af?: number | string;
   ff?: number | string;
   contractFor?: string[];
+  email?: string;
+  address?: string;
   deleted?: boolean;
 }
 
@@ -46,6 +48,8 @@ function insertFeeK(db: DatabaseInstance, o: FeeKOpts) {
     ...(o.af !== undefined ? { af: o.af } : {}),
     ...(o.ff !== undefined ? { ff: o.ff } : {}),
     ...(o.contractFor ? { contract_for: { labels: o.contractFor } } : {}),
+    ...(o.email !== undefined ? { e_mail: o.email } : {}),
+    ...(o.address !== undefined ? { address: o.address } : {}),
   };
   db.prepare(`
     INSERT INTO contracts (batch_id, local_id, profile_local_id, name, group_title, raw_column_values, deleted_at)
@@ -124,6 +128,24 @@ describe("getPendingContracts", () => {
       clientName: "Ana LOPEZ",
     });
     expect(c.b).toMatchObject({ attorneys: [], attorneyFee: null, filingFee: null });
+    db.close();
+  });
+
+  test("flags the Fee K fields a contract can't go out without; FF is never one", () => {
+    const db = freshDb();
+    insertFeeK(db, {
+      localId: "full", attorney: "William Hanna", af: 4000, contractFor: ["CVP"],
+      email: "ana@example.com", address: "1 Main St, Monett, MO 65708",
+    });
+    insertFeeK(db, { localId: "bare" });
+    insertFeeK(db, { localId: "blank", attorney: "Rekha@Sharma- com", af: "", contractFor: [], email: " ", address: "" });
+    insertFeeK(db, { localId: "zeroAf", attorney: "William Hanna", af: 0, contractFor: ["Bond"], email: "a@b.co", address: "Detained in Chase" });
+    const c = byId(db);
+    expect(c.full!.missing).toEqual([]);
+    expect(c.bare!.missing).toEqual(["Contract for", "AF", "Attorney", "E-mail", "Address"]);
+    expect(c.blank!.missing).toEqual(["Contract for", "AF", "Attorney", "E-mail", "Address"]);
+    // AF 0 is a decision (no attorney fee), not a gap.
+    expect(c.zeroAf!.missing).toEqual([]);
     db.close();
   });
 });

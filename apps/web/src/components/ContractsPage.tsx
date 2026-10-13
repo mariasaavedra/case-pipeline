@@ -129,6 +129,8 @@ function RowMenu({ c, onStep, onFiles, onGenerate, onPaymentLinks, onFees, onCas
 
 interface Filter {
   attorney: string | null;
+  /** Only Fee Ks missing an "INFO NEEDED TO FILL FEE K" field. */
+  missingOnly: boolean;
 }
 
 interface RowProps {
@@ -174,6 +176,13 @@ function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPay
               </span>
             )}
         </div>
+        {/* Fields the contract can't go out without (pending-contracts.ts MISSING_FIELDS). */}
+        {c.missing.length > 0 && (
+          <div className="text-xs mt-0.5" style={{ color: waitFg("waiting") }}
+            title="Empty on the Fee K in Monday. E-mail and Address come from the client's Profile.">
+            Missing: {c.missing.join(", ")}
+          </div>
+        )}
       </div>
 
       {/* Age */}
@@ -231,7 +240,7 @@ function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPay
 export function ContractsPage() {
   const [data, setData] = useState<PendingContractsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>({ attorney: null });
+  const [filter, setFilter] = useState<Filter>({ attorney: null, missingOnly: false });
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState<PendingContract | null>(null);
   const [generating, setGenerating] = useState<PendingContract | null>(null);
@@ -255,9 +264,12 @@ export function ContractsPage() {
   };
 
   const all = data?.contracts ?? [];
-  const visible = all.filter((c) => filter.attorney === null || attorneysOf(c).includes(filter.attorney));
+  const visible = all.filter(
+    (c) => (filter.attorney === null || attorneysOf(c).includes(filter.attorney)) && (!filter.missingOnly || c.missing.length > 0),
+  );
+  const missingCount = all.filter((c) => c.missing.length > 0).length;
   const t = data?.thresholds;
-  const pickAttorney = (name: string) => setFilter((f) => ({ attorney: f.attorney === name ? null : name }));
+  const pickAttorney = (name: string) => setFilter((f) => ({ ...f, attorney: f.attorney === name ? null : name }));
 
   return (
     <div>
@@ -272,6 +284,17 @@ export function ContractsPage() {
             {all.length} pending ·{" "}
             <span style={{ color: waitFg("late") }}>{all.filter((c) => c.ageLevel === "late").length} older than {t.lateDays} days</span>{" "}
             · {all.filter((c) => c.agedFrom === "added").length} not sent yet
+            {missingCount > 0 && (
+              <>
+                {" "}·{" "}
+                <button type="button" onClick={() => setFilter((f) => ({ ...f, missingOnly: !f.missingOnly }))}
+                  className="hover:underline" title={filter.missingOnly ? "Show all contracts" : "Show only contracts missing info"}
+                  style={{ color: waitFg("waiting"), background: "none", border: "none", padding: 0, cursor: "pointer",
+                    fontWeight: filter.missingOnly ? 600 : undefined }}>
+                  {missingCount} missing info{filter.missingOnly ? " ✕" : ""}
+                </button>
+              </>
+            )}
           </span>
         )}
         <Button type="button" className="ml-auto" onClick={() => setCreating(true)}>
@@ -337,7 +360,7 @@ export function ContractsPage() {
               {visible.length} contract{visible.length !== 1 ? "s" : ""}
             </span>
             {filter.attorney && (
-              <button type="button" className="filter-chip filter-chip-active" onClick={() => setFilter({ attorney: null })}>
+              <button type="button" className="filter-chip filter-chip-active" onClick={() => setFilter((f) => ({ ...f, attorney: null }))}>
                 {filter.attorney} ×
               </button>
             )}
