@@ -65,3 +65,27 @@ const KNOWN_PROCEEDED = new Set([
   "interview prep",
   "court prep appt",
 ]);
+
+/**
+ * Whether the consultation is over, so its summary can be written.
+ *
+ * "Today's consult" counts as proceeding for the folder — the attorney needs
+ * somewhere to put things during the meeting — but the meeting has not taken
+ * place yet when the morning sweep runs. A summary written then is written
+ * before the consult. So a today's-consult status waits for its scheduled time
+ * (Monday stores it in UTC), or, with no time, for the next day.
+ */
+export function consultHasTakenPlace(
+  status: string | null | undefined,
+  date: string | null | undefined,
+  time: string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (consultOutcome(status) !== "proceeded") return false;
+  if (!(status ?? "").trim().toLowerCase().startsWith("today's consult")) return true;
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const at = time && /^\d{2}:\d{2}/.test(time)
+    ? new Date(`${date}T${time.slice(0, 5)}:00Z`)
+    : new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000);
+  return now.getTime() >= at.getTime();
+}
