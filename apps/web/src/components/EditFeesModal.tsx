@@ -122,7 +122,8 @@ export function EditFeesModal({ contract: c, onSaved, onClose, focus = "fees" }:
                   onClick={() => { setAdding(false); setNewType(""); }}>Cancel</button>
               </>
             ) : (
-              <Select items={[{ value: "", label: "Select…" }, ...caseTypes.map((t) => ({ value: t, label: t })), { value: NEW, label: "+ New case type…" }]}
+              <>
+              <Select items={[{ value: "", label: "Select…" }, { value: NEW, label: "+ New case type…" }, ...caseTypes.map((t) => ({ value: t, label: t }))]}
                 value={caseType} onValueChange={(v) => { if (v === NEW) setAdding(true); else setCaseType(v ?? ""); }}>
                 <SelectTrigger aria-label="Case type (Contract for…)" size="sm" autoFocus={focus === "caseType"}
                   className="flex-1 min-w-0 border-border-light bg-surface">
@@ -130,10 +131,13 @@ export function EditFeesModal({ contract: c, onSaved, onClose, focus = "fees" }:
                 </SelectTrigger>
                 <SelectContent code="D15" className="w-[var(--anchor-width)]">
                   <SelectItem value="">Select…</SelectItem>
-                  {caseTypes.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {/* First, not last: the list is long (129 labels on 2026-10-13). */}
                   <SelectItem value={NEW}>+ New case type…</SelectItem>
+                  {caseTypes.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <Button type="button" size="xs" variant="outline" className="shrink-0" onClick={() => setAdding(true)}>+ New</Button>
+              </>
             )}
           </div>
           {isNewType && (
