@@ -46,19 +46,31 @@ describe("consultOutcome", () => {
 });
 
 describe("consultHasTakenPlace", () => {
+  // 07:32 Central (CDT, UTC−5).
   const morning = new Date("2026-10-13T12:32:00Z");
 
   it("waits for a today's consult's scheduled time (Patrick FERREIRA TOSCANO, 2026-10-13)", () => {
-    // The 12:32 UTC sweep wrote the summary for a 14:00 UTC consult.
+    // The 07:32 sweep wrote the summary for a 14:00 Central consult. The synced
+    // time is Central — 14:00 here is 19:00 UTC.
     expect(consultHasTakenPlace("Today's consult (1st time)", "2026-10-13", "14:00", morning)).toBe(false);
     expect(consultHasTakenPlace("Today's consult (1st time)", "2026-10-13", "14:00",
-      new Date("2026-10-13T14:00:00Z"))).toBe(true);
+      new Date("2026-10-13T18:59:00Z"))).toBe(false);
+    expect(consultHasTakenPlace("Today's consult (1st time)", "2026-10-13", "14:00",
+      new Date("2026-10-13T19:00:00Z"))).toBe(true);
   });
 
-  it("with no time, waits for the day after", () => {
-    expect(consultHasTakenPlace("Today's consult (detainee)", "2026-10-13", null, morning)).toBe(false);
+  it("reads the time as Central in winter too (CST, UTC−6)", () => {
+    expect(consultHasTakenPlace("Today's consult (1st time)", "2026-12-01", "10:00",
+      new Date("2026-12-01T15:30:00Z"))).toBe(false);
+    expect(consultHasTakenPlace("Today's consult (1st time)", "2026-12-01", "10:00",
+      new Date("2026-12-01T16:00:00Z"))).toBe(true);
+  });
+
+  it("with no time, waits for the end of that day in Central", () => {
     expect(consultHasTakenPlace("Today's consult (detainee)", "2026-10-13", null,
-      new Date("2026-10-14T00:00:00Z"))).toBe(true);
+      new Date("2026-10-14T00:30:00Z"))).toBe(false); // 19:30 Central
+    expect(consultHasTakenPlace("Today's consult (detainee)", "2026-10-13", null,
+      new Date("2026-10-14T05:00:00Z"))).toBe(true);
     expect(consultHasTakenPlace("Today's consult (detainee)", null, null, morning)).toBe(false);
   });
 
