@@ -230,6 +230,7 @@ export function checkEnvironment(opts: CheckOptions = {}): EnvIssue[] {
     "BACKUP_CRON",
     "CONSULT_SWEEP_CRON",
     "DRIVE_INTAKE_CRON",
+    "FEE_K_AUTOFILL_CRON",
   ] as const) {
     const expr = env[key]?.trim();
     if (expr && !cron.validate(expr)) {
@@ -252,6 +253,21 @@ export function checkEnvironment(opts: CheckOptions = {}): EnvIssue[] {
         "Files uploaded before it are left alone — set it to the day reception stops copying by hand.",
       );
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Fee K auto-fill — switched on without a start date would touch every old Fee K
+  // ---------------------------------------------------------------------------
+  if (env.FEE_K_AUTOFILL?.trim() === "on") {
+    const since = env.FEE_K_AUTOFILL_SINCE?.trim();
+    if (!since || !/^\d{4}-\d{2}-\d{2}$/.test(since)) {
+      err(
+        "FEE_K_AUTOFILL_SINCE",
+        "must be a date (YYYY-MM-DD) when FEE_K_AUTOFILL=on",
+        "Only Fee Ks added on or after it are filled. See docs/features/fee-k-autofill.md.",
+      );
+    }
+    if (!env.MONDAY_API_TOKEN?.trim()) err("MONDAY_API_TOKEN", "is required when FEE_K_AUTOFILL=on", "The fill writes to Monday.");
   }
 
   return issues;

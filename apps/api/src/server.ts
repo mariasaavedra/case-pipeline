@@ -32,6 +32,7 @@ import {
 import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getAddressChanges, getFoias, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
 import { setApiToken } from "@case-pipeline/monday";
+import { mondayFeeKIo, runFeeKAutofill } from "./fee-k-autofill.js";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
 import { handleAuthMe } from "./routes/auth.js";
 import {
@@ -61,7 +62,7 @@ import { initStatusOverrides, loadStatusOverrides } from "./routes/status-overri
 import { initUrgencySettings, loadUrgencySettings } from "./routes/urgency-settings.js";
 import { currentUserId } from "./db/user-context.js";
 import { sanitizeKpiColumns } from "./db/users-types.js";
-import { auditFromReq } from "./audit/log.js";
+import { auditFromReq, recordAudit } from "./audit/log.js";
 import { registerCallLogRoutes } from "./routes/call-log.js";
 import { registerMailRoutes } from "./routes/mail.js";
 import { registerBoardItemWriteRoutes } from "./routes/board-item-write.js";
@@ -577,6 +578,7 @@ const server = app.listen(PORT, HOST, () => {
     scheduleNightlySync();
     scheduleConsultSweep();
     scheduleDriveIntake();
+    scheduleFeeKAutofill();
     scheduleWalCheckpoint();
     scheduleBackups();
     if (MONDAY_API_TOKEN) {
@@ -864,6 +866,56 @@ function scheduleDriveIntake() {
     { timezone: FIRM_TIMEZONE },
   );
   console.log(`[drive] Intake scheduled — cron "${intakeCron}" (${FIRM_TIMEZONE}).`);
+}
+
+/**
+ * Fee K auto-fill: POC Full Name from the Jail Intake, AF/FF surcharges when
+ * paying by credit card — empty columns only, re-checked on Monday before each
+ * write. See docs/features/fee-k-autofill.md.
+ *
+ * Off unless FEE_K_AUTOFILL=on. In-process (a few reads and writes a run),
+ * skipped while a sync runs, since it reads candidates out of live.db.
+ */
+let feeKInFlight = false;
+
+function scheduleFeeKAutofill() {
+  if (process.env.FEE_K_AUTOFILL !== "on") {
+    console.log("[feek] Auto-fill DISABLED (set FEE_K_AUTOFILL=on to enable). Dry run: npm run feek:autofill");
+    return;
+  }
+  const since = process.env.FEE_K_AUTOFILL_SINCE?.trim() ?? "";
+  if (!MONDAY_API_TOKEN || !/^\d{4}-\d{2}-\d{2}$/.test(since)) {
+    console.error("[feek] Auto-fill NOT scheduled: needs MONDAY_API_TOKEN and FEE_K_AUTOFILL_SINCE=YYYY-MM-DD.");
+    return;
+  }
+  const feeKCron = process.env.FEE_K_AUTOFILL_CRON ?? "*/15 7-20 * * *";
+
+  cron.schedule(
+    feeKCron,
+    () => {
+      if (syncInFlight || feeKInFlight) return;
+      feeKInFlight = true;
+      (async () => {
+        const io = await mondayFeeKIo();
+        const r = await runFeeKAutofill({ db, since, apply: true, ...io, log: (l) => console.log(l) });
+        for (const w of r.written) {
+          recordAudit({
+            actor: { userId: null, email: "system:fee-k-autofill" },
+            action: "monday.fee_k_autofilled",
+            targetType: "contract", targetMondayId: w.mondayItemId,
+            metadata: { changes: w.changes },
+          });
+        }
+        if (r.written.length || r.failed.length) {
+          console.log(`[feek] run: ${r.written.length} filled, ${r.failed.length} failed, ${r.skipped.length} skipped of ${r.candidates}.`);
+        }
+      })()
+        .catch((err) => console.error("[feek] Error:", err))
+        .finally(() => { feeKInFlight = false; });
+    },
+    { timezone: FIRM_TIMEZONE },
+  );
+  console.log(`[feek] Auto-fill scheduled — cron "${feeKCron}" (${FIRM_TIMEZONE}), Fee Ks added since ${since}.`);
 }
 
 function scheduleWalCheckpoint() {

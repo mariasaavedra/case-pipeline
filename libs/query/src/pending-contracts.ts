@@ -44,7 +44,18 @@ export interface PendingContract {
   filingFee: number | null;
   /** Postage fee (PF), in dollars, when set on Monday. */
   processingFee: number | null;
+  /** "INFO NEEDED TO FILL FEE K" fields still empty on Monday (MISSING_FIELDS order). */
+  missing: MissingField[];
 }
+
+/**
+ * The Fee K fields a contract can't go out without. Contract for / AF /
+ * Attorney are typed by a person; E-mail / Address are mirrors of the Profile,
+ * so empty there means the Profile is missing them (or the Fee K isn't linked).
+ * Not FF (court cases have none) and not Payment Method (known only at payment).
+ */
+export const MISSING_FIELDS = ["Contract for", "AF", "Attorney", "E-mail", "Address"] as const;
+export type MissingField = (typeof MISSING_FIELDS)[number];
 
 export interface PendingContractsResult {
   /** Every Pending Fee K, oldest first. */
@@ -202,6 +213,22 @@ interface RawRow {
   af: unknown;
   ff: unknown;
   pf: unknown;
+  email: string | null;
+  address: string | null;
+}
+
+/** Which MISSING_FIELDS a Fee K has empty. */
+export function missingFeeKFields(f: {
+  contractFor: string[]; attorneyFee: number | null; attorneys: string[]; email: string | null; address: string | null;
+}): MissingField[] {
+  const empty: Record<MissingField, boolean> = {
+    "Contract for": f.contractFor.length === 0,
+    AF: f.attorneyFee == null,
+    Attorney: f.attorneys.length === 0,
+    "E-mail": !f.email?.trim(),
+    Address: !f.address?.trim(),
+  };
+  return MISSING_FIELDS.filter((k) => empty[k]);
 }
 
 export function getPendingContracts(db: Database, options: PendingContractsOptions = {}): PendingContractsResult {
@@ -227,7 +254,9 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       json_extract(c.raw_column_values, '$.payment_link_sent_on.date')  AS paymentLinkSentOn,
       json_extract(c.raw_column_values, '$.af')                         AS af,
       json_extract(c.raw_column_values, '$.ff')                         AS ff,
-      json_extract(c.raw_column_values, '$.pf')                         AS pf
+      json_extract(c.raw_column_values, '$.pf')                         AS pf,
+      json_extract(c.raw_column_values, '$.e_mail')                     AS email,
+      json_extract(c.raw_column_values, '$.address')                    AS address
     FROM contracts c
     LEFT JOIN profiles p ON p.local_id = c.profile_local_id
     WHERE c.group_title = ? AND c.deleted_at IS NULL
@@ -238,15 +267,18 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
     const ageDays = from ? daysBetween(from, today) : null;
     const ageLevel: WaitLevel =
       ageDays === null ? "unknown" : ageDays >= lateDays ? "late" : ageDays >= waitingDays ? "waiting" : "fresh";
+    const contractFor = parseLabels(r.contractFor);
+    const attorneys = splitNames(r.attorney);
+    const attorneyFee = toAmount(r.af);
     return {
       localId: r.localId,
       clientName: r.clientName ?? r.name,
       clientLocalId: r.clientLocalId,
       itemName: r.name,
-      contractFor: parseLabels(r.contractFor),
+      contractFor,
       contractStage: r.contractStage?.trim() || null,
       nextStep: nextContractStep(r.contractStage),
-      attorneys: splitNames(r.attorney),
+      attorneys,
       assistant: r.assistant?.trim() || null,
       addedOn: r.addedOn,
       sentOn: r.sentOn,
@@ -255,9 +287,10 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       ageDays,
       agedFrom: r.sentOn ? "sent" : r.addedOn ? "added" : null,
       ageLevel,
-      attorneyFee: toAmount(r.af),
+      attorneyFee,
       filingFee: toAmount(r.ff),
       processingFee: toAmount(r.pf),
+      missing: missingFeeKFields({ contractFor, attorneyFee, attorneys, email: r.email, address: r.address }),
     };
   });
 
