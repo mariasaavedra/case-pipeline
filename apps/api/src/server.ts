@@ -873,8 +873,12 @@ function scheduleDriveIntake() {
  * paying by credit card — empty columns only, re-checked on Monday before each
  * write. See docs/features/fee-k-autofill.md.
  *
- * Off unless FEE_K_AUTOFILL=on. In-process (a few reads and writes a run),
- * skipped while a sync runs, since it reads candidates out of live.db.
+ * Off unless FEE_K_AUTOFILL=on. In-process (a few reads and writes a run).
+ * Waits out a full or incremental sync, but NOT a webhook sync: those start
+ * every couple of minutes and run 1–3, so waiting for them meant the job
+ * skipped every tick (2026-10-13). Overlapping one is harmless — every write
+ * re-reads Monday first, and a row the sync rewrites just comes back as a
+ * candidate that the next run finds already filled.
  */
 let feeKInFlight = false;
 
@@ -893,7 +897,10 @@ function scheduleFeeKAutofill() {
   cron.schedule(
     feeKCron,
     () => {
-      if (syncInFlight || feeKInFlight) return;
+      if ((syncInFlight && syncInFlight !== "webhook") || feeKInFlight) {
+        console.log(`[feek] Skipped — ${feeKInFlight ? "the last run is still going" : `a ${syncInFlight} sync is running`}.`);
+        return;
+      }
       feeKInFlight = true;
       (async () => {
         const io = await mondayFeeKIo();
