@@ -53,7 +53,7 @@ export interface SweepCandidate {
   firstName: string | null;
   lastName: string | null;
   consultDate: string | null;
-  /** Scheduled time, HH:MM UTC as Monday stores it. */
+  /** Scheduled time, HH:MM Central (the sync converts Monday's UTC). */
   consultTime?: string | null;
   apptStatus: string | null;
   /** Anything already recorded, from any of the three columns. */

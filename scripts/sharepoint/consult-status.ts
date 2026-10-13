@@ -12,6 +12,8 @@
 // gets this exactly backwards and was the first mistake made here.
 // =============================================================================
 
+import { firmToUtc } from "../../libs/core/src/firm-time";
+
 export type ConsultOutcome = "proceeded" | "not-yet" | "did-not-happen" | "unknown";
 
 /** Statuses meaning the appointment is still ahead of us. */
@@ -72,8 +74,11 @@ const KNOWN_PROCEEDED = new Set([
  * "Today's consult" counts as proceeding for the folder — the attorney needs
  * somewhere to put things during the meeting — but the meeting has not taken
  * place yet when the morning sweep runs. A summary written then is written
- * before the consult. So a today's-consult status waits for its scheduled time
- * (Monday stores it in UTC), or, with no time, for the next day.
+ * before the consult. So a today's-consult status waits for its scheduled time,
+ * or, with no time, for the end of that day.
+ *
+ * `date` and `time` are the firm's wall clock (Central): the sync converts
+ * Monday's UTC value on the way in (scripts/sync/mapper.ts, firm-time.ts).
  */
 export function consultHasTakenPlace(
   status: string | null | undefined,
@@ -83,9 +88,8 @@ export function consultHasTakenPlace(
 ): boolean {
   if (consultOutcome(status) !== "proceeded") return false;
   if (!(status ?? "").trim().toLowerCase().startsWith("today's consult")) return true;
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-  const at = time && /^\d{2}:\d{2}/.test(time)
-    ? new Date(`${date}T${time.slice(0, 5)}:00Z`)
-    : new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000);
-  return now.getTime() >= at.getTime();
+  if (!date) return false;
+  const at = firmToUtc(date, time?.trim() || "23:59");
+  if (!at) return false;
+  return now.getTime() >= Date.parse(`${at.date}T${at.time}Z`);
 }
