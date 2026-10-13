@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { consultOutcome } from "./consult-status.js";
+import { consultOutcome, consultHasTakenPlace } from "./consult-status.js";
 
 describe("consultOutcome", () => {
   it("treats a No Hire as a consultation that HAPPENED", () => {
@@ -42,5 +42,34 @@ describe("consultOutcome", () => {
     expect(consultOutcome("Some New Label")).toBe("unknown");
     expect(consultOutcome("")).toBe("unknown");
     expect(consultOutcome(null)).toBe("unknown");
+  });
+});
+
+describe("consultHasTakenPlace", () => {
+  const morning = new Date("2026-10-13T12:32:00Z");
+
+  it("waits for a today's consult's scheduled time (Patrick FERREIRA TOSCANO, 2026-10-13)", () => {
+    // The 12:32 UTC sweep wrote the summary for a 14:00 UTC consult.
+    expect(consultHasTakenPlace("Today's consult (1st time)", "2026-10-13", "14:00", morning)).toBe(false);
+    expect(consultHasTakenPlace("Today's consult (1st time)", "2026-10-13", "14:00",
+      new Date("2026-10-13T14:00:00Z"))).toBe(true);
+  });
+
+  it("with no time, waits for the day after", () => {
+    expect(consultHasTakenPlace("Today's consult (detainee)", "2026-10-13", null, morning)).toBe(false);
+    expect(consultHasTakenPlace("Today's consult (detainee)", "2026-10-13", null,
+      new Date("2026-10-14T00:00:00Z"))).toBe(true);
+    expect(consultHasTakenPlace("Today's consult (detainee)", null, null, morning)).toBe(false);
+  });
+
+  it("trusts a concluded status regardless of the clock", () => {
+    expect(consultHasTakenPlace("No Hire", "2026-10-13", "23:00", morning)).toBe(true);
+    expect(consultHasTakenPlace("Past Consult", null, null, morning)).toBe(true);
+  });
+
+  it("never for an appointment ahead, cancelled or unknown", () => {
+    expect(consultHasTakenPlace("Upcoming", "2026-10-01", "10:00", morning)).toBe(false);
+    expect(consultHasTakenPlace("Cancelled/No Show", "2026-10-01", "10:00", morning)).toBe(false);
+    expect(consultHasTakenPlace("Something new", "2026-10-01", "10:00", morning)).toBe(false);
   });
 });

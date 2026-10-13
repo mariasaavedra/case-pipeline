@@ -29,7 +29,7 @@ import {
   decide, perform, ensureConsultDoc, resolveLinkedFolder, isDocSite,
   type SweepCandidate, type ConsultDocFolder, type DocOutcome,
 } from "./sharepoint/sweep.js";
-import { consultOutcome } from "./sharepoint/consult-status.js";
+import { consultOutcome, consultHasTakenPlace } from "./sharepoint/consult-status.js";
 import { cachedAccount } from "./sharepoint/auth.js";
 import { renderDocxTemplate } from "@case-pipeline/template";
 import type { TimelineNote } from "./sharepoint/consult-note.js";
@@ -56,6 +56,7 @@ function loadCandidates(db: Database.Database, days: number): SweepCandidate[] {
         json_extract(p.raw_column_values, '$.first_name')     AS firstName,
         json_extract(p.raw_column_values, '$.last_name')      AS lastName,
         json_extract(bi.column_values, '$.consult_date.date') AS consultDate,
+        json_extract(bi.column_values, '$.consult_date.time') AS consultTime,
         bi.status                                             AS apptStatus,
         p.raw_column_values                                   AS profileJson,
         bi.column_values                                      AS apptJson,
@@ -85,6 +86,7 @@ function loadOne(db: Database.Database, appointmentLocalId: string): SweepCandid
         json_extract(p.raw_column_values, '$.first_name')     AS firstName,
         json_extract(p.raw_column_values, '$.last_name')      AS lastName,
         COALESCE(json_extract(bi.column_values, '$.consult_date.date'), bi.next_date) AS consultDate,
+        json_extract(bi.column_values, '$.consult_date.time') AS consultTime,
         bi.status                                             AS apptStatus,
         p.raw_column_values                                   AS profileJson,
         bi.column_values                                      AS apptJson,
@@ -187,7 +189,7 @@ async function maybeWriteConsultDoc(
   c: SweepCandidate,
   folder: ConsultDocFolder,
   timeline: TimelineNote[],
-  happened: (status: string | null) => boolean,
+  happened: (c: SweepCandidate) => boolean,
 ) {
   if (!isDocSite(folder.site) || !c.consultDate) return null;
 
@@ -214,7 +216,7 @@ async function maybeWriteConsultDoc(
     },
     (vars) => renderDocxTemplate(consultTemplate(), vars),
     // The document waits for the consultation to have taken place.
-    { writeDocument: happened(c.apptStatus), account: cachedAccount() },
+    { writeDocument: happened(c), account: cachedAccount() },
   );
 }
 
@@ -232,9 +234,12 @@ async function main() {
     notesByProfile.set(candidates[0].profileLocalId, [...(notesByProfile.get(candidates[0].profileLocalId) ?? []), fresh]);
   }
   // Whether the consultation took place. One-consult mode comes with a note,
-  // which says it did unless the status says it never happened.
-  const happened = (status: string | null) =>
-    fresh ? consultOutcome(status) !== "did-not-happen" : consultOutcome(status) === "proceeded";
+  // which says it did unless the status says it never happened. Otherwise a
+  // "Today's consult" waits for its scheduled time.
+  const happened = (c: SweepCandidate) =>
+    fresh
+      ? consultOutcome(c.apptStatus) !== "did-not-happen"
+      : consultHasTakenPlace(c.apptStatus, c.consultDate, c.consultTime);
 
   const token = process.env.MONDAY_API_TOKEN?.trim();
   if (apply) {
@@ -273,7 +278,7 @@ async function main() {
       // consult (by an earlier sweep, or by reception). Nothing to create; just
       // make sure the summary is in that folder once the consult has happened.
       if (c.existingLink) {
-        if (!happened(c.apptStatus)) {
+        if (!happened(c)) {
           tally.skipped++;
           continue;
         }
