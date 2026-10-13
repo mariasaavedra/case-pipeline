@@ -36,7 +36,7 @@ export interface DataSource {
   /** Create an Emails & Activities timeline entry on an item. Returns the new timeline item id. */
   createTimelineItem(input: CreateTimelineItemInput, token?: string): Promise<string>;
   /** Set several columns on one item at once (createItem's per-column shapes). */
-  setColumnValues(boardId: string, itemId: string, columnValues: Record<string, unknown>, token?: string): Promise<void>;
+  setColumnValues(boardId: string, itemId: string, columnValues: Record<string, unknown>, token?: string, createLabelsIfMissing?: boolean): Promise<void>;
   /** Move an item to another board and group; Monday carries columns over by title + type. */
   moveItem(boardId: string, groupId: string, itemId: string, token?: string): Promise<void>;
   /** Upload a file into an item's file column. Returns the new asset id. */
@@ -55,8 +55,8 @@ export const mondayDataSource: DataSource = {
   },
   createItem: (boardId, itemName, columnValues, token, groupId) => mondayCreateItem(boardId, itemName, columnValues, token, groupId),
   createTimelineItem: (input, token) => mondayCreateTimelineItem(input, token),
-  setColumnValues: async (boardId, itemId, columnValues, token) => {
-    await changeMultipleColumnValues(boardId, itemId, columnValues, token);
+  setColumnValues: async (boardId, itemId, columnValues, token, createLabelsIfMissing) => {
+    await changeMultipleColumnValues(boardId, itemId, columnValues, token, createLabelsIfMissing);
   },
   moveItem: async (boardId, groupId, itemId, token) => {
     await moveItemToBoard(boardId, groupId, itemId, token);

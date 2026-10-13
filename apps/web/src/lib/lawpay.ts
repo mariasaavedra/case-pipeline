@@ -11,7 +11,7 @@ export type FeeType = "AF" | "PF" | "FF";
 
 export const FEE_TYPE_LABELS: Record<FeeType, string> = {
   AF: "Attorney fee",
-  PF: "Processing fee",
+  PF: "Postage fee",
   FF: "Filing fee",
 };
 

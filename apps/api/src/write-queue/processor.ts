@@ -159,7 +159,7 @@ async function dispatch(row: QueueRow, token?: string): Promise<string | undefin
       const columnId = String(payload.columnId ?? "");
       const value = (payload.value ?? {}) as Record<string, unknown>;
       if (!boardId || !columnId) throw new Error("change_column_json requires boardId and columnId");
-      await changeColumnValue(boardId, row.monday_item_id, columnId, value, token);
+      await changeColumnValue(boardId, row.monday_item_id, columnId, value, token, payload.createLabelsIfMissing === true);
       return undefined;
     }
     case "create_item": {

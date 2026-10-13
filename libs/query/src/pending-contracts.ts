@@ -42,7 +42,7 @@ export interface PendingContract {
   /** Attorney fee and filing fee, in dollars, when set on Monday. */
   attorneyFee: number | null;
   filingFee: number | null;
-  /** Processing fee (PF), in dollars, when set on Monday. */
+  /** Postage fee (PF), in dollars, when set on Monday. */
   processingFee: number | null;
 }
 
