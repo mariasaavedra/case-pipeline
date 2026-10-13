@@ -12,7 +12,9 @@
 //                         (the SharePoint e-file / consult folder browser).
 //   P4.6 after consult  — outcome buttons (the board's own status labels),
 //                         consult note (E&A "Consult note" on the profile),
-//                         and + New contract (M11, client already picked).
+//                         fees for the contract (a quote the Fee K auto-fill
+//                         copies onto the Fee K staff create in Monday), and
+//                         + New contract (M11, client already picked).
 //
 // It opens on the signed-in attorney's board (Settings → Users → Attorney
 // board, else matched by name); the board tabs switch to another attorney.
@@ -27,6 +29,8 @@ import { DocumentsTab } from "./DocumentsTab";
 import { FilePreviewModal } from "./FilePreviewModal";
 import { resolveFileLink, type DriveItem } from "../sharepoint/graph";
 import { NewContractModal } from "./NewContractModal";
+import { ContractFields } from "./ContractFields";
+import { emptyContractFields, toConsultFees, type ContractFieldValues } from "./contract-fields";
 import { clientPath } from "../router";
 import { SectionCode } from "./ScreenCode";
 import { StatusEditor } from "./StatusEditor";
@@ -455,11 +459,14 @@ function PrepBlock({ label, text, italic, warm }: { label: string; text: string;
 // =============================================================================
 
 function AfterConsult({
-  entry, note, setNote, onStatusChanged, contract, onContract,
+  entry, note, setNote, fees, setFees, onStatusChanged, contract, onContract,
 }: {
   entry: MyDayEntry;
   note: string;
   setNote: (v: string) => void;
+  /** The fee quote draft — kept by the page, like the note, so a refresh keeps it. */
+  fees: ContractFieldValues;
+  setFees: (v: ContractFieldValues) => void;
   onStatusChanged: (status: string) => void;
   contract: { name: string; pending: boolean } | null;
   onContract: () => void;
@@ -475,6 +482,11 @@ function AfterConsult({
   useEffect(() => { setMsg(null); }, [entry.localId]);
 
   const hired = /^(det )?hire$/i.test(entry.status ?? "");
+  const quote = toConsultFees(fees);
+  // The fees section opens by itself on a hire; otherwise one click away.
+  const [feesOpen, setFeesOpen] = useState(false);
+  useEffect(() => { setFeesOpen(false); }, [entry.localId]);
+  const showFees = hired || feesOpen || quote !== null;
 
   // An outcome button is a shortcut for the status picker: it writes at once.
   const setOutcome = async (label: string) => {
@@ -501,15 +513,21 @@ function AfterConsult({
       setMsg({ ok: false, text: "This appointment isn't linked to a client profile, so the note has nowhere to go." });
       return;
     }
+    if (quote && !quote.caseType) {
+      setMsg({ ok: false, text: "Pick the case type the fees are for, or clear the fees." });
+      return;
+    }
     setSaving(true);
     setMsg(null);
     try {
-      const r = await postConsultNote(entry.localId, note.trim());
+      const r = await postConsultNote(entry.localId, note.trim(), quote);
       setNote("");
+      setFees(emptyContractFields);
       setMsg({
         ok: true,
         text: [
           "Consult note logged on the profile (shows in Notes after the next sync).",
+          r.quoted ? "Fees saved: they go onto the client's Fee K automatically once it's created (Create Fee K in Monday)." : null,
           r.pending ? "Monday was slow, so it's queued and will go through shortly." : null,
           summaryLine(r.summary),
         ].filter(Boolean).join(" "),
@@ -583,6 +601,23 @@ function AfterConsult({
         <span style={{ fontSize: 12, color: "var(--color-ink-muted)" }}>Logged on the client's profile as a Consult note.</span>
       </div>
 
+      {/* Fees quoted with the note. No Fee K is made here: the Fee K
+          auto-fill copies these onto the one staff create in Monday. */}
+      {showFees ? (
+        <div className="flex flex-col gap-1" data-testid="p4-fees">
+          <span style={{ fontSize: 14, fontWeight: 600 }}>Fees for the contract</span>
+          <span style={{ fontSize: 12, color: "var(--color-ink-muted)", marginBottom: 6 }}>
+            Saved with the note. When the client's Fee K is created, its empty case type and fees are filled from here.
+          </span>
+          <ContractFields value={fees} onChange={setFees} showNote={false} />
+        </div>
+      ) : (
+        <button type="button" onClick={() => setFeesOpen(true)}
+          style={{ alignSelf: "flex-start", fontSize: 13, fontWeight: 500, color: "var(--color-amber)", background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+          + Add fees for the contract
+        </button>
+      )}
+
       <button type="button" onClick={saveNote} disabled={saving}
         style={{ height: 46, border: "none", borderRadius: 10, background: "var(--color-amber)", color: "#ffffff", fontSize: 15, fontWeight: 600, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
         {saving ? "Saving…" : "Save consult note"}
@@ -636,6 +671,7 @@ export function AppointmentsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("prep");
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [feeDrafts, setFeeDrafts] = useState<Record<string, ContractFieldValues>>({});
   const [contracts, setContracts] = useState<Record<string, { name: string; pending: boolean }>>({});
   const [contractFor, setContractFor] = useState<MyDayEntry | null>(null);
   const [pageRef, pageWidth] = useWidth<HTMLDivElement>();
@@ -853,6 +889,8 @@ export function AppointmentsPage() {
               entry={entry}
               note={notes[entry.localId] ?? ""}
               setNote={(v) => setNotes((n) => ({ ...n, [entry.localId]: v }))}
+              fees={feeDrafts[entry.localId] ?? emptyContractFields}
+              setFees={(v) => setFeeDrafts((m) => ({ ...m, [entry.localId]: v }))}
               onStatusChanged={(status) => updateStatus(entry.localId, status)}
               contract={contracts[entry.localId] ?? null}
               onContract={() => setContractFor(entry)}

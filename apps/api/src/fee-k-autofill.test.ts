@@ -6,8 +6,8 @@ import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import {
-  FEE_K_COLUMNS, findFeeKCandidates, parsePocName, planFeeKFill, runFeeKAutofill, stateFromMonday,
-  type FeeKState, type ReadFeeK, type WriteFeeK,
+  FEE_K_COLUMNS, findFeeKCandidates, matchQuotes, parsePocName, planFeeKFill, runFeeKAutofill, stateFromMonday,
+  type FeeKState, type FeeQuote, type ReadFeeK, type WriteFeeK,
 } from "./fee-k-autofill";
 
 describe("parsePocName", () => {
@@ -58,7 +58,7 @@ describe("parsePocName", () => {
   });
 });
 
-const empty: FeeKState = { af: null, ff: null, afSurcharge: null, ffSurcharge: null, paymentMethod: [], pocFullName: "" };
+const empty: FeeKState = { contractFor: [], af: null, ff: null, pf: null, afSurcharge: null, ffSurcharge: null, paymentMethod: [], pocFullName: "" };
 const CREDIT = "CREDIT Card - Surcharge Applies";
 
 describe("planFeeKFill", () => {
@@ -96,7 +96,7 @@ describe("stateFromMonday", () => {
   it("reads Monday's column texts", () => {
     expect(stateFromMonday({
       deal_value: "4000", numbers__1: "", numeric_mm0gfccq: "120", dropdown_mm7v5eeb: CREDIT, text_mm7xyv8e: " Ana ",
-    })).toEqual({ af: 4000, ff: null, afSurcharge: 120, ffSurcharge: null, paymentMethod: [CREDIT], pocFullName: "Ana" });
+    })).toEqual({ contractFor: [], af: 4000, ff: null, pf: null, afSurcharge: 120, ffSurcharge: null, paymentMethod: [CREDIT], pocFullName: "Ana" });
   });
 });
 
@@ -160,7 +160,7 @@ describe("runFeeKAutofill", () => {
 
   it("re-plans on Monday's current values, writes once, and updates the local copy", async () => {
     const db = setup();
-    const writes: [string, string, Record<string, string>][] = [];
+    const writes: [string, string, Record<string, unknown>][] = [];
     const write: WriteFeeK = async (b, i, v) => { writes.push([b, i, v]); };
     const read = monday({ deal_value: "3500", dropdown_mm7v5eeb: CREDIT });
     const r = await runFeeKAutofill({ db, since: "2026-10-01", apply: true, read, write });
@@ -183,7 +183,7 @@ describe("runFeeKAutofill", () => {
 
   it("writes only the part still empty when Monday changed one of them", async () => {
     const db = setup();
-    const writes: [string, string, Record<string, string>][] = [];
+    const writes: [string, string, Record<string, unknown>][] = [];
     // Payment method switched to debit on Monday: POC only.
     const read = monday({ deal_value: "3500", dropdown_mm7v5eeb: "DEBIT Card" });
     await runFeeKAutofill({ db, since: "2026-10-01", apply: true, read, write: async (b, i, v) => { writes.push([b, i, v]); } });
@@ -198,5 +198,110 @@ describe("runFeeKAutofill", () => {
     });
     expect(r.failed).toEqual([{ mondayItemId: "900", name: "Juan Lopez — Bond", error: "Monday is down" }]);
     expect(findFeeKCandidates(db, "2026-10-01")).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Consult-note quotes (P4)
+// ---------------------------------------------------------------------------
+
+const quote = (o: Partial<FeeQuote> = {}): FeeQuote => ({
+  id: 1, caseType: "Bond", newCaseType: false, af: 3500, ff: null, pf: 25, author: "Lucy B.", createdAt: "2026-10-13 18:00:00", ...o,
+});
+
+describe("planFeeKFill with a quote", () => {
+  it("fills the empty case type and fees, and the card surcharge from the quoted AF", () => {
+    const fill = planFeeKFill({ ...empty, paymentMethod: [CREDIT] }, null, quote());
+    expect(fill?.values).toEqual({
+      [FEE_K_COLUMNS.contractFor]: { labels: ["Bond"] },
+      [FEE_K_COLUMNS.af]: "3500",
+      [FEE_K_COLUMNS.pf]: "25",
+      [FEE_K_COLUMNS.afSurcharge]: "105",
+    });
+    expect(fill?.quoteId).toBe(1);
+    expect(fill?.createLabels).toBeUndefined();
+  });
+
+  it("never overwrites what staff typed; a quote with nothing left still comes back to be marked used", () => {
+    const fill = planFeeKFill({ ...empty, contractFor: ["Bond"], af: 4000, pf: 0 }, null, quote());
+    expect(fill).toEqual({ values: {}, local: {}, changes: [], quoteId: 1 });
+  });
+
+  it("asks Monday to add a new case type label", () => {
+    expect(planFeeKFill(empty, null, quote({ caseType: "Habeas Corpus", newCaseType: true }))?.createLabels).toBe(true);
+  });
+});
+
+describe("matchQuotes", () => {
+  const fk = (id: string, addedOn: string, contractFor: string[] = []) => ({ mondayItemId: id, addedOn, contractFor });
+
+  it("matches the one Fee K added around the consult", () => {
+    expect([...matchQuotes([fk("A", "2026-10-14")], [quote()]).keys()]).toEqual(["A"]);
+    // Create Fee K pressed two days before the note was saved.
+    expect([...matchQuotes([fk("A", "2026-10-11")], [quote()]).keys()]).toEqual(["A"]);
+  });
+
+  it("ignores Fee Ks outside the window or for another case type", () => {
+    expect(matchQuotes([fk("A", "2026-10-01")], [quote()]).size).toBe(0);
+    expect(matchQuotes([fk("A", "2026-11-20")], [quote()]).size).toBe(0);
+    expect(matchQuotes([fk("A", "2026-10-14", ["I-130"])], [quote()]).size).toBe(0);
+  });
+
+  it("two fits: the one already showing the case type, else none", () => {
+    expect([...matchQuotes([fk("A", "2026-10-14"), fk("B", "2026-10-14", ["bond"])], [quote()]).keys()]).toEqual(["B"]);
+    expect(matchQuotes([fk("A", "2026-10-14"), fk("B", "2026-10-15")], [quote()]).size).toBe(0);
+  });
+
+  it("a Fee K takes one quote — the newest", () => {
+    const m = matchQuotes([fk("A", "2026-10-14")], [quote({ id: 1, createdAt: "2026-10-13 10:00:00" }), quote({ id: 2, createdAt: "2026-10-13 18:00:00" })]);
+    expect(m.get("A")?.id).toBe(2);
+  });
+});
+
+describe("runFeeKAutofill with quotes", () => {
+  function setupQuote() {
+    const db = setup();
+    db.prepare("UPDATE contracts SET profile_monday_id = '111' WHERE profile_local_id = 'p1'").run();
+    db.prepare(`UPDATE contracts SET raw_column_values = json_set(raw_column_values, '$.payment_method', json('{"labels":["Cash"]}'), '$.af', NULL) WHERE local_id = 'c1'`).run();
+    db.prepare(`INSERT INTO consult_fee_quotes (profile_monday_id, appointment_monday_id, case_type, af, ff, pf, author_name, created_at)
+                VALUES ('111', '500', 'Bond', 3500, NULL, 25, 'Lucy B.', '2026-10-13 18:00:00')`).run();
+    return db;
+  }
+  const quoteRow = (db: Database.Database) =>
+    db.prepare("SELECT fee_k_monday_id f, applied_note n FROM consult_fee_quotes").get() as { f: string | null; n: string | null };
+
+  it("copies the quote onto the client's new Fee K and marks it used", async () => {
+    const db = setupQuote();
+    const writes: [string, string, Record<string, unknown>, boolean | undefined][] = [];
+    await runFeeKAutofill({
+      db, since: "2026-10-01", apply: true,
+      read: async () => ({ boardId: "8025467270", text: { dropdown_mm7v5eeb: "Cash" } }),
+      write: async (b, i, v, l) => { writes.push([b, i, v, l]); },
+    });
+    expect(writes).toEqual([["8025467270", "900", {
+      dropdown_mkv1db6z: { labels: ["Bond"] }, deal_value: "3500", numbers5__1: "25", text_mm7xyv8e: "Ana Torres",
+    }, undefined]]);
+    expect(quoteRow(db).f).toBe("900");
+    expect(local(db, "c1")).toMatchObject({ contract_for: { labels: ["Bond"] }, af: "3500", pf: "25" });
+    expect(findFeeKCandidates(db, "2026-10-01")).toEqual([]);
+  });
+
+  it("does not use the quote when Monday says the Fee K is for something else now", async () => {
+    const db = setupQuote();
+    const writes: Record<string, unknown>[] = [];
+    await runFeeKAutofill({
+      db, since: "2026-10-01", apply: true,
+      read: async () => ({ boardId: "8025467270", text: { dropdown_mkv1db6z: "I-130", text_mm7xyv8e: "Ana Torres" } }),
+      write: async (_b, _i, v) => { writes.push(v); },
+    });
+    expect(writes).toEqual([]);
+    expect(quoteRow(db)).toEqual({ f: "900", n: "not used: Fee K is for I-130" });
+  });
+
+  it("the dry run reports the quote and changes nothing", async () => {
+    const db = setupQuote();
+    const r = await runFeeKAutofill({ db, since: "2026-10-01", apply: false, read: async () => null, write: async () => {} });
+    expect(r.written[0]).toMatchObject({ mondayItemId: "900", quoteId: 1 });
+    expect(quoteRow(db).f).toBeNull();
   });
 });

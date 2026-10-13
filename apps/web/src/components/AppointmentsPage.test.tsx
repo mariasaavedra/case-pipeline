@@ -73,6 +73,15 @@ vi.mock("./NewContractModal", () => ({
     </div>
   ),
 }));
+// The real fields use ui/select ("@/" alias vitest doesn't resolve): a stub with the two inputs the tests use.
+vi.mock("./ContractFields", () => ({
+  ContractFields: ({ value, onChange }: { value: Record<string, string>; onChange: (v: Record<string, string>) => void }) => (
+    <div>
+      <button type="button" onClick={() => onChange({ ...value, caseType: "Bond" })}>pick Bond</button>
+      <button type="button" onClick={() => onChange({ ...value, af: "3500" })}>AF 3500</button>
+    </div>
+  ),
+}));
 // D6 is tested on its own; here it only has to show what the page hands it.
 vi.mock("./StatusEditor", () => ({
   StatusEditor: ({ status }: { status: string | null }) => <span data-status-picker="">status: {status ?? "none"}</span>,
@@ -151,11 +160,35 @@ describe("AppointmentsPage (P4 My Day)", () => {
     await render();
     await type("Hired for removal defense.");
     await click(button("Save consult note"));
-    expect(postConsultNote).toHaveBeenCalledWith("ana", "Hired for removal defense.");
+    expect(postConsultNote).toHaveBeenCalledWith("ana", "Hired for removal defense.", null);
     expect(changeBoardItemStatus).not.toHaveBeenCalled();
     expect(el.textContent).toContain("Consult note logged on the profile");
     expect(el.textContent).toContain("The Consultation Summary is being written to the client's CONSULT folder");
     expect(el.querySelector("textarea")!.value).toBe("");
+  });
+
+  it("fees for the contract: one click away, open by themselves on a hire, sent with the note", async () => {
+    await render();
+    expect(el.querySelector("[data-testid=p4-fees]")).toBeNull();
+    await click(button("Hire"));
+    expect(el.querySelector("[data-testid=p4-fees]")).not.toBeNull();
+    await click(button("AF 3500"));
+    await type("Hired for bond.");
+    await click(button("Save consult note"));
+    // No case type yet: refused, nothing sent.
+    expect(postConsultNote).not.toHaveBeenCalled();
+    expect(el.textContent).toContain("Pick the case type the fees are for");
+    await click(button("pick Bond"));
+    postConsultNote.mockResolvedValueOnce({ posted: true, pending: false, summary: "started", quoted: true } as never);
+    await click(button("Save consult note"));
+    expect(postConsultNote).toHaveBeenCalledWith("ana", "Hired for bond.", { caseType: "Bond", af: 3500, ff: null, pf: null });
+    expect(el.textContent).toContain("Fees saved: they go onto the client's Fee K automatically");
+  });
+
+  it("+ Add fees opens the section without a hire", async () => {
+    await render();
+    await click(button("+ Add fees for the contract"));
+    expect(el.querySelector("[data-testid=p4-fees]")).not.toBeNull();
   });
 
   it("stays in step with reception: refreshes when the attorney comes back, keeping their place and draft", async () => {

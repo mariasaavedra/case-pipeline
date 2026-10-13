@@ -14,6 +14,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-14",
+    title: "Appointments: fees with the consult note",
+    items: [
+      "Under the consult note there's now “Fees for the contract”: case type, AF, FF and PF. It opens by itself when you mark the consult Hire or Det Hire; otherwise click “+ Add fees for the contract”.",
+      "Save consult note adds the fees to the note (“Contract: Bond — AF $3,500.00”). When the client's Fee K is created with Create Fee K in Monday, its empty case type and fees are filled in from what you entered.",
+      "Nothing someone already typed on the Fee K is changed. If the Fee K is for a different case type, the fees are left for staff.",
+    ],
+  },
+  {
     date: "2026-10-13",
     title: "Contracts: the Fee K fills in more by itself",
     items: [

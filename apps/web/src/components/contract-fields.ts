@@ -43,6 +43,12 @@ export function toCreateContractInput(v: ContractFieldValues) {
   };
 }
 
+/** P4's fee quote (case type + fees, no note), or null when the section was left empty. */
+export function toConsultFees(v: ContractFieldValues) {
+  const { description: _description, ...rest } = toCreateContractInput(v);
+  return v.caseType || rest.af != null || rest.ff != null || rest.pf != null ? rest : null;
+}
+
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 /** A fee field as the note will print it — blank reads $0.00, same as the API. */
 export const money = (v: string) => usd.format(v === "" || !Number.isFinite(Number(v)) ? 0 : Number(v));
