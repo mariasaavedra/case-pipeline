@@ -67,8 +67,9 @@ export interface EsignPlan {
   status?: EsignStatus;
   /** Contract steps to record, in order. */
   steps: ContractStep[];
-  /** Monday update on the Fee K. */
+  /** Monday update on the Fee K — and, with `title`, an E&A entry on the client's profile. */
   note?: string;
+  title?: string;
   /** Monday bell + Slack. */
   notify?: string;
 }
@@ -96,6 +97,7 @@ export function planEsignEvent(row: EsignRow, kind: EsignEventKind, participantE
         return {
           status: "attorney_signed",
           steps: ["attorney_signed"],
+          title: "Contract signed by the attorney",
           note: `✍️ The attorney signed the contract in Adobe Sign. Adobe has sent it to the client (${row.client_email}).`,
         };
       }
@@ -107,6 +109,7 @@ export function planEsignEvent(row: EsignRow, kind: EsignEventKind, participantE
         status: "signed",
         // A missed attorney event still has to pass through "Sent to Client".
         steps: waiting ? ["attorney_signed", "client_signed"] : ["client_signed"],
+        title: "Contract signed",
         note: `✅ ${who} signed the contract in Adobe Sign. Next: send the payment link.`,
         notify: `✅ Contract signed: ${who}. Next: send the payment link.`,
       };
@@ -119,6 +122,7 @@ export function planEsignEvent(row: EsignRow, kind: EsignEventKind, participantE
       return {
         status: kind,
         steps: [],
+        title: `Contract ${kind}`,
         note: `⚠️ The contract ${what} in Adobe Sign. The Contract Stage was left as it is: decide the next step.`,
         notify: `⚠️ Contract ${what} in Adobe Sign: ${who}.`,
       };

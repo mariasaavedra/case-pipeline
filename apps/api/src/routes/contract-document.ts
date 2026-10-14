@@ -18,6 +18,7 @@ type DatabaseInstance = BetterSqlite3.Database;
 import { requireAuth } from "../auth/middleware.js";
 import { auditFromReq } from "../audit/log.js";
 import { hearingKindOf } from "@case-pipeline/query";
+import { letterAddress } from "../documents/us-address.js";
 import { loadDocumentSettings } from "../documents/document-settings.js";
 import type { AttorneyInfo } from "../documents/document-settings.js";
 
@@ -40,6 +41,9 @@ export interface ContractPrefill {
   email: string;
   /** One line, as Monday keeps it. */
   address: string;
+  /** The same address split for a letter: street line + "City, ST zip" ("" when it can't tell). */
+  street: string;
+  cityStateZip: string;
   attorneyName: string;
   /** From Settings → Documents, matched by name; "" when unknown. For Adobe Sign. */
   attorneyEmail: string;
@@ -94,6 +98,7 @@ export function contractPrefill(
     clientName: (row.clientName ?? row.itemName).trim(),
     email: row.email?.trim() ?? "",
     address: row.address?.trim() ?? "",
+    ...letterAddress(row.address),
     attorneyName,
     attorneyEmail: attorneyEmailFor(attorneyName, attorneys),
     contractFor: labels(row.contractFor),

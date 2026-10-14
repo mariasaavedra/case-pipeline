@@ -86,6 +86,8 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   const [templates, setTemplates] = useState<{ driveId: string; items: DriveItem[] } | null>(null);
   const [picked, setPicked] = useState<DriveItem | null>(null);
   const [file, setFile] = useState<{ id: string; data: ArrayBuffer; check: TemplateCheck } | null>(null);
+  // Monday's one-line address, and the same split for a letter (API: letterAddress).
+  const [addr, setAddr] = useState<{ full: string; street: string; cityStateZip: string } | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [busy, setBusy] = useState<"pdf" | "docx" | "send" | null>(null);
   const [esign, setEsign] = useState(false);
@@ -108,13 +110,18 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     void loadTemplates();
     fetchEsignStatus().then((s) => setEsign(s.enabled)).catch(() => setEsign(false));
     fetchContractPrefill(c.localId)
-      .then((p) => { setAttorneyEmail(p.attorneyEmail ?? ""); return p; })
+      .then((p) => {
+        setAttorneyEmail(p.attorneyEmail ?? "");
+        setAddr({ full: p.address, street: p.street ?? p.address, cityStateZip: p.cityStateZip ?? "" });
+        return p;
+      })
       .then((p) => setInput({
         date: today(), clientName: p.clientName, salutation: p.clientName, email: p.email,
-        // Monday keeps one line; staff move the city part to its own field when the contract splits them.
+        // Monday keeps one line; split below when the picked template has a City, State zip line.
         address: p.address, cityStateZip: "",
         hearingType: p.hearingType, hearingDate: p.hearingDate, formName: p.contractFor.join(", "),
-        attorneyFee: p.attorneyFee, filingFee: p.filingFee, postageFee: null, surcharge: null, interviewFee: null,
+        // The Fee K's PF is the postage.
+        attorneyFee: p.attorneyFee, filingFee: p.filingFee, postageFee: p.processingFee, surcharge: null, interviewFee: null,
         dueDate: "", attorneyName: p.attorneyName, creatorInitials: initialsOf(user?.name ?? ""),
       }))
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not load the contract"));
@@ -135,6 +142,19 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   }, [picked, templates]);
 
   const shown = useMemo(() => new Set((file?.check.tags ?? []).flatMap((t) => INPUTS_FOR[t] ?? [])), [file]);
+
+  // A template with its own "City, State zip" line gets the address split;
+  // one without keeps the whole line. Only while the fields are as pre-filled.
+  const splitsAddress = shown.has("cityStateZip");
+  useEffect(() => {
+    if (!addr || !addr.cityStateZip) return;
+    setInput((f) => {
+      if (!f) return f;
+      if (splitsAddress && f.address === addr.full && f.cityStateZip === "") return { ...f, address: addr.street, cityStateZip: addr.cityStateZip };
+      if (!splitsAddress && f.address === addr.street && f.cityStateZip === addr.cityStateZip) return { ...f, address: addr.full, cityStateZip: "" };
+      return f;
+    });
+  }, [splitsAddress, addr]);
   const problems = file && input ? contractProblems(file.check, input) : [];
   const templateBroken = !!file && (file.check.errors.length > 0 || file.check.unknown.length > 0);
 
@@ -285,7 +305,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {amount("filingFee", "Filing fee $")}
                 {amount("postageFee", "Postage $", "Empty prints N/A", "N/A")}
                 {amount("interviewFee", "Interview fee $")}
-                {amount("surcharge", "Surcharge $", input.surcharge === null ? `3% of AF = ${money(surchargeOf(input))}` : undefined, money(surchargeOf(input)))}
+                {amount("surcharge", "Surcharge $", input.surcharge === null ? `3% of AF + FF + postage = ${money(surchargeOf(input))}` : undefined, money(surchargeOf(input)))}
               </div>
               {file.check.tags.includes("total_fee") && (
                 <p className="text-sm" style={{ color: "var(--color-ink)" }}>Total fee: <strong className="tabular-nums">{money(totalOf(input))}</strong></p>

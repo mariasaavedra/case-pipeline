@@ -17,7 +17,9 @@
 // POST /api/webhooks/zapier/:secret — every Adobe event. events.ts decides;
 //   this applies: the CONTRACT_STEPS write (stage + date), a note on the Fee K,
 //   and for signed / rejected / expired / recalled a Monday notification to
-//   whoever sent it + Slack. The signed PDF goes onto the Fee K's (else the
+//   whoever sent it + Slack. Every note also lands in the client PROFILE's
+//   Emails & Activities as a "Contract note" (since 2026-10-14), so the
+//   contract's history shows on the client's timeline. The signed PDF goes onto the Fee K's (else the
 //   client profile's) file column.
 //
 // Off unless ZAPIER_ESIGN_HOOK_URL, ZAPIER_ESIGN_SECRET and API_URL are set.
@@ -41,6 +43,7 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { getUserMondayToken, markMondayTokenRejected } from "./monday-oauth.js";
 import { executeContractStep } from "./contract-step.js";
+import { CONTRACT_NOTE_ACTIVITY_ID } from "./profile-write.js";
 import { DATA_DIR } from "../paths.js";
 import { fetchWorkspaceUsers } from "@case-pipeline/monday";
 import { getBoardColumnsFor } from "@case-pipeline/query";
@@ -174,12 +177,26 @@ function senderTokenOptions(row: AgreementRow, shared: string | undefined): Toke
   };
 }
 
-async function postNote(db: DatabaseInstance, itemId: string, body: string, tokenOptions: TokenFallbackOptions, authorOid: string | null, localId: string) {
+/** The note as an update on the Fee K, and as a "Contract note" in the client profile's E&A. */
+async function postNote(
+  db: DatabaseInstance,
+  n: { feeKItemId: string; profileItemId: string | null; title: string; body: string; localId: string },
+  tokenOptions: TokenFallbackOptions,
+  authorOid: string | null,
+) {
   try {
-    await withTokenFallback((token) => dataSource.postUpdate(itemId, body, token), tokenOptions);
+    await withTokenFallback((token) => dataSource.postUpdate(n.feeKItemId, n.body, token), tokenOptions);
   } catch (err) {
     console.error("[esign] note failed; queueing:", err);
-    enqueueWrite(db, { opType: "create_update", targetTable: "contracts", targetLocalId: localId, mondayItemId: itemId, authorOid, payload: { body } });
+    enqueueWrite(db, { opType: "create_update", targetTable: "contracts", targetLocalId: n.localId, mondayItemId: n.feeKItemId, authorOid, payload: { body: n.body } });
+  }
+  if (!n.profileItemId) return;
+  const activity = { itemId: n.profileItemId, title: n.title, customActivityId: CONTRACT_NOTE_ACTIVITY_ID, content: n.body };
+  try {
+    await withTokenFallback((token) => dataSource.createTimelineItem(activity, token), tokenOptions);
+  } catch (err) {
+    console.error("[esign] profile E&A entry failed; queueing:", err);
+    enqueueWrite(db, { opType: "create_timeline_item", targetTable: "profiles", mondayItemId: n.profileItemId, authorOid, payload: { ...activity } });
   }
 }
 
@@ -217,7 +234,12 @@ async function applyEvent(
     // A stage someone moved by hand stays as they left it; the note still goes.
     stepResults[step] = r.ok ? r.data.stage : r.body.error;
   }
-  if (plan.note) await postNote(db, row.contract_monday_id, plan.note, tokenOptions, row.sent_by_oid, row.contract_local_id);
+  if (plan.note) {
+    await postNote(db, {
+      feeKItemId: row.contract_monday_id, profileItemId: row.profile_monday_id,
+      title: plan.title ?? "Contract update", body: plan.note, localId: row.contract_local_id,
+    }, tokenOptions, row.sent_by_oid);
+  }
   if (plan.notify) {
     const boardId = getBoardColumnsFor(db, "fee_ks")?.mondayBoardId;
     const link = boardId ? `${MONDAY_ACCOUNT_URL}/boards/${boardId}/pulses/${row.contract_monday_id}` : null;
@@ -392,11 +414,12 @@ export function registerEsignRoutes(app: Express, deps: EsignDeps): void {
         tokenOptions: writeTokenOptions(req), authorOid: req.user?.oid ?? null,
         audit: (action, opts) => auditFromReq(req, action, opts),
       });
-      await postNote(
-        db, contract.mondayId,
-        `📝 Contract sent for signature in Adobe Sign by ${senderName ?? "staff"}: attorney (${attorneyEmail}) first, then the client (${clientEmail}).`,
-        writeTokenOptions(req), req.user?.oid ?? null, localId,
-      );
+      await postNote(db, {
+        feeKItemId: contract.mondayId, profileItemId: contract.profileMondayId,
+        title: "Contract sent for signature",
+        body: `📝 Contract sent for signature in Adobe Sign by ${senderName ?? "staff"}: attorney (${attorneyEmail}) first, then the client (${clientEmail}).`,
+        localId,
+      }, writeTokenOptions(req), req.user?.oid ?? null);
       auditFromReq(req, "esign.sent", {
         targetType: "contract", targetId: localId, targetMondayId: contract.mondayId,
         metadata: { agreement: id, stageMoved: step.ok },

@@ -60,8 +60,9 @@ add a contract.
 - A blank is a tag typed into the text: `Dear {{client_name}},`. The list is
   `CONTRACT_FIELDS` in `apps/web/src/lib/contract-fill.ts`, and the
   **READ ME - template fields** document in the folder. Amounts print with
-  their `$`; postage prints "N/A" when empty; surcharge = 3% of AF (2026
-  rule) unless typed; total = AF + FF + postage + surcharge.
+  their `$`; postage prints "N/A" when empty; surcharge = 3% of AF + FF + postage (AF only until
+  2026-10-14) unless typed; a one-line Monday address is split into street +
+  "City, ST zip" when the template has `{{city_state_zip}}`; total = AF + FF + postage + surcharge.
 - **Generate contract…** lists the folder, downloads the picked template and
   checks it. Broken braces or an unknown tag (a typo) block it, with a link to
   open the file in Word. The form shows only the fields that template uses,

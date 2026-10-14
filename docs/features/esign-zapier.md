@@ -23,6 +23,9 @@ for contracts sent by hand.
    Received On is stamped, with a note. The sender gets a **Monday notification**
    and a **Slack** message. The signed PDF goes onto the Fee K's file column, or
    the client profile's Files column if the Fee K has none.
+   Every note in this flow also goes into the **client profile's Emails &
+   Activities** as a "Contract note" (titles: Contract sent for signature /
+   signed by the attorney / signed / rejected / expired / recalled).
 5. Rejected, expired or recalled: a note, a Monday notification and Slack. **The
    stage is not changed**, so a person decides what comes next. A new send is
    then allowed.
