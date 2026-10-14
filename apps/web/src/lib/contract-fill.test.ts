@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import PizZip from "pizzip";
 import {
-  contractValues, contractProblems, inspectContractTemplate, fillContractTemplate, surchargeFor,
+  contractValues, contractProblems, inspectContractTemplate, fillContractTemplate, surchargeFor, unhighlightTags,
   type ContractInput,
 } from "./contract-fill";
 
@@ -83,4 +83,25 @@ it("passes Adobe Sign text tags through untouched", async () => {
   const out = fillContractTemplate(docx(text), INPUT);
   const xml = new PizZip(await out.arrayBuffer()).file("word/document.xml")!.asText();
   expect(xml).toContain("Fee $5,000.00 {{Sig_es_:signer1:signature}} {{Int_es_:signer2:initials}} {{*Addr_es_:signer2        }}");
+});
+
+describe("the template's highlight on blanks", () => {
+  const HL = '<w:highlight w:val="magenta"/>';
+  const run = (text: string, hl = true) => `<w:r><w:rPr><w:b/>${hl ? HL : ""}</w:rPr><w:t>${text}</w:t></w:r>`;
+
+  it("is dropped from a tag, even one split over runs; other highlights stay", () => {
+    const xml = run("Note:") + run("{{client") + run("_name}}") + run(" and ", false) + run("{{date}}");
+    const out = unhighlightTags(xml);
+    expect(out).toBe(run("Note:") + run("{{client", false) + run("_name}}", false) + run(" and ", false) + run("{{date}}", false));
+  });
+
+  it("never reaches the filled contract", async () => {
+    const zip = new PizZip(docx("x"));
+    zip.file("word/document.xml", zip.file("word/document.xml")!.asText()
+      .replace(/<w:p>.*<\/w:p>/, `<w:p>${run("Dear ", false)}${run("{{salutation}}")}</w:p>`));
+    const out = fillContractTemplate(zip.generate({ type: "arraybuffer" }), INPUT);
+    const xml = new PizZip(await out.arrayBuffer()).file("word/document.xml")!.asText();
+    expect(xml).toContain("Ana LOPEZ");
+    expect(xml).not.toContain("w:highlight");
+  });
 });
