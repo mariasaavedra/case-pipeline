@@ -8,6 +8,7 @@ import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { DocumentSettingsSection } from "../components/DocumentSettingsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
+import { MondayUsageSection } from "../components/MondayUsageSection";
 import { AuditLogSection } from "../components/AuditLogSection";
 import { SectionCode } from "../components/ScreenCode";
 import { settingsSectionTitle } from "../components/settingsStyles";
@@ -982,6 +983,13 @@ export function SettingsPage({ tab }: { tab: string }) {
                   (reconciled-away but recoverable — nothing is hard-deleted).
                 </p>
                 <SyncHealthSection />
+              </section>
+              <section style={{ marginBottom: "40px" }}>
+                <h2 style={styles.sectionTitle}>Monday API usage<SectionCode code="P11.4.4" inline /></h2>
+                <p style={styles.sectionDesc}>
+                  Calls to Monday.com today against the account's daily limit, and which job made them.
+                </p>
+                <MondayUsageSection />
               </section>
               <AuditLogSection />
             </>

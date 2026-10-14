@@ -56,10 +56,13 @@ import {
   normalizeEmailMetadata,
   resolveAllColumns,
   parseStatusOptions,
+  setDefaultMondayJob,
+  drainMondayCallCounts,
 } from "@case-pipeline/monday";
 import type { MondayItem, MondayTimelineItem, MondayAsset, MondayColumn } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
+import { addMondayCallCounts } from "@case-pipeline/query";
 import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
 import { backupDatabase } from "../backup-db.js";
 import { backupEncryptionKey, encryptFile } from "../../apps/api/src/backup/crypto.js";
@@ -163,6 +166,17 @@ const DEFAULT_MAX_ITEMS = Number(process.env.SYNC_MAX_ITEMS) || 20000;
  */
 let activeRun: { db: LiveDatabase; runId: number; holder: string } | null = null;
 
+/** Write this run's Monday call counts (libs/monday/src/usage.ts) to
+ * monday_api_calls. Every minute while running, and once more at the end —
+ * a 5-hour full sync shows up in Settings → Sync health as it goes. */
+function flushMondayCalls(db: LiveDatabase): void {
+  try {
+    addMondayCallCounts(db, drainMondayCallCounts());
+  } catch {
+    // Counting must never fail a sync; a lost minute of counts is acceptable.
+  }
+}
+
 type LiveDatabase = ReturnType<typeof openDatabase>;
 
 /**
@@ -175,6 +189,7 @@ function finalizeFailedRun(err: unknown): void {
   if (!activeRun) return;
   const { db, runId, holder } = activeRun;
   activeRun = null;
+  flushMondayCalls(db);
   const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
   try {
     db.prepare(
@@ -299,6 +314,11 @@ async function main() {
   // Schema comes up to date only AFTER the snapshot, so the fallback captures
   // the database as it was before any migration touched it.
   initializeSchema(db);
+
+  // The API passes MONDAY_USAGE_JOB (sync:full / sync:incremental / sync:webhook);
+  // a run from a shell is counted as sync:manual.
+  setDefaultMondayJob(process.env.MONDAY_USAGE_JOB || "sync:manual");
+  setInterval(() => flushMondayCalls(db), 60_000).unref();
 
   // Everything upserted by this run is stamped last_seen_at >= runStartedAt;
   // anything older is what Monday stopped returning (see reconcile()).
@@ -1228,6 +1248,7 @@ async function main() {
   // The ledger row is final from here, so the fatal handler must not touch it.
   activeRun = null;
   releaseSyncLock(db, SYNC_HOLDER);
+  flushMondayCalls(db);
   db.close();
   if (!healthy) process.exit(2);
 }

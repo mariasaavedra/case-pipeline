@@ -131,6 +131,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `search.ts` | Cross-type search (contracts, court cases, etc.) |
 | `status-options.ts` | Each board's real status labels + colors (write-back validates against these) |
 | `sync-health.ts` | Sync-run ledger, per-board coverage, write-queue depth + failures, archived rows |
+| `monday-usage.ts` | Our Monday API call counts per UTC day per job (`monday_api_calls`, schema v34). The counter is `libs/monday/src/usage.ts` (`withMondayJob`, `setDefaultMondayJob`); the API flushes it every minute, the sync as it goes, the consult sweep / Drive intake at exit (`scripts/lib/monday-usage.ts`) |
 | `updates.ts` | Client update queries + `batchGetClientUpdates` |
 
 ## CLI Commands (`apps/cli`)
@@ -208,6 +209,7 @@ Writes and user/account routes:
 | `GET/PUT /api/settings/urgency` | Urgency thresholds (criticalDays/soonDays) + whether status urgency reorders Active Cases (PUT admin-only, audited) |
 | `GET/PUT /api/settings/documents` | Firm address/phone/fax, attorneys (email, USCIS account, bar admissions) and detention facility addresses for generated forms, `data/document-settings.json` (defaults in `documents/document-settings.ts`; PUT admin-only, audited) |
 | `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only) |
+| `GET /api/admin/monday-usage` | Monday API usage (admin-only, Settings → Admin → P11.4.4): Monday's own report (`platform_api`: daily limit, per day / app / user; one call, cached 10 min, `?refresh=1`) + our per-job counts for 14 days. The limit (10,000/day) is account-wide — Zapier too — and resets at midnight UTC |
 | `GET /api/admin/users/presence` | Who's online (admin-only): each active user as online (≤5 min) / idle (≤1 h) / offline, from `last_active_at`, which `requireAuth` stamps at most once a minute per user (`auth/presence.ts`). Shown in Settings → Users, polled every 30 s |
 | `/api/auth/monday`, `/callback`, `/status` | Personal Monday.com OAuth connection (`routes/monday-oauth.ts`) |
 | `POST /api/mail/scan`, `GET /api/mail/sample.pdf` | Mail intake: raw PDF body (`?name=`, `?sample=1`) → split notices matched to Open Forms, saved to `mail_scans`/`mail_documents` (schema v24) with the PDF under `data/mail/`; and a fake multi-notice sample built from the loaded DB. Image-only pages are OCR'd (`apps/api/src/mail/ocr.ts`, tesseract.js + vendored English model, ~1 s/page); `?scanned=1` gives an image-only sample. Nothing written to Monday at scan time |

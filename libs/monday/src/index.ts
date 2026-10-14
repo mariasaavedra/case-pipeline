@@ -5,3 +5,4 @@
 export * from "./types";
 export * from "./api";
 export * from "./column-resolver";
+export * from "./usage";

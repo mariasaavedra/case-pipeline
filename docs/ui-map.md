@@ -234,6 +234,7 @@ Four tabs, each with its own URL (`/settings/<tab>`); `/settings` opens My accou
 | P11.4.1 | Users | Per user: paralegal name (My Cases), **attorney board** (P4 opens on it), role, disable |
 | P11.4.2 | Sync health | |
 | P11.4.3 | Audit log: filter by what / who / dates, grouped by day, client names link to their page | |
+| P11.4.4 | Monday API usage | Calls today vs the account's daily limit (Monday's `platform_api` report), last 14 days, calls by job (`monday_api_calls`), by app / user. Shown above the audit log |
 
 Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P11.2.1 (Language moved to P11.2.2), P11.3 → P11.1.2, P11.4 → P11.1.3, P11.5 → P11.3.1, P11.6 → P11.3.2, P11.7 → P11.3.3, P11.8 → P11.4.2, P11.9 → P11.4.1, P11.10 → P11.4.3.
 

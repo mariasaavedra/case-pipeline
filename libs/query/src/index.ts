@@ -12,6 +12,8 @@ export { getBoardStatusOptions, getBoardStatusOptionsFor } from "./status-option
 export { getBoardColumns, getBoardColumnsFor } from "./board-columns";
 export { getSyncHealth, getArchivedRows } from "./sync-health";
 export type { SyncHealth, SyncBoardCoverage, ArchivedRow, WriteQueueFailure } from "./sync-health";
+export { addMondayCallCounts, getMondayCallCounts } from "./monday-usage";
+export type { MondayCallRow } from "./monday-usage";
 export { getClientRelationships } from "./relationships";
 export type { RelationshipWithDetails } from "./relationships";
 export { getDashboardKpis, getKpiCardDetail } from "./dashboard";

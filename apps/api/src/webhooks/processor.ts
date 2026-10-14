@@ -33,6 +33,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import cron from "node-cron";
+import { withMondayJob } from "@case-pipeline/monday";
 import { fetchItemUpdatesBatch } from "@case-pipeline/monday";
 import type { MondayAsset } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
@@ -532,7 +533,7 @@ export function startWebhookProcessor(
   cron.schedule(schedule, () => {
     if (draining) return; // a long targeted sync may outlive one tick
     draining = true;
-    processWebhookEvents(db, deps)
+    withMondayJob("webhooks", () => processWebhookEvents(db, deps))
       .then((s) => {
         if (s.processed || s.failed || s.syncedBoards.length) {
           console.log(
