@@ -31,6 +31,10 @@ import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from 
 import { parseNoteBody } from "./note-write.js";
 import { planReply } from "./note-replies.js";
 import { addLocalDropdownLabel, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
+import {
+  FEE_K_ATTORNEY, applyProfileContactLocally, cleanContact, makeMondayUserResolver,
+  peopleValue, planProfileContact,
+} from "../contract-info.js";
 
 /**
  * "Contract note" — the firm's existing E&A activity type (queried from the
@@ -82,6 +86,7 @@ export interface ProfileWriteDeps {
 
 export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps): void {
   const { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions } = deps;
+  const resolveMondayUser = makeMondayUserResolver(MONDAY_API_TOKEN);
 
 
   // =============================================================================
@@ -305,6 +310,12 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
   // new (`newCaseType`, "+ New" in ContractFields) — then Monday adds the label
   // (create_labels_if_missing) and the local schema gets it straight away.
   //
+  // Everything a contract needs is asked up front (2026-10-14: a Fee K created
+  // with only a case type could not be generated, and nothing could fill the
+  // rest): case type, AF, attorney (Fee K People column), and the client's
+  // e-mail + address. Those two live on the PROFILE (the Fee K mirrors them), so
+  // they are written there — only when they differ from what it holds.
+  //
   // The new Fee K also gets a note (contractNoteText: For/Fees header + the
   // optional description), twice on the item itself: as an update and as a
   // "Contract note" in its Emails & Activities. Both are best-effort — the
@@ -317,7 +328,10 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       return;
     }
     const localId = String(req.params.localId);
-    const body = req.body as { caseType?: unknown; newCaseType?: unknown; af?: unknown; ff?: unknown; pf?: unknown; description?: unknown };
+    const body = req.body as {
+      caseType?: unknown; newCaseType?: unknown; af?: unknown; ff?: unknown; pf?: unknown; description?: unknown;
+      attorney?: unknown; email?: unknown; address?: unknown;
+    };
     let caseType = (body.caseType ?? "").toString().trim().replace(/\s+/g, " ");
     const description = parseContractDescription(body.description);
     const num = (v: unknown): number | null => {
@@ -330,14 +344,28 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       res.status(400).json({ error: "caseType is required" });
       return;
     }
+    if (af == null || af < 0) {
+      res.status(400).json({ error: "The attorney fee (AF) is required" });
+      return;
+    }
+    const attorney = typeof body.attorney === "string" ? body.attorney.trim().replace(/\s+/g, " ") : "";
+    if (!attorney) {
+      res.status(400).json({ error: "The attorney is required" });
+      return;
+    }
+    const contact = cleanContact({ email: body.email, address: body.address }, true);
+    if ("error" in contact) {
+      res.status(400).json({ error: contact.error });
+      return;
+    }
     if (description.length > CONTRACT_DESCRIPTION_MAX) {
       res.status(400).json({ error: `description is too long (max ${CONTRACT_DESCRIPTION_MAX} characters)` });
       return;
     }
 
     const profile = db
-      .prepare("SELECT monday_item_id, name FROM profiles WHERE local_id = ?")
-      .get(localId) as { monday_item_id: string | null; name: string } | null;
+      .prepare("SELECT monday_item_id, name, email, address FROM profiles WHERE local_id = ?")
+      .get(localId) as { monday_item_id: string | null; name: string; email: string | null; address: string | null } | null;
     if (!profile) {
       res.status(404).json({ error: "Profile not found" });
       return;
@@ -374,7 +402,27 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       return;
     }
 
-    const columnValues: Record<string, unknown> = { [caseTypeCol.columnId]: { labels: [caseType] } };
+    if (!schema.columns.some((c) => c.columnId === FEE_K_ATTORNEY.id)) {
+      res.status(409).json({ error: "Could not resolve the Attorney column on Fee Ks" });
+      return;
+    }
+    let attorneyUserId: number | null;
+    try {
+      attorneyUserId = await resolveMondayUser(attorney);
+    } catch (err) {
+      console.error("[write-back] could not list Monday users:", err);
+      res.status(502).json({ error: "Monday did not answer — try again in a minute" });
+      return;
+    }
+    if (attorneyUserId == null) {
+      res.status(400).json({ error: `"${attorney}" is not a Monday user — pick the attorney from the list` });
+      return;
+    }
+
+    const columnValues: Record<string, unknown> = {
+      [caseTypeCol.columnId]: { labels: [caseType] },
+      [FEE_K_ATTORNEY.id]: peopleValue(attorneyUserId),
+    };
     if (afCol && af != null) columnValues[afCol.columnId] = af;
     if (ffCol && ff != null) columnValues[ffCol.columnId] = ff;
     if (pfCol && pf != null) columnValues[pfCol.columnId] = pf;
@@ -416,16 +464,39 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       }
     };
 
+    // The client's e-mail / address, on the profile, only when changed. Its own
+    // write: best-effort like the notes, queued on an outage.
+    const contactPlan = planProfileContact({ email: profile.email, address: profile.address }, contact, getBoardColumnsFor(db, "profiles"));
+    const writeProfileContact = async () => {
+      if (contactPlan.changed.length === 0 || !profile.monday_item_id) return;
+      const profileBoard = getBoardColumnsFor(db, "profiles")?.mondayBoardId;
+      if (!profileBoard) return;
+      const profileItemId = profile.monday_item_id;
+      try {
+        await withTokenFallback((token) => dataSource.setColumnValues(profileBoard, profileItemId, contactPlan.values, token), writeTokenOptions(req));
+      } catch (err) {
+        console.error("[write-back] client contact update failed; queueing for retry:", err);
+        for (const [columnId, value] of Object.entries(contactPlan.values)) {
+          enqueueWrite(db, {
+            opType: "change_column_json", targetTable: "profiles", targetLocalId: localId,
+            mondayItemId: profileItemId, authorOid: req.user?.oid ?? null,
+            payload: { boardId: profileBoard, columnId, value },
+          });
+        }
+      }
+      applyProfileContactLocally(db, localId, contactPlan.local);
+    };
+
     try {
       const outcome = await withTokenFallback(
         (token) => dataSource.createItem(schema.mondayBoardId, itemName, columnValues, token, undefined, newLabel),
         writeTokenOptions(req),
       );
-      await Promise.all([postFeeKUpdate(outcome.result), postFeeKActivity(outcome.result)]);
+      await Promise.all([postFeeKUpdate(outcome.result), postFeeKActivity(outcome.result), writeProfileContact()]);
       auditFromReq(req, "monday.contract_created", {
         targetType: "profile", targetId: localId, targetMondayId: profile.monday_item_id,
         metadata: {
-          feeKItemId: outcome.result, caseType, ...(newLabel ? { newCaseType: true } : {}), af, ff, pf, name: itemName, hasDescription: !!description,
+          feeKItemId: outcome.result, caseType, ...(newLabel ? { newCaseType: true } : {}), af, ff, pf, attorney, contactChanged: contactPlan.changed, name: itemName, hasDescription: !!description,
           usedPersonalToken: outcome.usedPersonalToken, fellBackToSharedToken: outcome.fellBackToSharedToken,
         },
       });
@@ -442,8 +513,9 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       });
       auditFromReq(req, "monday.contract_created", {
         targetType: "profile", targetId: localId, targetMondayId: profile.monday_item_id,
-        metadata: { caseType, ...(newLabel ? { newCaseType: true } : {}), af, ff, pf, name: itemName, hasDescription: !!description, queued: true },
+        metadata: { caseType, ...(newLabel ? { newCaseType: true } : {}), af, ff, pf, attorney, contactChanged: contactPlan.changed, name: itemName, hasDescription: !!description, queued: true },
       });
+      await writeProfileContact();
       if (newLabel) addLocalDropdownLabel(db, "fee_ks", caseTypeCol.columnId, caseType);
       res.status(202).json({ data: { name: itemName, pending: true } });
     }

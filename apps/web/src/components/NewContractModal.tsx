@@ -2,7 +2,9 @@
 // NewContractModal — create a Fee K (contract) for a client
 // =============================================================================
 // Case type (the Fee Ks "Contract for..." dropdown, real options) + AF/FF/PF
-// amounts. Creates the item on Monday via createContract, named "<client> —
+// amounts + attorney + the client's e-mail and address (pre-filled from the
+// profile, editable, saved there). All five things a contract is generated
+// from are required (contractFieldProblems), so P14 never gets an incomplete one. Creates the item on Monday via createContract, named "<client> —
 // <case type>", auto-linked to the profile. Surcharges are NOT here (post-signing).
 // The new Fee K gets a note — a For/Fees header (previewed here) plus the
 // optional description — as an update and as a "Contract note" in its own
@@ -20,6 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "./ui/button";
 import {
   ContractFields,
+  contractFieldProblems,
   emptyContractFields,
   toCreateContractInput,
   useContractCaseTypes,
@@ -68,10 +71,12 @@ export function NewContractModal({ profileLocalId, clientName, onClose, onCreate
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ name: string; pending: boolean } | null>(null);
+  const missing = contractFieldProblems(fields);
 
   const submit = async () => {
     if (!client) { setError("Pick a client."); return; }
-    if (!fields.caseType) { setError("Pick a case type."); return; }
+    const problems = contractFieldProblems(fields);
+    if (problems.length > 0) { setError(`Still needed: ${problems.join(", ")}.`); return; }
     setSaving(true);
     setError(null);
     try {
@@ -138,13 +143,18 @@ export function NewContractModal({ profileLocalId, clientName, onClose, onCreate
                     <button type="button" onClick={() => setClient(null)} style={{ fontSize: 12, color: "var(--color-amber)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Change</button>
                   </div>
                 )}
-                <ContractFields value={fields} onChange={setFields} />
+                <ContractFields value={fields} onChange={setFields} profileLocalId={client.localId} />
+                {missing.length > 0 && !error && (
+                  <p style={{ fontSize: 12, color: "var(--color-ink-faint)", marginBottom: 8, fontFamily: "var(--font-body)" }}>
+                    Still needed: {missing.join(", ")}.
+                  </p>
+                )}
 
                 {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
 
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
                   <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                  <Button type="button" onClick={submit} disabled={saving || caseTypes.length === 0}>
+                  <Button type="button" onClick={submit} disabled={saving || caseTypes.length === 0 || missing.length > 0}>
                     {saving ? "Creating…" : "Create contract"}
                   </Button>
                 </div>

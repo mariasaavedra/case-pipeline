@@ -12,6 +12,14 @@
 // update, audit — and the same stale check: the client sends what it saw
 // (`from`); if any of them changed on Monday since, the write is refused with
 // the current values. Plan = planContractFees (unit-tested).
+//
+// Since 2026-10-14 M25 edits everything a contract needs, not only fees and
+// case type: also the attorney (the Fee K's People column, same write) and the
+// client's e-mail + address — those live on the PROFILE (the Fee K mirrors
+// them), so they go out as a second write to the profile item. Same stale
+// check for each (`from.attorney`, `from.email`, `from.address`).
+// GET /api/contract-info?profile= gives M11 / M2 / M25 the pre-fill: the
+// profile's e-mail, address and attorney, and the attorney pick list.
 // =============================================================================
 
 import type { Express } from "express";
@@ -24,6 +32,10 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { getBoardColumnsFor } from "@case-pipeline/query";
+import {
+  FEE_K_ATTORNEY, applyProfileContactLocally, cleanContact, contractAttorneys, makeMondayUserResolver,
+  peopleValue, planProfileContact, splitPeople,
+} from "../contract-info.js";
 import type { BoardColumns } from "@case-pipeline/query";
 
 const BOARD_KEY = "fee_ks";
@@ -104,6 +116,7 @@ export function planContractFees(
   body: { fees?: unknown; caseType?: unknown; newCaseType?: unknown; from?: unknown },
   item: ContractFeesRow | null | undefined,
   schema: BoardColumns | null,
+  opts: { allowNoChange?: boolean } = {},
 ): ContractFeesPlanResult {
   if (!item) return { rejection: { status: 404, error: "Contract not found" } };
   if (!item.monday_item_id) {
@@ -132,7 +145,11 @@ export function planContractFees(
   const existing = caseType && typeCol?.options.find((o) => o.label.toLowerCase() === caseType!.toLowerCase());
   if (existing) caseType = existing.label;
   const typeChanged = caseType !== undefined && !sameLabels([caseType], currentType);
-  if (Object.keys(to).length === 0 && !typeChanged) return { rejection: { status: 400, error: "Nothing changed" } };
+  if (Object.keys(to).length === 0 && !typeChanged) {
+    if (!opts.allowNoChange) return { rejection: { status: 400, error: "Nothing changed" } };
+    if (!schema) return { rejection: { status: 409, error: "Fee Ks columns not synced yet — run a sync first" } };
+    return { plan: { mondayItemId: item.monday_item_id, mondayBoardId: schema.mondayBoardId, from: {}, to: {}, values: {}, local: {} } };
+  }
 
   // Stale check on what is being changed: what the user saw must still be on Monday.
   for (const k of Object.keys(to) as FeeKey[]) {
@@ -200,6 +217,27 @@ export interface ContractFeesDeps {
 
 export function registerContractFeesRoutes(app: Express, deps: ContractFeesDeps): void {
   const { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions } = deps;
+  const resolveMondayUser = makeMondayUserResolver(MONDAY_API_TOKEN);
+
+  // Pre-fill for M11 / M2 / M25: the client's e-mail, address and attorney
+  // (from the profile), plus who can be picked as the attorney.
+  app.get("/api/contract-info", requireAuth, (req, res) => {
+    const profileLocalId = typeof req.query.profile === "string" ? req.query.profile : "";
+    const p = profileLocalId
+      ? (db.prepare(
+          `SELECT email, address, json_extract(raw_column_values, '$.attorney.label') AS attorney
+             FROM profiles WHERE local_id = ?`,
+        ).get(profileLocalId) as { email: string | null; address: string | null; attorney: string | null } | undefined)
+      : undefined;
+    res.json({
+      data: {
+        attorneys: contractAttorneys(db),
+        email: p?.email?.trim() ?? "",
+        address: p?.address?.trim() ?? "",
+        attorney: splitPeople(p?.attorney)[0] ?? "",
+      },
+    });
+  });
 
   app.patch("/api/contracts/:localId/fees", requireAuth, async (req, res) => {
     if (!MONDAY_API_TOKEN) {
@@ -209,22 +247,99 @@ export function registerContractFeesRoutes(app: Express, deps: ContractFeesDeps)
     const localId = String(req.params.localId);
     const item = db
       .prepare(
-        `SELECT monday_item_id,
-                json_extract(raw_column_values, '$.af') AS af,
-                json_extract(raw_column_values, '$.ff') AS ff,
-                json_extract(raw_column_values, '$.pf') AS pf,
-                json_extract(raw_column_values, '$.contract_for.labels') AS contract_for
-           FROM contracts WHERE local_id = ? AND deleted_at IS NULL`,
+        `SELECT c.monday_item_id,
+                json_extract(c.raw_column_values, '$.af') AS af,
+                json_extract(c.raw_column_values, '$.ff') AS ff,
+                json_extract(c.raw_column_values, '$.pf') AS pf,
+                json_extract(c.raw_column_values, '$.contract_for.labels') AS contract_for,
+                json_extract(c.raw_column_values, '$.attorney.label') AS attorney,
+                p.local_id AS profile_local_id, p.monday_item_id AS profile_monday_id, p.email, p.address
+           FROM contracts c LEFT JOIN profiles p ON p.local_id = c.profile_local_id
+          WHERE c.local_id = ? AND c.deleted_at IS NULL`,
       )
-      .get(localId) as ContractFeesRow | undefined;
-    const planned = planContractFees((req.body ?? {}) as { fees?: unknown; caseType?: unknown; newCaseType?: unknown; from?: unknown }, item, getBoardColumnsFor(db, BOARD_KEY));
+      .get(localId) as (ContractFeesRow & {
+        attorney: string | null; profile_local_id: string | null; profile_monday_id: string | null;
+        email: string | null; address: string | null;
+      }) | undefined;
+    const body = (req.body ?? {}) as {
+      fees?: unknown; caseType?: unknown; newCaseType?: unknown; from?: unknown;
+      attorney?: unknown; email?: unknown; address?: unknown;
+    };
+    const seen = body.from && typeof body.from === "object" ? (body.from as Record<string, unknown>) : {};
+    const planned = planContractFees(body, item, getBoardColumnsFor(db, BOARD_KEY), { allowNoChange: true });
     if ("rejection" in planned) {
       const { status, ...rest } = planned.rejection;
       res.status(status).json(rest);
       return;
     }
+    const row = item!;
+
+    // Attorney: the Fee K's People column, in the same write as the fees.
+    const currentAttorneys = splitPeople(row.attorney);
+    const attorney = typeof body.attorney === "string" ? body.attorney.trim().replace(/\s+/g, " ") : undefined;
+    if (body.attorney !== undefined && !attorney) {
+      res.status(400).json({ error: "Pick the attorney" });
+      return;
+    }
+    const attorneyChanged = attorney !== undefined && !(currentAttorneys.length === 1 && currentAttorneys[0]!.toLowerCase() === attorney.toLowerCase());
+    if (attorneyChanged && Object.hasOwn(seen, "attorney")) {
+      const saw = Array.isArray(seen.attorney) ? (seen.attorney as unknown[]).map(String) : [];
+      if (saw.join("|").toLowerCase() !== currentAttorneys.join("|").toLowerCase()) {
+        res.status(409).json({ error: "This contract's attorney changed since you loaded the page", current: { attorney: currentAttorneys } });
+        return;
+      }
+    }
+
+    // E-mail / address: on the client's profile.
+    const contact = cleanContact({ email: body.email, address: body.address }, false);
+    if ("error" in contact) {
+      res.status(400).json({ error: contact.error });
+      return;
+    }
+    if ((contact.email !== undefined && !contact.email) || (contact.address !== undefined && !contact.address)) {
+      res.status(400).json({ error: "The client's e-mail and address can't be emptied here" });
+      return;
+    }
+    const profileSchema = getBoardColumnsFor(db, "profiles");
+    const contactPlan = planProfileContact({ email: row.email, address: row.address }, contact, profileSchema);
+    if (contactPlan.changed.length > 0) {
+      if (!row.profile_local_id || !row.profile_monday_id || !profileSchema) {
+        res.status(409).json({ error: "This contract isn't linked to a client profile on Monday — link it there first" });
+        return;
+      }
+      for (const key of contactPlan.changed) {
+        if (Object.hasOwn(seen, key) && String(seen[key] ?? "").trim() !== (row[key] ?? "").trim()) {
+          res.status(409).json({ error: `The client's ${key === "email" ? "e-mail" : "address"} changed since you loaded the page`, current: { email: row.email, address: row.address } });
+          return;
+        }
+      }
+    }
 
     const { mondayItemId, mondayBoardId, from, to, values, local, newLabel } = planned.plan;
+    let attorneyUserId: number | null = null;
+    if (attorneyChanged) {
+      if (!getBoardColumnsFor(db, BOARD_KEY)?.columns.some((c) => c.columnId === FEE_K_ATTORNEY.id)) {
+        res.status(409).json({ error: "The Attorney column is no longer on the Fee Ks board" });
+        return;
+      }
+      try {
+        attorneyUserId = await resolveMondayUser(attorney!);
+      } catch (err) {
+        console.error("[write-back] could not list Monday users:", err);
+        res.status(502).json({ error: "Monday did not answer — try again in a minute" });
+        return;
+      }
+      if (attorneyUserId == null) {
+        res.status(400).json({ error: `"${attorney}" is not a Monday user — pick the attorney from the list` });
+        return;
+      }
+      values[FEE_K_ATTORNEY.id] = peopleValue(attorneyUserId) as never;
+      (local as Record<string, unknown>)[FEE_K_ATTORNEY.key] = { label: attorney };
+    }
+    if (Object.keys(values).length === 0 && contactPlan.changed.length === 0) {
+      res.status(400).json({ error: "Nothing changed" });
+      return;
+    }
     const applyLocal = () => {
       for (const [key, value] of Object.entries(local)) {
         // A dropdown is stored as an object ({labels}); json() keeps it one.
@@ -238,10 +353,39 @@ export function registerContractFeesRoutes(app: Express, deps: ContractFeesDeps)
     const audit = (extra: Record<string, unknown>) =>
       auditFromReq(req, "monday.contract_fees", {
         targetType: "contract", targetId: localId, targetMondayId: mondayItemId,
-        metadata: { mondayItemId, boardKey: BOARD_KEY, from, to, ...(newLabel ? { newCaseType: true } : {}), ...extra },
+        metadata: {
+          mondayItemId, boardKey: BOARD_KEY, from, to, ...(newLabel ? { newCaseType: true } : {}),
+          ...(attorneyChanged ? { attorney: { from: currentAttorneys, to: attorney } } : {}),
+          ...(contactPlan.changed.length ? { clientContactChanged: contactPlan.changed } : {}),
+          ...extra,
+        },
       });
 
     let pending = false;
+    // The client's e-mail / address: a write to the profile item.
+    if (contactPlan.changed.length > 0) {
+      const profileBoard = profileSchema!.mondayBoardId;
+      const profileItemId = row.profile_monday_id!;
+      try {
+        await withTokenFallback((token) => dataSource.setColumnValues(profileBoard, profileItemId, contactPlan.values, token), writeTokenOptions(req));
+      } catch (err) {
+        console.error("[write-back] client contact update failed; queueing for retry:", err);
+        pending = true;
+        for (const [columnId, value] of Object.entries(contactPlan.values)) {
+          enqueueWrite(db, {
+            opType: "change_column_json", targetTable: "profiles", targetLocalId: row.profile_local_id,
+            mondayItemId: profileItemId, authorOid: req.user?.oid ?? null,
+            payload: { boardId: profileBoard, columnId, value },
+          });
+        }
+      }
+      applyProfileContactLocally(db, row.profile_local_id!, contactPlan.local);
+    }
+    if (Object.keys(values).length === 0) {
+      audit({ queued: pending });
+      res.status(pending ? 202 : 200).json({ data: { localId, fees: {}, pending } });
+      return;
+    }
     try {
       const outcome = await withTokenFallback(
         (token) => dataSource.setColumnValues(mondayBoardId, mondayItemId, values, token, !!newLabel),
@@ -262,6 +406,6 @@ export function registerContractFeesRoutes(app: Express, deps: ContractFeesDeps)
     }
     applyLocal();
     const { caseType: newType, ...fees } = to;
-    res.status(pending ? 202 : 200).json({ data: { localId, fees, ...(newType ? { caseType: newType } : {}), pending } });
+    res.status(pending ? 202 : 200).json({ data: { localId, fees, ...(newType ? { caseType: newType } : {}), ...(attorneyChanged ? { attorney } : {}), pending } });
   });
 }

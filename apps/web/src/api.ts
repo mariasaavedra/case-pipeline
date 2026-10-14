@@ -217,7 +217,10 @@ export async function changeBoardItemColumn(
 /** Create a Fee K (contract) for a client on Monday. pending=queued. */
 export async function createContract(
   profileLocalId: string,
-  input: { caseType: string; newCaseType?: boolean; af?: number | null; ff?: number | null; pf?: number | null; description?: string },
+  input: {
+    caseType: string; newCaseType?: boolean; af?: number | null; ff?: number | null; pf?: number | null; description?: string;
+    attorney: string; email: string; address: string;
+  },
 ): Promise<{ name: string; feeKItemId?: string; pending: boolean }> {
   return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/contracts`, {
     method: "POST",
@@ -712,11 +715,19 @@ export type ContractFees = { af: number | null; ff: number | null; pf: number | 
  * label, replacing what was there; `newCaseType` = add it to the dropdown).
  * Only what changed is written; a null fee clears. `from` is what the user
  * saw — 409 if Monday changed since. */
-export async function updateContractFees(
+/** Pre-fill for a contract (M11, M2, M25): the client's e-mail / address / attorney
+ * from their profile, and who can be picked as the attorney. */
+export async function fetchContractInfo(profileLocalId?: string | null): Promise<{ attorneys: string[]; email: string; address: string; attorney: string }> {
+  return apiFetch(`/api/contract-info${profileLocalId ? `?profile=${encodeURIComponent(profileLocalId)}` : ""}`);
+}
+
+/** M25 Edit contract: only what changed. Fees / case type / attorney on the Fee K,
+ * e-mail / address on the client's profile. `from` = what the user saw (409 if changed since). */
+export async function updateContract(
   localId: string,
-  change: { fees?: Partial<ContractFees>; caseType?: string; newCaseType?: boolean },
-  from: Partial<ContractFees> & { caseType?: string[] },
-): Promise<{ localId: string; fees: Partial<ContractFees>; caseType?: string; pending: boolean }> {
+  change: { fees?: Partial<ContractFees>; caseType?: string; newCaseType?: boolean; attorney?: string; email?: string; address?: string },
+  from: Partial<ContractFees> & { caseType?: string[]; attorney?: string[]; email?: string; address?: string },
+): Promise<{ localId: string; fees: Partial<ContractFees>; caseType?: string; attorney?: string; pending: boolean }> {
   return apiFetch(`/api/contracts/${encodeURIComponent(localId)}/fees`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

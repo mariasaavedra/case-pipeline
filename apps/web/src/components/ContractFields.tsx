@@ -7,15 +7,21 @@
 // without the note, by P4's fee quote, so a field added here reaches all three. See contract-fields.ts. "+ New" (button or
 // the list's second item) types a case type the dropdown doesn't have yet;
 // Monday adds it when the Fee K is created.
+//
+// Below the fees (M11, M2, M25 — not P4's quote): the attorney, picked from
+// Settings → Documents + anyone already on a Fee K, and the client's e-mail
+// and address. Given a profile, all three are pre-filled from it (empty
+// fields only) and stay editable; e-mail / address are saved to the profile.
 // =============================================================================
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 import { useBoardColumns } from "../BoardColumnsProvider";
 import { contractNoteHeader, type ContractFieldValues } from "./contract-fields";
+import { fetchContractInfo } from "../api";
 
-export { emptyContractFields, toCreateContractInput } from "./contract-fields";
+export { emptyContractFields, toCreateContractInput, contractFieldProblems } from "./contract-fields";
 export type { ContractFieldValues } from "./contract-fields";
 
 const labelStyle = {
@@ -42,14 +48,58 @@ export function useContractCaseTypes(): string[] {
   return (col?.options ?? []).map((o) => o.label);
 }
 
+export interface ContractInfo {
+  attorneys: string[];
+  email: string;
+  address: string;
+  attorney: string;
+}
+
+/** The pre-fill for one client (null while loading). Refetches when the client changes. */
+export function useContractInfo(profileLocalId: string | null | undefined): ContractInfo | null {
+  const [info, setInfo] = useState<{ for: string; data: ContractInfo } | null>(null);
+  const key = profileLocalId ?? "";
+  useEffect(() => {
+    let cancelled = false;
+    fetchContractInfo(profileLocalId)
+      .then((data) => { if (!cancelled) setInfo({ for: key, data }); })
+      .catch(() => { if (!cancelled) setInfo({ for: key, data: { attorneys: [], email: "", address: "", attorney: "" } }); });
+    return () => { cancelled = true; };
+  }, [key, profileLocalId]);
+  return info && info.for === key ? info.data : null;
+}
+
 interface Props {
   value: ContractFieldValues;
   onChange: (next: ContractFieldValues) => void;
   /** The contract note (M11, M2). P4's fee quote has the consult note instead. */
   showNote?: boolean;
+  /** Attorney + client e-mail / address (M11, M2, M25). Off for P4's fee quote. */
+  showClient?: boolean;
+  /** The client: pre-fills attorney / e-mail / address (empty fields only). */
+  profileLocalId?: string | null;
+  /** M25 sets its own starting values, so it turns the pre-fill off. */
+  prefill?: boolean;
 }
 
-export function ContractFields({ value, onChange, showNote = true }: Props) {
+export function ContractFields({ value, onChange, showNote = true, showClient = true, profileLocalId, prefill = true }: Props) {
+  const info = useContractInfo(showClient ? profileLocalId : undefined);
+  // Pre-fill once per client, into empty fields only — never over what was typed.
+  const latest = useRef(value);
+  latest.current = value;
+  const filledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!showClient || !prefill || !info || !profileLocalId || filledFor.current === profileLocalId) return;
+    filledFor.current = profileLocalId;
+    const v = latest.current;
+    const next = {
+      ...v,
+      attorney: v.attorney || info.attorney,
+      email: v.email || info.email,
+      address: v.address || info.address,
+    };
+    if (next.attorney !== v.attorney || next.email !== v.email || next.address !== v.address) onChange(next);
+  }, [info, profileLocalId, prefill, showClient, onChange]);
   const options = useContractCaseTypes();
   const NEW = "__new__";
   // "+ New" swaps the dropdown for a text box; `typed` is what's in it.
@@ -120,6 +170,45 @@ export function ContractFields({ value, onChange, showNote = true }: Props) {
         <div style={{ flex: 1 }}>{numInput("ff", "Filing fees (FF)")}</div>
         <div style={{ flex: 1 }}>{numInput("pf", "Postage (PF)")}</div>
       </div>
+
+      {showClient && (
+        <fieldset style={{ border: "none", padding: 0, margin: "0 0 4px" }}>
+          <legend style={{ ...labelStyle, fontSize: 13, color: "var(--color-ink)", marginBottom: 8 }}>Contract details</legend>
+          <div style={{ display: "block", marginBottom: 12 }}>
+            <span style={labelStyle}>Attorney</span>
+            {(() => {
+              const names = info?.attorneys ?? [];
+              // Keep a name that isn't on the list (e.g. from the profile) pickable.
+              const list = value.attorney && !names.some((n) => n.toLowerCase() === value.attorney.toLowerCase()) ? [value.attorney, ...names] : names;
+              const items = [{ value: "", label: info ? "Select…" : "Loading…" }, ...list.map((n) => ({ value: n, label: n }))];
+              return (
+                <Select items={items} value={value.attorney} onValueChange={(v) => onChange({ ...value, attorney: v ?? "" })}>
+                  <SelectTrigger aria-label="Attorney" size="sm" className="w-full border-border-light bg-surface">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="w-[var(--anchor-width)]">
+                    {items.map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              );
+            })()}
+          </div>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            <span style={labelStyle}>Client e-mail</span>
+            <input type="email" value={value.email} onChange={(e) => set("email")(e.target.value)} placeholder="name@example.com"
+              className="w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
+          </label>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            <span style={labelStyle}>Client address</span>
+            <input value={value.address} onChange={(e) => set("address")(e.target.value)} maxLength={300}
+              placeholder="123 Main St, Kansas City, MO 64105"
+              className="w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
+            <span style={{ display: "block", fontSize: 11, color: "var(--color-ink-faint)", marginTop: 2, fontFamily: "var(--font-body)" }}>
+              E-mail and address are saved on the client&apos;s profile in Monday — the contract shows them from there.
+            </span>
+          </label>
+        </fieldset>
+      )}
 
       {showNote && <label style={{ display: "block", marginBottom: 12 }}>
         <span style={labelStyle}>Contract note</span>

@@ -255,8 +255,10 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       json_extract(c.raw_column_values, '$.af')                         AS af,
       json_extract(c.raw_column_values, '$.ff')                         AS ff,
       json_extract(c.raw_column_values, '$.pf')                         AS pf,
-      json_extract(c.raw_column_values, '$.e_mail')                     AS email,
-      json_extract(c.raw_column_values, '$.address')                    AS address
+      -- The Fee K mirrors these from the profile; the profile's own copy is
+      -- read too, so an edit made from M11 / M25 counts before the next sync.
+      COALESCE(NULLIF(TRIM(p.email), ''), json_extract(c.raw_column_values, '$.e_mail'))     AS email,
+      COALESCE(NULLIF(TRIM(p.address), ''), json_extract(c.raw_column_values, '$.address')) AS address
     FROM contracts c
     LEFT JOIN profiles p ON p.local_id = c.profile_local_id
     WHERE c.group_title = ? AND c.deleted_at IS NULL
