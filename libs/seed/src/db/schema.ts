@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 31;
+export const SCHEMA_VERSION = 32;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -477,6 +477,30 @@ CREATE TABLE IF NOT EXISTS drive_intake_files (
 );
 CREATE INDEX IF NOT EXISTS idx_drive_intake_status ON drive_intake_files(match_status);
 CREATE INDEX IF NOT EXISTS idx_drive_intake_appt ON drive_intake_files(appointment_local_id);
+
+-- Consult fee quotes (v32+): the case type + fees an attorney entered with the
+-- P4 consult note. No Fee K is created then: staff still make it with Monday's
+-- Create Fee K button, and the Fee K auto-fill copies the quote into its empty
+-- fields (apps/api/src/fee-k-autofill.ts), then stamps fee_k_monday_id.
+-- Keyed by Monday ids: local ids are per-sync surrogates.
+-- Local-only — NOT rebuilt by sync.
+CREATE TABLE IF NOT EXISTS consult_fee_quotes (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    appointment_monday_id  TEXT,
+    profile_monday_id      TEXT NOT NULL,
+    case_type              TEXT NOT NULL,
+    new_case_type          INTEGER NOT NULL DEFAULT 0,  -- 1 = not on Monday's dropdown yet
+    af                     REAL,
+    ff                     REAL,
+    pf                     REAL,
+    author_oid             TEXT,
+    author_name            TEXT,
+    created_at             TEXT NOT NULL DEFAULT (datetime('now')),
+    fee_k_monday_id        TEXT,                  -- the Fee K it was applied to
+    applied_at             TEXT,
+    applied_note           TEXT                   -- what was written, or why nothing was
+);
+CREATE INDEX IF NOT EXISTS idx_consult_fee_quotes_profile ON consult_fee_quotes(profile_monday_id);
 
 -- Drive upload folders (v31+): one row per "Consult Documents …" folder Zapier
 -- made, matched to its appointment, and whether its link was written to the
@@ -1418,6 +1442,29 @@ export function initializeSchema(db: Database): void {
             updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_drive_folders_appt ON drive_folders(appointment_local_id);
+      `);
+    }
+
+    // Migration v31 → v32: consult fee quotes (P4 → Fee K auto-fill). New table only.
+    if (fromVersion < 32) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS consult_fee_quotes (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            appointment_monday_id  TEXT,
+            profile_monday_id      TEXT NOT NULL,
+            case_type              TEXT NOT NULL,
+            new_case_type          INTEGER NOT NULL DEFAULT 0,
+            af                     REAL,
+            ff                     REAL,
+            pf                     REAL,
+            author_oid             TEXT,
+            author_name            TEXT,
+            created_at             TEXT NOT NULL DEFAULT (datetime('now')),
+            fee_k_monday_id        TEXT,
+            applied_at             TEXT,
+            applied_note           TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_consult_fee_quotes_profile ON consult_fee_quotes(profile_monday_id);
       `);
     }
 

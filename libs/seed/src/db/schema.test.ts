@@ -546,3 +546,25 @@ describe("v28 → v29 consult preps", () => {
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'consult_preps'").get()).toBeTruthy();
   });
 });
+
+describe("v31 → v32 consult fee quotes", () => {
+  test("creates consult_fee_quotes on an existing database", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (31);
+    `);
+    initializeSchema(db);
+    const cols = (db.prepare("SELECT name FROM pragma_table_info('consult_fee_quotes')").all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toEqual(expect.arrayContaining([
+      "appointment_monday_id", "profile_monday_id", "case_type", "new_case_type", "af", "ff", "pf", "fee_k_monday_id", "applied_at", "applied_note",
+    ]));
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+  });
+
+  test("a fresh database has it too", () => {
+    const db = new Database(":memory:");
+    initializeSchema(db);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'consult_fee_quotes'").get()).toBeTruthy();
+  });
+});

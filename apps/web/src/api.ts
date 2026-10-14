@@ -1365,14 +1365,24 @@ export type ConsultSummaryStart = "started" | "already-running" | "disabled" | "
  * The attorney's consult note → a "Consult note" E&A entry on the client's
  * profile, which also starts the post-consult process.
  */
+/** Case type + fees quoted with the consult note; the Fee K auto-fill copies them onto the client's Fee K. */
+export interface ConsultFees {
+  caseType: string;
+  newCaseType?: boolean;
+  af: number | null;
+  ff: number | null;
+  pf: number | null;
+}
+
 export function postConsultNote(
   appointmentLocalId: string,
   note: string,
-): Promise<{ posted: true; pending: boolean; summary: ConsultSummaryStart }> {
+  fees?: ConsultFees | null,
+): Promise<{ posted: true; pending: boolean; summary: ConsultSummaryStart; quoted?: boolean }> {
   return apiFetch(`/api/appointments/${encodeURIComponent(appointmentLocalId)}/consult-note`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ note }),
+    body: JSON.stringify(fees ? { note, fees } : { note }),
   });
 }
 

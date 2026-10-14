@@ -9,7 +9,30 @@ each one comes from, and what the app does about it.
 | AF/FF deadline date, Attorney | Monday automations on Fee K creation | Monday |
 | **POC Full Name for Fee Ks** (`text_mm7xyv8e`) | The client's Jail Intake → "POC Name and relationship with detained:" | **This job** |
 | **AF / FF Surcharge Fee** (`numeric_mm0gfccq`, `numeric_mm0gc5x9`) | 3% of AF / FF, only when **Payment Method** (`dropdown_mm7v5eeb`) is `CREDIT Card - Surcharge Applies` | **This job** |
-| Contract for, AF, FF, PF | Decided by the attorney | A person. M11 (New contract) and M25 (Edit fees) write them; P14 flags a Fee K missing Contract for / AF / Attorney / E-mail / Address |
+| **Contract for, AF, FF, PF** | Decided by the attorney, entered with the **P4 consult note** ("Fees for the contract") | **This job**, from that quote. Otherwise a person (M11 New contract, M25 Edit fees). P14 flags a Fee K missing Contract for / AF / Attorney / E-mail / Address |
+
+## Fees quoted with the consult note
+
+Staff create Fee Ks with Monday's **Create Fee K** button (92 of 93 between
+Sep 15 and Oct 13), so P4 does not create one, which would make duplicates. Instead:
+
+1. The attorney fills **Fees for the contract** under the consult note (it opens
+   by itself when the status is Hire / Det Hire; otherwise "+ Add fees for the
+   contract"): case type, AF, FF, PF.
+2. Save consult note adds `Contract: Bond — AF $3,500.00 · PF $25.00` to the
+   note (so the quote is on Monday too) and stores a row in
+   `consult_fee_quotes` (schema v32, Monday ids, local-only).
+3. The job matches each unused quote to the client's Fee K (`matchQuotes`):
+   added from **3 days before to 30 days after** the note, with "Contract for…"
+   empty or the quoted case type. Several fits → the one already showing the
+   case type, else none, which leaves it for a person. A Fee K takes at most one quote, the newest.
+4. Empty fields only, re-checked on Monday. The quote is then stamped with the
+   Fee K (`fee_k_monday_id`, `applied_note`), also when everything was already
+   filled or Monday's case type turned out to be another one ("not used").
+   The quoted AF / FF also feed the card surcharge.
+
+A new case type quoted from P4 is added to Monday's dropdown when the job
+writes it (`create_labels_if_missing`).
 
 ## How the job works
 

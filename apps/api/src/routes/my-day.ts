@@ -16,6 +16,11 @@
 // profile, which then starts the post-consult process — the Consultation
 // Summary in the client's SharePoint folder (consult-summary.ts).
 //
+// The note can carry the contract's case type + fees: they are added to the
+// note as a "Contract: …" line and saved as a quote (consult_fee_quotes). No
+// Fee K is made here — staff still press Create Fee K in Monday — and the Fee K
+// auto-fill (fee-k-autofill.ts) copies the quote into that Fee K's empty fields.
+//
 // Like the release note (detention-write.ts) the note is not mirrored into
 // client_updates — the E&A sync dedupes on Monday's own fields, so a local copy
 // would come back twice. It shows in Notes after the next sync.
@@ -31,7 +36,8 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { currentUser } from "../db/user-context.js";
-import { getAppointments } from "@case-pipeline/query";
+import { getAppointments, getBoardColumnsFor } from "@case-pipeline/query";
+import { MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
 import type { ClientCaseSummary, ClientUpdate, ProfileSummary } from "@case-pipeline/query";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { FIRM_TIMEZONE } from "../firm.js";
@@ -219,14 +225,58 @@ function formatDay(ymd: string): string {
   });
 }
 
-export type ConsultNoteBody = { ok: true; note: string } | { ok: false; error: string };
+/** The case type + fees quoted with the note — copied onto the Fee K by fee-k-autofill.ts. */
+export interface ConsultFees {
+  caseType: string;
+  /** Not on Monday's "Contract for…" dropdown yet. */
+  newCaseType: boolean;
+  af: number | null;
+  ff: number | null;
+  pf: number | null;
+}
+
+export type ConsultNoteBody = { ok: true; note: string; fees: ConsultFees | null } | { ok: false; error: string };
+
+/** The most a fee can be — guards against a typo with extra zeros (same as M25). */
+const MAX_FEE = 1_000_000;
+
+function parseFee(v: unknown, label: string): { ok: true; value: number | null } | { ok: false; error: string } {
+  if (v == null || (typeof v === "string" && v.trim() === "")) return { ok: true, value: null };
+  const n = typeof v === "number" ? v : Number(String(v).replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(n) || n < 0 || n > MAX_FEE) return { ok: false, error: `${label} must be an amount between 0 and ${MAX_FEE.toLocaleString("en-US")}` };
+  return { ok: true, value: Math.round(n * 100) / 100 };
+}
 
 export function parseConsultNoteBody(raw: unknown): ConsultNoteBody {
   const body = (raw ?? {}) as Record<string, unknown>;
   const note = typeof body.note === "string" ? body.note.trim() : "";
   if (!note) return { ok: false, error: "note is required" };
   if (note.length > CONSULT_NOTE_MAX) return { ok: false, error: `note is too long (max ${CONSULT_NOTE_MAX} characters)` };
-  return { ok: true, note };
+
+  const f = body.fees && typeof body.fees === "object" ? (body.fees as Record<string, unknown>) : null;
+  if (!f) return { ok: true, note, fees: null };
+  const caseType = typeof f.caseType === "string" ? f.caseType.trim().replace(/\s+/g, " ") : "";
+  const amounts: Record<"af" | "ff" | "pf", number | null> = { af: null, ff: null, pf: null };
+  for (const [k, label] of [["af", "AF"], ["ff", "FF"], ["pf", "PF"]] as const) {
+    const r = parseFee(f[k], label);
+    if (!r.ok) return r;
+    amounts[k] = r.value;
+  }
+  // An untouched fees section is no quote at all.
+  if (!caseType && amounts.af == null && amounts.ff == null && amounts.pf == null) return { ok: true, note, fees: null };
+  if (!caseType) return { ok: false, error: "Pick the case type the fees are for" };
+  if (caseType.length > MAX_CASE_TYPE_LABEL) return { ok: false, error: `A case type can be at most ${MAX_CASE_TYPE_LABEL} characters` };
+  return { ok: true, note, fees: { caseType, newCaseType: f.newCaseType === true, ...amounts } };
+}
+
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+/** "Contract: Bond — AF $3,500.00 · PF $25.00": the line the note gets, so the quote is in Monday too. */
+export function consultFeesLine(fees: ConsultFees): string {
+  const parts = (["af", "ff", "pf"] as const)
+    .filter((k) => fees[k] != null)
+    .map((k) => `${k.toUpperCase()} ${usd.format(fees[k]!)}`);
+  return `Contract: ${fees.caseType}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
 }
 
 /**
@@ -311,7 +361,25 @@ export function registerMyDayRoutes(app: Express, deps: MyDayDeps): void {
     }
     const profileMondayId = appt.profileMondayId;
 
-    const input: CreateTimelineItemInput = { ...consultNoteActivity(parsed.note, appt.date), itemId: profileMondayId };
+    // Fees quoted with the note: the case type must be one of Monday's labels
+    // (any case), unless the attorney marked it new — then Monday adds it when
+    // the auto-fill writes it to the Fee K.
+    const fees = parsed.fees;
+    if (fees) {
+      const col = getBoardColumnsFor(db, "fee_ks")?.columns
+        .find((c) => c.type === "dropdown" && c.title.trim().toLowerCase().startsWith("contract for"));
+      const existing = col?.options.find((o) => o.label.toLowerCase() === fees.caseType.toLowerCase());
+      if (existing) {
+        fees.caseType = existing.label;
+        fees.newCaseType = false;
+      } else if (col && col.options.length > 0 && !fees.newCaseType) {
+        res.status(400).json({ error: `"${fees.caseType}" is not a case type on Monday`, allowed: col.options.map((o) => o.label) });
+        return;
+      }
+    }
+    const content = fees ? `${parsed.note}\n\n${consultFeesLine(fees)}` : parsed.note;
+
+    const input: CreateTimelineItemInput = { ...consultNoteActivity(content, appt.date), itemId: profileMondayId };
     let pending = false;
     try {
       await withTokenFallback((token) => dataSource.createTimelineItem(input, token), writeTokenOptions(req));
@@ -324,6 +392,17 @@ export function registerMyDayRoutes(app: Express, deps: MyDayDeps): void {
       });
     }
 
+    // The quote waits for the Fee K (staff still press Create Fee K in Monday);
+    // the auto-fill copies it into the Fee K's empty fields.
+    let quoteId: number | null = null;
+    if (fees) {
+      quoteId = Number(db.prepare(`
+        INSERT INTO consult_fee_quotes (appointment_monday_id, profile_monday_id, case_type, new_case_type, af, ff, pf, author_oid, author_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(appt.mondayItemId, profileMondayId, fees.caseType, fees.newCaseType ? 1 : 0, fees.af, fees.ff, fees.pf,
+        req.user?.oid ?? null, req.user?.name ?? null).lastInsertRowid);
+    }
+
     // The post-consult process: the Consultation Summary, with this note, into
     // the client's CONSULT folder — now rather than at the next sweep. The note
     // is saved either way; a failure to start is logged, never the request's.
@@ -331,7 +410,7 @@ export function registerMyDayRoutes(app: Express, deps: MyDayDeps): void {
     try {
       summary = startSummary({
         appointmentLocalId: appt.localId,
-        note: parsed.note,
+        note: content,
         author: req.user?.name ?? null,
         date: new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TIMEZONE }),
       });
@@ -341,8 +420,11 @@ export function registerMyDayRoutes(app: Express, deps: MyDayDeps): void {
 
     auditFromReq(req, "monday.consult_note_posted", {
       targetType: "profile", targetId: appt.profileLocalId, targetMondayId: profileMondayId,
-      metadata: { appointment: appt.mondayItemId, boardKey: appt.boardKey, length: parsed.note.length, queued: pending, summary },
+      metadata: {
+        appointment: appt.mondayItemId, boardKey: appt.boardKey, length: parsed.note.length, queued: pending, summary,
+        ...(fees ? { quote: { id: quoteId, caseType: fees.caseType, newCaseType: fees.newCaseType, af: fees.af, ff: fees.ff, pf: fees.pf } } : {}),
+      },
     });
-    res.status(pending ? 202 : 200).json({ data: { posted: true, pending, summary } });
+    res.status(pending ? 202 : 200).json({ data: { posted: true, pending, summary, quoted: fees != null } });
   });
 }

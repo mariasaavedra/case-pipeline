@@ -32,7 +32,7 @@ vi.mock("../auth/middleware.js", () => ({
 vi.mock("../audit/log.js", () => ({ auditFromReq: () => {} }));
 
 const {
-  resolveMyBoard, getMyDay, parseConsultNoteBody, consultNoteActivity, registerMyDayRoutes, CONSULT_NOTE_MAX,
+  resolveMyBoard, getMyDay, parseConsultNoteBody, consultNoteActivity, consultFeesLine, registerMyDayRoutes, CONSULT_NOTE_MAX,
 } = await import("./my-day.js");
 const { CONSULT_NOTE_ACTIVITY_ID } = await import("./reception.js");
 
@@ -67,7 +67,7 @@ describe("consult note body + activity", () => {
   it("requires a note and bounds its length", () => {
     expect(parseConsultNoteBody({ note: "  " })).toEqual({ ok: false, error: "note is required" });
     expect(parseConsultNoteBody({ note: "x".repeat(CONSULT_NOTE_MAX + 1) }).ok).toBe(false);
-    expect(parseConsultNoteBody({ note: " Hired, I-130 next. " })).toEqual({ ok: true, note: "Hired, I-130 next." });
+    expect(parseConsultNoteBody({ note: " Hired, I-130 next. " })).toEqual({ ok: true, note: "Hired, I-130 next.", fees: null });
   });
   it("logs under Consult note, titled with the consult's date", () => {
     expect(consultNoteActivity("Hired.", "2026-10-07")).toEqual({
@@ -105,6 +105,10 @@ function seed() {
   };
   prep.run("Standard Follow up", "Zoom", JSON.stringify({ ...body, apptType: "Standard Follow up", method: "Zoom", zoomLink: "z" }), "Old prep");
   prep.run("1st time", "Phone", JSON.stringify(body), "Karla");
+  db.prepare(
+    `INSERT INTO board_columns (board_key, monday_board_id, column_id, title, type, options, position)
+     VALUES ('fee_ks', '8025467270', 'dropdown_mkv1db6z', 'Contract for...', 'dropdown', ?, 6)`,
+  ).run(JSON.stringify([{ index: 1, label: "Bond" }, { index: 2, label: "I-130" }]));
 }
 
 describe("getMyDay", () => {
@@ -204,7 +208,7 @@ describe("POST /api/appointments/:localId/consult-note", () => {
 
   it("starts the post-consult process (Consultation Summary) with the note just written", async () => {
     const res = await post("a1", { note: "Hired for removal defense." });
-    expect((await res.json()).data).toEqual({ posted: true, pending: false, summary: "started" });
+    expect((await res.json()).data).toEqual({ posted: true, pending: false, summary: "started", quoted: false });
     expect(summaries).toEqual([{ appointmentLocalId: "a1", note: "Hired for removal defense.", author: "Ana Reyes" }]);
   });
 
@@ -221,5 +225,73 @@ describe("POST /api/appointments/:localId/consult-note", () => {
     const res = await post("a1", { note: "x" });
     expect(res.status).toBe(200);
     expect((await res.json()).data.summary).toBe("failed");
+  });
+});
+
+describe("consult note fees (the quote)", () => {
+  it("parses a fees section; an untouched one is no quote", () => {
+    expect(parseConsultNoteBody({ note: "x", fees: { caseType: "", af: "", ff: "", pf: "" } })).toEqual({ ok: true, note: "x", fees: null });
+    expect(parseConsultNoteBody({ note: "x", fees: { caseType: " Bond ", af: "3,500", ff: "", pf: 25 } })).toEqual({
+      ok: true, note: "x", fees: { caseType: "Bond", newCaseType: false, af: 3500, ff: null, pf: 25 },
+    });
+    expect(parseConsultNoteBody({ note: "x", fees: { af: 3500 } })).toEqual({ ok: false, error: "Pick the case type the fees are for" });
+    expect(parseConsultNoteBody({ note: "x", fees: { caseType: "Bond", af: -1 } }).ok).toBe(false);
+    expect(parseConsultNoteBody({ note: "x", fees: { caseType: "Bond", ff: "abc" } }).ok).toBe(false);
+  });
+
+  it("prints the line the note gets", () => {
+    expect(consultFeesLine({ caseType: "Bond", newCaseType: false, af: 3500, ff: null, pf: 25 })).toBe("Contract: Bond — AF $3,500.00 · PF $25.00");
+    expect(consultFeesLine({ caseType: "Bond", newCaseType: false, af: null, ff: null, pf: null })).toBe("Contract: Bond");
+  });
+});
+
+describe("POST consult-note with fees", () => {
+  let server: Server;
+  let base: string;
+  beforeEach(async () => {
+    calls = [];
+    down = false;
+    db = new Database(":memory:");
+    initializeSchema(db);
+    seed();
+    const app = express();
+    app.use(express.json());
+    registerMyDayRoutes(app, {
+      db, mondayApiToken: "tok", writeTokenOptions: () => ({ sharedToken: "tok" }) as never, startSummary: () => "started",
+    });
+    server = app.listen(0);
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+  afterEach(() => {
+    server.close();
+    db.close();
+  });
+  const post = (body: unknown) =>
+    fetch(`${base}/api/appointments/a1/consult-note`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const quotes = () => db.prepare("SELECT appointment_monday_id, profile_monday_id, case_type, new_case_type, af, ff, pf, author_name FROM consult_fee_quotes").all();
+
+  it("adds the fees to the note and saves the quote for the Fee K auto-fill", async () => {
+    const res = await post({ note: "Hired for bond.", fees: { caseType: "bond", af: 3500, pf: 25 } });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.quoted).toBe(true);
+    expect(calls[0]).toMatchObject({ itemId: "111", content: "Hired for bond.\n\nContract: Bond — AF $3,500.00 · PF $25.00" });
+    expect(quotes()).toEqual([{
+      appointment_monday_id: "901", profile_monday_id: "111", case_type: "Bond", new_case_type: 0, af: 3500, ff: null, pf: 25, author_name: "Ana Reyes",
+    }]);
+  });
+
+  it("refuses a case type Monday doesn't have unless it is marked new", async () => {
+    const res = await post({ note: "x", fees: { caseType: "Habeas", af: 9000 } });
+    expect(res.status).toBe(400);
+    expect(calls).toEqual([]);
+    expect(quotes()).toEqual([]);
+    expect((await post({ note: "x", fees: { caseType: "Habeas", newCaseType: true, af: 9000 } })).status).toBe(200);
+    expect(quotes()).toMatchObject([{ case_type: "Habeas", new_case_type: 1 }]);
+  });
+
+  it("keeps the quote when the note had to be queued", async () => {
+    down = true;
+    expect((await post({ note: "x", fees: { caseType: "I-130", ff: 675 } })).status).toBe(202);
+    expect(quotes()).toHaveLength(1);
   });
 });
