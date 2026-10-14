@@ -27,6 +27,10 @@ vi.mock("../data-source/index.js", () => ({
       calls.push({ op: "update", itemId, body });
       return "u1";
     },
+    createTimelineItem: async (input: { itemId: string; title: string; customActivityId: string; content: string }) => {
+      calls.push({ op: "activity", ...input });
+      return "t1";
+    },
     setColumnValues: async (_boardId: string, itemId: string, values: Record<string, unknown>) => {
       calls.push({ op: "columns", itemId, values });
     },
@@ -122,6 +126,8 @@ describe("Adobe Sign via Zapier", () => {
     const hook = hookBodies[0]!;
     expect(hook).toMatchObject({ ref: "CP-1", attorneyEmail: "atty@firm.com", clientEmail: "ana@mail.com", agreementName: "Fee K - Ana Pérez [CP-1]" });
     expect(calls.find((c) => c.op === "update")?.body).toContain("Ana Reyes");
+    // …and on the client's profile timeline (E&A), as a Contract note.
+    expect(calls.find((c) => c.op === "activity")).toMatchObject({ itemId: "111", title: "Contract sent for signature" });
 
     // Zap 1 downloads the PDF from the private link.
     const pdf = await fetch(hook.pdfUrl!);
@@ -143,6 +149,7 @@ describe("Adobe Sign via Zapier", () => {
     expect((await event({ event: "AGREEMENT_ACTION_COMPLETED", agreementId: "A1", participantEmail: "ana@mail.com" })).json.applied).toBe(false);
     await event({ event: "AGREEMENT_WORKFLOW_COMPLETED", agreementName: "Fee K - Ana Pérez [CP-1]" });
     expect(stage()).toBe("Needs Payment Link");
+    expect(calls.filter((c) => c.op === "activity").map((c) => c.title)).toEqual(["Contract signed"]);
     expect(calls.find((c) => c.op === "notify")).toMatchObject({ userId: "42", itemId: "555" });
 
     // Zapier retries are harmless.
@@ -157,7 +164,8 @@ describe("Adobe Sign via Zapier", () => {
     const r = await event({ event: "AGREEMENT_REJECTED", ref: "CP-1" });
     expect(r.json).toMatchObject({ applied: true, status: "rejected" });
     expect(stage()).toBe("Atty Reviewing");
-    expect(calls.map((c) => c.op).sort()).toEqual(["notify", "update"]);
+    expect(calls.map((c) => c.op).sort()).toEqual(["activity", "notify", "update"]);
+    expect(calls.find((c) => c.op === "activity")).toMatchObject({ itemId: "111", title: "Contract rejected" });
     expect(String(calls.find((c) => c.op === "update")?.body)).toContain("rejected");
   });
 

@@ -37,12 +37,14 @@ describe("contractValues", () => {
       date: "October 5, 2026", date_es: "5 de Octubre, 2026", salutation: "Ana LOPEZ",
       address_full: "123 Main St, Kansas City, MO 64105", hearing_date: "November 12, 2026",
       attorney_fee: "$5,000.00", filing_fee: "$675.00", postage_fee: "N/A",
-      surcharge: "$150.00", total_fee: "$5,825.00",
+      // 3% of AF + FF (5000 + 675; no postage).
+      surcharge: "$170.25", total_fee: "$5,845.25",
     });
   });
 
-  it("surcharge is 3% of the attorney fee only; a typed one wins", () => {
+  it("surcharge is 3% of AF + FF + postage; a typed one wins", () => {
     expect(surchargeFor(3500)).toBe(105);
+    expect(surchargeFor(5000, 675, 100)).toBe(173.25);
     expect(contractValues({ ...INPUT, surcharge: 0, postageFee: 100 })).toMatchObject({ surcharge: "$0.00", postage_fee: "$100.00", total_fee: "$5,775.00" });
   });
 });
@@ -72,7 +74,7 @@ describe("inspect + problems", () => {
 it("fills a template", async () => {
   const out = fillContractTemplate(docx("Dear {{salutation}}, total {{total_fee}}"), INPUT);
   const xml = new PizZip(await out.arrayBuffer()).file("word/document.xml")!.asText();
-  expect(xml).toContain("Dear Ana LOPEZ, total $5,825.00");
+  expect(xml).toContain("Dear Ana LOPEZ, total $5,845.25");
 });
 
 it("passes Adobe Sign text tags through untouched", async () => {

@@ -11,8 +11,8 @@
 // typo in a template is caught before a contract goes out), shows only the
 // fields that template uses, and fills it (fillContractTemplate). Amounts print
 // WITH their "$" ("$5,000.00"); dates as "October 5, 2026" (or the Spanish /
-// short variants). The 3% surcharge is on the attorney fee only, as in the
-// 2026 contracts.
+// short variants). The 3% surcharge is on everything the client pays by card:
+// AF + FF + postage (changed 2026-10-14; it was AF only).
 // =============================================================================
 
 import PizZip from "pizzip";
@@ -37,7 +37,7 @@ export interface ContractInput {
   filingFee: number | null;
   /** Null prints "N/A". */
   postageFee: number | null;
-  /** Null = 3% of the attorney fee. */
+  /** Null = 3% of AF + FF + postage. */
   surcharge: number | null;
   interviewFee: number | null;
   dueDate: string;
@@ -72,8 +72,9 @@ const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" 
 export const money = (n: number | null) => (n === null || !Number.isFinite(n) ? "" : usd.format(n));
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
-export const surchargeFor = (attorneyFee: number | null) => round2((attorneyFee ?? 0) * SURCHARGE_RATE);
-export const surchargeOf = (f: ContractInput) => f.surcharge ?? surchargeFor(f.attorneyFee);
+/** 3% of the fees it applies to: AF + FF + postage. */
+export const surchargeFor = (...fees: (number | null)[]) => round2(fees.reduce<number>((s, f) => s + (f ?? 0), 0) * SURCHARGE_RATE);
+export const surchargeOf = (f: ContractInput) => f.surcharge ?? surchargeFor(f.attorneyFee, f.filingFee, f.postageFee);
 export const totalOf = (f: ContractInput) =>
   round2((f.attorneyFee ?? 0) + (f.filingFee ?? 0) + (f.postageFee ?? 0) + surchargeOf(f));
 
@@ -96,7 +97,7 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "attorney_fee", label: "Attorney fee (AF)", example: "$5,000.00", value: (f) => money(f.attorneyFee), required: (f) => !positive(f.attorneyFee) },
   { tag: "filing_fee", label: "Filing fee (FF)", example: "$675.00", value: (f) => money(f.filingFee ?? 0) },
   { tag: "postage_fee", label: "Postage fee (N/A when empty)", example: "$100.00", value: (f) => (f.postageFee === null ? "N/A" : money(f.postageFee)) },
-  { tag: "surcharge", label: "Surcharge (3% of AF unless changed)", example: "$150.00", value: (f) => money(surchargeOf(f)) },
+  { tag: "surcharge", label: "Surcharge (3% of AF + FF + postage unless changed)", example: "$150.00", value: (f) => money(surchargeOf(f)) },
   { tag: "total_fee", label: "Total (AF + FF + postage + surcharge)", example: "$5,925.00", value: (f) => money(totalOf(f)) },
   { tag: "interview_fee", label: "Interview attendance fee", example: "$500.00", value: (f) => money(f.interviewFee), required: (f) => !positive(f.interviewFee) },
   { tag: "due_date", label: "Payment deadline", example: "October 12, 2026", value: (f) => dateEn(f.dueDate), required: (f) => !ymd(f.dueDate) },

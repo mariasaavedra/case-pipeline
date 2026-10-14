@@ -13,6 +13,8 @@
 export type UnitType = "" | "apt" | "ste" | "flr";
 
 export interface SplitAddress {
+  /** Everything before the city, unit included, as typed ("1234 Main St Apt 5"). */
+  line1: string;
   street: string;
   unitType: UnitType;
   unit: string;
@@ -49,7 +51,7 @@ function unitTypeOf(word: string | undefined): UnitType {
 const tidy = (s: string) => s.replace(/\s+/g, " ").replace(/^[\s,]+|[\s,.]+$/g, "").trim();
 
 export function splitUsAddress(line: string | null | undefined): SplitAddress {
-  const out: SplitAddress = { street: "", unitType: "", unit: "", city: "", state: "", zip: "" };
+  const out: SplitAddress = { line1: "", street: "", unitType: "", unit: "", city: "", state: "", zip: "" };
   let rest = tidy((line ?? "").replace(/\n/g, ", "));
   if (!rest) return out;
 
@@ -99,6 +101,8 @@ export function splitUsAddress(line: string | null | undefined): SplitAddress {
     }
   }
 
+  out.line1 = rest;
+
   // Unit.
   const unit = UNIT.exec(rest);
   if (unit && unit.index > 0) {
@@ -109,4 +113,16 @@ export function splitUsAddress(line: string | null | undefined): SplitAddress {
 
   out.street = rest;
   return out;
+}
+
+/**
+ * A one-line address as a letter prints it: the street line, and
+ * "City, ST zip". When no city is found the whole line stays on the street
+ * and cityStateZip is "" — staff fill it in.
+ */
+export function letterAddress(line: string | null | undefined): { street: string; cityStateZip: string } {
+  const full = tidy(line ?? "");
+  const a = splitUsAddress(full);
+  if (!a.city || (!a.state && !a.zip)) return { street: full, cityStateZip: "" };
+  return { street: a.line1, cityStateZip: `${a.city}, ${[a.state, a.zip].filter(Boolean).join(" ")}` };
 }

@@ -49,6 +49,7 @@ describe("planEsignEvent", () => {
     expect(p.status).toBe("signed");
     expect(p.steps).toEqual(["client_signed"]);
     expect(p.notify).toContain("Ana Pérez");
+    expect(p.title).toBe("Contract signed");
   });
 
   it("passes through the attorney step when that event was missed", () => {

@@ -563,6 +563,9 @@ export interface ContractPrefill {
   clientName: string;
   email: string;
   address: string;
+  /** `address` split for a letter; cityStateZip "" when it couldn't be split. */
+  street: string;
+  cityStateZip: string;
   attorneyName: string;
   /** From Settings → Documents; "" when the attorney isn't listed there. */
   attorneyEmail: string;
