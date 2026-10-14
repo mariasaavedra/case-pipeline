@@ -10,23 +10,29 @@ for contracts sent by hand.
 
 ## The flow
 
-1. P14 → ⋯ → **Generate contract** (M22) → pick the template → **Send for signature**.
-   The attorney's e-mail comes from Settings → Documents (matched by name), the
-   client's from Monday. Both can be edited.
-2. The browser makes the PDF (same as Generate PDF) and posts it to
+1. P14 → ⋯ → **Generate contract** (M22). Pick the template; it is picked
+   automatically when the folder holds only one. The attorney's e-mail comes from
+   Settings → Documents (matched by name), the client's from Monday. Both can be
+   edited.
+2. **Preview PDF** makes the PDF and shows it in the window. Staff check every
+   page, then **Send for signature** from the preview. Send exists only there,
+   and it sends that exact PDF, so what was checked is what the client gets.
+   **← Back to edit** drops the preview; any change makes a new one. From the
+   preview, **Download PDF** is still there for contracts sent by hand.
+3. The browser posts that PDF to
    `POST /api/contracts/:id/esign`. The API keeps it in `data/esign/` behind a
    random link that is valid for 3 days, and calls **Zap 1**. Then it moves the
    stage to **Atty Reviewing** and posts a note on the Fee K.
-3. Adobe emails the attorney. When they sign, the stage becomes **Sent to Client**
+4. Adobe emails the attorney. When they sign, the stage becomes **Sent to Client**
    and Contract Sent On is stamped, with a note.
-4. The client signs. The stage becomes **Needs Payment Link** and Signed Contract
+5. The client signs. The stage becomes **Needs Payment Link** and Signed Contract
    Received On is stamped, with a note. The sender gets a **Monday notification**
    and a **Slack** message. The signed PDF goes onto the Fee K's file column, or
    the client profile's Files column if the Fee K has none.
    Every note in this flow also goes into the **client profile's Emails &
    Activities** as a "Contract note" (titles: Contract sent for signature /
    signed by the attorney / signed / rejected / expired / recalled).
-5. Rejected, expired or recalled: a note, a Monday notification and Slack. **The
+6. Rejected, expired or recalled: a note, a Monday notification and Slack. **The
    stage is not changed**, so a person decides what comes next. A new send is
    then allowed.
 
