@@ -8,6 +8,11 @@ for signature or hear back when it's signed. Decided 2026-10-05: keep Acrobat
 Pro (≈40 contracts a month), and make the app the place staff **record** each
 step, so P14 shows where every contract is and Monday gets the dates.
 
+> **Since 2026-10-14** contracts can also go to Adobe Sign through Zapier
+> straight from M22 ("Send for signature"), with the stage following the
+> signatures by itself: [esign-zapier.md](esign-zapier.md). The manual steps
+> below remain for contracts sent by hand.
+
 ## The flow
 
 Staff send the contract from Acrobat Pro with two signers in order:

@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 32;
+export const SCHEMA_VERSION = 33;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -524,6 +524,30 @@ CREATE TABLE IF NOT EXISTS drive_folders (
     updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_drive_folders_appt ON drive_folders(appointment_local_id);
+
+-- Adobe Sign agreements sent through Zapier (v33+): one row per contract sent
+-- from P14. Local-only — NOT rebuilt by sync. routes/esign.ts.
+CREATE TABLE IF NOT EXISTS esign_agreements (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_local_id      TEXT NOT NULL,
+    contract_monday_id     TEXT NOT NULL,          -- the Fee K (stable)
+    profile_monday_id      TEXT,
+    client_name            TEXT NOT NULL,
+    client_email           TEXT NOT NULL,
+    attorney_email         TEXT NOT NULL,
+    agreement_id           TEXT UNIQUE,            -- Adobe's, posted back by Zap 1
+    file_token             TEXT NOT NULL UNIQUE,   -- the PDF's private link
+    status                 TEXT NOT NULL,          -- sending | out_for_signature | attorney_signed | signed | rejected | expired | recalled | send_failed
+    sent_by_oid            TEXT,
+    sent_by_name           TEXT,
+    sent_by_monday_id      TEXT,                   -- who gets the Monday notifications
+    last_event             TEXT,
+    last_error             TEXT,
+    signed_pdf_at          TEXT,
+    created_at             TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_esign_agreements_contract ON esign_agreements(contract_monday_id);
 
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_profiles_batch ON profiles(batch_id);
@@ -1465,6 +1489,33 @@ export function initializeSchema(db: Database): void {
             applied_note           TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_consult_fee_quotes_profile ON consult_fee_quotes(profile_monday_id);
+      `);
+    }
+
+    // Migration v32 → v33: Adobe Sign agreements (Zapier). New table only.
+    if (fromVersion < 33) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS esign_agreements (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            contract_local_id      TEXT NOT NULL,
+            contract_monday_id     TEXT NOT NULL,          -- the Fee K (stable)
+            profile_monday_id      TEXT,
+            client_name            TEXT NOT NULL,
+            client_email           TEXT NOT NULL,
+            attorney_email         TEXT NOT NULL,
+            agreement_id           TEXT UNIQUE,            -- Adobe's, posted back by Zap 1
+            file_token             TEXT NOT NULL UNIQUE,   -- the PDF's private link
+            status                 TEXT NOT NULL,          -- sending | out_for_signature | attorney_signed | signed | rejected | expired | recalled | send_failed
+            sent_by_oid            TEXT,
+            sent_by_name           TEXT,
+            sent_by_monday_id      TEXT,                   -- who gets the Monday notifications
+            last_event             TEXT,
+            last_error             TEXT,
+            signed_pdf_at          TEXT,
+            created_at             TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_esign_agreements_contract ON esign_agreements(contract_monday_id);
       `);
     }
 

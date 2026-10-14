@@ -302,7 +302,13 @@ export function ContractsPage() {
         </Button>
       </div>
       {creating && <NewContractModal onClose={() => setCreating(false)} />}
-      {generating && <GenerateContractModal contract={generating} onClose={() => setGenerating(null)} />}
+      {generating && (
+        <GenerateContractModal
+          contract={generating}
+          onClose={() => setGenerating(null)}
+          onSent={(msg) => { setNotice(msg); void load(); }}
+        />
+      )}
       {editing && (
         <EditFeesModal
           contract={editing.c}

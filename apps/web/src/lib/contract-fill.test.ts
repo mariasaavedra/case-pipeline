@@ -50,7 +50,7 @@ describe("contractValues", () => {
 describe("inspect + problems", () => {
   it("lists the template's fields and needs only those", () => {
     const check = inspectContractTemplate(docx("Dear {{client_name}}, fee {{attorney_fee}} on {{hearing_date}}"));
-    expect(check).toEqual({ tags: ["client_name", "hearing_date", "attorney_fee"], unknown: [], errors: [] });
+    expect(check).toEqual({ tags: ["client_name", "hearing_date", "attorney_fee"], unknown: [], signTags: [], errors: [] });
     expect(contractProblems(check, INPUT)).toEqual([]);
     expect(contractProblems(check, { ...INPUT, hearingDate: "" })).toEqual(["Hearing date is missing"]);
     // form_name is empty-able here because this template doesn't use it
@@ -73,4 +73,14 @@ it("fills a template", async () => {
   const out = fillContractTemplate(docx("Dear {{salutation}}, total {{total_fee}}"), INPUT);
   const xml = new PizZip(await out.arrayBuffer()).file("word/document.xml")!.asText();
   expect(xml).toContain("Dear Ana LOPEZ, total $5,825.00");
+});
+
+it("passes Adobe Sign text tags through untouched", async () => {
+  const text = "Fee {{attorney_fee}} {{Sig_es_:signer1:signature}} {{Int_es_:signer2:initials}} {{*Addr_es_:signer2        }}";
+  const check = inspectContractTemplate(docx(text));
+  expect(check.unknown).toEqual([]);
+  expect(check.signTags).toEqual(["Sig_es_:signer1:signature", "Int_es_:signer2:initials", "*Addr_es_:signer2"]);
+  const out = fillContractTemplate(docx(text), INPUT);
+  const xml = new PizZip(await out.arrayBuffer()).file("word/document.xml")!.asText();
+  expect(xml).toContain("Fee $5,000.00 {{Sig_es_:signer1:signature}} {{Int_es_:signer2:initials}} {{*Addr_es_:signer2        }}");
 });

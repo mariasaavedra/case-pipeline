@@ -1057,6 +1057,26 @@ export async function createUpdate(
 }
 
 /**
+ * Send a Monday notification (the bell) to one user, pointing at an item.
+ * Monday sends it as the token's owner. Returns nothing useful — the mutation's
+ * `id` is not a stable notification id.
+ */
+export async function createNotification(
+  userId: string,
+  itemId: string,
+  text: string,
+  tokenOverride?: string,
+): Promise<void> {
+  await mondayRequest<{ data: { create_notification: { text: string } } }>(
+    `mutation CreateNotification($userId: ID!, $targetId: ID!, $text: String!) {
+       create_notification(user_id: $userId, target_id: $targetId, text: $text, target_type: Project) { text }
+     }`,
+    { userId, targetId: itemId, text },
+    tokenOverride,
+  );
+}
+
+/**
  * Pin an update to the top of its item's update feed (`pin_to_top`). Not on the
  * 2024-10 schema the rest of the app is pinned to, so it rides the same
  * per-request version override as mentions. Callers treat a failure as

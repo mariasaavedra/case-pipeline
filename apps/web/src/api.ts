@@ -561,6 +561,8 @@ export interface ContractPrefill {
   email: string;
   address: string;
   attorneyName: string;
+  /** From Settings → Documents; "" when the attorney isn't listed there. */
+  attorneyEmail: string;
   contractFor: string[];
   attorneyFee: number | null;
   filingFee: number | null;
@@ -571,6 +573,25 @@ export interface ContractPrefill {
 
 export async function fetchContractPrefill(localId: string): Promise<ContractPrefill> {
   return apiFetch(`/api/contracts/${encodeURIComponent(localId)}/document-form`);
+}
+
+/** Whether this server can send contracts to Adobe Sign (Zapier configured). */
+export async function fetchEsignStatus(): Promise<{ enabled: boolean }> {
+  return apiFetch("/api/esign/status");
+}
+
+/** Send the generated PDF to Adobe Sign via Zapier: attorney signs first, then the client. */
+export async function sendContractForSignature(
+  localId: string,
+  pdf: Blob,
+  emails: { attorneyEmail: string; clientEmail: string },
+): Promise<{ id: number; stage: string | null; warning: string | null }> {
+  const q = new URLSearchParams(emails);
+  return apiFetch(`/api/contracts/${encodeURIComponent(localId)}/esign?${q}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/pdf" },
+    body: pdf,
+  });
 }
 
 /** Audit a generated contract (template name + fees only). Best-effort. */
