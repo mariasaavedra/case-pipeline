@@ -173,10 +173,48 @@ export function contractValues(input: ContractInput): Record<string, string> {
   return Object.fromEntries(CONTRACT_FIELDS.map((f) => [f.tag, f.value(input)]));
 }
 
+const RUN_RE = /<w:r[ >](?:(?!<\/w:r>)[\s\S])*?<\/w:r>/g;
+const HIGHLIGHT_RE = /<w:highlight\b[^>]*\/>/g;
+
+/**
+ * Staff mark the blanks in a template with Word's highlighter (magenta in the
+ * 2026 COURT Fee K) so they're easy to spot while editing. The fill keeps a
+ * run's formatting, so the colour would land on the client's contract: drop
+ * the highlight from the runs that make up a {{tag}} (a tag can be split over
+ * several runs), and leave every other highlight alone.
+ */
+export function unhighlightTags(xml: string): string {
+  let open = false;
+  // A paragraph holding a tag also carries the highlight on its end mark (pPr).
+  const marks = xml.replace(/<w:p[ >](?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g, (p) =>
+    p.includes("{{") ? p.replace(/<w:pPr>[\s\S]*?<\/w:pPr>/, (ppr) => ppr.replace(HIGHLIGHT_RE, "")) : p);
+  return marks.replace(RUN_RE, (run) => {
+    const text = [...run.matchAll(/<w:t(?: [^>]*)?>([^<]*)<\/w:t>/g)].map((m) => m[1]).join("");
+    const inTag = open || text.includes("{{");
+    const lastOpen = text.lastIndexOf("{{");
+    const lastClose = text.lastIndexOf("}}");
+    if (lastOpen > lastClose) open = true;
+    else if (lastClose > lastOpen) open = false;
+    return inTag ? run.replace(HIGHLIGHT_RE, "") : run;
+  });
+}
+
+/** The template with its tags' highlight removed (document, headers, footers). */
+function withoutTagHighlight(file: ArrayBuffer): PizZip {
+  const zip = new PizZip(file);
+  for (const name of Object.keys(zip.files)) {
+    if (!/^word\/(document|header\d*|footer\d*)\.xml$/.test(name)) continue;
+    const xml = zip.file(name)!.asText();
+    const clean = unhighlightTags(xml);
+    if (clean !== xml) zip.file(name, clean);
+  }
+  return zip;
+}
+
 /** Fill a template. Call contractProblems first. */
 export function fillContractTemplate(file: ArrayBuffer, input: ContractInput): Blob {
   const values = contractValues(input);
-  const doc = new Docxtemplater(new PizZip(file), {
+  const doc = new Docxtemplater(withoutTagHighlight(file), {
     ...OPTIONS,
     // Adobe Sign tags print back as they were typed (spaces included: they set the field's width).
     parser: (tag: string) => ({ get: () => (isAdobeSignTag(tag) ? `{{${tag}}}` : values[tag.trim()] ?? "") }),
