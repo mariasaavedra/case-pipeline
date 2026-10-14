@@ -23,6 +23,7 @@ export { searchByType } from "./search";
 export { getAlerts, getAlertsTotalCount } from "./alerts";
 export { getActiveCases } from "./active-cases";
 export { getPrescheduling } from "./prescheduling";
+export { getMyCases, FEE_KS_BOARD_KEY, PS_STAGE_COLUMN_ID } from "./my-cases";
 export { getPendingContracts, CONTRACT_STEPS, FEE_K_COLUMN_IDS, nextContractStep } from "./pending-contracts";
 export { getCourtCases, hearingKindOf, ACTIVE_COURT_CASE_GROUP, PREP_STAGE_COLUMN_TITLE } from "./court-cases";
 export { getCourtMotions, getMotionWriteSchema, motionDateFieldFor, phaseOf as motionPhaseOf, MOTION_COLUMN_IDS, HEARING_SOON_DAYS, MOTION_LATE_DAYS, MOTION_WAITING_DAYS } from "./court-motions";
@@ -42,6 +43,7 @@ export type { MailPageInput, MailScanResult, MailScanDocument, NoticeMatch, Noti
 export type { CallLogEntry, CallLogFilters, CallLogListResult } from "./types";
 export type { ActiveCase, ActiveCasesAssignee, ActiveCasesResult, ActiveCasesOptions, Urgency } from "./active-cases";
 export type { PreschedulingCase, PreschedulingResult, PreschedulingOptions, WaitLevel } from "./prescheduling";
+export type { MyCasesData, MyCasesOptions, MyOpenForm, MyPreschedulingCase } from "./my-cases";
 export type { PendingContract, PendingContractsResult, PendingContractsOptions, ContractStep, ContractStepDef } from "./pending-contracts";
 export type { CaseMotion, CourtCase, CourtCasesResult, CourtCasesOptions, CourtCaseFlag, HearingKind, Readiness, ReadinessThresholds } from "./court-cases";
 export type { AddressChange, AddressChangesResult, AddressChangePhase, AddressChangeFlag } from "./address-changes";

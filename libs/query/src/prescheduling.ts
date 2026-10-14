@@ -77,7 +77,7 @@ export const NO_STAGE = "No stage";
 
 // Workflow order for the table columns. Labels not listed here (new ones added
 // on Monday) follow in alphabetical order, then "No stage".
-const STAGE_ORDER = [
+export const STAGE_ORDER = [
   "Need to contact client",
   "Need Evidence",
   "P1 Working on letter",

@@ -181,7 +181,9 @@ by name); the board tabs switch to another attorney.
 
 | Code | Name | Notes |
 |---|---|---|
-| P6.1 | Case list | Also the "link your board identity" and "no cases" states |
+| P6.1 | Header + switcher | Whose cases (D38: the user's own by default — their linked board name — another paralegal, or Everyone; remembered per browser), counts, "not cooperating" / "past target date" tags, show/hide North Pole parks; a "link your board name" note when the user has none (they see everyone's meanwhile) |
+| P6.2 | Prescheduling | Paid Fee Ks (group `new_group3327__1`) grouped by PS Stage in workflow order, each group in its Monday colour. Row: client, Not cooperating / Court / North Pole tags, Contract for, hired + days (30/60 colours), reminder / evidence dates, E-File link. Click → M27 |
+| P6.3 | Open Forms | Open Forms + Court Forms grouped by Status (most urgent group first, North Pole last). Row: client, Court / Urgent tags, forms, target date + days, forms appointment / sent, E-File link. Click → M27 |
 
 ### Inside P7 Calendar
 
@@ -273,7 +275,8 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M23 | Generate document | "Generate document" | P3.0 → **Generate Doc**. Pick the document (only **G-28** so far); its fields show pre-filled — attorney from P11.3.4 (the client's Monday attorney when it matches), client from Monday (mailing address split into boxes), a detained client's facility as the address with ICE + Respondent — all editable. **Generate G-28** fills the official USCIS PDF (`templates/forms/g-28.pdf`), downloads it and saves a copy in the client's SharePoint folder (e-file first). Nothing written to Monday | `GenerateDocModal.tsx` |
 | M24 | Link client | "Link client" | P17.2 → **Link client** on a "No profile" row. Profile search pre-filled with the client's name from the appointment; **Link** sets the appointment's Profiles column in Monday (queued on an outage). Only unlinked consults — changing a link stays in Monday | `ConsultLinkModal.tsx` |
 | M25 | Edit contract | "Edit contract" | P14.3 → ⋯ → **Change case type…** / **Edit fees…**, or click the case type / the fees. Case type (the Fee Ks "Contract for…" dropdown, one label — replaces what was there; **+ New case type…** adds a label to the dropdown on Monday) + AF / FF / PF (Postage fee); only what changed is written to the Fee K on Monday, in one write (empty fee clears); refused if Monday changed since; queued on an outage | `EditFeesModal.tsx` |
-| M26 | Client files | "E-file / Consult file" | P14.3 → ⋯ → **E-file / Consult file…**. The client's SharePoint e-file / consult folders browsed in place (same browser as P4.5); a file → M12 | `ClientFilesModal.tsx` |
+| M26 | Client files | "E-file / Consult file" | P14.3 → ⋯ → **E-file / Consult file…**, or M27 → **Browse files here**. The client's SharePoint e-file / consult folders browsed in place (same browser as P4.5); a file → M12 | `ClientFilesModal.tsx` |
+| M27 | Case card | client name | P6.2 / P6.3 → a row. **Open E-File** (profile's link, else the Fee K / Open Form mirror) + **Browse files here** (→ M26), or **Link E-File folder** (paste a SharePoint link → the profile's E-File on Monday, only when it has none); **Client** (→ M3) and **Monday ↗**. PS Stage (Fee K) / Status (Open Form) via D39 with a confirm; dates — Fee K: Hired, **Reminder sent**, **Evidence received**; Open Form: On Open Forms since, Hired, **Forms appointment**, **Target date**, **Forms sent** — Set / Edit / Clear, and **Today** on the ones that record something done. Two tabs: **Details** (all of the above) and **Notes** — the client's timeline as in M3 (Notes / All with emails, replies) with a box on top that posts a note on the profile. Every write is refused if Monday changed since, queued on an outage | `CaseCardModal.tsx` |
 | M20 | Change consult | "Change consult" | P17.2 → **Edit**. Attorney, date, time; a new attorney moves the appointment to their board in Monday. Calendly is not changed (reminder shown) | `ConsultScheduleModal.tsx` |
 
 ## Dropdowns
@@ -316,6 +319,8 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D34 | Paralegal filter | P19.2 | `FoiasPage.tsx` |
 | D35 | Client folder menu | M18 → Documents **⋯**: **Use a different folder…** (paste a SharePoint link — replaces the profile's on save, only if Monday still holds it), **Find or create e-file folder**, **Find or create consult folder** (creates only when none exists) | `ConsultPrepModal.tsx` |
 | D36 | Detention center | M18 → Type of appt **Detained appt**: the Court Cases board's Det. Facility labels (synced) + **Other** (free text). Pre-filled from the client's open court case | `ConsultPrepModal.tsx` |
+| D38 | Whose cases | P6.1: each paralegal on the Fee Ks / Open Forms boards ("(me)" = the user's linked name) + **Everyone** | `MyCasesPage.tsx` |
+| D39 | Case status picker | M27: the board's real PS Stage / Status labels in their Monday colours; picking one asks to confirm | `CaseCardModal.tsx` |
 | D37 | Client actions menu | P3.0 → **⋯** (also in the M3 header, links only): **Open in DMS** (only when the profile has a DMS link — Innovation Law Lab, cases up to end of 2024; opens one reusable window, DMS can't be embedded), **Open in Monday.com**, **Copy client summary**, **Generate document…** (→ M23), **Relations** | `ActionButtons.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.
