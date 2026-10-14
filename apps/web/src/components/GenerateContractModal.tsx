@@ -10,10 +10,13 @@
 // Generate PDF fills it in the browser and converts it with the user's
 // Microsoft 365 (convertDocxToPdf); Word downloads the filled .docx to edit.
 // Nothing is written to Monday; the generation is audited (template + fees).
+// Send for signature (when the server has Zapier set up) makes the same PDF and
+// hands it to Adobe Sign — attorney first, then the client — and the API moves
+// the stage, leaves a note and follows the signatures (routes/esign.ts).
 // =============================================================================
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchContractPrefill, logContractGenerated } from "../api";
+import { fetchContractPrefill, fetchEsignStatus, logContractGenerated, sendContractForSignature } from "../api";
 import type { PendingContract } from "../api";
 import { useAuth } from "../auth/useAuth";
 import {
@@ -31,6 +34,8 @@ import { Button } from "./ui/button";
 interface Props {
   contract: PendingContract;
   onClose: () => void;
+  /** After a send to Adobe Sign, with a line for the page. */
+  onSent?: (message: string) => void;
 }
 
 const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)", marginBottom: 4, fontFamily: "var(--font-body)" } as const;
@@ -75,14 +80,16 @@ function Field({ id, label, hint, children }: { id: string; label: string; hint?
   );
 }
 
-export function GenerateContractModal({ contract: c, onClose }: Props) {
+export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   const { user } = useAuth();
   const [input, setInput] = useState<ContractInput | null>(null);
   const [templates, setTemplates] = useState<{ driveId: string; items: DriveItem[] } | null>(null);
   const [picked, setPicked] = useState<DriveItem | null>(null);
   const [file, setFile] = useState<{ id: string; data: ArrayBuffer; check: TemplateCheck } | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
-  const [busy, setBusy] = useState<"pdf" | "docx" | null>(null);
+  const [busy, setBusy] = useState<"pdf" | "docx" | "send" | null>(null);
+  const [esign, setEsign] = useState(false);
+  const [attorneyEmail, setAttorneyEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [needsConsent, setNeedsConsent] = useState(false);
   const [done, setDone] = useState<string | null>(null);
@@ -99,7 +106,9 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
 
   useEffect(() => {
     void loadTemplates();
+    fetchEsignStatus().then((s) => setEsign(s.enabled)).catch(() => setEsign(false));
     fetchContractPrefill(c.localId)
+      .then((p) => { setAttorneyEmail(p.attorneyEmail ?? ""); return p; })
       .then((p) => setInput({
         date: today(), clientName: p.clientName, salutation: p.clientName, email: p.email,
         // Monday keeps one line; staff move the city part to its own field when the contract splits them.
@@ -145,6 +154,32 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
           value={(input[k] as number | null) ?? ""} onChange={(e) => set(k, num(e.target.value) as never)} />
       </Field>
     ) : null;
+
+  const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+  const sendReady = !!input && emailOk(attorneyEmail) && emailOk(input.email)
+    && attorneyEmail.trim().toLowerCase() !== input.email.trim().toLowerCase();
+
+  const sendForSignature = async () => {
+    if (!input || !file || !picked || problems.length > 0 || !sendReady) return;
+    setBusy("send");
+    setError(null);
+    setDone(null);
+    try {
+      const docx = fillContractTemplate(file.data, input);
+      const name = `${baseName(picked.name)} - ${input.clientName.replace(/[\\/:*?"<>|]+/g, " ").trim()}`;
+      const pdf = await convertDocxToPdf(docx, `${name}.docx`);
+      const res = await sendContractForSignature(c.localId, pdf, { attorneyEmail: attorneyEmail.trim(), clientEmail: input.email.trim() });
+      void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+      const msg = `${c.clientName}: sent to Adobe Sign (attorney first, then the client)${res.stage ? ` · stage → ${res.stage}` : ""}`;
+      if (res.warning) setDone(`Sent to Adobe Sign. ${res.warning}`);
+      else { onSent?.(msg); onClose(); }
+    } catch (e) {
+      if (e instanceof GraphConsentRequiredError) setNeedsConsent(true);
+      else setError(e instanceof Error ? e.message : "Could not send the contract");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const generate = async (format: "pdf" | "docx") => {
     if (!input || !file || !picked || problems.length > 0) return;
@@ -263,6 +298,32 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
             </>
           )}
 
+          {esign && file && input && !templateBroken && (
+            <div className="rounded-md p-3 space-y-2" style={{ border: "1px solid var(--color-border-light)" }}>
+              <div className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>Send for signature (Adobe Sign)</div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field id="m22-atty-email" label="1. Attorney signs first" hint={attorneyEmail ? undefined : "Not in Settings → Documents — type it."}>
+                  <input id="m22-atty-email" type="email" className={inputClass} style={inputStyle}
+                    value={attorneyEmail} onChange={(e) => setAttorneyEmail(e.target.value)} />
+                </Field>
+                <Field id="m22-client-email" label="2. Then the client">
+                  <input id="m22-client-email" type="email" className={inputClass} style={inputStyle}
+                    value={input.email} onChange={(e) => set("email", e.target.value)} />
+                </Field>
+              </div>
+              {file.check.signTags.length === 0 && (
+                <p className="text-xs rounded p-2" style={{ background: "var(--color-amber-light)", color: "var(--color-ink)" }}>
+                  This template has no Adobe signing tags, so Adobe will add a signature page at the end instead of using the
+                  contract&apos;s own signature, initials and address lines. Add the tags to the Word template (see the READ ME in the folder).
+                </p>
+              )}
+              <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
+                Moves the stage to Atty Reviewing and leaves a note on Monday. Each signature updates the stage by itself;
+                you get a Monday notification when the client signs.
+              </p>
+            </div>
+          )}
+
           {error && <p className="text-sm" style={{ color: "var(--urgency-overdue)" }}>{error}</p>}
           {done && <p className="text-sm" style={{ color: "var(--color-ink)" }}>✓ {done}</p>}
 
@@ -273,9 +334,15 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
                 title="Download the filled Word file, to make changes before sending">
                 {busy === "docx" ? "Filling…" : "Word"}
               </Button>
-              <Button type="button" disabled={!file || templateBroken || problems.length > 0 || busy !== null} onClick={() => generate("pdf")}>
+              <Button type="button" variant={esign ? "outline" : undefined} disabled={!file || templateBroken || problems.length > 0 || busy !== null} onClick={() => generate("pdf")}>
                 {busy === "pdf" ? "Making PDF…" : "Generate PDF"}
               </Button>
+              {esign && (
+                <Button type="button" disabled={!file || templateBroken || problems.length > 0 || !sendReady || busy !== null} onClick={sendForSignature}
+                  title="Make the PDF and send it to Adobe Sign: attorney first, then the client">
+                  {busy === "send" ? "Sending…" : "Send for signature"}
+                </Button>
+              )}
             </div>
           </div>
         </div>

@@ -108,6 +108,14 @@ export const CONTRACT_FIELDS: ContractField[] = [
 
 const BY_TAG = new Map(CONTRACT_FIELDS.map((f) => [f.tag, f]));
 
+/**
+ * Adobe Sign text tags — {{Sig_es_:signer1:signature}}, {{*Addr_es_:signer2}}…
+ * — share our {{ }} braces. They always contain "_es_", are not ours to fill,
+ * and must reach the PDF exactly as typed: Adobe turns each into a signing
+ * field there (signer1 = attorney, signer2 = client; docs/features/esign-zapier.md).
+ */
+export const isAdobeSignTag = (tag: string) => /_es_/i.test(tag);
+
 // Same delimiters as the rest of the app's templates (libs/template/src/docx.ts).
 const OPTIONS = { delimiters: { start: "{{", end: "}}" }, paragraphLoop: true, linebreaks: true, nullGetter: () => "" };
 
@@ -116,6 +124,8 @@ export interface TemplateCheck {
   tags: string[];
   /** Tags that aren't fields (typos) — the contract can't be generated. */
   unknown: string[];
+  /** Adobe Sign text tags, passed through untouched. None = Adobe adds a signature page at the end. */
+  signTags: string[];
   /** Broken tags ("{{client_name}" …), from docxtemplater. */
   errors: string[];
 }
@@ -136,14 +146,15 @@ export function inspectContractTemplate(file: ArrayBuffer): TemplateCheck {
     });
     return {
       tags: CONTRACT_FIELDS.map((f) => f.tag).filter((t) => found.has(t)),
-      unknown: [...found].filter((t) => !BY_TAG.has(t)),
+      unknown: [...found].filter((t) => !BY_TAG.has(t) && !isAdobeSignTag(t)),
+      signTags: [...found].filter(isAdobeSignTag),
       errors: [],
     };
   } catch (e) {
     const err = e as DocxError;
     const list = err.properties?.errors?.map((x) => x.properties?.explanation ?? "").filter(Boolean)
       ?? [err.properties?.explanation ?? (e instanceof Error ? e.message : "This isn't a Word file the app can read")];
-    return { tags: [], unknown: [], errors: list };
+    return { tags: [], unknown: [], signTags: [], errors: list };
   }
 }
 
@@ -164,8 +175,13 @@ export function contractValues(input: ContractInput): Record<string, string> {
 
 /** Fill a template. Call contractProblems first. */
 export function fillContractTemplate(file: ArrayBuffer, input: ContractInput): Blob {
-  const doc = new Docxtemplater(new PizZip(file), OPTIONS);
-  doc.render(contractValues(input));
+  const values = contractValues(input);
+  const doc = new Docxtemplater(new PizZip(file), {
+    ...OPTIONS,
+    // Adobe Sign tags print back as they were typed (spaces included: they set the field's width).
+    parser: (tag: string) => ({ get: () => (isAdobeSignTag(tag) ? `{{${tag}}}` : values[tag.trim()] ?? "") }),
+  });
+  doc.render(values);
   return doc.getZip().generate({
     type: "blob",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
