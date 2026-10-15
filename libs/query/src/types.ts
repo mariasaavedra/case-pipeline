@@ -44,6 +44,14 @@ export interface ProfileSummary {
    * Only the full client detail sets it.
    */
   detainedAt?: string | null;
+  /**
+   * For texting the client (M28): Phone 2, Preferred Language ("Espanol",
+   * "English"…) and First Name from the Profiles board. Only the full client
+   * detail sets them.
+   */
+  phone2?: string | null;
+  preferredLanguage?: string | null;
+  firstName?: string | null;
 }
 
 /**

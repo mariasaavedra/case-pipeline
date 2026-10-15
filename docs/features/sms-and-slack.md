@@ -1,6 +1,6 @@
 # SMS (RingCentral) + Slack notifications
 
-**Status:** SMS core + Log Call button built 2026-10-15 (PR 3 below, done first); Slack and the other SMS entry points planned
+**Status:** SMS built 2026-10-15 — core + Log Call (PR 3, #132), Payment links + client page (PR 4, stacked on #132). Slack planned
 **Owner:** Rafael
 
 Two outbound channels, built on one shape: a small sender in `apps/api/src/notify/`,
@@ -16,8 +16,13 @@ from seed data.
 | Where | Button | What it does |
 |---|---|---|
 | Log Call popup (`LogCallModal`) | **Text consult link** | Pick a template (EN / ES), preview, send to the number dialled (or the linked client's phone) |
-| Payment links popup (M21) | **Text links to client** | Sends the LawPay links with the payment template, then records "Mark sent" (stage → Payment link sent) |
-| Client page | **Text client** | Free text or a template, to Phone / Phone 2 |
+| Payment links popup (M21) | **Text links to client** | Sends the LawPay links with the payment template; a **live** send then records "Mark sent" (stage → Payment link sent). A test-mode send marks nothing |
+| Client page header (P3.0) | **Text** (next to the phone) | Free text or a template, to Phone, with Phone 2 one click away |
+
+Language comes from the call's Language (Call Log) or the profile's Preferred
+Language ("Espanol" / "English"); `{{firstName}}` from the profile's First Name
+column when there is one, else the first word of the name. Payment-link texts
+run 3–6 segments (each LawPay link is ~150 characters) — expected.
 
 Every send is **click-to-send with a preview** — nothing texts a client without
 a person pressing Send. (Fully automatic sends, e.g. consult reminders, are a

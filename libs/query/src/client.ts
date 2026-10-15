@@ -144,6 +144,29 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
     displayName: readDisplayName(rawColumnValues),
     dmsUrl: readDmsUrl(rawColumnValues),
     detainedAt: getDetainedAt(db, localId),
+    ...readTextingContact(rawColumnValues),
+  };
+}
+
+/** What a text to the client needs beyond `phone` (M28): see ProfileSummary. */
+export interface TextingContact {
+  phone2: string | null;
+  preferredLanguage: string | null;
+  firstName: string | null;
+}
+
+/**
+ * Phone 2, Preferred Language ("Espanol" / "English"…) and First Name from the
+ * Profiles board's raw columns. First Name loses the [A#] / (det in …) notes.
+ */
+export function readTextingContact(rawColumnValues: string | null | undefined): TextingContact {
+  const cvs = safeParseJson(rawColumnValues);
+  const lang = cvs.preferred_language;
+  const label = lang && typeof lang === "object" ? (lang as { label?: unknown }).label : lang;
+  return {
+    phone2: asNonEmptyString(cvs.phone_2)?.trim() ?? null,
+    preferredLanguage: asNonEmptyString(label)?.trim() ?? null,
+    firstName: stripNameNotes(asNonEmptyString(cvs.first_name) ?? "") || null,
   };
 }
 

@@ -7,8 +7,8 @@
 // too). Segment count is shown because a single á turns 160-character texts
 // into 70-character ones.
 //
-// Opened from Log Call (M2, "Text consult link"); later from Payment links
-// (M21) and the client page. Rules: routes/sms.ts.
+// Opened from Log Call (M2, "Text consult link"), Payment links (M21, "Text
+// links to client") and the client header (P3.0, "Text"). Rules: routes/sms.ts.
 // =============================================================================
 
 import { useEffect, useMemo, useState } from "react";
@@ -20,13 +20,17 @@ import { Button } from "./ui/button";
 interface Props {
   /** The number to text; editable in the popup. */
   phone: string;
-  /** Client or caller name — fills {{firstName}} / {{name}}. */
+  /** Other numbers on file (Phone 2) — offered as one-click switches. */
+  altPhones?: (string | null | undefined)[];
+  /** Client or caller name — fills {{name}}, and {{firstName}} unless `firstName` is given. */
   name: string;
+  /** The profile's First Name column, when there is one. */
+  firstName?: string | null;
   /** Linked client: the text is logged in their Emails & Activities. */
   profileLocalId?: string | null;
-  /** Monday Language label ("Spanish"…) — picks the template language. */
+  /** Monday Language label ("Spanish", the profile's "Espanol"…) — picks the template language. */
   language?: string;
-  /** Template to start on. */
+  /** Template to start on; "" = free text; absent = the first template. */
   templateKey?: string;
   /** Extra placeholder values (e.g. `links` from Payment links). */
   vars?: Record<string, string>;
@@ -38,11 +42,18 @@ interface Props {
 const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)", marginBottom: 4, fontFamily: "var(--font-body)" } as const;
 const inputStyle = { border: "1px solid var(--color-border-light)", background: "var(--color-surface)", color: "var(--color-ink)", fontFamily: "var(--font-body)" } as const;
 
-export function SendSmsModal({ phone: initialPhone, name, profileLocalId, language, templateKey, vars, context, onClose, onSent }: Props) {
+/** Monday's Spanish labels: "Spanish" (Call Log), "Espanol" / "Español" (Profiles). */
+export const isSpanishLabel = (label: string | null | undefined) => /^(span|espa)/i.test(label?.trim() ?? "");
+
+export function SendSmsModal({
+  phone: initialPhone, altPhones, name, firstName, profileLocalId, language, templateKey, vars, context, onClose, onSent,
+}: Props) {
   const [config, setConfig] = useState<SmsConfig | null>(null);
   const [phone, setPhone] = useState(initialPhone);
-  const [key, setKey] = useState(templateKey ?? "");
-  const [lang, setLang] = useState<"en" | "es">(/^span/i.test(language ?? "") ? "es" : "en");
+  // null until the templates load: absent prop → the first template.
+  const [chosenKey, setKey] = useState<string | null>(templateKey ?? null);
+  const key = chosenKey ?? "";
+  const [lang, setLang] = useState<"en" | "es">(isSpanishLabel(language) ? "es" : "en");
   const [link, setLink] = useState("");
   const [body, setBody] = useState("");
   /** Staff edited the text by hand — a template/language switch then asks first. */
@@ -55,7 +66,8 @@ export function SendSmsModal({ phone: initialPhone, name, profileLocalId, langua
     fetchSmsConfig()
       .then((c) => {
         setConfig(c);
-        setKey((k) => (c.templates.some((t) => t.key === k) ? k : c.templates[0]?.key ?? ""));
+        // "" = free text, on purpose; an unknown or missing key falls back to the first template.
+        setKey((k) => (k === "" || c.templates.some((t) => t.key === k) ? k : c.templates[0]?.key ?? ""));
       })
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -67,13 +79,13 @@ export function SendSmsModal({ phone: initialPhone, name, profileLocalId, langua
   const rendered = useMemo(
     () =>
       renderSmsTemplate(templateText, {
-        firstName: firstNameOf(name),
+        firstName: firstName?.trim() || firstNameOf(name),
         name: name.trim(),
         link,
         ...config?.firm,
         ...vars,
       }),
-    [templateText, name, link, config, vars],
+    [templateText, name, firstName, link, config, vars],
   );
 
   // The text follows the template until staff type in it.
@@ -88,6 +100,10 @@ export function SendSmsModal({ phone: initialPhone, name, profileLocalId, langua
   };
 
   const to = toUsE164(phone);
+  // Other US numbers on file that aren't the one in the box.
+  const otherPhones = [...new Set([initialPhone, ...(altPhones ?? [])])].filter(
+    (p): p is string => !!p && !!toUsE164(p) && toUsE164(p) !== to,
+  );
   const segs = smsSegments(body);
   const unfilled = unfilledPlaceholders(body);
   const mode = config?.mode ?? "off";
@@ -151,6 +167,12 @@ export function SendSmsModal({ phone: initialPhone, name, profileLocalId, langua
                   <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
                     className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
                   {phone && !to && <span className="text-xs" style={{ color: "var(--color-status-red)" }}>Not a US number</span>}
+                  {otherPhones.map((p) => (
+                    <button key={p} type="button" onClick={() => setPhone(p)} className="block text-xs hover:underline mt-0.5"
+                      style={{ color: "var(--color-ink-muted)" }}>
+                      Use {formatUsPhone(p)} instead
+                    </button>
+                  ))}
                 </label>
                 <div>
                   <span style={labelStyle}>Language</span>

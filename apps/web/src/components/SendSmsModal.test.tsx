@@ -98,6 +98,22 @@ describe("SendSmsModal", () => {
     expect(mocks.send.mock.calls[0]![0].body).toBe("Call us tomorrow");
   });
 
+  it("the profile's Espanol + First Name are used; Phone 2 is one click away", async () => {
+    await open({ language: "Espanol", firstName: "Ana", phone: "816-555-1234", altPhones: ["913-555-0000", null] });
+    expect(textarea().value).toMatch(/^Hola Ana,/);
+    await act(async () => { button("Use (913) 555-0000 instead")!.click(); });
+    expect((document.querySelector('input[type="tel"]') as HTMLInputElement).value).toBe("913-555-0000");
+    // …and the number just left is offered back.
+    expect(button("Use (816) 555-1234 instead")).toBeTruthy();
+  });
+
+  it('templateKey "" starts on free text', async () => {
+    await open({ templateKey: "" });
+    expect((document.querySelector("select") as HTMLSelectElement).value).toBe("");
+    expect(textarea().value).toBe("");
+    expect(button("Send text")!.disabled).toBe(true);
+  });
+
   it("refuses a number that isn't a US number", async () => {
     await open({ templateKey: "plain", phone: "+52 55 1234 5678" });
     expect(document.body.textContent).toContain("Not a US number");
