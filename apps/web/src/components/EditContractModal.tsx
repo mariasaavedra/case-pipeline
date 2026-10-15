@@ -10,12 +10,14 @@
 // e-mail and address can be corrected but not emptied. Refused (409) if Monday
 // changed since the window opened. Queued on an outage like every write-back.
 // Replaced EditFeesModal (fees + case type only) on 2026-10-14.
+// "From fee sheet" (FeeSheetPicker) fills AF + FF from the firm's fee sheet.
 // =============================================================================
 
 import { useEffect, useState } from "react";
 import { updateContract, type ContractFees, type PendingContract } from "../api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { FeeSheetPicker } from "./FeeSheetPicker";
 import { ContractFields, contractFieldProblems, useContractCaseTypes, useContractInfo, type ContractFieldValues } from "./ContractFields";
 import { useBoardColumnsMeta } from "../BoardColumnsProvider";
 
@@ -138,6 +140,15 @@ export function EditContractModal({ contract: c, onSaved, onClose }: Props) {
               {c.attorneys.length > 1 && (
                 <p className="text-xs mb-2" style={{ color: "var(--color-ink-faint)" }}>Attorney now: {c.attorneys.join(", ")}. Picking one replaces them.</p>
               )}
+              <div className="mb-3">
+                <FeeSheetPicker
+                  onPick={(fees) => setValue((v) => (v ? {
+                    ...v,
+                    ...(fees.attorneyFee !== undefined ? { af: feeText(fees.attorneyFee) } : {}),
+                    ...(fees.filingFee !== undefined ? { ff: feeText(fees.filingFee) } : {}),
+                  } : v))}
+                />
+              </div>
               <ContractFields value={value} onChange={setValue} showNote={false} profileLocalId={c.clientLocalId} prefill={false} />
               {!c.clientLocalId && (
                 <p className="text-xs mb-2" style={{ color: "var(--urgency-overdue)" }}>

@@ -7,6 +7,9 @@
 // broken or unknown tags are shown with a link to fix the file — and shows
 // only the fields that template uses, pre-filled from Monday (client, e-mail,
 // address, attorney, AF / FF, next hearing) and the signed-in user (initials).
+// "From fee sheet" (FeeSheetPicker) fills AF + FF from the firm's fee sheet.
+// Send for signature and each Download also make the user the Fee K's
+// Assistant when it has none (routes/contract-document.ts).
 // Preview fills it in the browser, converts it with the user's Microsoft 365
 // (convertDocxToPdf) and shows the PDF in the window; from there it can be
 // downloaded or — when the server has Zapier set up — sent for signature.
@@ -31,6 +34,7 @@ import {
   type ContractInput, type TemplateCheck,
 } from "../lib/contract-fill";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { FeeSheetPicker } from "./FeeSheetPicker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 
@@ -368,6 +372,9 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {text("signByDate", "Signed contract due", { type: "date" })}
                 {text("dueDate", "Payment deadline", { type: "date" })}
               </div>
+              {(shown.has("attorneyFee") || shown.has("filingFee")) && (
+                <FeeSheetPicker onPick={(fees) => setInput((f) => (f ? { ...f, ...fees } : f))} />
+              )}
               <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
                 {amount("attorneyFee", "Attorney fee $", file.check.tags.includes("attorney_fee_half") ? `Printed as two halves of ${money(halfOf(input.attorneyFee))}` : undefined)}
                 {amount("motionFee", "Motion fee $")}
