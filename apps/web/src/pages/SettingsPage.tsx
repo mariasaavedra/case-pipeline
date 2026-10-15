@@ -7,6 +7,7 @@ import type { AttorneyBoard, PublicUser, MondayConnectionStatus, UserPresence, P
 import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { DocumentSettingsSection } from "../components/DocumentSettingsSection";
+import { SmsTemplatesSection } from "../components/SmsTemplatesSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
 import { MondayUsageSection } from "../components/MondayUsageSection";
 import { AuditLogSection } from "../components/AuditLogSection";
@@ -970,6 +971,7 @@ export function SettingsPage({ tab }: { tab: string }) {
               <StatusTagsSection />
               <UrgencySettingsSection />
               <DocumentSettingsSection />
+              <SmsTemplatesSection />
             </>
           )}
 

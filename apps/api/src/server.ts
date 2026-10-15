@@ -75,6 +75,8 @@ import { registerContractDocumentRoutes } from "./routes/contract-document.js";
 import { registerEsignPublicRoutes, registerEsignRoutes } from "./routes/esign.js";
 import { registerDocumentRoutes } from "./routes/documents.js";
 import { initDocumentSettings } from "./documents/document-settings.js";
+import { registerSmsRoutes } from "./routes/sms.js";
+import { initSmsTemplates } from "./sms/templates.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
 import { registerDetentionWriteRoutes } from "./routes/detention-write.js";
 import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
@@ -213,6 +215,7 @@ initKpiColumns(DATA_DIR);
 initStatusOverrides(DATA_DIR);
 initUrgencySettings(DATA_DIR);
 initDocumentSettings(DATA_DIR);
+initSmsTemplates(DATA_DIR);
 
 /** Build the status → urgency map the Active Cases query consumes. */
 function statusUrgencyMap(): Record<string, Urgency> {
@@ -546,6 +549,11 @@ registerDocumentRoutes(app, { db });
 // Call Log — see routes/call-log.ts
 // =============================================================================
 registerCallLogRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+
+// =============================================================================
+// SMS (RingCentral) — see routes/sms.ts. Seed data never texts anyone.
+// =============================================================================
+registerSmsRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions, forceDryRun: DB_SOURCE === "seed" });
 
 // =============================================================================
 // Mail intake (prototype, read-only) — see routes/mail.ts

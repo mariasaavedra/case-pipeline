@@ -55,6 +55,7 @@ import { ProfileNotesPreview } from "./ProfileNotesPreview";
 import { NewJailIntakeModal } from "./NewJailIntakeModal";
 import { createJailIntake, createContract } from "../api";
 import { NewContractModal } from "./NewContractModal";
+import { SendSmsModal } from "./SendSmsModal";
 import {
   ContractFields,
   contractFieldProblems,
@@ -247,6 +248,8 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
   } | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
+  const [smsOpen, setSmsOpen] = useState(false);
+  const [smsSent, setSmsSent] = useState(false);
   // "This call is a jail intake" — filled in alongside the call and created
   // straight after it, so the intake can carry the new call's monday id. The
   // fields are the shared set, so this cannot fall behind the popup again.
@@ -502,6 +505,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
     setNoteMentions([]);
     setLanguage("");
     setHighlightedForId("");
+    setSmsSent(false);
     // Without these, "Log another call" keeps the toggle on and the detainee's
     // details filled in, and the next save creates a second intake for the same
     // person against a different call.
@@ -572,6 +576,11 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                     Request contract
                   </Button>
                 )}
+                {/* M28 — click-to-send, template + preview. Texts the number
+                    dialled, else the linked client's phone. */}
+                <Button type="button" variant="outline" onClick={() => setSmsOpen(true)}>
+                  {smsSent ? "Text again" : "Text consult link"}
+                </Button>
                 <Button type="button" variant="outline" onClick={logAnother}>Log another call</Button>
                 <Button type="button" onClick={onClose}>Done</Button>
               </div>
@@ -885,6 +894,18 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
           callLogItemId={done?.mondayItemId ?? entry?.mondayItemId ?? null}
           initialPocName={effectiveName || undefined}
           initialPocPhone={phone.trim() || undefined}
+        />
+      )}
+      {smsOpen && (
+        <SendSmsModal
+          context="call_log"
+          templateKey="consult_link"
+          phone={phone.trim() || selectedProfile?.phone || ""}
+          name={name.trim() || selectedProfile?.name || ""}
+          profileLocalId={selectedProfile?.localId ?? null}
+          language={language}
+          onSent={() => setSmsSent(true)}
+          onClose={() => setSmsOpen(false)}
         />
       )}
       {/* M11 as-is: fixed to the linked client, or its own client search when

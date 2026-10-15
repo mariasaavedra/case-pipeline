@@ -710,6 +710,52 @@ export function updateDocumentSettings(s: DocumentSettings): Promise<DocumentSet
   });
 }
 
+// SMS (RingCentral) — routes/sms.ts
+export interface SmsTemplate { key: string; label: string; en: string; es: string }
+export type SmsMode = "off" | "dry-run" | "on";
+export interface SmsConfig {
+  mode: SmsMode;
+  /** The number texts come from, formatted; null when not configured. */
+  fromNumber: string | null;
+  templates: SmsTemplate[];
+  firm: { firmName: string; firmPhone: string };
+}
+export type SmsContext = "call_log" | "payment_links" | "client";
+export interface SendSmsInput {
+  to: string;
+  body: string;
+  context: SmsContext;
+  templateKey?: string | null;
+  language?: "en" | "es" | null;
+  profileLocalId?: string | null;
+}
+export interface SendSmsResult {
+  mode: SmsMode;
+  /** RingCentral's status ("Queued", "Sent"…) or "DryRun". */
+  status: string;
+  /** The E&A entry on the profile: written, queued (Monday down), or none (unlinked / dry run). */
+  activity: "logged" | "queued" | "none";
+  segments: number;
+}
+
+export function fetchSmsConfig(): Promise<SmsConfig> {
+  return apiFetch<SmsConfig>("/api/sms/config");
+}
+export function sendSms(input: SendSmsInput): Promise<SendSmsResult> {
+  return apiFetch<SendSmsResult>("/api/sms/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+export function updateSmsTemplates(templates: SmsTemplate[]): Promise<SmsTemplate[]> {
+  return apiFetch<SmsTemplate[]>("/api/settings/sms-templates", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(templates),
+  });
+}
+
 export async function fetchPendingContracts(): Promise<PendingContractsResult> {
   return apiFetch<PendingContractsResult>("/api/pending-contracts");
 }

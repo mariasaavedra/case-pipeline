@@ -1,0 +1,63 @@
+import { describe, it, expect } from "vitest";
+import { parseSmsSendBody, smsActivity, SMS_BODY_MAX } from "./send-plan.js";
+import { sanitizeSmsTemplates, DEFAULT_SMS_TEMPLATES } from "./templates.js";
+
+const ok = { to: "(816) 555-1234", body: "Hi Maria", context: "call_log" };
+
+describe("parseSmsSendBody", () => {
+  it("normalizes the number and keeps the optional fields", () => {
+    const r = parseSmsSendBody({ ...ok, templateKey: "consult_link", language: "es", profileLocalId: "p1" });
+    expect(r).toEqual({
+      ok: true,
+      value: { to: "+18165551234", body: "Hi Maria", context: "call_log", templateKey: "consult_link", language: "es", profileLocalId: "p1" },
+    });
+  });
+
+  it.each([
+    [{ ...ok, to: "555-1234" }, /US phone number/],
+    [{ ...ok, to: "+52 55 1234 5678" }, /US phone number/],
+    [{ ...ok, body: "  " }, /body is required/],
+    [{ ...ok, body: "x".repeat(SMS_BODY_MAX + 1) }, /too long/],
+    [{ ...ok, body: "Book here: {{link}}" }, /fill in \{\{link\}\}/],
+    [{ ...ok, context: "marketing" }, /context must be/],
+  ])("refuses %j", (body, msg) => {
+    const r = parseSmsSendBody(body);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(msg);
+  });
+
+  it("drops an unknown language rather than refusing", () => {
+    const r = parseSmsSendBody({ ...ok, language: "pt" });
+    expect(r.ok && r.value.language).toBeNull();
+  });
+});
+
+describe("smsActivity", () => {
+  it("logs the text and the number, and notes a multi-segment text", () => {
+    expect(smsActivity({ to: "+18165551234", body: "Hi" }, "111", "act")).toEqual({
+      itemId: "111", title: "Text sent to (816) 555-1234", customActivityId: "act", content: "Hi", phone: "+18165551234",
+    });
+    expect(smsActivity({ to: "+18165551234", body: "x".repeat(200) }, "111", "act").content).toMatch(/\(2 SMS segments\)$/);
+  });
+});
+
+describe("sanitizeSmsTemplates", () => {
+  it("keeps the defaults as they are", () => {
+    expect(sanitizeSmsTemplates(DEFAULT_SMS_TEMPLATES)).toEqual(DEFAULT_SMS_TEMPLATES);
+  });
+
+  it("drops templates with no label or no text, derives and de-duplicates keys", () => {
+    expect(
+      sanitizeSmsTemplates([
+        { label: "Docs reminder", en: "Send us your documents" },
+        { label: "Docs reminder", es: "Envíe sus documentos" },
+        { label: "", en: "x" },
+        { label: "Empty" },
+        "junk",
+      ]),
+    ).toEqual([
+      { key: "docs_reminder", label: "Docs reminder", en: "Send us your documents", es: "" },
+      { key: "docs_reminder_2", label: "Docs reminder", en: "", es: "Envíe sus documentos" },
+    ]);
+  });
+});
