@@ -13,7 +13,7 @@ import { createNotification } from "@case-pipeline/monday";
 import { notifyEvent, slackEscape, withLink } from "../notify/slack.js";
 
 export async function notifySlack(text: string, link?: string | null): Promise<void> {
-  await notifyEvent(withLink(slackEscape(text), link ?? null, "Open in Monday"));
+  await notifyEvent("esign", withLink(slackEscape(text), link ?? null, "Open in Monday"));
 }
 
 export async function notifyMonday(userId: string | null, itemId: string, text: string, token: string | undefined): Promise<void> {

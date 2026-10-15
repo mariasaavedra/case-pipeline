@@ -212,7 +212,7 @@ export function registerContractStepRoutes(app: Express, deps: ContractStepDeps)
         by: req.user?.name,
         link: mondayItemUrl(getBoardColumnsFor(db, BOARD_KEY)?.mondayBoardId, c.mondayItemId),
       });
-      if (text) inBackground(notifyEvent(text));
+      if (text) inBackground(notifyEvent(result.data.step === "client_signed" ? "contract_signed" : "payment_link_sent", text));
     } else res.status(result.status).json(result.body);
   });
 }

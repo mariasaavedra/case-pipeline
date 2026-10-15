@@ -350,7 +350,7 @@ export async function drainWriteQueue(
           // Monday never got this write and nothing will retry it. The error is
           // cut short: Monday sometimes echoes the value it refused.
           inBackground(notifyOps(
-            "write-queue",
+            "ops_write_queue",
             `A Monday write gave up after ${attempts} tries (${row.op_type}, item ${row.monday_item_id ?? "new"}): ${message.slice(0, 160)}. ` +
               "It is in Settings → Admin → Sync health. More failures within the hour are not posted.",
           ));

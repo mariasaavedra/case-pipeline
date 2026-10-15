@@ -118,6 +118,20 @@ The older Incoming Webhook (`SLACK_WEBHOOK_URL`, Adobe Sign alerts) keeps
 working: events fall back to it whenever `SLACK_EVENTS_CHANNEL` is empty,
 whatever `SLACK_MODE` says.
 
+### Settings → Integrations (P11.5)
+
+Admins turn each notification on or off, send it to another channel, and set
+how often the same failure may repost (5 min – 24 h, default 60). Stored in
+`data/notify-settings.json`; the catalog of everything the app can post is
+`NOTIFY_EVENTS` in `notify/settings.ts` — a new event ships **on**, to its
+kind's default channel, without anyone re-saving. The page also has **Send
+test message** (posts even in dry-run) and, for texting, **Check connection**
+(the same steps as `npm run sms:check`, in `sms/check.ts`).
+
+What stays in `.env` and can't be changed from the page: the bot token, the
+RingCentral credentials, `SLACK_MODE`, `SMS_MODE` and the default channel per
+kind. The page sees whether each is set, never the value.
+
 ### Env
 
 | Var | |

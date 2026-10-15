@@ -207,7 +207,7 @@ export function registerSmsRoutes(app: Express, deps: SmsDeps): void {
 
     // Slack: real texts only — never the number or the words.
     if (mode === "on") {
-      inBackground(notifyEvent(smsSentEvent({
+      inBackground(notifyEvent("sms_sent", smsSentEvent({
         clientName: profileName,
         templateLabel: loadSmsTemplates().find((t) => t.key === sms.templateKey)?.label ?? null,
         context: sms.context,

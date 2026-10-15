@@ -77,6 +77,8 @@ import { registerDocumentRoutes } from "./routes/documents.js";
 import { initDocumentSettings } from "./documents/document-settings.js";
 import { registerSmsRoutes } from "./routes/sms.js";
 import { initSmsTemplates } from "./sms/templates.js";
+import { initNotifySettings } from "./notify/settings.js";
+import { registerIntegrationRoutes } from "./routes/integrations.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
 import { registerDetentionWriteRoutes } from "./routes/detention-write.js";
 import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
@@ -217,6 +219,7 @@ initStatusOverrides(DATA_DIR);
 initUrgencySettings(DATA_DIR);
 initDocumentSettings(DATA_DIR);
 initSmsTemplates(DATA_DIR);
+initNotifySettings(DATA_DIR);
 
 /** Build the status → urgency map the Active Cases query consumes. */
 function statusUrgencyMap(): Record<string, Urgency> {
@@ -555,6 +558,8 @@ registerCallLogRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOpt
 // SMS (RingCentral) — see routes/sms.ts. Seed data never texts anyone.
 // =============================================================================
 registerSmsRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions, forceDryRun: DB_SOURCE === "seed" });
+// Settings → Integrations (Slack + texting) — see routes/integrations.ts
+registerIntegrationRoutes(app);
 
 // =============================================================================
 // Mail intake (prototype, read-only) — see routes/mail.ts
@@ -742,8 +747,9 @@ function runSync(label: string, args: string[]): Promise<boolean> {
       } else {
         console.error(`[sync] ${label} sync failed (exit code ${code}).`);
         inBackground(notifyOps(
-          `sync:${label}`,
+          "ops_sync",
           `The ${label} sync from Monday failed (exit code ${code}). The dashboard keeps its last good data until a run succeeds — see the API log.`,
+          `sync:${label}`,
         ));
         reject(new Error(`sync exited with code ${code}`));
       }
@@ -844,7 +850,7 @@ function scheduleConsultSweep() {
       }
       runConsultSweep(days).catch((err) => {
         console.error("[consult] Error:", err);
-        inBackground(notifyOps("consult-sweep", `The consult folder sweep failed: ${(err as Error).message}. Consultation summaries may be missing until it runs again.`));
+        inBackground(notifyOps("ops_consult_sweep", `The consult folder sweep failed: ${(err as Error).message}. Consultation summaries may be missing until it runs again.`));
       });
     },
     { timezone: FIRM_TIMEZONE },
@@ -918,7 +924,7 @@ function scheduleDriveIntake() {
         intakeInFlight = false;
         if (code !== 0) {
           console.error(`[drive] Intake exited with code ${code}`);
-          inBackground(notifyOps("drive-intake", `Drive intake failed (exit code ${code}). Client uploads aren't being copied to SharePoint until it runs again.`));
+          inBackground(notifyOps("ops_drive_intake", `Drive intake failed (exit code ${code}). Client uploads aren't being copied to SharePoint until it runs again.`));
         }
       });
       child.on("error", (err) => {
@@ -982,7 +988,7 @@ function scheduleFeeKAutofill() {
       })
         .catch((err) => {
           console.error("[feek] Error:", err);
-          inBackground(notifyOps("fee-k-autofill", `Fee K auto-fill failed: ${(err as Error).message}`));
+          inBackground(notifyOps("ops_fee_k_autofill", `Fee K auto-fill failed: ${(err as Error).message}`));
         })
         .finally(() => { feeKInFlight = false; });
     },
@@ -1195,7 +1201,7 @@ function scheduleBackups() {
   cron.schedule(backupCron, () => {
     runBackup().catch((err) => {
       console.error("[backup] error:", err);
-      inBackground(notifyOps("backup", `The daily database backup failed: ${(err as Error).message}. Check disk space on the server.`));
+      inBackground(notifyOps("ops_backup", `The daily database backup failed: ${(err as Error).message}. Check disk space on the server.`));
     });
   });
   console.log(`[backup] Daily backup scheduled — cron "${backupCron}".`);

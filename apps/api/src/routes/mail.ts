@@ -224,7 +224,7 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
         by: user?.name,
         link: appUrl("/alerts"),
       });
-      if (text) inBackground(notifyEvent(text));
+      if (text) inBackground(notifyEvent("mail_scanned", text));
     },
   );
 

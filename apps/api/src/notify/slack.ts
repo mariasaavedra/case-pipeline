@@ -1,29 +1,32 @@
 // =============================================================================
 // Slack — one sender for every notification the app posts
 // =============================================================================
-// A Slack app with a bot token (chat.postMessage), one channel per kind:
+// A Slack bot token (chat.postMessage) and a channel per kind, from .env:
 //
 //   events  SLACK_EVENTS_CHANNEL  contract signed / payment link sent, consult
 //                                 prepped, mail to review, text sent, Adobe Sign
-//   ops     SLACK_OPS_CHANNEL     a sync, scheduled job or Monday write failed —
-//                                 at most one post per kind per hour
+//   ops     SLACK_OPS_CHANNEL     a sync, scheduled job or Monday write failed
 //   alerts  SLACK_ALERTS_CHANNEL  the morning digest (next PR)
 //
-// An empty channel id = that kind is off. SLACK_MODE=off (default) / dry-run
-// (logs what it would post) / on. For `events` only, the older Incoming
-// Webhook (SLACK_WEBHOOK_URL, the Adobe Sign alerts) still works when no bot
-// channel is set, so turning the bot on never silences those.
+// On top of that, Settings → Integrations (notify/settings.ts) turns each event
+// on or off, can send it to another channel, and sets how often the same
+// failure may repost. SLACK_MODE=off (default) / dry-run (logs what it would
+// post) / on stays in .env. For `events` only, the older Incoming Webhook
+// (SLACK_WEBHOOK_URL, the Adobe Sign alerts) still works when no channel is
+// set, so turning the bot on never silences those.
 //
 // Everything here is best-effort: a post never throws and never delays the
 // request that caused it beyond its own 10 s timeout. Content rule: client name,
-// case type, a link — never A#, date of birth, receipt numbers or note text.
-// See docs/features/sms-and-slack.md.
+// case type, a link — never A#, date of birth, receipt numbers, phone numbers,
+// note or text bodies. See docs/features/sms-and-slack.md.
 // =============================================================================
+
+import { loadNotifySettings, eventDef, type NotifySettings, type NotifyEventKey } from "./settings.js";
 
 export type SlackMode = "off" | "dry-run" | "on";
 export type SlackChannelKind = "events" | "ops" | "alerts";
 
-const CHANNEL_VARS: Record<SlackChannelKind, string> = {
+export const SLACK_CHANNEL_VARS: Record<SlackChannelKind, string> = {
   events: "SLACK_EVENTS_CHANNEL",
   ops: "SLACK_OPS_CHANNEL",
   alerts: "SLACK_ALERTS_CHANNEL",
@@ -48,41 +51,50 @@ type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 export interface SlackDeps {
   env?: NodeJS.ProcessEnv;
+  settings?: () => NotifySettings;
   fetchImpl?: FetchLike;
   now?: () => number;
   log?: (msg: string) => void;
 }
 
+/** What a post did — the test button shows it. */
+export type SlackPostResult = { ok: true; dryRun: boolean } | { ok: false; error: string };
+
 /**
- * Builds a sender. The module-level `postSlack` / `notifyOps` / `notifyEvent`
- * use the real environment; tests build their own with fakes.
+ * Builds a sender. The module-level exports use the real environment and the
+ * saved settings; tests build their own with fakes.
  */
 export function createSlackNotifier(deps: SlackDeps = {}) {
   const env = () => deps.env ?? process.env;
+  const settings = deps.settings ?? loadNotifySettings;
   const fetchImpl = deps.fetchImpl ?? fetch;
   const now = deps.now ?? Date.now;
   const log = deps.log ?? ((m: string) => console.log(m));
   const lastOps = new Map<string, number>();
 
-  /** Post `text` (already mrkdwn) to the channel for `kind`. True when it was posted (or would be, in dry-run). */
-  async function postSlack(kind: SlackChannelKind, text: string): Promise<boolean> {
+  /**
+   * The one place that talks to Slack. `force` = an admin pressed "Send test
+   * message": post whatever SLACK_MODE says, as long as there is a token.
+   */
+  async function send(
+    channel: string | null, kind: SlackChannelKind, text: string, force = false,
+  ): Promise<SlackPostResult> {
     const e = env();
-    const mode = slackMode(e);
-    const channel = e[CHANNEL_VARS[kind]]?.trim();
+    const mode = force ? "on" : slackMode(e);
     const webhook = kind === "events" && !channel ? e.SLACK_WEBHOOK_URL?.trim() : undefined;
-    if (mode === "off" && !webhook) return false;
-    if (!channel && !webhook) return false;
+    if (mode === "off" && !webhook) return { ok: false, error: "SLACK_MODE is off" };
+    if (!channel && !webhook) return { ok: false, error: `no ${kind} channel set` };
 
     if (mode === "dry-run") {
-      log(`[slack] DRY RUN → ${kind}: ${text}`);
-      return true;
+      log(`[slack] DRY RUN → ${kind}${channel ? ` (${channel})` : ""}: ${text}`);
+      return { ok: true, dryRun: true };
     }
     try {
       if (channel && mode === "on") {
         const token = e.SLACK_BOT_TOKEN?.trim();
         if (!token) {
           log("[slack] SLACK_BOT_TOKEN is not set — nothing posted");
-          return false;
+          return { ok: false, error: "SLACK_BOT_TOKEN is not set" };
         }
         const res = await fetchImpl("https://slack.com/api/chat.postMessage", {
           method: "POST",
@@ -93,10 +105,11 @@ export function createSlackNotifier(deps: SlackDeps = {}) {
         // Slack answers 200 with { ok: false, error } for most failures.
         const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
         if (!body.ok) {
-          log(`[slack] ${kind} post refused: ${body.error ?? `HTTP ${res.status}`}`);
-          return false;
+          const error = body.error ?? `HTTP ${res.status}`;
+          log(`[slack] ${kind} post refused: ${error}`);
+          return { ok: false, error };
         }
-        return true;
+        return { ok: true, dryRun: false };
       }
       if (webhook && /^https:\/\/hooks\.slack\.com\//.test(webhook)) {
         const res = await fetchImpl(webhook, {
@@ -106,41 +119,66 @@ export function createSlackNotifier(deps: SlackDeps = {}) {
           signal: AbortSignal.timeout(10_000),
         });
         if (!res.ok) log(`[slack] webhook answered ${res.status}`);
-        return res.ok;
+        return res.ok ? { ok: true, dryRun: false } : { ok: false, error: `webhook HTTP ${res.status}` };
       }
-      return false;
+      return { ok: false, error: "nothing to post to" };
     } catch (err) {
       log(`[slack] ${kind} post failed: ${(err as Error).message}`);
-      return false;
+      return { ok: false, error: (err as Error).message };
     }
   }
 
+  const envChannel = (kind: SlackChannelKind) => env()[SLACK_CHANNEL_VARS[kind]]?.trim() || null;
+
+  /** Where an event goes: its own channel from Settings, else its kind's from .env. Null = turned off. */
+  function route(key: NotifyEventKey): { kind: SlackChannelKind; channel: string | null } | null {
+    const s = settings().events[key];
+    if (!s.enabled) return null;
+    const { kind } = eventDef(key);
+    return { kind, channel: s.channel ?? envChannel(kind) };
+  }
+
+  /** Post to the kind's .env channel (the digest; no per-event settings). */
+  async function postSlack(kind: SlackChannelKind, text: string): Promise<boolean> {
+    return (await send(envChannel(kind), kind, text)).ok;
+  }
+
+  /** Something happened staff want to hear about. */
+  async function notifyEvent(key: NotifyEventKey, text: string): Promise<boolean> {
+    const r = route(key);
+    return r ? (await send(r.channel, r.kind, text)).ok : false;
+  }
+
   /**
-   * Something broke that nobody is watching for. Throttled per `key` (e.g.
-   * "sync:full", "write-queue") to one post an hour, so a job failing every 15
-   * minutes is one message, not a flood. The throttle is per process: a
-   * restart may repeat one.
+   * Something broke that nobody is watching for. The same `throttleKey`
+   * (default: the event key; "sync:full" vs "sync:webhook" are separate) posts
+   * again only after Settings' repeat limit (default 60 min), so a job failing
+   * every 15 minutes is one message, not a flood. Per process: a restart may
+   * repeat one.
    */
-  async function notifyOps(key: string, text: string, throttleMs = 60 * 60 * 1000): Promise<boolean> {
-    const last = lastOps.get(key);
-    if (last !== undefined && now() - last < throttleMs) return false;
-    const posted = await postSlack("ops", `:rotating_light: ${text}`);
-    if (posted) lastOps.set(key, now());
+  async function notifyOps(key: NotifyEventKey, text: string, throttleKey: string = key): Promise<boolean> {
+    const r = route(key);
+    if (!r) return false;
+    const last = lastOps.get(throttleKey);
+    if (last !== undefined && now() - last < settings().opsRepeatMinutes * 60_000) return false;
+    const posted = (await send(r.channel, r.kind, `:rotating_light: ${text}`)).ok;
+    if (posted) lastOps.set(throttleKey, now());
     return posted;
   }
 
-  /** Something happened staff want to hear about. Not throttled. */
-  function notifyEvent(text: string): Promise<boolean> {
-    return postSlack("events", text);
+  /** Settings → Integrations → "Send test message". Posts even when SLACK_MODE isn't on. */
+  function sendTest(channel: string, text: string): Promise<SlackPostResult> {
+    return send(channel, "events", text, true);
   }
 
-  return { postSlack, notifyOps, notifyEvent };
+  return { postSlack, notifyOps, notifyEvent, sendTest };
 }
 
 const shared = createSlackNotifier();
 export const postSlack = shared.postSlack;
 export const notifyOps = shared.notifyOps;
 export const notifyEvent = shared.notifyEvent;
+export const sendSlackTest = shared.sendTest;
 
 /**
  * Fire-and-forget: start the post, never await it in a request path. The

@@ -987,7 +987,7 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
     res.status(pending ? 202 : 200).json({ data: { prepped: true, pending, wroteBack: steps.map((s) => s.field) } });
 
     const client = db.prepare("SELECT name FROM profiles WHERE local_id = ?").get(profileLocalId) as { name: string } | undefined;
-    inBackground(notifyEvent(consultPrepEvent({
+    inBackground(notifyEvent("consult_prepped", consultPrepEvent({
       clientName: client?.name ?? "a client",
       attorney: appt.attorney,
       date: appt.date,
