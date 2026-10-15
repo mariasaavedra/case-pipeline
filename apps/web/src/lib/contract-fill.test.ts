@@ -18,7 +18,8 @@ const INPUT: ContractInput = {
   address: "123 Main St", cityStateZip: "Kansas City, MO 64105",
   hearingType: "Master Hearing", hearingDate: "2026-11-12", formName: "I-130",
   attorneyFee: 5000, filingFee: 675, postageFee: null, surcharge: null, interviewFee: null,
-  dueDate: "", attorneyName: "Jane Attorney", creatorInitials: "RC",
+  bioFee: null, motionFee: null, hearingFee: null,
+  dueDate: "", signByDate: "", attorneyName: "Jane Attorney", creatorInitials: "RC",
 };
 
 /** A one-paragraph .docx whose text is `text`. */
@@ -46,6 +47,34 @@ describe("contractValues", () => {
     expect(surchargeFor(3500)).toBe(105);
     expect(surchargeFor(5000, 675, 100)).toBe(173.25);
     expect(contractValues({ ...INPUT, surcharge: 0, postageFee: 100 })).toMatchObject({ surcharge: "$0.00", postage_fee: "$100.00", total_fee: "$5,775.00" });
+  });
+});
+
+describe("per-fee surcharges (2026 contracts)", () => {
+  it("prints 3% under each fee; N/A when that fee doesn't apply", () => {
+    expect(contractValues({ ...INPUT, postageFee: 100 })).toMatchObject({
+      attorney_fee_surcharge: "$150.00", filing_fee_surcharge: "$20.25", postage_fee_surcharge: "$3.00",
+      bio_fee: "N/A", bio_fee_surcharge: "N/A",
+    });
+    expect(contractValues(INPUT)).toMatchObject({ postage_fee_surcharge: "N/A" });
+    expect(contractValues({ ...INPUT, bioFee: 30 })).toMatchObject({ bio_fee: "$30.00", bio_fee_surcharge: "$0.90" });
+  });
+
+  it("splits the attorney fee in halves (trial, BIA appeal)", () => {
+    expect(contractValues({ ...INPUT, attorneyFee: 7001 })).toMatchObject({ attorney_fee_half: "$3,500.50", attorney_fee_half_surcharge: "$105.02" });
+  });
+
+  it("bond motion + hearing fees are their own blanks, each required", () => {
+    const check = inspectContractTemplate(docx("{{motion_fee}} {{motion_fee_surcharge}} {{hearing_fee}} {{hearing_fee_surcharge}} by {{sign_by_date}}"));
+    expect(check.unknown).toEqual([]);
+    expect(contractProblems(check, INPUT)).toEqual([
+      "Attorney fee for the motion is missing", "Surcharge on the motion fee (3%) is missing",
+      "Attorney fee for the hearing is missing", "Surcharge on the hearing fee (3%) is missing",
+      "Signed contract due is missing",
+    ]);
+    const ok = { ...INPUT, motionFee: 1500, hearingFee: 1000, signByDate: "2026-10-10" };
+    expect(contractProblems(check, ok)).toEqual([]);
+    expect(contractValues(ok)).toMatchObject({ motion_fee_surcharge: "$45.00", hearing_fee_surcharge: "$30.00", sign_by_date: "October 10, 2026", sign_by_date_es: "10 de Octubre, 2026" });
   });
 });
 
