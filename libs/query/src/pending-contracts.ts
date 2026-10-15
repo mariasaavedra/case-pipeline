@@ -11,6 +11,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import type { WaitLevel } from "./prescheduling";
+import { readTextingContact, type TextingContact } from "./client";
 
 // =============================================================================
 // Types
@@ -46,6 +47,10 @@ export interface PendingContract {
   processingFee: number | null;
   /** "INFO NEEDED TO FILL FEE K" fields still empty on Monday (MISSING_FIELDS order). */
   missing: MissingField[];
+  /** The linked profile's Phone, for texting the payment links (M21 → M28). Null when unlinked or empty. */
+  clientPhone: string | null;
+  /** Phone 2 / Preferred Language / First Name from the linked profile. */
+  clientContact: TextingContact;
 }
 
 /**
@@ -215,6 +220,8 @@ interface RawRow {
   pf: unknown;
   email: string | null;
   address: string | null;
+  phone: string | null;
+  profileRaw: string | null;
 }
 
 /** Which MISSING_FIELDS a Fee K has empty. */
@@ -258,7 +265,9 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       -- The Fee K mirrors these from the profile; the profile's own copy is
       -- read too, so an edit made from M11 / M25 counts before the next sync.
       COALESCE(NULLIF(TRIM(p.email), ''), json_extract(c.raw_column_values, '$.e_mail'))     AS email,
-      COALESCE(NULLIF(TRIM(p.address), ''), json_extract(c.raw_column_values, '$.address')) AS address
+      COALESCE(NULLIF(TRIM(p.address), ''), json_extract(c.raw_column_values, '$.address')) AS address,
+      NULLIF(TRIM(p.phone), '') AS phone,
+      p.raw_column_values       AS profileRaw
     FROM contracts c
     LEFT JOIN profiles p ON p.local_id = c.profile_local_id
     WHERE c.group_title = ? AND c.deleted_at IS NULL
@@ -293,6 +302,8 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       filingFee: toAmount(r.ff),
       processingFee: toAmount(r.pf),
       missing: missingFeeKFields({ contractFor, attorneyFee, attorneys, email: r.email, address: r.address }),
+      clientPhone: r.phone,
+      clientContact: readTextingContact(r.profileRaw),
     };
   });
 

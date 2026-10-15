@@ -56,6 +56,8 @@ type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 export class RingCentralClient {
   private token: { value: string; expiresAt: number } | null = null;
+  /** The app permissions the last sign-in granted ("SMS ReadAccounts …"), for the setup check. */
+  grantedScopes: string[] = [];
 
   constructor(
     private readonly config: RingCentralConfig,
@@ -75,10 +77,21 @@ export class RingCentralClient {
       },
       body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }).toString(),
     });
-    const body = (await res.json()) as { access_token?: string; expires_in?: number };
+    const body = (await res.json()) as { access_token?: string; expires_in?: number; scope?: string };
     if (!body.access_token) throw new RingCentralError("RingCentral sign-in returned no token", res.status);
     this.token = { value: body.access_token, expiresAt: this.now() + (body.expires_in ?? 3600) * 1000 };
+    this.grantedScopes = (body.scope ?? "").split(/\s+/).filter(Boolean);
     return this.token.value;
+  }
+
+  /** Signed-in GET of a REST path ("/restapi/v1.0/…") — read-only, for the setup check. */
+  async getJson<T>(restPath: string): Promise<T> {
+    const token = await this.accessToken();
+    const res = await this.call(`${this.config.serverUrl}${restPath}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return (await res.json()) as T;
   }
 
   /** Send one text. `to` must already be E.164. */

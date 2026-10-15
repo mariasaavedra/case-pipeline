@@ -1,7 +1,8 @@
 // =============================================================================
 // SmsTemplatesSection (P11.3.5) — the texts staff can send from M28
 // =============================================================================
-// One row per template: a name, the English text and the Spanish text. Shows
+// One row per template: a name, the English text and the Spanish text. The
+// `payment_links` key is the one M21 opens on (its {{links}} are filled there). Shows
 // the placeholders that get filled and a live segment count per language, so a
 // template that costs three texts is visible before anyone sends it.
 // Admin-only (the tab is); saved to data/sms-templates.json, audited.
@@ -72,7 +73,8 @@ export function SmsTemplatesSection() {
         <SectionCode code="P11.3.5" inline />
       </h2>
       <p style={{ fontSize: 13, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginBottom: 8, lineHeight: 1.5 }}>
-        What staff can text a client (Log Call → Text consult link). Placeholders filled in for them:{" "}
+        What staff can text a client (Log Call → Text consult link, Payment links → Text links to client,
+        the client page&apos;s Text button). Placeholders filled in for them:{" "}
         {SMS_PLACEHOLDERS.map((p) => <code key={p} style={{ marginRight: 6 }}>{`{{${p}}}`}</code>)}
         — <code>{"{{link}}"}</code> is typed in when sending unless you write the link here. Keep the
         &quot;Reply STOP&quot; line: carriers require it.

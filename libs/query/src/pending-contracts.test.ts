@@ -148,6 +148,27 @@ describe("getPendingContracts", () => {
     expect(c.zeroAf!.missing).toEqual([]);
     db.close();
   });
+
+  test("carries the client's phones, language and first name for texting the links", () => {
+    const db = freshDb();
+    db.prepare("UPDATE profiles SET phone = ' (816) 555-1234 ', raw_column_values = ? WHERE local_id = 'p1'").run(
+      JSON.stringify({ phone_2: "913-555-0000", preferred_language: { label: "Espanol" }, first_name: "Ana [A123] (det in Chase)" }),
+    );
+    insertFeeK(db, { localId: "k" });
+    const k = byId(db).k!;
+    expect(k.clientPhone).toBe("(816) 555-1234");
+    expect(k.clientContact).toEqual({ phone2: "913-555-0000", preferredLanguage: "Espanol", firstName: "Ana" });
+    db.close();
+  });
+
+  test("an unlinked Fee K has no phone", () => {
+    const db = freshDb();
+    insertFeeK(db, { localId: "k" });
+    db.prepare("UPDATE contracts SET profile_local_id = 'nobody'").run();
+    expect(byId(db).k!.clientPhone).toBeNull();
+    expect(byId(db).k!.clientContact).toEqual({ phone2: null, preferredLanguage: null, firstName: null });
+    db.close();
+  });
 });
 
 describe("nextContractStep", () => {
