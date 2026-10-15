@@ -57,6 +57,7 @@ import { createJailIntake, createContract } from "../api";
 import { NewContractModal } from "./NewContractModal";
 import {
   ContractFields,
+  contractFieldProblems,
   emptyContractFields,
   toCreateContractInput,
   useContractCaseTypes,
@@ -381,8 +382,9 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
       setError("Link the client above, or untick \u201cthis call requests a contract\u201d.");
       return;
     }
-    if (isContract && !contractFields.caseType) {
-      setError("Pick the contract's case type, or untick \u201cthis call requests a contract\u201d.");
+    const contractMissing = isContract ? contractFieldProblems(contractFields) : [];
+    if (contractMissing.length > 0) {
+      setError(`The contract still needs: ${contractMissing.join(", ")} \u2014 or untick \u201cthis call requests a contract\u201d.`);
       return;
     }
     setSaving(true);
@@ -732,7 +734,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                           Link the client above first — the contract is created on their profile.
                         </p>
                       )}
-                      <ContractFields value={contractFields} onChange={setContractFields} />
+                      <ContractFields value={contractFields} onChange={setContractFields} profileLocalId={selectedProfile?.localId ?? null} />
                     </div>
                   )}
                 </div>

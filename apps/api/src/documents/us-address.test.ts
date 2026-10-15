@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { splitUsAddress } from "./us-address.js";
+import { letterAddress, splitUsAddress } from "./us-address.js";
 
 describe("splitUsAddress", () => {
   it("splits the comma form", () => {
     expect(splitUsAddress("1234 Main St Apt 5, Kansas City, MO 64105")).toEqual({
-      street: "1234 Main St", unitType: "apt", unit: "5", city: "Kansas City", state: "MO", zip: "64105",
+      line1: "1234 Main St Apt 5", street: "1234 Main St", unitType: "apt", unit: "5", city: "Kansas City", state: "MO", zip: "64105",
     });
   });
 
@@ -39,7 +39,7 @@ describe("splitUsAddress", () => {
   });
 
   it("keeps a street-only line whole", () => {
-    expect(splitUsAddress("1234 Main St")).toEqual({ street: "1234 Main St", unitType: "", unit: "", city: "", state: "", zip: "" });
+    expect(splitUsAddress("1234 Main St")).toEqual({ line1: "1234 Main St", street: "1234 Main St", unitType: "", unit: "", city: "", state: "", zip: "" });
   });
 
   it("does not take a word ending in a state code for a state", () => {
@@ -50,5 +50,21 @@ describe("splitUsAddress", () => {
   it("is empty for nothing", () => {
     expect(splitUsAddress(null).street).toBe("");
     expect(splitUsAddress("   ").street).toBe("");
+  });
+});
+
+describe("letterAddress (M22 contract: street line + City, ST zip)", () => {
+  it.each([
+    ["1234 Main St Apt 5, Kansas City, MO 64105", "1234 Main St Apt 5", "Kansas City, MO 64105"],
+    ["1234 Main St, Kansas City MO 64105", "1234 Main St", "Kansas City, MO 64105"],
+    ["1234 Main St Kansas City Missouri 64105", "1234 Main St", "Kansas City, MO 64105"],
+    ["515 Avenida Cesar E. Chavez, Kansas City, MO", "515 Avenida Cesar E. Chavez", "Kansas City, MO"],
+  ])("%s", (line, street, cityStateZip) => {
+    expect(letterAddress(line)).toEqual({ street, cityStateZip });
+  });
+
+  it("keeps a line it can't split whole, for staff to fix", () => {
+    expect(letterAddress("1234 Main St")).toEqual({ street: "1234 Main St", cityStateZip: "" });
+    expect(letterAddress(null)).toEqual({ street: "", cityStateZip: "" });
   });
 });

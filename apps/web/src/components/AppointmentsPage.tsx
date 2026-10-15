@@ -609,7 +609,7 @@ function AfterConsult({
           <span style={{ fontSize: 12, color: "var(--color-ink-muted)", marginBottom: 6 }}>
             Saved with the note. When the client's Fee K is created, its empty case type and fees are filled from here.
           </span>
-          <ContractFields value={fees} onChange={setFees} showNote={false} />
+          <ContractFields value={fees} onChange={setFees} showNote={false} showClient={false} />
         </div>
       ) : (
         <button type="button" onClick={() => setFeesOpen(true)}

@@ -7,13 +7,19 @@
 // broken or unknown tags are shown with a link to fix the file — and shows
 // only the fields that template uses, pre-filled from Monday (client, e-mail,
 // address, attorney, AF / FF, next hearing) and the signed-in user (initials).
-// Generate PDF fills it in the browser and converts it with the user's
-// Microsoft 365 (convertDocxToPdf); Word downloads the filled .docx to edit.
-// Nothing is written to Monday; the generation is audited (template + fees).
+// Preview fills it in the browser, converts it with the user's Microsoft 365
+// (convertDocxToPdf) and shows the PDF in the window; from there it can be
+// downloaded or — when the server has Zapier set up — sent for signature.
+// Sending only happens from the preview and sends that exact PDF, so what staff
+// looked at is what the client gets. Word downloads the filled .docx to edit.
+// Nothing is written to Monday until Send; the generation is audited
+// (template + fees). Send hands the PDF to Adobe Sign — attorney first, then
+// the client — and the API moves the stage, leaves a note and follows the
+// signatures (routes/esign.ts).
 // =============================================================================
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchContractPrefill, logContractGenerated } from "../api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchContractPrefill, fetchEsignStatus, logContractGenerated, sendContractForSignature } from "../api";
 import type { PendingContract } from "../api";
 import { useAuth } from "../auth/useAuth";
 import {
@@ -31,6 +37,8 @@ import { Button } from "./ui/button";
 interface Props {
   contract: PendingContract;
   onClose: () => void;
+  /** After a send to Adobe Sign, with a line for the page. */
+  onSent?: (message: string) => void;
 }
 
 const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)", marginBottom: 4, fontFamily: "var(--font-body)" } as const;
@@ -75,21 +83,31 @@ function Field({ id, label, hint, children }: { id: string; label: string; hint?
   );
 }
 
-export function GenerateContractModal({ contract: c, onClose }: Props) {
+export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   const { user } = useAuth();
   const [input, setInput] = useState<ContractInput | null>(null);
   const [templates, setTemplates] = useState<{ driveId: string; items: DriveItem[] } | null>(null);
   const [picked, setPicked] = useState<DriveItem | null>(null);
   const [file, setFile] = useState<{ id: string; data: ArrayBuffer; check: TemplateCheck } | null>(null);
+  // Monday's one-line address, and the same split for a letter (API: letterAddress).
+  const [addr, setAddr] = useState<{ full: string; street: string; cityStateZip: string } | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
-  const [busy, setBusy] = useState<"pdf" | "docx" | null>(null);
+  const [busy, setBusy] = useState<"preview" | "docx" | "send" | null>(null);
+  // The PDF being previewed. Leaving the preview drops it, so any edit makes a new one.
+  const [preview, setPreview] = useState<{ pdf: Blob; url: string; name: string } | null>(null);
+  const previewUrl = useRef<string | null>(null);
+  const [esign, setEsign] = useState(false);
+  const [attorneyEmail, setAttorneyEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [needsConsent, setNeedsConsent] = useState(false);
   const [done, setDone] = useState<string | null>(null);
 
   const loadTemplates = useCallback(async () => {
     try {
-      setTemplates(await listContractTemplates());
+      const list = await listContractTemplates();
+      setTemplates(list);
+      // Only one contract in the folder: nothing to choose.
+      if (list.items.length === 1) setPicked((p) => p ?? list.items[0]!);
       setNeedsConsent(false);
     } catch (e) {
       if (e instanceof GraphConsentRequiredError) setNeedsConsent(true);
@@ -99,17 +117,32 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
 
   useEffect(() => {
     void loadTemplates();
+    fetchEsignStatus().then((s) => setEsign(s.enabled)).catch(() => setEsign(false));
     fetchContractPrefill(c.localId)
+      .then((p) => {
+        setAttorneyEmail(p.attorneyEmail ?? "");
+        setAddr({ full: p.address, street: p.street ?? p.address, cityStateZip: p.cityStateZip ?? "" });
+        return p;
+      })
       .then((p) => setInput({
         date: today(), clientName: p.clientName, salutation: p.clientName, email: p.email,
-        // Monday keeps one line; staff move the city part to its own field when the contract splits them.
+        // Monday keeps one line; split below when the picked template has a City, State zip line.
         address: p.address, cityStateZip: "",
         hearingType: p.hearingType, hearingDate: p.hearingDate, formName: p.contractFor.join(", "),
-        attorneyFee: p.attorneyFee, filingFee: p.filingFee, postageFee: null, surcharge: null, interviewFee: null,
+        // The Fee K's PF is the postage.
+        attorneyFee: p.attorneyFee, filingFee: p.filingFee, postageFee: p.processingFee, surcharge: null, interviewFee: null,
         dueDate: "", attorneyName: p.attorneyName, creatorInitials: initialsOf(user?.name ?? ""),
       }))
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not load the contract"));
   }, [c.localId, loadTemplates, user?.name]);
+
+  useEffect(() => () => { if (previewUrl.current) URL.revokeObjectURL(previewUrl.current); }, []);
+
+  const showPreview = (next: { pdf: Blob; name: string } | null) => {
+    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+    previewUrl.current = next ? URL.createObjectURL(next.pdf) : null;
+    setPreview(next && previewUrl.current ? { ...next, url: previewUrl.current } : null);
+  };
 
   // Download + check the picked template.
   useEffect(() => {
@@ -126,6 +159,19 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
   }, [picked, templates]);
 
   const shown = useMemo(() => new Set((file?.check.tags ?? []).flatMap((t) => INPUTS_FOR[t] ?? [])), [file]);
+
+  // A template with its own "City, State zip" line gets the address split;
+  // one without keeps the whole line. Only while the fields are as pre-filled.
+  const splitsAddress = shown.has("cityStateZip");
+  useEffect(() => {
+    if (!addr || !addr.cityStateZip) return;
+    setInput((f) => {
+      if (!f) return f;
+      if (splitsAddress && f.address === addr.full && f.cityStateZip === "") return { ...f, address: addr.street, cityStateZip: addr.cityStateZip };
+      if (!splitsAddress && f.address === addr.street && f.cityStateZip === addr.cityStateZip) return { ...f, address: addr.full, cityStateZip: "" };
+      return f;
+    });
+  }, [splitsAddress, addr]);
   const problems = file && input ? contractProblems(file.check, input) : [];
   const templateBroken = !!file && (file.check.errors.length > 0 || file.check.unknown.length > 0);
 
@@ -146,7 +192,31 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
       </Field>
     ) : null;
 
-  const generate = async (format: "pdf" | "docx") => {
+  const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+  const sendReady = !!input && emailOk(attorneyEmail) && emailOk(input.email)
+    && attorneyEmail.trim().toLowerCase() !== input.email.trim().toLowerCase();
+
+  const sendForSignature = async () => {
+    if (!input || !picked || !preview || !sendReady) return;
+    setBusy("send");
+    setError(null);
+    setDone(null);
+    try {
+      // Exactly the PDF on screen.
+      const res = await sendContractForSignature(c.localId, preview.pdf, { attorneyEmail: attorneyEmail.trim(), clientEmail: input.email.trim() });
+      void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+      const msg = `${c.clientName}: sent to Adobe Sign (attorney first, then the client)${res.stage ? ` · stage → ${res.stage}` : ""}`;
+      if (res.warning) setDone(`Sent to Adobe Sign. ${res.warning}`);
+      else { onSent?.(msg); onClose(); }
+    } catch (e) {
+      if (e instanceof GraphConsentRequiredError) setNeedsConsent(true);
+      else setError(e instanceof Error ? e.message : "Could not send the contract");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const generate = async (format: "preview" | "docx") => {
     if (!input || !file || !picked || problems.length > 0) return;
     setBusy(format);
     setError(null);
@@ -154,16 +224,26 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
     try {
       const docx = fillContractTemplate(file.data, input);
       const name = `${baseName(picked.name)} - ${input.clientName.replace(/[\\/:*?"<>|]+/g, " ").trim()}`;
-      if (format === "docx") save(docx, `${name}.docx`);
-      else save(await convertDocxToPdf(docx, `${name}.docx`), `${name}.pdf`);
-      setDone(format === "pdf" ? `Downloaded ${name}.pdf — send it from Acrobat (attorney first, then the client).` : `Downloaded ${name}.docx`);
-      void logContractGenerated(c.localId, { template: picked.name, format, attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+      if (format === "docx") {
+        save(docx, `${name}.docx`);
+        setDone(`Downloaded ${name}.docx`);
+        void logContractGenerated(c.localId, { template: picked.name, format: "docx", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+        return;
+      }
+      showPreview({ pdf: await convertDocxToPdf(docx, `${name}.docx`), name });
     } catch (e) {
       if (e instanceof GraphConsentRequiredError) setNeedsConsent(true);
       else setError(e instanceof Error ? e.message : "Could not generate the contract");
     } finally {
       setBusy(null);
     }
+  };
+
+  const downloadPdf = () => {
+    if (!preview || !input || !picked) return;
+    save(preview.pdf, `${preview.name}.pdf`);
+    setDone(`Downloaded ${preview.name}.pdf`);
+    void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
   };
 
   // From the click itself, so the browser allows the Microsoft popup.
@@ -182,12 +262,46 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent code="M22" className="gap-0 p-0 sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
+      <DialogContent code="M22" className={`gap-0 p-0 max-h-[94vh] overflow-y-auto ${preview ? "sm:max-w-[960px]" : "sm:max-w-[640px]"}`}>
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Generate contract</DialogTitle>
           <DialogDescription>{c.clientName}{c.contractFor.length > 0 ? ` · ${c.contractFor.join(", ")}` : ""}</DialogDescription>
         </DialogHeader>
 
+        {preview && input ? (
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-sm" style={{ color: "var(--color-ink-muted)" }}>
+              Check every page — this exact PDF is what {esign ? "goes to Adobe Sign" : "you download"}. To change something, go back to the form.
+            </p>
+            <iframe title="Contract preview" src={`${preview.url}#view=FitH`} className="w-full block rounded"
+              style={{ height: "min(70vh, 900px)", border: "1px solid var(--color-border-light)" }} />
+            {esign && (
+              <p className="text-xs" style={{ color: "var(--color-ink-muted)" }}>
+                Signers: <strong>{attorneyEmail.trim() || "attorney e-mail missing"}</strong> first, then <strong>{input.email.trim() || "client e-mail missing"}</strong>.
+                {!sendReady && " Go back and fix the e-mails to send."}
+              </p>
+            )}
+            {error && <p className="text-sm" style={{ color: "var(--urgency-overdue)" }}>{error}</p>}
+            {done && <p className="text-sm" style={{ color: "var(--color-ink)" }}>✓ {done}</p>}
+            <div className="flex items-center gap-2 pt-1">
+              <Button type="button" variant="outline" disabled={busy !== null} onClick={() => { showPreview(null); setDone(null); setError(null); }}>
+                ← Back to edit
+              </Button>
+              <div className="ml-auto flex gap-2">
+                <Button type="button" variant={esign ? "outline" : undefined} disabled={busy !== null} onClick={downloadPdf}
+                  title={esign ? "Download this PDF instead of sending it" : "Download this PDF — send it from Acrobat (attorney first, then the client)"}>
+                  Download PDF
+                </Button>
+                {esign && (
+                  <Button type="button" disabled={!sendReady || busy !== null} onClick={sendForSignature}
+                    title="Send this PDF to Adobe Sign: attorney first, then the client">
+                    {busy === "send" ? "Sending…" : "Send for signature"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="px-5 py-4 space-y-4">
           {needsConsent && (
             <div className="text-sm rounded p-3 flex items-center gap-2" style={{ background: "var(--color-amber-light)", color: "var(--color-ink)" }}>
@@ -250,7 +364,7 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
                 {amount("filingFee", "Filing fee $")}
                 {amount("postageFee", "Postage $", "Empty prints N/A", "N/A")}
                 {amount("interviewFee", "Interview fee $")}
-                {amount("surcharge", "Surcharge $", input.surcharge === null ? `3% of AF = ${money(surchargeOf(input))}` : undefined, money(surchargeOf(input)))}
+                {amount("surcharge", "Surcharge $", input.surcharge === null ? `3% of AF + FF + postage = ${money(surchargeOf(input))}` : undefined, money(surchargeOf(input)))}
               </div>
               {file.check.tags.includes("total_fee") && (
                 <p className="text-sm" style={{ color: "var(--color-ink)" }}>Total fee: <strong className="tabular-nums">{money(totalOf(input))}</strong></p>
@@ -263,6 +377,32 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
             </>
           )}
 
+          {esign && file && input && !templateBroken && (
+            <div className="rounded-md p-3 space-y-2" style={{ border: "1px solid var(--color-border-light)" }}>
+              <div className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>Send for signature (Adobe Sign)</div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field id="m22-atty-email" label="1. Attorney signs first" hint={attorneyEmail ? undefined : "Not in Settings → Documents — type it."}>
+                  <input id="m22-atty-email" type="email" className={inputClass} style={inputStyle}
+                    value={attorneyEmail} onChange={(e) => setAttorneyEmail(e.target.value)} />
+                </Field>
+                <Field id="m22-client-email" label="2. Then the client">
+                  <input id="m22-client-email" type="email" className={inputClass} style={inputStyle}
+                    value={input.email} onChange={(e) => set("email", e.target.value)} />
+                </Field>
+              </div>
+              {file.check.signTags.length === 0 && (
+                <p className="text-xs rounded p-2" style={{ background: "var(--color-amber-light)", color: "var(--color-ink)" }}>
+                  This template has no Adobe signing tags, so Adobe will add a signature page at the end instead of using the
+                  contract&apos;s own signature, initials and address lines. Add the tags to the Word template (see the READ ME in the folder).
+                </p>
+              )}
+              <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
+                Preview first, then send from the preview. Sending moves the stage to Atty Reviewing and leaves a note on Monday.
+                Each signature updates the stage by itself; you get a Monday notification when the client signs.
+              </p>
+            </div>
+          )}
+
           {error && <p className="text-sm" style={{ color: "var(--urgency-overdue)" }}>{error}</p>}
           {done && <p className="text-sm" style={{ color: "var(--color-ink)" }}>✓ {done}</p>}
 
@@ -273,12 +413,14 @@ export function GenerateContractModal({ contract: c, onClose }: Props) {
                 title="Download the filled Word file, to make changes before sending">
                 {busy === "docx" ? "Filling…" : "Word"}
               </Button>
-              <Button type="button" disabled={!file || templateBroken || problems.length > 0 || busy !== null} onClick={() => generate("pdf")}>
-                {busy === "pdf" ? "Making PDF…" : "Generate PDF"}
+              <Button type="button" disabled={!file || templateBroken || problems.length > 0 || busy !== null} onClick={() => generate("preview")}
+                title="Make the PDF and show it here, to check before downloading or sending">
+                {busy === "preview" ? "Making PDF…" : "Preview PDF"}
               </Button>
             </div>
           </div>
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );

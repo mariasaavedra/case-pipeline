@@ -6,7 +6,7 @@ import { SectionCode } from "./ScreenCode";
 import { NewContractModal } from "./NewContractModal";
 import { PaymentLinksModal } from "./PaymentLinksModal";
 import { GenerateContractModal } from "./GenerateContractModal";
-import { EditFeesModal } from "./EditFeesModal";
+import { EditContractModal } from "./EditContractModal";
 import { ClientFilesModal } from "./ClientFilesModal";
 import { createPortal } from "react-dom";
 import { menuBoxStyle, useAnchoredMenu } from "./anchored-menu";
@@ -23,7 +23,7 @@ import { formatDue, PersonChip, FormChip, ListSection, waitFg } from "./caseBoar
 // doesn't record when a stage changed. Each stage group wears its Monday colour. See docs/features/prescheduling-and-contracts.md.
 // Each row's ⋯ menu: E-file / Consult file (M26, the client's SharePoint
 // folders), Generate contract (M22, PDF from the firm's templates), Payment
-// links (M21, LawPay), Edit fees / Change case type (M25, also a click on the
+// links (M21, LawPay), Edit contract (M25, also a click on the
 // fees or the case type) and the next
 // signing step (contracts are signed in
 // Acrobat Pro, attorney first, then the client) — see
@@ -50,14 +50,13 @@ const menuItemStyle: React.CSSProperties = {
 
 /** The row's ⋯ menu: the client's folders, generate the contract, payment links,
  *  fees, and the next signing step. */
-function RowMenu({ c, onStep, onFiles, onGenerate, onPaymentLinks, onFees, onCaseType }: {
+function RowMenu({ c, onStep, onFiles, onGenerate, onPaymentLinks, onEdit }: {
   c: PendingContract;
   onStep: (step: ContractStep) => Promise<void>;
   onFiles: () => void;
   onGenerate: () => void;
   onPaymentLinks: () => void;
-  onFees: () => void;
-  onCaseType: () => void;
+  onEdit: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -108,8 +107,7 @@ function RowMenu({ c, onStep, onFiles, onGenerate, onPaymentLinks, onFees, onCas
               )}
               <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onGenerate)}>Generate contract…</button>
               <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onPaymentLinks)}>Payment links…</button>
-              <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onCaseType)}>Change case type…</button>
-              <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onFees)}>Edit fees…</button>
+              <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={() => pick(onEdit)}>Edit contract…</button>
               {step && (
                 <>
                   <div style={{ borderTop: "1px solid var(--color-border-light)", margin: "4px 0" }} />
@@ -141,11 +139,10 @@ interface RowProps {
   onFiles: (c: PendingContract) => void;
   onGenerate: (c: PendingContract) => void;
   onPaymentLinks: (c: PendingContract) => void;
-  onFees: (c: PendingContract) => void;
-  onCaseType: (c: PendingContract) => void;
+  onEdit: (c: PendingContract) => void;
 }
 
-function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPaymentLinks, onFees, onCaseType }: RowProps) {
+function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPaymentLinks, onEdit }: RowProps) {
   return (
     <li
       className="grid gap-x-4 gap-y-1.5 px-4 py-3 items-center grid-cols-1 md:grid-cols-[minmax(0,2fr)_11rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto]"
@@ -162,7 +159,7 @@ function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPay
         )}
         <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
             {/* Case type — click to change (M25) */}
-            <button type="button" onClick={() => onCaseType(c)} title="Change case type"
+            <button type="button" onClick={() => onEdit(c)} title="Edit contract"
               className="flex items-center gap-1.5 shrink-0 rounded hover:bg-[var(--color-surface-warm)]"
               style={{ cursor: "pointer", background: "none", border: "none", padding: 0 }}>
               {c.contractFor.length > 0
@@ -178,10 +175,11 @@ function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPay
         </div>
         {/* Fields the contract can't go out without (pending-contracts.ts MISSING_FIELDS). */}
         {c.missing.length > 0 && (
-          <div className="text-xs mt-0.5" style={{ color: waitFg("waiting") }}
-            title="Empty on the Fee K in Monday. E-mail and Address come from the client's Profile.">
+          <button type="button" onClick={() => onEdit(c)} className="block text-xs mt-0.5 text-left hover:underline"
+            style={{ color: waitFg("waiting"), background: "none", border: "none", padding: 0, cursor: "pointer" }}
+            title="Fill it in (M25). E-mail and Address are saved on the client's Profile.">
             Missing: {c.missing.join(", ")}
-          </div>
+          </button>
         )}
       </div>
 
@@ -208,7 +206,7 @@ function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPay
       </div>
 
       {/* Fees — click to edit (M25) */}
-      <button type="button" onClick={() => onFees(c)} title="Edit fees"
+      <button type="button" onClick={() => onEdit(c)} title="Edit contract"
         className="text-xs tabular-nums min-w-0 text-left rounded px-1 -mx-1 hover:bg-[var(--color-surface-warm)]"
         style={{ color: "var(--color-ink-muted)", cursor: "pointer", background: "none", border: "none" }}>
         {c.attorneyFee !== null && <div>AF {money(c.attorneyFee)}</div>}
@@ -231,7 +229,7 @@ function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPay
       {/* ⋯ actions */}
       <div className="md:justify-self-end">
         <RowMenu c={c} onStep={(step) => onStep(c, step)} onFiles={() => onFiles(c)} onGenerate={() => onGenerate(c)}
-          onPaymentLinks={() => onPaymentLinks(c)} onFees={() => onFees(c)} onCaseType={() => onCaseType(c)} />
+          onPaymentLinks={() => onPaymentLinks(c)} onEdit={() => onEdit(c)} />
       </div>
     </li>
   );
@@ -244,7 +242,7 @@ export function ContractsPage() {
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState<PendingContract | null>(null);
   const [generating, setGenerating] = useState<PendingContract | null>(null);
-  const [editing, setEditing] = useState<{ c: PendingContract; focus: "fees" | "caseType" } | null>(null);
+  const [editing, setEditing] = useState<PendingContract | null>(null);
   const [browsing, setBrowsing] = useState<PendingContract | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -302,13 +300,18 @@ export function ContractsPage() {
         </Button>
       </div>
       {creating && <NewContractModal onClose={() => setCreating(false)} />}
-      {generating && <GenerateContractModal contract={generating} onClose={() => setGenerating(null)} />}
+      {generating && (
+        <GenerateContractModal
+          contract={generating}
+          onClose={() => setGenerating(null)}
+          onSent={(msg) => { setNotice(msg); void load(); }}
+        />
+      )}
       {editing && (
-        <EditFeesModal
-          contract={editing.c}
-          focus={editing.focus}
+        <EditContractModal
+          contract={editing}
           onSaved={(pending) => {
-            setNotice(`${editing.c.clientName}: contract saved${pending ? " (queued — Monday will update shortly)" : ""}`);
+            setNotice(`${editing.clientName}: contract saved${pending ? " (queued — Monday will update shortly)" : ""}`);
             void load();
           }}
           onClose={() => setEditing(null)}
@@ -380,7 +383,7 @@ export function ContractsPage() {
                   {inStage.map((c) => (
                     <ContractRow key={c.localId} c={c} filter={filter} onAttorney={pickAttorney} onStep={takeStep}
                       onFiles={setBrowsing} onGenerate={setGenerating} onPaymentLinks={setPaying}
-                      onFees={(c) => setEditing({ c, focus: "fees" })} onCaseType={(c) => setEditing({ c, focus: "caseType" })} />
+                      onEdit={(c) => setEditing(c)} />
                   ))}
                 </ListSection>
               ) : null;

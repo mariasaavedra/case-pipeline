@@ -18,6 +18,9 @@ type DatabaseInstance = BetterSqlite3.Database;
 import { requireAuth } from "../auth/middleware.js";
 import { auditFromReq } from "../audit/log.js";
 import { hearingKindOf } from "@case-pipeline/query";
+import { letterAddress } from "../documents/us-address.js";
+import { loadDocumentSettings } from "../documents/document-settings.js";
+import type { AttorneyInfo } from "../documents/document-settings.js";
 
 interface ContractDocRow {
   monday_item_id: string | null;
@@ -38,7 +41,12 @@ export interface ContractPrefill {
   email: string;
   /** One line, as Monday keeps it. */
   address: string;
+  /** The same address split for a letter: street line + "City, ST zip" ("" when it can't tell). */
+  street: string;
+  cityStateZip: string;
   attorneyName: string;
+  /** From Settings → Documents, matched by name; "" when unknown. For Adobe Sign. */
+  attorneyEmail: string;
   contractFor: string[];
   attorneyFee: number | null;
   filingFee: number | null;
@@ -70,13 +78,29 @@ export function contractHearingType(mondayLabel: string | null): string {
   return kind === "mch" ? "Master Hearing" : kind === "trial" ? "Individual Hearing" : mondayLabel;
 }
 
-export function contractPrefill(row: ContractDocRow, hearing: { type: string | null; date: string | null } | null): ContractPrefill {
+/** The attorney's e-mail from Settings → Documents, by full name. */
+export function attorneyEmailFor(name: string, attorneys: Pick<AttorneyInfo, "givenName" | "familyName" | "email">[]): string {
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+  const want = norm(name);
+  if (!want) return "";
+  const hit = attorneys.find((a) => norm(`${a.givenName} ${a.familyName}`) === want);
+  return hit?.email.trim() ?? "";
+}
+
+export function contractPrefill(
+  row: ContractDocRow,
+  hearing: { type: string | null; date: string | null } | null,
+  attorneys: Pick<AttorneyInfo, "givenName" | "familyName" | "email">[] = [],
+): ContractPrefill {
+  // First listed attorney; a people label can read "A, B".
+  const attorneyName = (row.attorney ?? "").split(",").map((s) => s.trim()).find((s) => s && !s.includes("@")) ?? "";
   return {
     clientName: (row.clientName ?? row.itemName).trim(),
     email: row.email?.trim() ?? "",
     address: row.address?.trim() ?? "",
-    // First listed attorney; a people label can read "A, B".
-    attorneyName: (row.attorney ?? "").split(",").map((s) => s.trim()).find((s) => s && !s.includes("@")) ?? "",
+    ...letterAddress(row.address),
+    attorneyName,
+    attorneyEmail: attorneyEmailFor(attorneyName, attorneys),
     contractFor: labels(row.contractFor),
     attorneyFee: amount(row.af),
     filingFee: amount(row.ff),
@@ -118,7 +142,7 @@ export function registerContractDocumentRoutes(app: Express, deps: { db: Databas
            ORDER BY next_date LIMIT 1
         `).get(row.profileLocalId, today) as { type: string | null; date: string | null } | undefined) ?? null
       : null;
-    res.json({ data: contractPrefill(row, hearing) });
+    res.json({ data: contractPrefill(row, hearing, loadDocumentSettings().attorneys) });
   });
 
   app.post("/api/contracts/:localId/document-generated", requireAuth, (req, res) => {

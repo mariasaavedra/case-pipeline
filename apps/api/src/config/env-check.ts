@@ -270,6 +270,25 @@ export function checkEnvironment(opts: CheckOptions = {}): EnvIssue[] {
     if (!env.MONDAY_API_TOKEN?.trim()) err("MONDAY_API_TOKEN", "is required when FEE_K_AUTOFILL=on", "The fill writes to Monday.");
   }
 
+  // ---------------------------------------------------------------------------
+  // Adobe Sign via Zapier — half set up means the Send button never shows
+  // ---------------------------------------------------------------------------
+  const esignHook = env.ZAPIER_ESIGN_HOOK_URL?.trim();
+  const esignSecret = env.ZAPIER_ESIGN_SECRET?.trim();
+  if (esignHook || esignSecret) {
+    if (!esignHook) err("ZAPIER_ESIGN_HOOK_URL", "is required when ZAPIER_ESIGN_SECRET is set", "Zap 1's Catch Hook URL. See docs/features/esign-zapier.md.");
+    else if (!/^https:\/\/hooks\.zapier\.com\//.test(esignHook)) err("ZAPIER_ESIGN_HOOK_URL", "is not a Zapier Catch Hook URL (https://hooks.zapier.com/…)");
+    if (!esignSecret) err("ZAPIER_ESIGN_SECRET", "is required when ZAPIER_ESIGN_HOOK_URL is set", "Generate one with: openssl rand -hex 24");
+    else if (esignSecret.length < 24) {
+      warn("ZAPIER_ESIGN_SECRET", `is short (${esignSecret.length} chars) — it is the only thing authenticating the Zapier endpoint`, "openssl rand -hex 24");
+    }
+    if (!env.API_URL?.trim()) err("API_URL", "is required for Adobe Sign — Zapier downloads the contract PDF from it");
+  }
+  const slack = env.SLACK_WEBHOOK_URL?.trim();
+  if (slack && !/^https:\/\/hooks\.slack\.com\//.test(slack)) {
+    warn("SLACK_WEBHOOK_URL", "is not a Slack Incoming Webhook URL (https://hooks.slack.com/…) — Slack messages are skipped");
+  }
+
   return issues;
 }
 

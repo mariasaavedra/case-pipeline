@@ -72,6 +72,7 @@ import { registerContractStepRoutes } from "./routes/contract-step.js";
 import { registerContractFeesRoutes } from "./routes/contract-fees.js";
 import { registerCaseCardWriteRoutes } from "./routes/case-card-write.js";
 import { registerContractDocumentRoutes } from "./routes/contract-document.js";
+import { registerEsignPublicRoutes, registerEsignRoutes } from "./routes/esign.js";
 import { registerDocumentRoutes } from "./routes/documents.js";
 import { initDocumentSettings } from "./documents/document-settings.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
@@ -260,6 +261,10 @@ registerMondayOAuth(app);
 // send an Azure AD token; it authenticates via the secret URL path segment).
 // Must be registered BEFORE the /api/ requireAuth catch-all below.
 registerMondayWebhook(app, db);
+
+// Adobe Sign via Zapier: the contract PDF link Zap 1 downloads and the event
+// receiver. Secret URL / random file token instead of an Azure AD login.
+registerEsignPublicRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 
 // Admin — requireAdmin gates the role once here, so a future admin route can't
 // forget the check.
@@ -510,6 +515,7 @@ registerContractStepRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTok
 registerContractFeesRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerCaseCardWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractDocumentRoutes(app, { db });
+registerEsignRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerDocumentRoutes(app, { db });
 
 // =============================================================================
