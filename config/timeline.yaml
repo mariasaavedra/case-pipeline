@@ -1,0 +1,103 @@
+# =============================================================================
+# Case timeline (P3.9) — which dates on each board are milestones
+# =============================================================================
+# Read by libs/query/src/case-timeline.ts via loadTimelineConfig().
+#
+# `column` is the logical column key from boards.yaml (the key in a row's
+# column_values JSON), not Monday's column id. A row whose column is empty adds
+# nothing.
+#
+# Labels and details are templates:
+#   {col}           the column's text / status label / tag labels
+#   {col|fallback}  ... or `fallback` when the column is empty
+#   {status}        the item's Status
+#   {who}           " — <first names>" when an Open Form is for someone other
+#                   than the client (a spouse or child on the same profile)
+#
+# Tracks: court · uscis · fees · meetings · notes
+# Kinds:  milestone · filing · decision · hearing · deadline · meeting · call · note
+#
+# Rows whose name contains "(copy)" are skipped everywhere (Monday duplicates).
+#
+# Rules that need more than a date + label (court outcome from the item name,
+# hearing outcomes, appeals, motions, RFEs/denials, appointments, Fee K
+# signing) are in code: see RULES in case-timeline.ts. A board listed here can
+# have both `milestones` and a `rule`.
+# =============================================================================
+
+boards:
+  court_cases:
+    track: court
+    rule: court_outcome
+    milestones:
+      - { column: nta_date, kind: milestone, label: "NTA issued" }
+      - { column: app_filed, kind: filing, label: "{relief|Application} filed with court" }
+      - { column: wps_filed_on, kind: filing, label: "WPS filed" }
+      - { column: wl_filed, kind: filing, label: "Witness list filed" }
+      - { column: fp_date, kind: milestone, label: "Biometrics (fingerprints)" }
+
+  calendaring:
+    track: court
+    rule: calendaring
+
+  appeals:
+    track: court
+    rule: appeal
+
+  motions:
+    track: court
+    rule: motion
+
+  address_changes:
+    track: court
+    milestones:
+      - { column: date_sent, kind: filing, label: "Change of address filed" }
+
+  _cd_open_forms:
+    track: uscis
+    # The interview item ("... I589 INTERVIEW ...") is skipped: Calendaring
+    # carries the interview itself.
+    skip_name: "INTERVIEW"
+    milestones:
+      - { column: hire_date, kind: milestone, label: "Hired for {forms|forms}{who}" }
+      - { column: forms_appt_date, kind: meeting, label: "Forms appointment: {forms|forms}{who}" }
+      - { column: forms_sent_date, kind: filing, label: "{forms|Forms} sent to USCIS{who}" }
+      - { column: received_priority_date, kind: milestone, label: "{forms|Forms} receipt notice{who}", detail: "Receipt status: {receipt_status|—}" }
+
+  rfes_all:
+    track: uscis
+    rule: rfe
+
+  _na_originals_cards_notices:
+    track: uscis
+    milestones:
+      - { column: date_received, kind: milestone, label: "Originals received: {what_we_have|documents}", detail: "Status: {status}" }
+
+  call_log:
+    track: meetings
+    milestones:
+      - { column: date, kind: call, label: "Client call", detail: "Status: {status}" }
+
+  # Every attorney board (appointments_<initials>) uses the same rule.
+  appointments_*:
+    track: meetings
+    rule: appointment
+
+# Fee Ks live in the contracts table, not board_items.
+contracts:
+  track: fees
+  rule: contract
+  milestones:
+    - { column: payment_link_sent_on, kind: milestone, label: "Payment link sent" }
+
+# Emails & Activities types that are milestones. Only the first line of the
+# entry is shown; the body goes in the detail. A "Filing Complete" on the same
+# day as a filing the boards already show is folded into that filing's detail.
+activities:
+  # skip_if: entries that are chat, not a filing ("I was wondering why...").
+  "Filing Complete": { track: court, kind: filing, uscis_if: "RFE|USCIS|I-?765|Fedex", skip_if: "^(I |Tried|So |We )" }
+  "HEARING NOTICE": { track: court, kind: milestone, label: "Hearing notice: {first}" }
+  "IJ - Order/Decision": { track: court, kind: decision, label: "IJ order received" }
+  "USCIS FF Payment": { track: uscis, kind: milestone, label: "USCIS filing fee paid" }
+  "CASE STRAT": { track: notes, kind: note, label: "Case strategy discussed" }
+  "Deadline": { track: notes, kind: note, label: "Deadline logged" }

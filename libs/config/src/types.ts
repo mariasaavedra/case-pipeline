@@ -43,3 +43,50 @@ export interface AppConfig {
   boards: Record<string, BoardConfig>;
   templates: Record<string, TemplateConfig>;
 }
+
+// =============================================================================
+// Case timeline (config/timeline.yaml)
+// =============================================================================
+
+export type TimelineTrack = "court" | "uscis" | "fees" | "meetings" | "notes";
+export type TimelineKind =
+  | "milestone" | "filing" | "decision" | "hearing" | "deadline" | "meeting" | "call" | "note";
+/** Milestones that need more than a date + label — implemented in libs/query/src/case-timeline.ts. */
+export type TimelineRule =
+  | "court_outcome" | "calendaring" | "appeal" | "motion" | "rfe" | "appointment" | "contract";
+
+export interface TimelineMilestoneConfig {
+  /** Logical column key from boards.yaml (the key in column_values). */
+  column: string;
+  kind: TimelineKind;
+  /** Template: {col}, {col|fallback}, {status}, {who}. */
+  label: string;
+  detail?: string;
+}
+
+export interface TimelineBoardConfig {
+  track: TimelineTrack;
+  rule?: TimelineRule;
+  /** Skip items whose name contains this text. */
+  skip_name?: string;
+  milestones?: TimelineMilestoneConfig[];
+}
+
+export interface TimelineActivityConfig {
+  track: TimelineTrack;
+  kind: TimelineKind;
+  /** Template: {first} = the entry's first line. Omitted = the first line itself. */
+  label?: string;
+  /** Regex: entries matching it go on the USCIS track instead. */
+  uscis_if?: string;
+  /** Regex: entries matching it are not milestones (chat logged under the type). */
+  skip_if?: string;
+}
+
+export interface TimelineConfig {
+  /** Keyed by board key; a key ending in `*` matches every board with that prefix. */
+  boards: Record<string, TimelineBoardConfig>;
+  contracts?: TimelineBoardConfig;
+  /** Keyed by Emails & Activities type name. */
+  activities: Record<string, TimelineActivityConfig>;
+}

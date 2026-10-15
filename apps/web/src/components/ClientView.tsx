@@ -13,6 +13,7 @@ import { ContractsTab } from "./ContractsTab";
 import { ActiveCasesTab } from "./ActiveCasesTab";
 import { CourtCasesTab } from "./CourtCasesTab";
 import { DocumentsTab } from "./DocumentsTab";
+import { CaseTimelineTab } from "./CaseTimelineTab";
 import {
   TimelineFilters,
   resolveRange,
@@ -28,6 +29,7 @@ import { useAuth } from "../auth/useAuth";
 /** Screen codes from docs/ui-map.md — P3 is Client 360, one number per tab. */
 const TAB_CODES: Record<TabId, string> = {
   overview: "P3.1",
+  timeline: "P3.9",
   appointments: "P3.2",
   contracts: "P3.3",
   active_cases: "P3.4",
@@ -199,6 +201,8 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
               />
             </div>
           )}
+
+          {activeTab === "timeline" && <CaseTimelineTab profileLocalId={data.profile.localId} />}
 
           {activeTab === "appointments" && (
             <AppointmentsTab

@@ -1338,3 +1338,59 @@ body {
   padding-left: 0.75em;
   color: var(--color-ink-faint);
 }
+
+/* =============================================================================
+   P3.9 Case timeline (CaseTimelineTab.tsx) — one color per track
+   ============================================================================= */
+:root {
+  --tl-court: #3b5bdb;
+  --tl-uscis: #0c8599;
+  --tl-fees: #9c6b00;
+  --tl-meetings: #7048e8;
+  --tl-notes: #868e96;
+  --tl-good: #2b8a3e;
+  --tl-bad: #c92a2a;
+  --tl-warn: #d9480f;
+}
+[data-theme="dark"] {
+  --tl-court: #748ffc;
+  --tl-uscis: #3bc9db;
+  --tl-fees: #fab005;
+  --tl-meetings: #9775fa;
+  --tl-notes: #adb5bd;
+  --tl-good: #51cf66;
+  --tl-bad: #ff6b6b;
+  --tl-warn: #ffa94d;
+}
+.case-tl-seg { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.case-tl-seg button {
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-ink-muted);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.case-tl-seg button[aria-pressed="true"] {
+  background: var(--color-ink);
+  color: var(--color-card);
+  border-color: var(--color-ink);
+}
+.case-tl-chart { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.case-tl-chart svg { display: block; min-width: 720px; width: 100%; }
+.case-tl-tip {
+  position: fixed;
+  pointer-events: none;
+  z-index: 60;
+  max-width: 320px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: var(--color-ink);
+  color: var(--color-card);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+.case-tl-row { display: grid; grid-template-columns: 56px 16px 1fr; gap: 8px; padding: 6px; border-radius: 8px; align-items: start; }
+.case-tl-row:hover, .case-tl-row[data-hl="true"] { background: var(--color-surface-warm); }
+.case-tl-row[data-cancelled="true"] .case-tl-label { text-decoration: line-through; color: var(--color-ink-faint); }

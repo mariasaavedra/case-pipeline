@@ -1,4 +1,4 @@
-export type TabId = "overview" | "appointments" | "contracts" | "active_cases" | "court_cases" | "documents" | "relations" | "debug";
+export type TabId = "overview" | "timeline" | "appointments" | "contracts" | "active_cases" | "court_cases" | "documents" | "relations" | "debug";
 
 interface Props {
   activeTab: TabId;
@@ -16,6 +16,7 @@ interface Props {
 
 const TABS: { id: TabId; label: string; countKey?: keyof NonNullable<Props["counts"]>; adminOnly?: boolean }[] = [
   { id: "overview", label: "Overview" },
+  { id: "timeline", label: "Timeline" },
   { id: "appointments", label: "Appointments", countKey: "appointments" },
   { id: "contracts", label: "Contracts", countKey: "contracts" },
   { id: "active_cases", label: "Active Cases", countKey: "activeCases" },

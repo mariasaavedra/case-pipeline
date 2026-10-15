@@ -4,7 +4,7 @@
 
 import yaml from "js-yaml";
 import { readFile, access } from "node:fs/promises";
-import type { AppConfig, BoardConfig, TemplateConfig } from "./types";
+import type { AppConfig, BoardConfig, TemplateConfig, TimelineConfig } from "./types";
 
 // =============================================================================
 // Environment variable substitution
@@ -67,6 +67,7 @@ export interface LoadConfigOptions {
 
 const DEFAULT_BOARDS_PATH = "config/boards.yaml";
 const DEFAULT_TEMPLATES_PATH = "config/templates.yaml";
+const DEFAULT_TIMELINE_PATH = "config/timeline.yaml";
 
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<AppConfig> {
   const boardsPath = options.boardsPath ?? DEFAULT_BOARDS_PATH;
@@ -91,4 +92,9 @@ export async function loadBoardsConfig(path: string = DEFAULT_BOARDS_PATH): Prom
 export async function loadTemplatesConfig(path: string = DEFAULT_TEMPLATES_PATH): Promise<Record<string, TemplateConfig>> {
   const config = await loadYamlFile<{ templates: Record<string, TemplateConfig> }>(path);
   return config.templates;
+}
+
+/** The case timeline's milestone mapping (P3.9). */
+export async function loadTimelineConfig(path: string = DEFAULT_TIMELINE_PATH): Promise<TimelineConfig> {
+  return loadYamlFile<TimelineConfig>(path);
 }

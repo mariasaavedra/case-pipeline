@@ -9,7 +9,7 @@ export interface Route {
   params: Record<string, string>;
 }
 
-const VALID_TABS = new Set<string>(["overview", "appointments", "contracts", "active_cases", "court_cases", "documents", "relations"]);
+const VALID_TABS = new Set<string>(["overview", "timeline", "appointments", "contracts", "active_cases", "court_cases", "documents", "relations"]);
 const SETTINGS_TABS = new Set<string>(["account", "preferences", "firm", "integrations", "admin"]);
 
 /**
