@@ -142,6 +142,7 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
     ...profile,
     ...readSharePointLinks(rawColumnValues),
     displayName: readDisplayName(rawColumnValues),
+    ...readLastName(rawColumnValues),
     dmsUrl: readDmsUrl(rawColumnValues),
     detainedAt: getDetainedAt(db, localId),
     ...readTextingContact(rawColumnValues),
@@ -189,6 +190,11 @@ export function readDisplayName(rawColumnValues: string | null | undefined): str
   const clean = (v: unknown): string => stripNameNotes(asNonEmptyString(v) ?? "");
   const full = [clean(cvs.first_name), clean(cvs.last_name)].filter(Boolean).join(" ");
   return full || null;
+}
+
+/** Last Name exactly as stored (consultFolderName strips the notes itself). */
+function readLastName(rawColumnValues: string | null | undefined): { lastName: string | null } {
+  return { lastName: asNonEmptyString(safeParseJson(rawColumnValues).last_name) ?? null };
 }
 
 /** An open court case whose Det. Facility says where the client is held. */

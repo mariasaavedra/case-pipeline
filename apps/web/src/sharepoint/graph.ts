@@ -424,6 +424,27 @@ export async function convertDocxToPdf(docx: Blob, fileName: string): Promise<Bl
   }
 }
 
+/** SharePoint's forbidden characters in a file or folder name. */
+const ILLEGAL_NAME = /["*:<>?/\\|]/;
+
+/** Why a new folder name won't work, or null when it's fine. */
+export function folderNameProblem(name: string): string | null {
+  const n = name.trim();
+  if (!n) return "Type a name";
+  if (ILLEGAL_NAME.test(n)) return 'A folder name can\'t contain " * : < > ? / \\ |';
+  if (n.endsWith(".")) return "A folder name can't end with a dot";
+  return null;
+}
+
+/** A new subfolder. conflictBehavior=fail → a 409 when the name is taken, never a "NAME 1" sibling. */
+export async function createFolder(driveId: string, parentItemId: string, name: string): Promise<DriveItem> {
+  return graphFetch<DriveItem>(`/drives/${driveId}/items/${parentItemId}/children`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name.trim(), folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+  });
+}
+
 // ---- Client folders ---------------------------------------------------------
 
 /** The firm's tenant and the three sites a client folder can live on. */

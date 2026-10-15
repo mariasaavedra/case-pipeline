@@ -14,6 +14,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-15",
+    title: "Client page: e-file shortcuts and new folders",
+    items: [
+      "The ⋯ menu at the top of a client's page has “Open e-file in SharePoint”, which opens their e-file folder in a new tab.",
+      "In the Documents tab, “New folder” next to “Upload files” makes a folder inside the one you're looking at.",
+      "A client with no e-file gets “Find or create e-file folder”: it finds their folder in E-Files (or Closed), or makes E-Files / initial / LAST, First, and puts the link on their Monday profile.",
+    ],
+  },
+  {
     date: "2026-10-14",
     title: "Appointments: fees with the consult note",
     items: [

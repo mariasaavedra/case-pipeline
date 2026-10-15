@@ -9,14 +9,24 @@
 // `pick` turns it into a picker (M19, from the consult prep popup): each file
 // gets an Attach toggle, and files uploaded here are reported back so the
 // caller can attach them too.
+//
+// Inside a folder, New folder makes a subfolder. `eFile` (P3.6 only) adds
+// "Find or create e-file folder" when the client has no e-file link: the same
+// lookup as M18 (E-Files, then Closed; created under E-Files/{initial}/ only
+// when neither has one), and the link is written to the profile's E-File.
 // =============================================================================
 
 import { useState, useMemo, useCallback } from "react";
+import { consultFolderName } from "@case-pipeline/core";
+import { setProfileEFile } from "../api";
 import { collectClientFolders, type ClientFolder, type FolderSource } from "../sharepoint/collectFolders";
 import {
   resolveFolder,
   listChildren,
   uploadFile,
+  createFolder,
+  folderNameProblem,
+  findOrCreateClientFolder,
   getGraphToken,
   GraphConsentRequiredError,
   GraphError,
@@ -46,6 +56,8 @@ interface Props {
     /** A file uploaded in pick mode — it is also chosen. */
     onUploaded?: (file: File, item: DriveItem) => void;
   };
+  /** The client whose e-file folder can be found or created here (P3.6). */
+  eFile?: { profileLocalId: string; firstName?: string | null; lastName?: string | null };
 }
 
 interface Crumb {
@@ -94,8 +106,18 @@ function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function DocumentsTab({ data, pick }: Props) {
-  const folders = useMemo(() => collectClientFolders(data), [data]);
+export function DocumentsTab({ data, pick, eFile }: Props) {
+  // An e-file linked from here shows at once, before the next sync brings it.
+  const [linkedEFile, setLinkedEFile] = useState<string | null>(null);
+  const folders = useMemo(
+    () => collectClientFolders(linkedEFile ? { ...data, profile: { ...data.profile, eFile: linkedEFile } } : data),
+    [data, linkedEFile],
+  );
+  const hasEFile = folders.some((f) => f.label.startsWith("e-file") || f.label.startsWith("Archived"));
+  const [eFileBusy, setEFileBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [newFolder, setNewFolder] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
   const [children, setChildren] = useState<DriveItem[]>([]);
   const [status, setStatus] = useState<Status>("roots");
@@ -109,6 +131,7 @@ export function DocumentsTab({ data, pick }: Props) {
   const open = useCallback(async (item: ResolvedItem, trail: Crumb[]) => {
     setStatus("loading");
     setError(null);
+    setNewFolder(null);
     try {
       const kids = await listChildren(item.driveId, item.itemId);
       setChildren(kids);
@@ -218,6 +241,64 @@ export function DocumentsTab({ data, pick }: Props) {
     [crumbs, pick],
   );
 
+  /** A subfolder in the folder being viewed, then refresh the listing. */
+  const doCreateFolder = useCallback(async () => {
+    const parent = crumbs[crumbs.length - 1];
+    if (!parent || newFolder === null) return;
+    const problem = folderNameProblem(newFolder);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setError(null);
+    setCreatingFolder(true);
+    try {
+      await createFolder(parent.item.driveId, parent.item.itemId, newFolder);
+      setNewFolder(null);
+      setChildren(await listChildren(parent.item.driveId, parent.item.itemId));
+    } catch (err) {
+      if (err instanceof GraphConsentRequiredError) {
+        setStatus("consent");
+        return;
+      }
+      setError(err instanceof GraphError && err.status === 409 ? `There is already a "${newFolder.trim()}" here.` : describe(err));
+    } finally {
+      setCreatingFolder(false);
+    }
+  }, [crumbs, newFolder]);
+
+  /** Find the client's e-file folder (or make it) and link it on Monday. */
+  const findOrCreateEFile = useCallback(async () => {
+    if (!eFile) return;
+    const named = consultFolderName({ firstName: eFile.firstName, lastName: eFile.lastName });
+    if (!named.ok) {
+      setError(`Can't name the folder: ${named.detail}. Fix the name on the Monday profile, or paste the link there.`);
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    setEFileBusy(true);
+    try {
+      const r = await findOrCreateClientFolder({
+        want: "e_file", folder: named.name.folder, initial: named.name.initial, year: new Date().getFullYear(),
+      });
+      const linked = await setProfileEFile(eFile.profileLocalId, r.url);
+      setLinkedEFile(r.url);
+      setNotice(
+        `${r.created ? "Created" : "Found"} ${r.path} and set it as the client's E-File on Monday` +
+          (linked.pending ? " (Monday is unreachable — it will be written when it's back)." : "."),
+      );
+    } catch (err) {
+      if (err instanceof GraphConsentRequiredError) {
+        setStatus("consent");
+        return;
+      }
+      setError(describe(err));
+    } finally {
+      setEFileBusy(false);
+    }
+  }, [eFile]);
+
   /** Consent popup — must run from a click or the browser blocks it. */
   const connect = useCallback(async () => {
     setConnecting(true);
@@ -234,12 +315,20 @@ export function DocumentsTab({ data, pick }: Props) {
   }, []);
 
   // ---- States ----
-  if (folders.length === 0) {
+  if (folders.length === 0 && status !== "consent") {
     return (
-      <SharePointPlaceholder
-        title="No SharePoint folders for this client"
-        message="This client has no e-file or consult link on their Monday profile or board items. Once a link is added in Monday, the folder shows up here after the next sync."
-      />
+      <>
+        <SharePointPlaceholder
+          title="No SharePoint folders for this client"
+          message={
+            eFile
+              ? "This client has no e-file or consult link on their Monday profile or board items. Find or create their e-file folder, or add a link in Monday."
+              : "This client has no e-file or consult link on their Monday profile or board items. Once a link is added in Monday, the folder shows up here after the next sync."
+          }
+          action={eFile ? { label: "Find or create e-file folder", onClick: () => void findOrCreateEFile(), busy: eFileBusy } : undefined}
+        />
+        {error && <p style={{ textAlign: "center", color: "var(--color-status-red)", fontFamily: "var(--font-body)", fontSize: 13 }}>{error}</p>}
+      </>
     );
   }
 
@@ -292,6 +381,22 @@ export function DocumentsTab({ data, pick }: Props) {
         </div>
       )}
 
+      {notice && (
+        <div
+          style={{
+            backgroundColor: "var(--color-status-green-bg)",
+            color: "var(--color-ink)",
+            border: "1px solid var(--color-border-light)",
+            borderRadius: 8,
+            padding: "10px 14px",
+            fontSize: 13,
+            fontFamily: "var(--font-body)",
+          }}
+        >
+          {notice}
+        </div>
+      )}
+
       {status === "loading" && (
         <div style={{ padding: "24px 0", textAlign: "center", color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", fontSize: 14 }}>
           Loading…
@@ -318,6 +423,16 @@ export function DocumentsTab({ data, pick }: Props) {
               )}
             </div>
           ))}
+          {eFile && !hasEFile && (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", borderTop: "1px solid var(--color-border-light)" }}>
+              <span style={{ flex: 1, fontFamily: "var(--font-body)", fontSize: 13, color: "var(--color-ink-faint)" }}>
+                No e-file folder linked on this client's profile.
+              </span>
+              <button type="button" className="action-btn" disabled={eFileBusy} onClick={() => void findOrCreateEFile()} style={{ flexShrink: 0 }}>
+                {eFileBusy ? "Working…" : "Find or create e-file folder"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -345,7 +460,42 @@ export function DocumentsTab({ data, pick }: Props) {
             transition: "border-color 0.15s ease, background-color 0.15s ease",
           }}
         >
-          {uploading ? (
+          {newFolder !== null ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void doCreateFolder();
+              }}
+              style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, flexWrap: "wrap", minWidth: 0 }}
+            >
+              <FolderIcon />
+              <input
+                autoFocus
+                value={newFolder}
+                onChange={(e) => setNewFolder(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setNewFolder(null);
+                    setError(null);
+                  }
+                }}
+                placeholder={`New folder in ${crumbs[crumbs.length - 1]!.label}`}
+                aria-label="New folder name"
+                maxLength={200}
+                disabled={creatingFolder}
+                style={{
+                  flex: "1 1 160px", minWidth: 0, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--color-border)",
+                  fontFamily: "var(--font-body)", fontSize: 13, color: "var(--color-ink)", background: "var(--color-surface)",
+                }}
+              />
+              <button type="submit" className="action-btn" disabled={creatingFolder || !newFolder.trim()} style={{ flexShrink: 0 }}>
+                {creatingFolder ? "Creating…" : "Create"}
+              </button>
+              <button type="button" className="action-btn" disabled={creatingFolder} onClick={() => { setNewFolder(null); setError(null); }} style={{ flexShrink: 0 }}>
+                Cancel
+              </button>
+            </form>
+          ) : uploading ? (
             <>
               <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--color-ink)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 Uploading {uploading.name}…
@@ -359,6 +509,9 @@ export function DocumentsTab({ data, pick }: Props) {
               <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--color-ink-faint)", flex: 1 }}>
                 Drop files here to upload to <strong style={{ color: "var(--color-ink)" }}>{crumbs[crumbs.length - 1]!.label}</strong>
               </span>
+              <button type="button" className="action-btn" style={{ flexShrink: 0 }} onClick={() => setNewFolder("")}>
+                New folder
+              </button>
               <label className="action-btn" style={{ flexShrink: 0, cursor: "pointer" }}>
                 <input
                   type="file"

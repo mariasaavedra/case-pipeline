@@ -95,13 +95,13 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Address | Notes |
 |---|---|---|---|
-| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17; **Watch** + a **⋯** menu → D37, whose **Generate document…** → M23; **Text** next to the phone → M28 on free text, Phone else Phone 2) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
+| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17; **Watch** + a **⋯** menu → D37: Open in DMS / Monday.com / **Open e-file in SharePoint**, and **Generate document…** → M23; **Text** next to the phone → M28 on free text, Phone else Phone 2) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
 | P3.1 | Overview tab | `/clients/:id` | Timeline of notes + note composer; date range → D5 |
 | P3.2 | Appointments tab | `/clients/:id/appointments` | **+ Book a consult** → M10 |
 | P3.3 | Contracts tab | `/clients/:id/contracts` | **+ New contract** → M11 |
 | P3.4 | Active Cases tab | `/clients/:id/active_cases` | |
 | P3.5 | Court Cases tab | `/clients/:id/court_cases` | |
-| P3.6 | Documents tab | `/clients/:id/documents` | SharePoint files; click a file → M12 |
+| P3.6 | Documents tab | `/clients/:id/documents` | SharePoint files; click a file → M12. Inside a folder: **New folder**, **Upload files**. No e-file link → **Find or create e-file folder** (writes the profile's E-File) |
 | P3.7 | Relations tab | `/clients/:id/relations` | |
 | P3.8 | Debug tab | — | Admins only. Click an entry → M13 |
 
