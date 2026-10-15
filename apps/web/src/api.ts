@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase, PreschedulingResult, PendingContractsResult, ContractStep, CourtCasesResult, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, MyCasesData, PreschedulingResult, PendingContractsResult, ContractStep, CourtCasesResult, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -15,6 +15,7 @@ export type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "@case-pipeline/query/appointments";
 export type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 export type { ActiveCasesResult, ActiveCasesAssignee, ActiveCase, Urgency } from "@case-pipeline/query";
+export type { MyCasesData, MyOpenForm, MyPreschedulingCase } from "@case-pipeline/query";
 export type { PreschedulingResult, PreschedulingCase, WaitLevel } from "@case-pipeline/query";
 export type { PendingContractsResult, PendingContract, ContractStep } from "@case-pipeline/query";
 export type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness, CaseMotion, CourtMotion, MotionFlag, MotionPhase } from "@case-pipeline/query";
@@ -1036,10 +1037,11 @@ export interface PublicUser {
   mondayConnected: boolean;
 }
 
-export interface MyCasesResult {
+export interface MyCasesResult extends MyCasesData {
   needsLink: boolean;
   paralegalLink: string | null;
-  cases: ActiveCase[];
+  /** Whose cases these are; null = everyone. */
+  selected: string | null;
 }
 
 export interface WatchlistItem {
@@ -1127,8 +1129,44 @@ export function getParalegals(): Promise<string[]> {
 }
 
 // ---- My cases ----
-export function getMyCases(): Promise<MyCasesResult> {
-  return apiFetch<MyCasesResult>("/api/my-cases");
+/** `paralegal`: a board name, "all" for everyone, or undefined for the caller's own. */
+export function getMyCases(paralegal?: string, includeSnoozed = false): Promise<MyCasesResult> {
+  const params = new URLSearchParams();
+  if (paralegal) params.set("paralegal", paralegal);
+  if (includeSnoozed) params.set("includeSnoozed", "1");
+  const qs = params.toString();
+  return apiFetch<MyCasesResult>(`/api/my-cases${qs ? `?${qs}` : ""}`);
+}
+
+export type CaseCardKind = "fee_k" | "open_form";
+
+/** P6 case card (M27): one field on a Fee K or an Open Form. value "" clears a date. */
+export function updateCaseField(
+  kind: CaseCardKind,
+  localId: string,
+  field: string,
+  value: string,
+  from: string | null,
+): Promise<{ localId: string; field: string; value: string | null; pending: boolean }> {
+  const base = kind === "fee_k" ? "/api/contracts" : "/api/open-forms";
+  return apiFetch(`${base}/${encodeURIComponent(localId)}/case-field`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ field, value, from }),
+  });
+}
+
+/** Set the client's E-File link on Monday (only where none is, or replacing `replaces`). */
+export function setProfileEFile(
+  profileLocalId: string,
+  url: string,
+  replaces?: string | null,
+): Promise<{ localId: string; eFile: string; pending: boolean }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/e-file`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, replaces: replaces ?? null }),
+  });
 }
 
 // ---- Watchlist ----

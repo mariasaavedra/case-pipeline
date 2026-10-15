@@ -70,6 +70,7 @@ import { registerCourtCaseWriteRoutes } from "./routes/court-case-write.js";
 import { registerMotionWriteRoutes } from "./routes/motion-write.js";
 import { registerContractStepRoutes } from "./routes/contract-step.js";
 import { registerContractFeesRoutes } from "./routes/contract-fees.js";
+import { registerCaseCardWriteRoutes } from "./routes/case-card-write.js";
 import { registerContractDocumentRoutes } from "./routes/contract-document.js";
 import { registerEsignPublicRoutes, registerEsignRoutes } from "./routes/esign.js";
 import { registerDocumentRoutes } from "./routes/documents.js";
@@ -340,7 +341,15 @@ app.delete("/api/watchlist/:mondayItemId", handleRemoveWatchlist);
 app.get("/api/saved-views", handleGetSavedViews);
 app.post("/api/saved-views", handleAddSavedView);
 app.delete("/api/saved-views/:id", handleDeleteSavedView);
-app.get("/api/my-cases", (req, res) => handleMyCases(req, res, db));
+app.get("/api/my-cases", (req, res) => {
+  const u = loadUrgencySettings();
+  handleMyCases(req, res, db, {
+    criticalDays: u.criticalDays,
+    soonDays: u.soonDays,
+    statusUrgency: statusUrgencyMap(),
+    statusUrgencyAffectsBoard: u.statusUrgencyAffectsBoard,
+  });
+});
 app.get("/api/paralegals", (req, res) => handleParalegals(req, res, db));
 
 // API routes
@@ -504,6 +513,7 @@ registerCourtCaseWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeT
 registerMotionWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractStepRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractFeesRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerCaseCardWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractDocumentRoutes(app, { db });
 registerEsignRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerDocumentRoutes(app, { db });

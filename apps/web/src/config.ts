@@ -155,6 +155,12 @@ export const MONDAY_PROFILES_BOARD_ID = "8025265377";
 /** Mirrors `_fa_jail_intakes.id` in config/boards.yaml — keep the two in sync. */
 export const MONDAY_JAIL_INTAKES_BOARD_ID = "8094412694";
 
+/** Mirrors `fee_ks.id` in config/boards.yaml — keep the two in sync. */
+export const MONDAY_FEE_KS_BOARD_ID = "8025467270";
+
+/** Mirrors `_cd_open_forms.id` in config/boards.yaml — keep the two in sync. */
+export const MONDAY_OPEN_FORMS_BOARD_ID = "8025566986";
+
 /** Canonical deep link to a Monday item ("pulse") on a board. */
 export function mondayItemUrl(boardId: string, itemId: string): string {
   return `${MONDAY_ACCOUNT_URL}/boards/${boardId}/pulses/${itemId}`;
