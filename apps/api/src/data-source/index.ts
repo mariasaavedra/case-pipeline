@@ -19,6 +19,7 @@ import {
   pinUpdateToTop,
   moveItemToBoard,
   changeMultipleColumnValues,
+  fetchItem,
 } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput, UpdateMention } from "@case-pipeline/monday";
 
@@ -41,6 +42,8 @@ export interface DataSource {
   moveItem(boardId: string, groupId: string, itemId: string, token?: string): Promise<void>;
   /** Upload a file into an item's file column. Returns the new asset id. */
   addFile(itemId: string, columnId: string, fileName: string, bytes: Uint8Array, contentType: string, token?: string): Promise<string>;
+  /** A column's display text on Monday right now ("" when empty), for "only if empty" writes. */
+  getColumnText(itemId: string, columnId: string): Promise<string>;
 }
 
 /** Backed by Monday.com — the current, only implementation. */
@@ -64,6 +67,8 @@ export const mondayDataSource: DataSource = {
   },
   addFile: (itemId, columnId, fileName, bytes, contentType, token) =>
     addFileToColumn(itemId, columnId, fileName, bytes, contentType, token),
+  getColumnText: async (itemId, columnId) =>
+    ((await fetchItem(itemId)).column_values.find((c) => c.id === columnId)?.text ?? "").trim(),
 };
 
 /** The active data source the app writes through. Swap this one line the day a

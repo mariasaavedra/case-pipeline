@@ -541,7 +541,7 @@ registerMotionWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeToke
 registerContractStepRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractFeesRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerCaseCardWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
-registerContractDocumentRoutes(app, { db });
+registerContractDocumentRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerEsignRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerDocumentRoutes(app, { db });
 

@@ -393,6 +393,33 @@ export async function listContractTemplates(): Promise<{ driveId: string; items:
   return { driveId: resolved.driveId, items };
 }
 
+// ---- Fee sheet ----------------------------------------------------------------
+
+/** Where the firm's fee sheet lives (lib/fee-sheet.ts). */
+export const FEE_SHEET_FOLDER =
+  "https://sharmacrawford.sharepoint.com/sites/SCALDocs/Shared Documents/Fee Contracts";
+
+/**
+ * The firm's fee sheet: the newest "…fees….xlsx" in Fee Contracts (2026's is
+ * "FINAL COPY OF FIRM FEES 2026.xlsx"; a 2027 copy is picked up by itself).
+ * Its first worksheet's cells, read by Excel's own API, so the browser needs no
+ * spreadsheet library.
+ */
+export async function loadFeeSheet(): Promise<{ name: string; webUrl: string; values: unknown[][] }> {
+  const folder = parseSharePointLink(FEE_SHEET_FOLDER);
+  if (!folder) throw new GraphError(400, "The fee sheet folder link isn't a SharePoint folder.");
+  const resolved = await resolveFolder(folder);
+  const sheet = (await listChildren(resolved.driveId, resolved.itemId))
+    .filter((i) => !i.folder && /\.xlsx$/i.test(i.name) && /fees?\b/i.test(i.name) && !i.name.startsWith("~$"))
+    .sort((a, b) => (b.lastModifiedDateTime ?? "").localeCompare(a.lastModifiedDateTime ?? ""))[0];
+  if (!sheet) throw new GraphError(404, "No fee sheet (…fees….xlsx) in Fee Contracts.");
+  const base = `/drives/${resolved.driveId}/items/${sheet.id}/workbook/worksheets`;
+  const first = (await graphFetch<{ value: { id: string }[] }>(`${base}?$select=id&$top=1`)).value[0];
+  if (!first) throw new GraphError(404, "The fee sheet has no worksheet.");
+  const range = await graphFetch<{ values: unknown[][] }>(`${base}/${encodeURIComponent(first.id)}/usedRange(valuesOnly=true)?$select=values`);
+  return { name: sheet.name, webUrl: sheet.webUrl, values: range.values };
+}
+
 // ---- Word → PDF -------------------------------------------------------------
 
 /** Where conversions are staged in the user's own OneDrive (deleted right after). */

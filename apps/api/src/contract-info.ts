@@ -68,6 +68,20 @@ export function makeMondayUserResolver(token: string | undefined) {
 
 export const peopleValue = (userId: number) => ({ personsAndTeams: [{ id: userId, kind: "person" }] });
 
+/** Fee Ks "Assistant" (People) — config/boards.yaml fee_ks.assistant. */
+export const FEE_K_ASSISTANT = { id: "people__1", key: "assistant" } as const;
+
+/** The signed-in user's Monday id: by login e-mail, else by name. Cached 10 min. */
+export function makeMondayUserByLogin(token: string | undefined) {
+  let cache: { users: Awaited<ReturnType<typeof fetchWorkspaceUsers>>; at: number } | null = null;
+  return async (email: string, name: string): Promise<{ id: number; name: string } | null> => {
+    if (!cache || Date.now() - cache.at > 10 * 60 * 1000) cache = { users: await fetchWorkspaceUsers(token), at: Date.now() };
+    const hit = (email && cache.users.find((u) => same(u.email, email))) || (name && cache.users.find((u) => same(u.name, name)));
+    const id = hit ? Number(hit.id) : NaN;
+    return hit && Number.isFinite(id) ? { id, name: hit.name } : null;
+  };
+}
+
 /** A profile contact value in the shape its Monday column takes. */
 export function contactValue(schema: BoardColumns | null, key: ContactKey, value: string): unknown {
   const col = schema?.columns.find((c) => c.columnId === PROFILE_CONTACT[key].id);

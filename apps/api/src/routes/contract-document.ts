@@ -8,15 +8,26 @@
 //        the form: client, e-mail, address, attorney, AF / FF / PF, and the
 //        client's next hearing (type + date) from their open court case.
 //   POST /api/contracts/:localId/document-generated — audit entry for a
-//        generated contract (template name + fees; no client details).
-// Nothing is written to Monday.
+//        generated contract (template name + fees; no client details). M22
+//        calls it on Send for signature and on each Download, not on Preview.
+//        It also makes whoever generated it the Fee K's ASSISTANT when that
+//        column is empty — locally and on Monday (checked live first), never
+//        replacing someone already there (decided 2026-10-15). Their own
+//        Monday token, the durable queue on outage.
 // =============================================================================
 
 import type { Express } from "express";
 import type BetterSqlite3 from "better-sqlite3";
 type DatabaseInstance = BetterSqlite3.Database;
+import type { Request } from "express";
 import { requireAuth } from "../auth/middleware.js";
 import { auditFromReq } from "../audit/log.js";
+import { dataSource } from "../data-source/index.js";
+import { withTokenFallback } from "../write-auth.js";
+import type { WriteTokenOptions } from "../write-token.js";
+import { enqueueWrite } from "../write-queue/processor.js";
+import { getBoardColumnsFor } from "@case-pipeline/query";
+import { FEE_K_ASSISTANT, makeMondayUserByLogin, peopleValue } from "../contract-info.js";
 import { hearingKindOf } from "@case-pipeline/query";
 import { letterAddress } from "../documents/us-address.js";
 import { loadDocumentSettings } from "../documents/document-settings.js";
@@ -34,6 +45,7 @@ interface ContractDocRow {
   af: unknown;
   ff: unknown;
   pf: unknown;
+  assistant: string | null;
 }
 
 export interface ContractPrefill {
@@ -110,8 +122,45 @@ export function contractPrefill(
   };
 }
 
-export function registerContractDocumentRoutes(app: Express, deps: { db: DatabaseInstance }): void {
+export type AssistantOutcome = "assigned" | "queued" | "kept" | "unknown-user" | "not-synced";
+
+export function registerContractDocumentRoutes(
+  app: Express,
+  deps: { db: DatabaseInstance; mondayApiToken?: string; writeTokenOptions?: WriteTokenOptions },
+): void {
   const { db } = deps;
+  const mondayUser = makeMondayUserByLogin(deps.mondayApiToken);
+
+  /** Whoever generated the contract becomes the Fee K's Assistant — only when nobody is. */
+  async function assignAssistant(req: Request, localId: string, row: ContractDocRow): Promise<AssistantOutcome> {
+    if (!row.monday_item_id || !deps.writeTokenOptions) return "not-synced";
+    if ((row.assistant ?? "").trim()) return "kept";
+    // The local copy can lag a change made in Monday minutes ago.
+    if (await dataSource.getColumnText(row.monday_item_id, FEE_K_ASSISTANT.id)) return "kept";
+    const me = await mondayUser(String(req.user?.preferred_username ?? req.user?.email ?? ""), String(req.user?.name ?? ""));
+    if (!me) return "unknown-user";
+    const boardId = getBoardColumnsFor(db, "fee_ks")?.mondayBoardId;
+    if (!boardId) return "not-synced";
+    const value = peopleValue(me.id);
+    let outcome: AssistantOutcome = "assigned";
+    try {
+      await withTokenFallback(
+        (token) => dataSource.setColumnValues(boardId, row.monday_item_id!, { [FEE_K_ASSISTANT.id]: value }, token),
+        deps.writeTokenOptions(req),
+      );
+    } catch (err) {
+      console.error("[write-back] Fee K assistant failed; queueing for retry:", err);
+      enqueueWrite(db, {
+        opType: "change_column_json", targetTable: "contracts", targetLocalId: localId,
+        mondayItemId: row.monday_item_id, authorOid: req.user?.oid ?? null,
+        payload: { boardId, columnId: FEE_K_ASSISTANT.id, value },
+      });
+      outcome = "queued";
+    }
+    db.prepare(`UPDATE contracts SET raw_column_values = json_set(COALESCE(raw_column_values, '{}'), '$.${FEE_K_ASSISTANT.key}', json(?)) WHERE local_id = ?`)
+      .run(JSON.stringify({ label: me.name }), localId);
+    return outcome;
+  }
 
   const load = (localId: string) =>
     db.prepare(`
@@ -121,7 +170,8 @@ export function registerContractDocumentRoutes(app: Express, deps: { db: Databas
              json_extract(c.raw_column_values, '$.contract_for.labels') AS contractFor,
              json_extract(c.raw_column_values, '$.af')                  AS af,
              json_extract(c.raw_column_values, '$.ff')                  AS ff,
-             json_extract(c.raw_column_values, '$.pf')                  AS pf
+             json_extract(c.raw_column_values, '$.pf')                  AS pf,
+             json_extract(c.raw_column_values, '$.assistant.label')     AS assistant
         FROM contracts c
         LEFT JOIN profiles p ON p.local_id = c.profile_local_id
        WHERE c.local_id = ? AND c.deleted_at IS NULL
@@ -145,7 +195,7 @@ export function registerContractDocumentRoutes(app: Express, deps: { db: Databas
     res.json({ data: contractPrefill(row, hearing, loadDocumentSettings().attorneys) });
   });
 
-  app.post("/api/contracts/:localId/document-generated", requireAuth, (req, res) => {
+  app.post("/api/contracts/:localId/document-generated", requireAuth, async (req, res) => {
     const localId = String(req.params.localId);
     const row = load(localId);
     if (!row) {
@@ -153,14 +203,22 @@ export function registerContractDocumentRoutes(app: Express, deps: { db: Databas
       return;
     }
     const b = (req.body ?? {}) as { template?: unknown; format?: unknown; attorneyFee?: unknown; filingFee?: unknown };
+    let assistant: AssistantOutcome | "failed";
+    try {
+      assistant = await assignAssistant(req, localId, row);
+    } catch (err) {
+      console.error("[contracts] assistant auto-assign failed:", err);
+      assistant = "failed";
+    }
     auditFromReq(req, "doc.contract_generated", {
       targetType: "contract", targetId: localId, targetMondayId: row.monday_item_id,
       metadata: {
         template: typeof b.template === "string" ? b.template.slice(0, 200) : null,
         format: b.format === "pdf" ? "pdf" : "docx",
         attorneyFee: amount(b.attorneyFee), filingFee: amount(b.filingFee),
+        assistant,
       },
     });
-    res.status(204).end();
+    res.json({ data: { assistant } });
   });
 }
