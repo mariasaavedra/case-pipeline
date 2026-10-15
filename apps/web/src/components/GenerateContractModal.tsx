@@ -27,7 +27,7 @@ import {
   CONTRACT_TEMPLATES_FOLDER, GraphConsentRequiredError, type DriveItem,
 } from "../sharepoint/graph";
 import {
-  contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf,
+  contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf, contractDocumentName,
   type ContractInput, type TemplateCheck,
 } from "../lib/contract-fill";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -209,7 +209,9 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     setDone(null);
     try {
       // Exactly the PDF on screen.
-      const res = await sendContractForSignature(c.localId, preview.pdf, { attorneyEmail: attorneyEmail.trim(), clientEmail: input.email.trim() });
+      const res = await sendContractForSignature(c.localId, preview.pdf, {
+        attorneyEmail: attorneyEmail.trim(), clientEmail: input.email.trim(), documentName: preview.name,
+      });
       void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
       const msg = `${c.clientName}: sent to Adobe Sign (attorney first, then the client)${res.stage ? ` · stage → ${res.stage}` : ""}`;
       if (res.warning) setDone(`Sent to Adobe Sign. ${res.warning}`);
@@ -229,7 +231,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     setDone(null);
     try {
       const docx = fillContractTemplate(file.data, input);
-      const name = `${baseName(picked.name)} - ${input.clientName.replace(/[\\/:*?"<>|]+/g, " ").trim()}`;
+      const name = contractDocumentName(input);
       if (format === "docx") {
         save(docx, `${name}.docx`);
         setDone(`Downloaded ${name}.docx`);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { agreementNameFor, classifyEsignEvent, esignRefOf, planEsignEvent, type EsignRow } from "./events";
+import { agreementNameFor, agreementNameOf, classifyEsignEvent, esignRefOf, planEsignEvent, signedDocumentName, type EsignRow } from "./events";
 
 const row = (status: EsignRow["status"]): EsignRow => ({
   status, attorney_email: "atty@firm.com", client_email: "client@mail.com", client_name: "Ana Pérez",
@@ -29,6 +29,19 @@ describe("esignRefOf", () => {
     expect(esignRefOf("CP-12")).toBe(12);
     expect(esignRefOf(undefined, agreementNameFor("Ana  Pérez", 7))).toBe(7);
     expect(esignRefOf(null, "Some other agreement")).toBeNull();
+  });
+});
+
+describe("document names", () => {
+  it("the agreement carries the standard name and the [CP-n] reference", () => {
+    expect(agreementNameOf("Ana LOPEZ - I-212 - 10-15-2026", "Ana LOPEZ", 7)).toBe("Ana LOPEZ - I-212 - 10-15-2026 [CP-7]");
+    expect(agreementNameOf(null, "Ana LOPEZ", 7)).toBe("Fee K - Ana LOPEZ [CP-7]");
+    expect(esignRefOf(agreementNameOf("Ana LOPEZ - I-212 - 10-15-2026", "Ana LOPEZ", 7))).toBe(7);
+  });
+  it("the signed copy is named like what was sent; old agreements keep the old name", () => {
+    expect(signedDocumentName("Ana LOPEZ - I-212 - 10-15-2026 [CP-7]", "Ana LOPEZ")).toBe("Ana LOPEZ - I-212 - 10-15-2026");
+    expect(signedDocumentName("Fee K - Ana LOPEZ [CP-7]", "Ana LOPEZ")).toBe("Ana LOPEZ - Signed Fee K");
+    expect(signedDocumentName(null, "Ana  LOPEZ")).toBe("Ana LOPEZ - Signed Fee K");
   });
 });
 
