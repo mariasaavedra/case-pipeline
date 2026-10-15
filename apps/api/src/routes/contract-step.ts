@@ -29,6 +29,8 @@ import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { getBoardColumnsFor, CONTRACT_STEPS, FEE_K_COLUMN_IDS } from "@case-pipeline/query";
 import type { BoardColumns, ContractStep } from "@case-pipeline/query";
+import { notifyEvent, inBackground, mondayItemUrl } from "../notify/slack.js";
+import { contractStepEvent } from "../notify/events.js";
 
 const BOARD_KEY = "fee_ks";
 
@@ -191,7 +193,37 @@ export function registerContractStepRoutes(app: Express, deps: ContractStepDeps)
       authorOid: req.user?.oid ?? null,
       audit: (action, opts) => auditFromReq(req, action, opts),
     });
-    if (result.ok) res.status(result.status).json({ data: result.data });
-    else res.status(result.status).json(result.body);
+    if (result.ok) {
+      res.status(result.status).json({ data: result.data });
+      // Slack: only here, not in executeContractStep — the Adobe Sign receiver
+      // shares that function and posts its own message (esign/notify.ts).
+      const c = db
+        .prepare(
+          `SELECT c.monday_item_id AS mondayItemId, COALESCE(p.name, c.name) AS clientName,
+                  json_extract(c.raw_column_values, '$.contract_for.labels') AS contractFor
+             FROM contracts c LEFT JOIN profiles p ON p.local_id = c.profile_local_id
+            WHERE c.local_id = ?`,
+        )
+        .get(String(req.params.localId)) as { mondayItemId: string | null; clientName: string; contractFor: string | null } | undefined;
+      const text = c && contractStepEvent({
+        step: result.data.step,
+        clientName: c.clientName,
+        contractFor: parseLabelList(c.contractFor),
+        by: req.user?.name,
+        link: mondayItemUrl(getBoardColumnsFor(db, BOARD_KEY)?.mondayBoardId, c.mondayItemId),
+      });
+      if (text) inBackground(notifyEvent(text));
+    } else res.status(result.status).json(result.body);
   });
+}
+
+/** contract_for.labels as stored: a JSON array (or a JSON-encoded string of one). */
+function parseLabelList(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
 }

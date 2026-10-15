@@ -39,6 +39,9 @@ import { recordSms, recentlySent, smsHistoryForProfile } from "../sms/log.js";
 import { parseSmsSendBody, smsActivity } from "../sms/send-plan.js";
 import { loadDocumentSettings } from "../documents/document-settings.js";
 import { CASENOTE_ACTIVITY_ID } from "./detention-write.js";
+import { getBoardColumnsFor } from "@case-pipeline/query";
+import { notifyEvent, inBackground, mondayItemUrl } from "../notify/slack.js";
+import { smsSentEvent } from "../notify/events.js";
 
 /** The E&A type a sent text is logged under, looked up by name in Monday. */
 export const SMS_ACTIVITY_NAME = "Text message";
@@ -118,12 +121,14 @@ export function registerSmsRoutes(app: Express, deps: SmsDeps): void {
     const sms = parsed.value;
 
     let profileMondayId: string | null = null;
+    let profileName: string | null = null;
     if (sms.profileLocalId) {
-      const p = db.prepare("SELECT monday_item_id FROM profiles WHERE local_id = ?").get(sms.profileLocalId) as
-        | { monday_item_id: string | null }
+      const p = db.prepare("SELECT monday_item_id, name FROM profiles WHERE local_id = ?").get(sms.profileLocalId) as
+        | { monday_item_id: string | null; name: string }
         | undefined;
       if (!p) return res.status(404).json({ error: "profile not found" });
       profileMondayId = p.monday_item_id;
+      profileName = p.name;
     }
 
     if (recentlySent(sms.to, sms.body)) {
@@ -199,5 +204,16 @@ export function registerSmsRoutes(app: Express, deps: SmsDeps): void {
     });
 
     res.json({ data: { mode, status, activity, segments } });
+
+    // Slack: real texts only — never the number or the words.
+    if (mode === "on") {
+      inBackground(notifyEvent(smsSentEvent({
+        clientName: profileName,
+        templateLabel: loadSmsTemplates().find((t) => t.key === sms.templateKey)?.label ?? null,
+        context: sms.context,
+        by: req.user?.name,
+        link: mondayItemUrl(getBoardColumnsFor(db, "profiles")?.mondayBoardId, profileMondayId),
+      })));
+    }
   });
 }

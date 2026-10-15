@@ -100,6 +100,7 @@ import { makeWriteTokenOptions } from "./write-token.js";
 import { checkEnvironment, reportEnvironment } from "./config/env-check.js";
 import { registerMondayWebhook, webhookSecret } from "./webhooks/receiver.js";
 import { startWebhookProcessor, createBoardKeyResolver } from "./webhooks/processor.js";
+import { notifyOps, inBackground } from "./notify/slack.js";
 
 // =============================================================================
 // Database
@@ -740,6 +741,10 @@ function runSync(label: string, args: string[]): Promise<boolean> {
         resolve(true);
       } else {
         console.error(`[sync] ${label} sync failed (exit code ${code}).`);
+        inBackground(notifyOps(
+          `sync:${label}`,
+          `The ${label} sync from Monday failed (exit code ${code}). The dashboard keeps its last good data until a run succeeds — see the API log.`,
+        ));
         reject(new Error(`sync exited with code ${code}`));
       }
     });
@@ -837,7 +842,10 @@ function scheduleConsultSweep() {
         console.log("[consult] Sweep skipped — a sync is running.");
         return;
       }
-      runConsultSweep(days).catch((err) => console.error("[consult] Error:", err));
+      runConsultSweep(days).catch((err) => {
+        console.error("[consult] Error:", err);
+        inBackground(notifyOps("consult-sweep", `The consult folder sweep failed: ${(err as Error).message}. Consultation summaries may be missing until it runs again.`));
+      });
     },
     { timezone: FIRM_TIMEZONE },
   );
@@ -908,7 +916,10 @@ function scheduleDriveIntake() {
       });
       child.on("close", (code) => {
         intakeInFlight = false;
-        if (code !== 0) console.error(`[drive] Intake exited with code ${code}`);
+        if (code !== 0) {
+          console.error(`[drive] Intake exited with code ${code}`);
+          inBackground(notifyOps("drive-intake", `Drive intake failed (exit code ${code}). Client uploads aren't being copied to SharePoint until it runs again.`));
+        }
       });
       child.on("error", (err) => {
         intakeInFlight = false;
@@ -969,7 +980,10 @@ function scheduleFeeKAutofill() {
           console.log(`[feek] run: ${r.written.length} filled, ${r.failed.length} failed, ${r.skipped.length} skipped of ${r.candidates}.`);
         }
       })
-        .catch((err) => console.error("[feek] Error:", err))
+        .catch((err) => {
+          console.error("[feek] Error:", err);
+          inBackground(notifyOps("fee-k-autofill", `Fee K auto-fill failed: ${(err as Error).message}`));
+        })
         .finally(() => { feeKInFlight = false; });
     },
     { timezone: FIRM_TIMEZONE },
@@ -1179,7 +1193,10 @@ function scheduleBackups() {
   // poor thing to keep as the day's restore point.
   const backupCron = process.env.BACKUP_CRON ?? "30 5 * * *";
   cron.schedule(backupCron, () => {
-    runBackup().catch((err) => console.error("[backup] error:", err));
+    runBackup().catch((err) => {
+      console.error("[backup] error:", err);
+      inBackground(notifyOps("backup", `The daily database backup failed: ${(err as Error).message}. Check disk space on the server.`));
+    });
   });
   console.log(`[backup] Daily backup scheduled — cron "${backupCron}".`);
 }

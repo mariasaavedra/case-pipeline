@@ -1,6 +1,6 @@
 # SMS (RingCentral) + Slack notifications
 
-**Status:** SMS built 2026-10-15 — core + Log Call (PR 3, #132), Payment links + client page (PR 4, stacked on #132). Slack planned
+**Status:** SMS LIVE 2026-10-15 (#132, #133). Slack PR 1 (core + ops failures + workflow events) built 2026-10-15; PR 2 (digest + DMs) planned
 **Owner:** Rafael
 
 Two outbound channels, built on one shape: a small sender in `apps/api/src/notify/`,
@@ -84,20 +84,52 @@ One Slack app with a **bot token** (`chat:write`, `im:write`, `users:read`,
 | **Workflow events** | `SLACK_EVENTS_CHANNEL` | Contract client-signed / payment link sent, consult prepped, mail scan with notices to review, SMS sent |
 | **Ops failures** | `SLACK_OPS_CHANNEL` | Sync run failed, write-queue item permanently failed, scheduled job exited non-zero. Throttled: one post per kind per hour |
 
-Content rule: client name + case type + link back to the app. **Never** A#,
-DOB, receipt numbers or note bodies in Slack.
+Content rule: client name + case type + link. **Never** A#, DOB, receipt
+numbers, phone numbers, note or text bodies in Slack.
+
+### Built (Slack PR 1, 2026-10-15)
+
+`apps/api/src/notify/slack.ts` is the one sender (best-effort, never throws,
+10 s timeout); message texts are pure functions in `notify/events.ts`.
+
+| Event | Posted when | Link |
+|---|---|---|
+| :writing_hand: client signed | P14 step `client_signed` | Fee K in Monday |
+| :money_with_wings: payment link sent | P14 step `payment_link_sent` (also via M21 "Text links to client") | Fee K in Monday |
+| :clipboard: consult prepped | M18 prep saved | appointment in Monday |
+| :envelope: mail scanned | a non-sample scan with ≥1 notice | /alerts, only when some need review |
+| :speech_balloon: text sent | a **live** SMS (not dry-run) | profile in Monday |
+| Adobe Sign signed / rejected / … | existing (routes/esign.ts) | Fee K in Monday |
+
+| Ops failure (`:rotating_light:`, max 1 per key per hour) | key |
+|---|---|
+| A sync (full / incremental / webhook) exits non-zero | `sync:<label>` |
+| A Monday write dead-letters in the write queue | `write-queue` |
+| Consult sweep / Drive intake / Fee K auto-fill / daily backup fails | `consult-sweep`, `drive-intake`, `fee-k-autofill`, `backup` |
+
+Links go to **Monday items**, not dashboard client pages: a profile's local id
+changes on every nightly full sync, so `/clients/<id>` would be dead by morning.
+
+Contract steps post from the P14 route only — the Adobe Sign receiver shares
+`executeContractStep` and already posts its own message, so posting there
+would double up.
+
+The older Incoming Webhook (`SLACK_WEBHOOK_URL`, Adobe Sign alerts) keeps
+working: events fall back to it whenever `SLACK_EVENTS_CHANNEL` is empty,
+whatever `SLACK_MODE` says.
 
 ### Env
 
 | Var | |
 |---|---|
-| `SLACK_MODE` | `off` (default) / `dry-run` / `on` |
-| `SLACK_BOT_TOKEN` | `xoxb-…` |
-| `SLACK_ALERTS_CHANNEL`, `SLACK_EVENTS_CHANNEL`, `SLACK_OPS_CHANNEL` | channel ids (`C…`); empty = that notification off |
-| `SLACK_DIGEST_CRON` | default `0 8 * * 1-5` |
-| `APP_BASE_URL` | for links back into the dashboard |
+| `SLACK_MODE` | `off` (default) / `dry-run` (logs `[slack] DRY RUN → …`) / `on` |
+| `SLACK_BOT_TOKEN` | `xoxb-…` (bot token — `xoxp-` / `xapp-` are refused) |
+| `SLACK_EVENTS_CHANNEL`, `SLACK_OPS_CHANNEL`, `SLACK_ALERTS_CHANNEL` | channel **ids** (`C…` / `G…`, not `#name`); empty = that kind off |
+| `SLACK_DIGEST_CRON` | (PR 2) default `0 8 * * 1-5` |
+| `FRONTEND_URL` | already set; used for the /alerts link |
 
-`check-env.ts` validates the token shapes and that `on` has what it needs.
+`check-env.ts` refuses `on` without a bot token, a non-bot token, or a `#name`
+where an id goes; warns when `on` has no channel at all.
 
 ---
 
@@ -110,8 +142,13 @@ DOB, receipt numbers or note bodies in Slack.
 
 ## Setup (Rafael)
 
-- **Slack:** api.slack.com/apps → Create app → bot scopes above → install →
-  copy `xoxb-` token → invite the bot to the 3 channels.
+- **Slack:** api.slack.com/apps → Create New App → From scratch, name "Case
+  Pipeline", the firm's workspace → OAuth & Permissions → Bot Token Scopes:
+  `chat:write` (PR 1); `im:write`, `users:read`, `users:read.email` (PR 2 DMs —
+  add them now to avoid a reinstall) → Install to Workspace → copy the **Bot
+  User OAuth Token** (`xoxb-…`). Create the channels (e.g. #case-events,
+  #case-ops, #case-alerts), `/invite @Case Pipeline` in each, copy each
+  channel's id (channel name → View channel details → bottom of About).
 - **RingCentral:** developers.ringcentral.com → REST API app, auth = JWT,
   permission **SMS** → create a JWT credential for the sending user → submit
   10DLC brand + campaign in RC admin.

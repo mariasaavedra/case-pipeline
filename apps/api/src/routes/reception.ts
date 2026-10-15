@@ -47,6 +47,8 @@ import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { activeBoardKeys, loadAttorneyBoards } from "../attorney-boards.js";
 import { consultFolderName } from "@case-pipeline/core";
 import { FIRM_TIMEZONE } from "../firm.js";
+import { notifyEvent, inBackground, mondayItemUrl } from "../notify/slack.js";
+import { consultPrepEvent } from "../notify/events.js";
 
 // -----------------------------------------------------------------------------
 // The form
@@ -983,6 +985,16 @@ export function registerReceptionRoutes(app: Express, deps: ReceptionDeps): void
       },
     });
     res.status(pending ? 202 : 200).json({ data: { prepped: true, pending, wroteBack: steps.map((s) => s.field) } });
+
+    const client = db.prepare("SELECT name FROM profiles WHERE local_id = ?").get(profileLocalId) as { name: string } | undefined;
+    inBackground(notifyEvent(consultPrepEvent({
+      clientName: client?.name ?? "a client",
+      attorney: appt.attorney,
+      date: appt.date,
+      time: appt.time,
+      by: author,
+      link: mondayItemUrl(getBoardColumnsFor(db, appt.boardKey)?.mondayBoardId, apptMondayId),
+    })));
   });
 
   // A document picked or uploaded in M18/M19 also goes onto the appointment, in

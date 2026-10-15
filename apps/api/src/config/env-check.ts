@@ -309,6 +309,31 @@ export function checkEnvironment(opts: CheckOptions = {}): EnvIssue[] {
     warn("RINGCENTRAL_SERVER_URL", "is not https://platform.ringcentral.com (or the devtest sandbox)");
   }
 
+  // ---------------------------------------------------------------------------
+  // Slack bot — "on" without a token posts nothing, silently
+  // ---------------------------------------------------------------------------
+  const slackModeRaw = env.SLACK_MODE?.trim().toLowerCase();
+  if (slackModeRaw && !["off", "dry-run", "on"].includes(slackModeRaw)) {
+    err("SLACK_MODE", "must be off, dry-run or on");
+  }
+  const botToken = env.SLACK_BOT_TOKEN?.trim();
+  if (slackModeRaw === "on" && !botToken) {
+    err("SLACK_BOT_TOKEN", "is required when SLACK_MODE=on", "The app's Bot User OAuth Token (xoxb-…). See docs/features/sms-and-slack.md.");
+  }
+  if (botToken && !botToken.startsWith("xoxb-")) {
+    err("SLACK_BOT_TOKEN", "is not a bot token (xoxb-…)", "Use the Bot User OAuth Token, not a user (xoxp-) or app-level (xapp-) token.");
+  }
+  const slackChannels = ["SLACK_EVENTS_CHANNEL", "SLACK_OPS_CHANNEL", "SLACK_ALERTS_CHANNEL"] as const;
+  for (const key of slackChannels) {
+    const v = env[key]?.trim();
+    if (v && !/^[CG][A-Z0-9]{8,}$/.test(v)) {
+      err(key, "is not a Slack channel id (C… / G…, not the #name)", "Channel name → View channel details → bottom of the About tab.");
+    }
+  }
+  if (slackModeRaw === "on" && !slackChannels.some((k) => env[k]?.trim())) {
+    warn("SLACK_MODE", "is on but no SLACK_*_CHANNEL is set — nothing will be posted");
+  }
+
   const slack = env.SLACK_WEBHOOK_URL?.trim();
   if (slack && !/^https:\/\/hooks\.slack\.com\//.test(slack)) {
     warn("SLACK_WEBHOOK_URL", "is not a Slack Incoming Webhook URL (https://hooks.slack.com/…) — Slack messages are skipped");

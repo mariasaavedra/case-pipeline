@@ -41,6 +41,8 @@ import { buildSampleMailPdf, buildScannedSampleMailPdf } from "../mail/sample.js
 import { readPdfPages } from "../mail/ocr.js";
 import { executeMailWriteBack } from "../mail/writeback.js";
 import type { WriteTokenOptions } from "../write-token.js";
+import { notifyEvent, inBackground, appUrl } from "../notify/slack.js";
+import { mailScanEvent } from "../notify/events.js";
 
 type DatabaseInstance = BetterSqlite3.Database;
 
@@ -214,6 +216,15 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
         },
       });
       res.json({ data: result });
+
+      // Samples are demos, not mail.
+      const text = !isSample && mailScanEvent({
+        notices: result.documents.length,
+        needsReview: result.documents.filter((d) => d.needsReview).length,
+        by: user?.name,
+        link: appUrl("/alerts"),
+      });
+      if (text) inBackground(notifyEvent(text));
     },
   );
 

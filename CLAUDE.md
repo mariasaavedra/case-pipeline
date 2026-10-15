@@ -79,6 +79,7 @@ See `.env.example` for the full list. Key variables:
 | `MONDAY_API_VERSION` | No (default: `2024-10`) | Monday.com API version |
 | `FEE_K_AUTOFILL` | No | `on` fills empty Fee K columns on Monday every 15 min: POC Full Name from the Jail Intake, AF/FF Surcharge (3%) when paid by credit card. Needs `FEE_K_AUTOFILL_SINCE`. See `docs/features/fee-k-autofill.md` |
 | `MONDAY_WEBHOOK_SECRET` | No | Enables the Monday webhook receiver + processor (near-real-time mirror refresh). See `docs/webhooks.md` |
+| `SLACK_MODE` | No (default `off`) | `dry-run` logs what it would post; `on` posts with `SLACK_BOT_TOKEN` (`xoxb-`) to `SLACK_EVENTS_CHANNEL` (contract signed / payment link sent, consult prepped, mail to review, texts sent, Adobe Sign) and `SLACK_OPS_CHANNEL` (sync / job / Monday-write failures, max 1 per kind per hour). Channel ids, not names. Sender = `apps/api/src/notify/slack.ts`. See `docs/features/sms-and-slack.md` |
 | `SMS_MODE` | No (default `off`) | `dry-run` records texts without sending; `on` sends through RingCentral and needs `RINGCENTRAL_CLIENT_ID` / `_CLIENT_SECRET` / `_JWT` / `_FROM_NUMBER` (E.164). Seed data is always dry-run. See `docs/features/sms-and-slack.md` |
 | `ZAPIER_ESIGN_HOOK_URL` / `ZAPIER_ESIGN_SECRET` | No | Both set (+ `API_URL`) = M22 "Send for signature": contracts to Adobe Sign through 3 Zaps. See `docs/features/esign-zapier.md` |
 | `SLACK_WEBHOOK_URL` | No | Slack Incoming Webhook for contract alerts (signed / rejected / expired / recalled) |

@@ -228,6 +228,28 @@ describe("reportEnvironment", () => {
   });
 });
 
+describe("Slack bot", () => {
+  // A bare env warns about unrelated things (encryption keys…); only Slack's count here.
+  const vars = (issues: EnvIssue[], level: "error" | "warning" = "error") =>
+    issues.filter((i) => i.level === level && i.variable.startsWith("SLACK_")).map((i) => i.variable).sort();
+  const check = (env: NodeJS.ProcessEnv) => checkEnvironment({ env, envFilePath: null, examplePath: null });
+
+  test("SLACK_MODE=on needs a bot token", () => {
+    expect(vars(check({ SLACK_MODE: "on", SLACK_EVENTS_CHANNEL: "C0123456789" }))).toEqual(["SLACK_BOT_TOKEN"]);
+  });
+
+  test("wrong token kind, a #name for a channel, and a bad mode are errors", () => {
+    expect(vars(check({ SLACK_MODE: "loud", SLACK_BOT_TOKEN: "xoxp-123", SLACK_OPS_CHANNEL: "#ops" })))
+      .toEqual(["SLACK_BOT_TOKEN", "SLACK_MODE", "SLACK_OPS_CHANNEL"]);
+  });
+
+  test("on with no channel at all is a warning; a full setup is clean", () => {
+    expect(vars(check({ SLACK_MODE: "on", SLACK_BOT_TOKEN: "xoxb-1" }), "warning")).toEqual(["SLACK_MODE"]);
+    const ok = check({ SLACK_MODE: "on", SLACK_BOT_TOKEN: "xoxb-1", SLACK_EVENTS_CHANNEL: "C0123456789", SLACK_OPS_CHANNEL: "G0123456789" });
+    expect(ok.filter((i) => i.variable.startsWith("SLACK_"))).toEqual([]);
+  });
+});
+
 describe("SMS (RingCentral)", () => {
   const vars = (issues: EnvIssue[]) => issues.filter((i) => i.level === "error").map((i) => i.variable).sort();
   const check = (env: NodeJS.ProcessEnv) => vars(checkEnvironment({ env, envFilePath: null, examplePath: null }));
