@@ -48,10 +48,11 @@ import { DATA_DIR } from "../paths.js";
 import { fetchWorkspaceUsers } from "@case-pipeline/monday";
 import { getBoardColumnsFor } from "@case-pipeline/query";
 import {
-  OPEN_STATUSES, agreementNameFor, classifyEsignEvent, esignRefOf, planEsignEvent,
+  OPEN_STATUSES, agreementNameOf, classifyEsignEvent, esignRefOf, planEsignEvent, signedDocumentName,
   type EsignStatus,
 } from "../esign/events.js";
 import { notifyMonday, notifySlack } from "../esign/notify.js";
+import { fileSignedContract } from "../esign/efile.js";
 
 const ESIGN_DIR = "esign";
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
@@ -155,6 +156,7 @@ export function registerEsignPublicRoutes(app: Express, deps: EsignDeps): void {
     try {
       const result = await applyEvent(db, row, kind, {
         agreementId, participantEmail: str(b.participantEmail), pdfUrl: str(b.pdfUrl), rawEvent: str(b.event),
+        agreementName: str(b.agreementName),
       }, MONDAY_API_TOKEN);
       res.json({ ok: true, ...result });
     } catch (err) {
@@ -204,7 +206,7 @@ async function applyEvent(
   db: DatabaseInstance,
   row: AgreementRow,
   kind: ReturnType<typeof classifyEsignEvent>,
-  ev: { agreementId: string | null; participantEmail: string | null; pdfUrl: string | null; rawEvent: string | null },
+  ev: { agreementId: string | null; participantEmail: string | null; pdfUrl: string | null; rawEvent: string | null; agreementName: string | null },
   sharedToken: string | undefined,
 ): Promise<Record<string, unknown>> {
   const tokenOptions = senderTokenOptions(row, sharedToken);
@@ -218,7 +220,12 @@ async function applyEvent(
   db.prepare("UPDATE esign_agreements SET last_event = ?, agreement_id = COALESCE(agreement_id, ?), updated_at = datetime('now') WHERE id = ?")
     .run(ev.rawEvent, ev.agreementId, row.id);
 
-  if (kind === "signed_pdf") return attachSignedPdf(db, row, ev.pdfUrl, tokenOptions, audit);
+  if (kind === "signed_pdf") {
+    const documentName = safeFileName(signedDocumentName(ev.agreementName, row.client_name));
+    const result = await attachSignedPdf(db, row, ev.pdfUrl, documentName, tokenOptions, audit);
+    fileInEfile(db, row, documentName, tokenOptions, audit);
+    return result;
+  }
 
   const plan = planEsignEvent(row, kind, ev.participantEmail);
   if (!plan.status) return { applied: false, kind };
@@ -257,6 +264,7 @@ async function attachSignedPdf(
   db: DatabaseInstance,
   row: AgreementRow,
   pdfUrl: string | null,
+  documentName: string,
   tokenOptions: TokenFallbackOptions,
   audit: (action: string, metadata: Record<string, unknown>) => void,
 ): Promise<Record<string, unknown>> {
@@ -282,7 +290,7 @@ async function attachSignedPdf(
     audit("esign.signed_pdf", { attached: false, reason: "no file column" });
     return { attached: false, saved: true };
   }
-  const fileName = `${safeFileName(row.client_name)} - Signed Fee K.pdf`;
+  const fileName = `${documentName}.pdf`;
   try {
     await withTokenFallback(
       (token) => dataSource.addFile(target.itemId, target.columnId, fileName, new Uint8Array(bytes), "application/pdf", token),
@@ -297,6 +305,33 @@ async function attachSignedPdf(
   }
   audit("esign.signed_pdf", { attached: true, on: target.table });
   return { attached: true, on: target.table };
+}
+
+/**
+ * The signed copy (already in data/esign/) → the client's E-File, FEE Ks folder.
+ * Background: the outcome becomes a note on the Fee K, so staff see where it
+ * went — or that it needs filing by hand.
+ */
+function fileInEfile(
+  db: DatabaseInstance,
+  row: AgreementRow,
+  documentName: string,
+  tokenOptions: TokenFallbackOptions,
+  audit: (action: string, metadata: Record<string, unknown>) => void,
+): void {
+  const running = fileSignedContract(row.id, documentName);
+  if (!running) return;
+  void running.then(async (r) => {
+    audit("esign.efile", r.ok ? { filed: true, folder: r.folder, already: !!r.already } : { filed: false, reason: r.reason });
+    if (r.ok && r.already) return;
+    const body = r.ok
+      ? `📁 Signed contract saved in the client's E-File: ${r.folder} / ${r.name}\n${r.webUrl}`
+      : `⚠️ The signed contract could not be saved in the client's E-File (${r.reason}). It is attached here — please file it by hand.`;
+    await postNote(db, {
+      feeKItemId: row.contract_monday_id, profileItemId: null,
+      title: "Signed contract filed", body, localId: row.contract_local_id,
+    }, tokenOptions, row.sent_by_oid);
+  }).catch((err) => console.error("[esign] E-File filing failed:", err));
 }
 
 /** The send itself (signed-in staff). */
@@ -348,6 +383,7 @@ export function registerEsignRoutes(app: Express, deps: EsignDeps): void {
         res.status(400).json({ error: "The attorney and the client need different e-mails" });
         return;
       }
+      const documentName = safeFileName(String(req.query.documentName ?? "")).replace(/^contract$/, "") || null;
       const localId = String(req.params.localId);
       const contract = db.prepare(`
         SELECT c.monday_item_id AS mondayId, COALESCE(p.name, c.name) AS clientName, p.monday_item_id AS profileMondayId
@@ -383,7 +419,8 @@ export function registerEsignRoutes(app: Express, deps: EsignDeps): void {
         req.user?.oid ?? null, senderName, await mondayUserIdOf(req),
       ).lastInsertRowid);
 
-      const agreementName = agreementNameFor(contract.clientName, id);
+      const agreementName = agreementNameOf(documentName, contract.clientName, id);
+      const fileBase = safeFileName(documentName ?? agreementName);
       try {
         const hook = await fetch(config.hookUrl, {
           method: "POST",
@@ -391,8 +428,8 @@ export function registerEsignRoutes(app: Express, deps: EsignDeps): void {
           body: JSON.stringify({
             ref: `CP-${id}`,
             agreementName,
-            pdfUrl: `${config.publicUrl}/api/esign/files/${token}/${encodeURIComponent(safeFileName(agreementName))}.pdf`,
-            fileName: `${safeFileName(agreementName)}.pdf`,
+            pdfUrl: `${config.publicUrl}/api/esign/files/${token}/${encodeURIComponent(fileBase)}.pdf`,
+            fileName: `${fileBase}.pdf`,
             attorneyEmail,
             clientEmail,
             clientName: contract.clientName,

@@ -43,6 +43,34 @@ export function pickLink(links: ClientLinks): { url: string; label: Destination[
   return null;
 }
 
+export type ClientFolderResult = { ok: true; driveId: string; item: DriveItem } | { ok: false; reason: string };
+
+/** A client folder from its SharePoint link (path or sharing link). Also used by esign-efile. */
+export async function openClientFolder(auth: GraphAuth, url: string): Promise<ClientFolderResult> {
+  const parsed = parseSharePointLink(url);
+  if (!parsed) return { ok: false, reason: `Link is not a SharePoint link: ${url}` };
+  let driveId: string;
+  let item: DriveItem | null;
+  try {
+    if (parsed.kind === "sharing") {
+      const shared = await getItemBySharingUrl(auth, parsed.url);
+      driveId = shared.parentReference?.driveId ?? "";
+      item = shared;
+    } else {
+      const site = parsed.sitePath.replace(/^\/sites\//, "");
+      driveId = (await resolveSiteDrive(auth, parsed.host, site)).driveId;
+      item = await getItemByPath(auth, driveId, parsed.relPath);
+    }
+  } catch (err) {
+    if (err instanceof GraphError && (err.status === 404 || err.status === 403)) {
+      return { ok: false, reason: `Link does not open (${err.status}): ${url}` };
+    }
+    throw err;
+  }
+  if (!item?.folder || !driveId) return { ok: false, reason: `Link is not a folder: ${url}` };
+  return { ok: true, driveId, item };
+}
+
 export async function resolveDestination(
   auth: GraphAuth,
   links: ClientLinks,
@@ -51,26 +79,9 @@ export async function resolveDestination(
   const picked = pickLink(links);
   if (!picked) return { ok: false, reason: "no SharePoint folder recorded yet (the consult sweep creates it)" };
 
-  const parsed = parseSharePointLink(picked.url)!;
-  let driveId: string;
-  let client: DriveItem | null;
-  try {
-    if (parsed.kind === "sharing") {
-      const item = await getItemBySharingUrl(auth, parsed.url);
-      driveId = item.parentReference?.driveId ?? "";
-      client = item;
-    } else {
-      const site = parsed.sitePath.replace(/^\/sites\//, "");
-      driveId = (await resolveSiteDrive(auth, parsed.host, site)).driveId;
-      client = await getItemByPath(auth, driveId, parsed.relPath);
-    }
-  } catch (err) {
-    if (err instanceof GraphError && (err.status === 404 || err.status === 403)) {
-      return { ok: false, reason: `${picked.label} link does not open (${err.status}): ${picked.url}` };
-    }
-    throw err;
-  }
-  if (!client?.folder || !driveId) return { ok: false, reason: `${picked.label} link is not a folder: ${picked.url}` };
+  const opened = await openClientFolder(auth, picked.url);
+  if (!opened.ok) return { ok: false, reason: opened.reason.replace(/^Link/, `${picked.label} link`) };
+  const { driveId, item: client } = opened;
 
   const children = await listChildren(auth, driveId, client.id);
   let folder = children.find((c) => c.folder && /^consults?$/i.test(c.name.trim())) ?? null;

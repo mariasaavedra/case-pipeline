@@ -21,6 +21,13 @@ let calls: Call[] = [];
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "esign-test-"));
 
 vi.mock("../paths.js", () => ({ DATA_DIR: tmp, REPO_ROOT: tmp }));
+const efile = vi.hoisted(() => ({ calls: [] as [number, string][], result: { ok: true, folder: "FEE Ks", name: "x.pdf", webUrl: "https://sp/x" } as Record<string, unknown> }));
+vi.mock("../esign/efile.js", () => ({
+  fileSignedContract: (id: number, name: string) => {
+    efile.calls.push([id, name]);
+    return Promise.resolve(efile.result);
+  },
+}));
 vi.mock("../data-source/index.js", () => ({
   dataSource: {
     postUpdate: async (itemId: string, body: string) => {
@@ -180,6 +187,26 @@ describe("Adobe Sign via Zapier", () => {
     expect(r.status).toBe(502);
     expect(stage()).toBe("Needs to be sent");
     expect((await fetch(`${base}/api/esign/files/${"x".repeat(32)}/a.pdf`)).status).toBe(404);
+  });
+
+  it("names it Client - Matter - date, and files the signed copy in the E-File", async () => {
+    const r = await send(`attorneyEmail=atty@firm.com&clientEmail=ana@mail.com&documentName=${encodeURIComponent("Ana Pérez - I-212 - 10-15-2026")}`);
+    expect(r.status).toBe(200);
+    expect(hookBodies[0]).toMatchObject({ agreementName: "Ana Pérez - I-212 - 10-15-2026 [CP-1]", fileName: "Ana Pérez - I-212 - 10-15-2026.pdf" });
+    expect(hookBodies[0]!.pdfUrl).toMatch(/\/Ana%20P%C3%A9rez%20-%20I-212%20-%2010-15-2026\.pdf$/);
+
+    // Zap 3's signed copy: fetched from Adobe's https link.
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+      String(input) === "https://adobe.test/signed.pdf" ? Promise.resolve(new Response("%PDF-signed")) : realFetch(input, init));
+    calls = [];
+    efile.calls = [];
+    const ev = await event({ event: "signed_pdf", agreementName: "Ana Pérez - I-212 - 10-15-2026 [CP-1]", pdfUrl: "https://adobe.test/signed.pdf" });
+    spy.mockRestore();
+    // (This test board has no file column, so the Monday attach is skipped; the copy is kept.)
+    expect(ev.json).toMatchObject({ saved: true });
+    expect(efile.calls).toEqual([[1, "Ana Pérez - I-212 - 10-15-2026"]]);
+    await vi.waitFor(() => expect(String(calls.find((c) => c.op === "update")?.body)).toContain("E-File: FEE Ks / x.pdf"));
   });
 
   it("needs two different e-mails", async () => {

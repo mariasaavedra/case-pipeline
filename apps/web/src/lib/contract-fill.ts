@@ -137,6 +137,22 @@ export const CONTRACT_FIELDS: ContractField[] = [
 const BY_TAG = new Map(CONTRACT_FIELDS.map((f) => [f.tag, f]));
 
 /**
+ * The contract's file name, the same everywhere (download, Adobe, the signed
+ * copy in the E-File): "Client name - Form(s)/Matter - MM-DD-YYYY". Decided
+ * 2026-10-15. A bilingual title typed into Form(s)/matter keeps its English
+ * half ("… / I-212 Aplicación…" is dropped) and is capped at a word, so the
+ * name stays readable in a folder.
+ */
+export function contractDocumentName(f: ContractInput): string {
+  const clean = (s: string) => s.replace(/[\\/:*?"<>|#%{}~&]+/g, " ").replace(/\s+/g, " ").trim();
+  let matter = clean((f.formName.trim() || f.hearingType.trim() || "Fee K").split(" / ")[0]!);
+  if (matter.length > 80) matter = `${matter.slice(0, 80).replace(/\s+\S*$/, "")}…`;
+  const p = ymd(f.date);
+  const date = p ? `${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}-${p.y}` : "";
+  return [clean(f.clientName), matter, date].filter(Boolean).join(" - ");
+}
+
+/**
  * Adobe Sign text tags — {{Sig_es_:signer1:signature}}, {{*Addr_es_:signer2}}…
  * — share our {{ }} braces. They always contain "_es_", are not ours to fill,
  * and must reach the PDF exactly as typed: Adobe turns each into a signing

@@ -607,9 +607,9 @@ export async function fetchEsignStatus(): Promise<{ enabled: boolean }> {
 export async function sendContractForSignature(
   localId: string,
   pdf: Blob,
-  emails: { attorneyEmail: string; clientEmail: string },
+  opts: { attorneyEmail: string; clientEmail: string; documentName: string },
 ): Promise<{ id: number; stage: string | null; warning: string | null }> {
-  const q = new URLSearchParams(emails);
+  const q = new URLSearchParams(opts);
   return apiFetch(`/api/contracts/${encodeURIComponent(localId)}/esign?${q}`, {
     method: "POST",
     headers: { "Content-Type": "application/pdf" },

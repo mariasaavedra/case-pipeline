@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import PizZip from "pizzip";
 import {
-  contractValues, contractProblems, inspectContractTemplate, fillContractTemplate, surchargeFor, unhighlightTags,
+  contractValues, contractProblems, contractDocumentName, inspectContractTemplate, fillContractTemplate, surchargeFor, unhighlightTags,
   type ContractInput,
 } from "./contract-fill";
 
@@ -75,6 +75,20 @@ describe("per-fee surcharges (2026 contracts)", () => {
     const ok = { ...INPUT, motionFee: 1500, hearingFee: 1000, signByDate: "2026-10-10" };
     expect(contractProblems(check, ok)).toEqual([]);
     expect(contractValues(ok)).toMatchObject({ motion_fee_surcharge: "$45.00", hearing_fee_surcharge: "$30.00", sign_by_date: "October 10, 2026", sign_by_date_es: "10 de Octubre, 2026" });
+  });
+});
+
+describe("contractDocumentName", () => {
+  it("is Client name - Form(s)/Matter - MM-DD-YYYY", () => {
+    expect(contractDocumentName({ ...INPUT, formName: "I-212" })).toBe("Ana LOPEZ - I-212 - 10-05-2026");
+  });
+  it("keeps the English half of a bilingual title, capped at a word", () => {
+    const long = "I-212 Application for Permission to Reapply for Admission into the United States After Deportation or Removal / I-212 Aplicación de Permiso";
+    const name = contractDocumentName({ ...INPUT, formName: long });
+    expect(name).toBe("Ana LOPEZ - I-212 Application for Permission to Reapply for Admission into the United… - 10-05-2026");
+  });
+  it("falls back to the hearing type, and drops characters a file name can't hold", () => {
+    expect(contractDocumentName({ ...INPUT, formName: "", clientName: "Ana / LOPEZ" })).toBe("Ana LOPEZ - Master Hearing - 10-05-2026");
   });
 });
 

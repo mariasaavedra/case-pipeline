@@ -55,6 +55,19 @@ export function esignRefOf(...texts: unknown[]): number | null {
 export const agreementNameFor = (clientName: string, id: number) =>
   `Fee K - ${clientName.replace(/\s+/g, " ").trim()} [CP-${id}]`;
 
+/**
+ * The agreement's name for the standard "Client - Matter - MM-DD-YYYY" one M22
+ * sends (since 2026-10-15); the old "Fee K - Client" when it sent none.
+ */
+export const agreementNameOf = (documentName: string | null, clientName: string, id: number) =>
+  documentName ? `${documentName} [CP-${id}]` : agreementNameFor(clientName, id);
+
+/** The signed copy's file name (no extension), from the agreement name on Zap 3's event. */
+export function signedDocumentName(agreementName: string | null | undefined, clientName: string): string {
+  const base = (agreementName ?? "").replace(/\s*\[CP-\d+\]\s*$/i, "").trim();
+  return base && !/^Fee K - /i.test(base) ? base : `${clientName.replace(/\s+/g, " ").trim()} - Signed Fee K`;
+}
+
 export interface EsignRow {
   status: EsignStatus;
   attorney_email: string;
