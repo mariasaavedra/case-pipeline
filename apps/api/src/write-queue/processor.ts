@@ -24,6 +24,7 @@ import { acquireSyncLock, releaseSyncLock } from "@case-pipeline/seed/db/sync-lo
 import { withTokenFallback } from "../write-auth.js";
 import { DATA_DIR } from "../paths.js";
 import { settleQueuedMailStep } from "@case-pipeline/query";
+import { notifyOps, inBackground } from "../notify/slack.js";
 
 /** A queued step of a scanned notice's write-back reports back to that notice. */
 function settleMailStep(db: Database, row: QueueRow, result: "done" | "failed", detail?: string): void {
@@ -346,6 +347,13 @@ export async function drainWriteQueue(
             `UPDATE write_queue SET status = 'failed', attempts = ?, last_error = ?, updated_at = ? WHERE id = ?`,
           ).run(attempts, message, new Date().toISOString(), row.id);
           console.error(`[write-queue] op ${row.id} (${row.op_type}) dead-lettered after ${attempts} attempts: ${message}`);
+          // Monday never got this write and nothing will retry it. The error is
+          // cut short: Monday sometimes echoes the value it refused.
+          inBackground(notifyOps(
+            "ops_write_queue",
+            `A Monday write gave up after ${attempts} tries (${row.op_type}, item ${row.monday_item_id ?? "new"}): ${message.slice(0, 160)}. ` +
+              "It is in Settings → Admin → Sync health. More failures within the hour are not posted.",
+          ));
           settleMailStep(db, row, "failed", message);
         } else {
           const nextAttempt = new Date(Date.now() + backoffMs(attempts)).toISOString();

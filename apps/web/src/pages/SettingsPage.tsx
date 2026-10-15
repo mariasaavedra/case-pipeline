@@ -8,6 +8,7 @@ import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { DocumentSettingsSection } from "../components/DocumentSettingsSection";
 import { SmsTemplatesSection } from "../components/SmsTemplatesSection";
+import { IntegrationsSection } from "../components/IntegrationsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
 import { MondayUsageSection } from "../components/MondayUsageSection";
 import { AuditLogSection } from "../components/AuditLogSection";
@@ -886,15 +887,16 @@ function PreferencesSections() {
 }
 
 // =============================================================================
-// Main Settings page — four tabs, each with its own URL (/settings/:tab)
+// Main Settings page — five tabs, each with its own URL (/settings/:tab)
 // =============================================================================
 
-type SettingsTab = "account" | "preferences" | "firm" | "admin";
+type SettingsTab = "account" | "preferences" | "firm" | "integrations" | "admin";
 
 const TABS: { id: SettingsTab; label: string; code: string; hint: string; adminOnly?: boolean }[] = [
   { id: "account", label: "My account", code: "P11.1", hint: "Profile, board identity, Monday.com" },
   { id: "preferences", label: "Preferences", code: "P11.2", hint: "Theme, dates, language" },
   { id: "firm", label: "Firm setup", code: "P11.3", hint: "Attorney boards, status tags, urgency, documents", adminOnly: true },
+  { id: "integrations", label: "Integrations", code: "P11.5", hint: "Slack notifications, texting", adminOnly: true },
   { id: "admin", label: "Admin", code: "P11.4", hint: "Users, sync health, audit log", adminOnly: true },
 ];
 
@@ -974,6 +976,8 @@ export function SettingsPage({ tab }: { tab: string }) {
               <SmsTemplatesSection />
             </>
           )}
+
+          {active.id === "integrations" && <IntegrationsSection />}
 
           {active.id === "admin" && (
             <>

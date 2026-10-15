@@ -756,6 +756,51 @@ export function updateSmsTemplates(templates: SmsTemplate[]): Promise<SmsTemplat
   });
 }
 
+// Settings → Integrations (P11.5) — routes/integrations.ts
+export type SlackChannelKind = "events" | "ops" | "alerts";
+export interface NotifyEventDef { key: string; kind: SlackChannelKind; label: string; description: string }
+export interface NotifyEventSetting { enabled: boolean; channel: string | null }
+export interface NotifySettings { events: Record<string, NotifyEventSetting>; opsRepeatMinutes: number }
+export interface IntegrationsStatus {
+  slack: {
+    mode: "off" | "dry-run" | "on";
+    tokenSet: boolean;
+    bot: { name: string; team: string } | { error: string } | null;
+    webhookSet: boolean;
+    envChannels: Record<SlackChannelKind, string | null>;
+    catalog: NotifyEventDef[];
+    settings: NotifySettings;
+    opsRepeatLimits: { min: number; max: number };
+  };
+  sms: { mode: SmsMode; configured: boolean; fromNumber: string | null; templates: number; tenDlcNote: string };
+}
+export interface SlackChannelInfo { id: string; name: string; isPrivate: boolean; isMember: boolean }
+export interface CheckStep { ok: boolean; label: string; fix?: string }
+
+export function fetchIntegrations(): Promise<IntegrationsStatus> {
+  return apiFetch<IntegrationsStatus>("/api/settings/integrations");
+}
+export function fetchSlackChannels(refresh = false): Promise<SlackChannelInfo[]> {
+  return apiFetch<SlackChannelInfo[]>(`/api/settings/integrations/slack/channels${refresh ? "?refresh=1" : ""}`);
+}
+export function updateNotifySettings(s: NotifySettings): Promise<NotifySettings> {
+  return apiFetch<NotifySettings>("/api/settings/notify", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(s),
+  });
+}
+export function sendSlackTest(channel: string): Promise<{ posted: boolean }> {
+  return apiFetch<{ posted: boolean }>("/api/settings/integrations/slack/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel }),
+  });
+}
+export function checkSmsConnection(): Promise<{ ok: boolean; steps: CheckStep[] }> {
+  return apiFetch<{ ok: boolean; steps: CheckStep[] }>("/api/settings/integrations/sms/check", { method: "POST" });
+}
+
 export async function fetchPendingContracts(): Promise<PendingContractsResult> {
   return apiFetch<PendingContractsResult>("/api/pending-contracts");
 }

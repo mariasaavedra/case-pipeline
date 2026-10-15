@@ -77,6 +77,8 @@ import { registerDocumentRoutes } from "./routes/documents.js";
 import { initDocumentSettings } from "./documents/document-settings.js";
 import { registerSmsRoutes } from "./routes/sms.js";
 import { initSmsTemplates } from "./sms/templates.js";
+import { initNotifySettings } from "./notify/settings.js";
+import { registerIntegrationRoutes } from "./routes/integrations.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
 import { registerDetentionWriteRoutes } from "./routes/detention-write.js";
 import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
@@ -100,6 +102,7 @@ import { makeWriteTokenOptions } from "./write-token.js";
 import { checkEnvironment, reportEnvironment } from "./config/env-check.js";
 import { registerMondayWebhook, webhookSecret } from "./webhooks/receiver.js";
 import { startWebhookProcessor, createBoardKeyResolver } from "./webhooks/processor.js";
+import { notifyOps, inBackground } from "./notify/slack.js";
 
 // =============================================================================
 // Database
@@ -216,6 +219,7 @@ initStatusOverrides(DATA_DIR);
 initUrgencySettings(DATA_DIR);
 initDocumentSettings(DATA_DIR);
 initSmsTemplates(DATA_DIR);
+initNotifySettings(DATA_DIR);
 
 /** Build the status → urgency map the Active Cases query consumes. */
 function statusUrgencyMap(): Record<string, Urgency> {
@@ -554,6 +558,8 @@ registerCallLogRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOpt
 // SMS (RingCentral) — see routes/sms.ts. Seed data never texts anyone.
 // =============================================================================
 registerSmsRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions, forceDryRun: DB_SOURCE === "seed" });
+// Settings → Integrations (Slack + texting) — see routes/integrations.ts
+registerIntegrationRoutes(app);
 
 // =============================================================================
 // Mail intake (prototype, read-only) — see routes/mail.ts
@@ -740,6 +746,11 @@ function runSync(label: string, args: string[]): Promise<boolean> {
         resolve(true);
       } else {
         console.error(`[sync] ${label} sync failed (exit code ${code}).`);
+        inBackground(notifyOps(
+          "ops_sync",
+          `The ${label} sync from Monday failed (exit code ${code}). The dashboard keeps its last good data until a run succeeds — see the API log.`,
+          `sync:${label}`,
+        ));
         reject(new Error(`sync exited with code ${code}`));
       }
     });
@@ -837,7 +848,10 @@ function scheduleConsultSweep() {
         console.log("[consult] Sweep skipped — a sync is running.");
         return;
       }
-      runConsultSweep(days).catch((err) => console.error("[consult] Error:", err));
+      runConsultSweep(days).catch((err) => {
+        console.error("[consult] Error:", err);
+        inBackground(notifyOps("ops_consult_sweep", `The consult folder sweep failed: ${(err as Error).message}. Consultation summaries may be missing until it runs again.`));
+      });
     },
     { timezone: FIRM_TIMEZONE },
   );
@@ -908,7 +922,10 @@ function scheduleDriveIntake() {
       });
       child.on("close", (code) => {
         intakeInFlight = false;
-        if (code !== 0) console.error(`[drive] Intake exited with code ${code}`);
+        if (code !== 0) {
+          console.error(`[drive] Intake exited with code ${code}`);
+          inBackground(notifyOps("ops_drive_intake", `Drive intake failed (exit code ${code}). Client uploads aren't being copied to SharePoint until it runs again.`));
+        }
       });
       child.on("error", (err) => {
         intakeInFlight = false;
@@ -969,7 +986,10 @@ function scheduleFeeKAutofill() {
           console.log(`[feek] run: ${r.written.length} filled, ${r.failed.length} failed, ${r.skipped.length} skipped of ${r.candidates}.`);
         }
       })
-        .catch((err) => console.error("[feek] Error:", err))
+        .catch((err) => {
+          console.error("[feek] Error:", err);
+          inBackground(notifyOps("ops_fee_k_autofill", `Fee K auto-fill failed: ${(err as Error).message}`));
+        })
         .finally(() => { feeKInFlight = false; });
     },
     { timezone: FIRM_TIMEZONE },
@@ -1179,7 +1199,10 @@ function scheduleBackups() {
   // poor thing to keep as the day's restore point.
   const backupCron = process.env.BACKUP_CRON ?? "30 5 * * *";
   cron.schedule(backupCron, () => {
-    runBackup().catch((err) => console.error("[backup] error:", err));
+    runBackup().catch((err) => {
+      console.error("[backup] error:", err);
+      inBackground(notifyOps("ops_backup", `The daily database backup failed: ${(err as Error).message}. Check disk space on the server.`));
+    });
   });
   console.log(`[backup] Daily backup scheduled — cron "${backupCron}".`);
 }
