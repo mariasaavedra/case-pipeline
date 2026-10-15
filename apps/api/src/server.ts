@@ -29,9 +29,9 @@ import {
   handleCallLog,
   handleJailIntakes,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getAddressChanges, getFoias, getSyncHealth, getArchivedRows, getCalendarEvents } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getAddressChanges, getFoias, getSyncHealth, getArchivedRows, getCalendarEvents, addMondayCallCounts, getMondayCallCounts } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
-import { setApiToken } from "@case-pipeline/monday";
+import { setApiToken, withMondayJob, drainMondayCallCounts, fetchPlatformUsage } from "@case-pipeline/monday";
 import { mondayFeeKIo, runFeeKAutofill } from "./fee-k-autofill.js";
 import { requireAuth, requireAdmin } from "./auth/middleware.js";
 import { handleAuthMe } from "./routes/auth.js";
@@ -278,6 +278,30 @@ app.get("/api/admin/audit", requireAuth, requireAdmin, (req, res) => handleAdmin
 // it synced" into visible per-board coverage, and makes archived rows restorable.
 app.get("/api/admin/sync-health", requireAuth, requireAdmin, (_req, res) => {
   res.json({ data: getSyncHealth(db) });
+});
+
+// Monday API usage (admin-only). Monday caps the whole account's calls per day
+// (10,000 on our plan, midnight UTC) — hitting it on 2026-10-14 blocked every
+// integration until the reset. Two views side by side: Monday's own report
+// (platform_api, per token/app/user, costs one call so it is cached 10 min) and
+// our per-job counts (monday_api_calls), which say WHICH job spent them.
+let platformUsageCache: { at: number; data: Awaited<ReturnType<typeof fetchPlatformUsage>> } | null = null;
+const PLATFORM_USAGE_TTL_MS = 10 * 60_000;
+app.get("/api/admin/monday-usage", requireAuth, requireAdmin, async (req, res) => {
+  flushMondayCallCounts();
+  const since = new Date(Date.now() - 13 * 86_400_000).toISOString().slice(0, 10);
+  let platform = platformUsageCache?.data ?? null;
+  let platformError: string | null = null;
+  const stale = !platformUsageCache || Date.now() - platformUsageCache.at > PLATFORM_USAGE_TTL_MS;
+  if (MONDAY_API_TOKEN && (stale || req.query.refresh === "1")) {
+    try {
+      platform = await withMondayJob("usage-report", () => fetchPlatformUsage());
+      platformUsageCache = { at: Date.now(), data: platform };
+    } catch (e) {
+      platformError = e instanceof Error ? e.message : String(e);
+    }
+  }
+  res.json({ data: { platform, platformError, jobs: getMondayCallCounts(db, since) } });
 });
 // Discard dead-lettered write-backs (e.g. stale writes that failed before a
 // permission/scope fix — retrying them could clobber newer Monday values, so we
@@ -596,6 +620,8 @@ const server = app.listen(PORT, HOST, () => {
     scheduleDriveIntake();
     scheduleFeeKAutofill();
     scheduleWalCheckpoint();
+    // Write this process's Monday call counts to monday_api_calls every minute.
+    setInterval(flushMondayCallCounts, 60_000).unref();
     scheduleBackups();
     if (MONDAY_API_TOKEN) {
       // Drain queued Monday.com write-backs in the background, with retries.
@@ -608,7 +634,7 @@ const server = app.listen(PORT, HOST, () => {
       // Refresh board/column schema in the background so the editors work right
       // after a deploy without a manual data sync. Light (structure only) and
       // non-blocking; a failure leaves the last-good schema in place.
-      refreshBoardSchema(db)
+      withMondayJob("schema-refresh", () => refreshBoardSchema(db))
         .then((r) => console.log(`[schema-refresh] board schema refreshed: ${r.boards} boards${r.failed ? `, ${r.failed} failed` : ""}`))
         .catch((e) => console.error("[schema-refresh] failed:", e));
 
@@ -650,6 +676,7 @@ function shutdown(signal: string): void {
   console.log(`[shutdown] ${signal} received — draining…`);
   server.close(() => {
     try {
+      flushMondayCallCounts();
       db.pragma("wal_checkpoint(TRUNCATE)");
       db.close();
       usersDb.pragma("wal_checkpoint(TRUNCATE)");
@@ -694,7 +721,8 @@ function runSync(label: string, args: string[]): Promise<boolean> {
     const child = spawn("npm", ["run", "sync:live", "--", ...args], {
       cwd: REPO_ROOT,
       stdio: "inherit",
-      env: process.env,
+      // Its Monday calls are counted as sync:<label> (Settings → Sync health).
+      env: { ...process.env, MONDAY_USAGE_JOB: `sync:${label}` },
       shell: true,
     });
     child.on("close", (code) => {
@@ -918,7 +946,7 @@ function scheduleFeeKAutofill() {
         return;
       }
       feeKInFlight = true;
-      (async () => {
+      withMondayJob("fee-k-autofill", async () => {
         const io = await mondayFeeKIo();
         const r = await runFeeKAutofill({ db, since, apply: true, ...io, log: (l) => console.log(l) });
         for (const w of r.written) {
@@ -932,13 +960,22 @@ function scheduleFeeKAutofill() {
         if (r.written.length || r.failed.length) {
           console.log(`[feek] run: ${r.written.length} filled, ${r.failed.length} failed, ${r.skipped.length} skipped of ${r.candidates}.`);
         }
-      })()
+      })
         .catch((err) => console.error("[feek] Error:", err))
         .finally(() => { feeKInFlight = false; });
     },
     { timezone: FIRM_TIMEZONE },
   );
   console.log(`[feek] Auto-fill scheduled — cron "${feeKCron}" (${FIRM_TIMEZONE}), Fee Ks added since ${since}.`);
+}
+
+/** Monday calls made in this process since the last flush → monday_api_calls. */
+function flushMondayCallCounts(): void {
+  try {
+    addMondayCallCounts(db, drainMondayCallCounts());
+  } catch (err) {
+    console.error("[monday-usage] could not record call counts:", err);
+  }
 }
 
 function scheduleWalCheckpoint() {

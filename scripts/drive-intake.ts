@@ -34,6 +34,7 @@
 // =============================================================================
 
 import Database from "better-sqlite3";
+import { countMondayCalls } from "./lib/monday-usage.js";
 import fs from "node:fs";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { addFileToUpdate, changeSimpleColumnValue, createUpdate, fetchItem, fetchItemAssets, setApiToken } from "@case-pipeline/monday";
@@ -321,6 +322,7 @@ function localColumnText(db: Database.Database, localId: string, key: string): s
 async function main() {
   const apply = flag("apply");
   const dbPath = (arg("db") ?? "live") === "live" ? "data/live.db" : "data/seed.db";
+  countMondayCalls("drive-intake", dbPath);
   const since = arg("since") ?? process.env.DRIVE_INTAKE_SINCE?.trim();
   const rootId = process.env.DRIVE_INTAKE_ROOT_ID?.trim();
   if (!since || !/^\d{4}-\d{2}-\d{2}$/.test(since)) {

@@ -201,6 +201,22 @@ export async function clearFailedWrites(): Promise<{ removed: number }> {
   return apiFetch("/api/admin/write-queue/clear-failed", { method: "POST" });
 }
 
+/** Monday API usage: Monday's own report (platform_api) + our per-job counts. */
+export interface MondayUsage {
+  platform: {
+    dailyLimit: number | null;
+    lastUpdated: string | null;
+    byDay: { day: string; usage: number }[];
+    byApp: { appId: string; name: string | null; usage: number }[];
+    byUser: { name: string | null; usage: number }[];
+  } | null;
+  platformError: string | null;
+  jobs: { day: string; job: string; calls: number }[];
+}
+export async function fetchMondayUsage(refresh = false): Promise<MondayUsage> {
+  return apiFetch(`/api/admin/monday-usage${refresh ? "?refresh=1" : ""}`);
+}
+
 /** Change any editable column on a board item. `value` is the label (choice
  * columns), YYYY-MM-DD (dates), or the raw text/number. pending=queued. */
 export async function changeBoardItemColumn(

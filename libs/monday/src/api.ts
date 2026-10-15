@@ -2,6 +2,7 @@
 // Monday.com API utilities
 // =============================================================================
 
+import { recordMondayCall } from "./usage";
 import type {
   MondayBoard,
   MondayColumn,
@@ -299,6 +300,7 @@ async function requestWithRetry<T>(send: (timeoutMs: number) => Promise<Response
 
   for (let attempt = 0; attempt <= apiConfig.maxRetries; attempt++) {
     try {
+      recordMondayCall();
       const response = await send(timeoutForAttempt(attempt));
 
       // Handle non-OK responses

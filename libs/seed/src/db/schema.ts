@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 33;
+export const SCHEMA_VERSION = 34;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -548,6 +548,15 @@ CREATE TABLE IF NOT EXISTS esign_agreements (
     updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_esign_agreements_contract ON esign_agreements(contract_monday_id);
+
+-- Monday API calls per UTC day per job (v34). Monday caps the account's calls
+-- per day; this says which of our jobs spent them. See libs/monday/src/usage.ts.
+CREATE TABLE IF NOT EXISTS monday_api_calls (
+    day    TEXT NOT NULL,              -- UTC YYYY-MM-DD (Monday's daily-limit day)
+    job    TEXT NOT NULL,              -- sync:full, sync:incremental, write-queue, app, …
+    calls  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, job)
+);
 
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_profiles_batch ON profiles(batch_id);
@@ -1516,6 +1525,18 @@ export function initializeSchema(db: Database): void {
             updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_esign_agreements_contract ON esign_agreements(contract_monday_id);
+      `);
+    }
+
+    // Migration v33 → v34: Monday API call counter. New table only.
+    if (fromVersion < 34) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS monday_api_calls (
+            day    TEXT NOT NULL,
+            job    TEXT NOT NULL,
+            calls  INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (day, job)
+        );
       `);
     }
 

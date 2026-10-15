@@ -22,6 +22,7 @@
 // =============================================================================
 
 import Database from "better-sqlite3";
+import { countMondayCalls } from "./lib/monday-usage.js";
 import fs from "node:fs";
 import { setApiToken, mondayRequest } from "@case-pipeline/monday";
 import { graphAuthFromEnv } from "./sharepoint/auth.js";
@@ -224,6 +225,7 @@ async function main() {
   const days = Number(arg("days") ?? 45);
   const apply = flag("apply");
   const dbPath = (arg("db") ?? "live") === "live" ? "data/live.db" : "data/seed.db";
+  countMondayCalls("consult-sweep", dbPath);
 
   const db = new Database(dbPath, { readonly: true });
   const one = arg("appointment");

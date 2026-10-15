@@ -14,6 +14,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import cron from "node-cron";
+import { withMondayJob } from "@case-pipeline/monday";
 import fs from "node:fs";
 import path from "node:path";
 import { createUpdate, changeSimpleColumnValue, changeColumnValue, createItem, createTimelineItem, addFileToColumn } from "@case-pipeline/monday";
@@ -377,11 +378,11 @@ export function startWriteQueueProcessor(
 
   const schedule = opts.schedule ?? "* * * * *";
   cron.schedule(schedule, () => {
-    drainWriteQueue(db, {
+    withMondayJob("write-queue", () => drainWriteQueue(db, {
       token: opts.token,
       resolveUserToken: opts.resolveUserToken,
       reportTokenRejected: opts.reportTokenRejected,
-    }).catch((err) => console.error("[write-queue] drain error:", err));
+    })).catch((err) => console.error("[write-queue] drain error:", err));
   });
   console.log(`[write-queue] processor scheduled (${schedule}).`);
 }
