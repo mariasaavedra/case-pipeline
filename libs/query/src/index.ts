@@ -3,7 +3,7 @@
 // =============================================================================
 
 export { searchClients, getClientProfile, getOpenDetentions, getClientByName, listProfiles, listProfilesFiltered, getFilterOptions } from "./client";
-export type { ProfileFilterOptions, FilteredProfileResult, FilterOptions } from "./client";
+export type { ProfileFilterOptions, FilteredProfileResult, FilterOptions, TextingContact } from "./client";
 export { getClientContracts } from "./contracts";
 export { getClientBoardItems, getBoardItemDetail } from "./board-items";
 export { getClientCaseSummary } from "./case-summary";

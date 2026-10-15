@@ -284,6 +284,31 @@ export function checkEnvironment(opts: CheckOptions = {}): EnvIssue[] {
     }
     if (!env.API_URL?.trim()) err("API_URL", "is required for Adobe Sign — Zapier downloads the contract PDF from it");
   }
+  // ---------------------------------------------------------------------------
+  // SMS (RingCentral) — "on" without credentials would fail every send
+  // ---------------------------------------------------------------------------
+  const smsModeRaw = env.SMS_MODE?.trim().toLowerCase();
+  if (smsModeRaw && !["off", "dry-run", "on"].includes(smsModeRaw)) {
+    err("SMS_MODE", "must be off, dry-run or on");
+  }
+  if (smsModeRaw === "on") {
+    for (const key of ["RINGCENTRAL_CLIENT_ID", "RINGCENTRAL_CLIENT_SECRET", "RINGCENTRAL_JWT", "RINGCENTRAL_FROM_NUMBER"] as const) {
+      if (!env[key]?.trim()) err(key, "is required when SMS_MODE=on", "See docs/features/sms-and-slack.md.");
+    }
+  }
+  const rcJwt = env.RINGCENTRAL_JWT?.trim();
+  if (rcJwt && !JWT_RE.test(rcJwt)) {
+    err("RINGCENTRAL_JWT", "is not a JWT (three dot-separated parts)", "Copy the JWT credential from the RingCentral developer console.");
+  }
+  const rcFrom = env.RINGCENTRAL_FROM_NUMBER?.trim();
+  if (rcFrom && !/^\+1[2-9]\d{2}[2-9]\d{6}$/.test(rcFrom)) {
+    err("RINGCENTRAL_FROM_NUMBER", "must be a US number in E.164 form (+18165551234)");
+  }
+  const rcServer = env.RINGCENTRAL_SERVER_URL?.trim();
+  if (rcServer && !/^https:\/\/platform(\.devtest)?\.ringcentral\.com\/?$/.test(rcServer)) {
+    warn("RINGCENTRAL_SERVER_URL", "is not https://platform.ringcentral.com (or the devtest sandbox)");
+  }
+
   const slack = env.SLACK_WEBHOOK_URL?.trim();
   if (slack && !/^https:\/\/hooks\.slack\.com\//.test(slack)) {
     warn("SLACK_WEBHOOK_URL", "is not a Slack Incoming Webhook URL (https://hooks.slack.com/…) — Slack messages are skipped");

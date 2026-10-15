@@ -227,3 +227,27 @@ describe("reportEnvironment", () => {
     expect(reportEnvironment([issue("error")], { ENV_CHECK: "warn" })).toBe(false);
   });
 });
+
+describe("SMS (RingCentral)", () => {
+  const vars = (issues: EnvIssue[]) => issues.filter((i) => i.level === "error").map((i) => i.variable).sort();
+  const check = (env: NodeJS.ProcessEnv) => vars(checkEnvironment({ env, envFilePath: null, examplePath: null }));
+
+  test("SMS_MODE=on without credentials refuses to boot, naming each missing one", () => {
+    expect(check({ SMS_MODE: "on" })).toEqual([
+      "RINGCENTRAL_CLIENT_ID", "RINGCENTRAL_CLIENT_SECRET", "RINGCENTRAL_FROM_NUMBER", "RINGCENTRAL_JWT",
+    ]);
+  });
+
+  test("a fully configured SMS_MODE=on passes; dry-run needs nothing", () => {
+    expect(check({
+      SMS_MODE: "on", RINGCENTRAL_CLIENT_ID: "id", RINGCENTRAL_CLIENT_SECRET: "secret",
+      RINGCENTRAL_JWT: GOOD_TOKEN, RINGCENTRAL_FROM_NUMBER: "+18169942300",
+    })).toEqual([]);
+    expect(check({ SMS_MODE: "dry-run" })).toEqual([]);
+  });
+
+  test("a bad mode, a non-E.164 number and a non-JWT are errors", () => {
+    expect(check({ SMS_MODE: "yes", RINGCENTRAL_FROM_NUMBER: "816-994-2300", RINGCENTRAL_JWT: "not-a-jwt" }))
+      .toEqual(["RINGCENTRAL_FROM_NUMBER", "RINGCENTRAL_JWT", "SMS_MODE"]);
+  });
+});
