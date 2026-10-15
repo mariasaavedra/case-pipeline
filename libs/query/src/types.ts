@@ -32,11 +32,10 @@ export interface ProfileSummary {
    */
   displayName?: string | null;
   /**
-   * The Profiles board's First Name / Last Name columns as typed (notes and all)
-   * — what a new e-file folder is named from (consultFolderName). Only the full
-   * client detail sets them.
+   * The Profiles board's Last Name column as typed (notes and all) — with
+   * `firstName`, what a new e-file folder is named from (consultFolderName).
+   * Only the full client detail sets it.
    */
-  firstName?: string | null;
   lastName?: string | null;
   /**
    * The client's page in DMS (Innovation Law Lab), from the Profiles "DMS"
@@ -51,6 +50,14 @@ export interface ProfileSummary {
    * Only the full client detail sets it.
    */
   detainedAt?: string | null;
+  /**
+   * For texting the client (M28): Phone 2, Preferred Language ("Espanol",
+   * "English"…) and First Name from the Profiles board. Only the full client
+   * detail sets them.
+   */
+  phone2?: string | null;
+  preferredLanguage?: string | null;
+  firstName?: string | null;
 }
 
 /**

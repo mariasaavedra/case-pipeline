@@ -35,7 +35,9 @@
     "consult:folders": "tsx --env-file-if-exists=.env scripts/consult-folders.ts",
     "consult:sweep": "tsx --env-file-if-exists=.env scripts/consult-sweep.ts",
     "drive:intake": "tsx --env-file-if-exists=.env scripts/drive-intake.ts",
-    "feek:autofill": "tsx --env-file-if-exists=.env scripts/fee-k-autofill.ts"
+    "esign:efile": "tsx --env-file-if-exists=.env scripts/esign-efile.ts",
+    "feek:autofill": "tsx --env-file-if-exists=.env scripts/fee-k-autofill.ts",
+    "sms:check": "tsx --env-file-if-exists=.env scripts/ringcentral-check.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

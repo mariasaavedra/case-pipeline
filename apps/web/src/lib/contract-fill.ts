@@ -12,7 +12,9 @@
 // fields that template uses, and fills it (fillContractTemplate). Amounts print
 // WITH their "$" ("$5,000.00"); dates as "October 5, 2026" (or the Spanish /
 // short variants). The 3% surcharge is on everything the client pays by card:
-// AF + FF + postage (changed 2026-10-14; it was AF only).
+// AF + FF + postage (changed 2026-10-14; it was AF only). Most 2026 contracts
+// print it per fee instead, one "Surcharge Fee" line under each amount:
+// {{attorney_fee_surcharge}}, {{filing_fee_surcharge}}… = 3% of that one fee.
 // =============================================================================
 
 import PizZip from "pizzip";
@@ -40,7 +42,14 @@ export interface ContractInput {
   /** Null = 3% of AF + FF + postage. */
   surcharge: number | null;
   interviewFee: number | null;
+  /** COURT APPLICATION: DHS biometrics fee. Null prints "N/A". */
+  bioFee: number | null;
+  /** BOND MOTION + MASTER HEARING: the motion's and the hearing's attorney fees. */
+  motionFee: number | null;
+  hearingFee: number | null;
   dueDate: string;
+  /** TRIAL: when the signed contract must be back (the payment deadline is dueDate). */
+  signByDate: string;
   attorneyName: string;
   creatorInitials: string;
 }
@@ -78,6 +87,11 @@ export const surchargeOf = (f: ContractInput) => f.surcharge ?? surchargeFor(f.a
 export const totalOf = (f: ContractInput) =>
   round2((f.attorneyFee ?? 0) + (f.filingFee ?? 0) + (f.postageFee ?? 0) + surchargeOf(f));
 
+/** "N/A" for a fee that doesn't apply (null), else the amount. */
+const moneyOrNA = (n: number | null) => (n === null ? "N/A" : money(n));
+/** Trial and BIA appeal fees are paid in two equal halves. */
+export const halfOf = (attorneyFee: number | null) => round2((attorneyFee ?? 0) / 2);
+
 const has = (s: string) => s.trim() !== "";
 const positive = (n: number | null) => n !== null && Number.isFinite(n) && n > 0;
 
@@ -99,15 +113,44 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "postage_fee", label: "Postage fee (N/A when empty)", example: "$100.00", value: (f) => (f.postageFee === null ? "N/A" : money(f.postageFee)) },
   { tag: "surcharge", label: "Surcharge (3% of AF + FF + postage unless changed)", example: "$150.00", value: (f) => money(surchargeOf(f)) },
   { tag: "total_fee", label: "Total (AF + FF + postage + surcharge)", example: "$5,925.00", value: (f) => money(totalOf(f)) },
+  { tag: "attorney_fee_surcharge", label: "Surcharge on the attorney fee (3%)", example: "$150.00", value: (f) => money(surchargeFor(f.attorneyFee)), required: (f) => !positive(f.attorneyFee) },
+  { tag: "filing_fee_surcharge", label: "Surcharge on the filing fee (3%)", example: "$20.25", value: (f) => money(surchargeFor(f.filingFee)) },
+  { tag: "postage_fee_surcharge", label: "Surcharge on postage (3%, N/A when no postage)", example: "$3.00", value: (f) => (f.postageFee === null ? "N/A" : money(surchargeFor(f.postageFee))) },
+  { tag: "attorney_fee_half", label: "Half the attorney fee (paid in two halves)", example: "$2,500.00", value: (f) => money(halfOf(f.attorneyFee)), required: (f) => !positive(f.attorneyFee) },
+  { tag: "attorney_fee_half_surcharge", label: "Surcharge on half the attorney fee (3%)", example: "$75.00", value: (f) => money(surchargeFor(halfOf(f.attorneyFee))), required: (f) => !positive(f.attorneyFee) },
+  { tag: "bio_fee", label: "DHS biometrics fee (N/A when empty)", example: "$30.00", value: (f) => moneyOrNA(f.bioFee) },
+  { tag: "bio_fee_surcharge", label: "Surcharge on the biometrics fee (3%)", example: "$0.90", value: (f) => (f.bioFee === null ? "N/A" : money(surchargeFor(f.bioFee))) },
+  { tag: "motion_fee", label: "Attorney fee for the motion", example: "$1,500.00", value: (f) => money(f.motionFee), required: (f) => !positive(f.motionFee) },
+  { tag: "motion_fee_surcharge", label: "Surcharge on the motion fee (3%)", example: "$45.00", value: (f) => money(surchargeFor(f.motionFee)), required: (f) => !positive(f.motionFee) },
+  { tag: "hearing_fee", label: "Attorney fee for the hearing", example: "$1,000.00", value: (f) => money(f.hearingFee), required: (f) => !positive(f.hearingFee) },
+  { tag: "hearing_fee_surcharge", label: "Surcharge on the hearing fee (3%)", example: "$30.00", value: (f) => money(surchargeFor(f.hearingFee)), required: (f) => !positive(f.hearingFee) },
   { tag: "interview_fee", label: "Interview attendance fee", example: "$500.00", value: (f) => money(f.interviewFee), required: (f) => !positive(f.interviewFee) },
   { tag: "due_date", label: "Payment deadline", example: "October 12, 2026", value: (f) => dateEn(f.dueDate), required: (f) => !ymd(f.dueDate) },
   { tag: "due_date_es", label: "Payment deadline, Spanish", example: "12 de Octubre, 2026", value: (f) => dateEs(f.dueDate), required: (f) => !ymd(f.dueDate) },
+  { tag: "sign_by_date", label: "Signed contract due", example: "October 10, 2026", value: (f) => dateEn(f.signByDate), required: (f) => !ymd(f.signByDate) },
+  { tag: "sign_by_date_es", label: "Signed contract due, Spanish", example: "10 de Octubre, 2026", value: (f) => dateEs(f.signByDate), required: (f) => !ymd(f.signByDate) },
   { tag: "due_date_short", label: "Payment deadline, short", example: "10/12/2026", value: (f) => dateShort(f.dueDate), required: (f) => !ymd(f.dueDate) },
   { tag: "attorney_name", label: "Attorney (signs the letter)", example: "Jane Attorney", value: (f) => f.attorneyName.trim(), required: (f) => !has(f.attorneyName) },
   { tag: "creator_initials", label: "Initials of who made the Fee K", example: "RC", value: (f) => f.creatorInitials.trim(), required: (f) => !has(f.creatorInitials) },
 ];
 
 const BY_TAG = new Map(CONTRACT_FIELDS.map((f) => [f.tag, f]));
+
+/**
+ * The contract's file name, the same everywhere (download, Adobe, the signed
+ * copy in the E-File): "Client name - Form(s)/Matter - MM-DD-YYYY". Decided
+ * 2026-10-15. A bilingual title typed into Form(s)/matter keeps its English
+ * half ("… / I-212 Aplicación…" is dropped) and is capped at a word, so the
+ * name stays readable in a folder.
+ */
+export function contractDocumentName(f: ContractInput): string {
+  const clean = (s: string) => s.replace(/[\\/:*?"<>|#%{}~&]+/g, " ").replace(/\s+/g, " ").trim();
+  let matter = clean((f.formName.trim() || f.hearingType.trim() || "Fee K").split(" / ")[0]!);
+  if (matter.length > 80) matter = `${matter.slice(0, 80).replace(/\s+\S*$/, "")}…`;
+  const p = ymd(f.date);
+  const date = p ? `${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}-${p.y}` : "";
+  return [clean(f.clientName), matter, date].filter(Boolean).join(" - ");
+}
 
 /**
  * Adobe Sign text tags — {{Sig_es_:signer1:signature}}, {{*Addr_es_:signer2}}…

@@ -327,6 +327,34 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    // Texts sent to clients through RingCentral (routes/sms.ts). One row per
+    // send, dry runs included, so "did we text them?" has an answer here even
+    // when the client isn't linked to a profile (no E&A entry then).
+    version: 13,
+    up: () => {
+      usersDb.exec(`
+        CREATE TABLE IF NOT EXISTS sms_messages (
+          id                INTEGER PRIMARY KEY,
+          created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+          user_id           INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          to_number         TEXT NOT NULL,
+          body              TEXT NOT NULL,
+          template_key      TEXT,
+          language          TEXT,
+          context           TEXT NOT NULL,
+          profile_local_id  TEXT,
+          profile_monday_id TEXT,
+          mode              TEXT NOT NULL,
+          rc_message_id     TEXT,
+          status            TEXT NOT NULL,
+          error             TEXT
+        )
+      `);
+      usersDb.exec(`CREATE INDEX IF NOT EXISTS idx_sms_messages_to ON sms_messages(to_number, created_at)`);
+      usersDb.exec(`CREATE INDEX IF NOT EXISTS idx_sms_messages_profile ON sms_messages(profile_monday_id)`);
+    },
+  },
 ];
 
 const TARGET_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

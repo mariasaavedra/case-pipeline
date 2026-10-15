@@ -5,7 +5,8 @@ import { WatchlistPin } from "./WatchlistPin";
 import { DialogTitle } from "./ui/dialog";
 import { SectionCode } from "./ScreenCode";
 import { ReleaseDetentionModal } from "./ReleaseDetentionModal";
-import { formatANumber } from "@case-pipeline/core";
+import { formatANumber, toUsE164 } from "@case-pipeline/core";
+import { SendSmsModal } from "./SendSmsModal";
 
 const PRIORITY_STYLES: Record<string, { dot: string; label: string; bg: string; text: string }> = {
   Urgent: { dot: "priority-dot-urgent", label: "Urgent", bg: "#fef2f2", text: "#991b1b" },
@@ -46,6 +47,9 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
   // facility from live.db (updated optimistically by the API).
   const [released, setReleased] = useState(false);
   const detainedAt = released ? null : profile.detainedAt;
+  // M28 — free text to the client; Phone, else Phone 2.
+  const [smsOpen, setSmsOpen] = useState(false);
+  const textPhone = [profile.phone, profile.phone2].find((p) => p && toUsE164(p)) ?? null;
 
   return (
     <div className={isPopup ? "flex-shrink-0 border-b border-border" : "client-header-sticky"}>
@@ -162,6 +166,30 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
                     {profile.phone}
                   </span>
                 </div>
+              )}
+              {textPhone && (
+                <button
+                  type="button"
+                  onClick={() => setSmsOpen(true)}
+                  className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={{ border: "1px solid var(--color-border-light)", color: "var(--color-ink-muted)", background: "var(--color-surface)", cursor: "pointer" }}
+                  title="Send this client a text (RingCentral)"
+                >
+                  Text
+                </button>
+              )}
+              {smsOpen && textPhone && (
+                <SendSmsModal
+                  context="client"
+                  templateKey=""
+                  phone={textPhone}
+                  altPhones={[profile.phone, profile.phone2]}
+                  name={displayName}
+                  firstName={profile.firstName}
+                  language={profile.preferredLanguage ?? undefined}
+                  profileLocalId={profile.localId}
+                  onClose={() => setSmsOpen(false)}
+                />
               )}
               {profile.address && (
                 <div className="flex items-center gap-2">

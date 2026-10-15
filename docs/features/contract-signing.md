@@ -63,6 +63,14 @@ add a contract.
   their `$`; postage prints "N/A" when empty; surcharge = 3% of AF + FF + postage (AF only until
   2026-10-14) unless typed; a one-line Monday address is split into street +
   "City, ST zip" when the template has `{{city_state_zip}}`; total = AF + FF + postage + surcharge.
+- Most 2026 contracts print a "Surcharge Fee" line under **each** fee, so
+  each fee has its own 3% tag (`{{attorney_fee_surcharge}}`,
+  `{{filing_fee_surcharge}}`, `{{postage_fee_surcharge}}`, `{{bio_fee_surcharge}}`…;
+  N/A when that fee is empty). A typed surcharge only changes `{{surcharge}}`.
+  Trial and BIA appeal fees are paid in two equal halves (`{{attorney_fee_half}}`);
+  Bond + Master Hearing has its own `{{motion_fee}}` / `{{hearing_fee}}`; Court
+  Application adds the DHS `{{bio_fee}}`; Trial's "signed contract by" date is
+  `{{sign_by_date}}` (payment = `{{due_date}}`).
 - **Generate contract…** lists the folder, downloads the picked template and
   checks it. Broken braces or an unknown tag (a typo) block it, with a link to
   open the file in Word. The form shows only the fields that template uses,
@@ -81,8 +89,11 @@ add a contract.
 
 ## Not done yet
 
-- FORMS template: the Word file in `9-29-26` is an older draft than its
-  approved PDF (empty header, no amounts) — needs the approved Word version.
+- 2026-10-15: FORMS, Court Application, BIA, Bond + MCH, Interview, Trial
+  and Habeas tagged from the `9-29-26` drafts (word-for-word the approved
+  PDFs) into `Fee Contracts/App Templates - REVIEW`, with filled SAMPLE PDFs.
+  They go live by moving them into App Templates once staff approve. Credited
+  Hearing and Electronic File Copy have no Word version yet.
 - Acrobat text tags at the signature and Initials lines, so Acrobat places the
   signing fields itself (to be confirmed with one test send).
 - If the firm later moves to an e-signature service with an API (Acrobat Sign

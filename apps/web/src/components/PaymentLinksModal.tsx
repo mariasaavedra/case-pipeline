@@ -4,9 +4,10 @@
 // One link per fee on the contract: AF and PF go to Operating, FF to Trust
 // (rules in lib/lawpay.ts, same as the firm's own link script). The
 // description starts as "<client> <case type>" and is editable; amounts start
-// from Monday's AF / PF / FF and are editable too. Nothing is sent from here —
-// staff copy the links into their message, then "Mark sent" records Payment
-// Link Sent On and moves the stage to Payment link sent.
+// from Monday's AF / PF / FF and are editable too. Staff either copy the links
+// into their own message and press "Mark sent" (records Payment Link Sent On,
+// stage → Payment link sent), or press "Text links to client" (M28): a live
+// text marks it sent by itself; a test-mode text doesn't.
 // =============================================================================
 
 import { useState } from "react";
@@ -14,6 +15,8 @@ import type { PendingContract } from "../api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { lawPayLink, FEE_TYPE_LABELS, type FeeType } from "../lib/lawpay";
+import { SendSmsModal } from "./SendSmsModal";
+import type { SendSmsResult } from "../api";
 
 interface Props {
   contract: PendingContract;
@@ -41,8 +44,27 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [smsOpen, setSmsOpen] = useState(false);
+  /** After a text: "marked" = live text + stage recorded; "texted" = sent, nothing to mark; "test" = dry run. */
+  const [texted, setTexted] = useState<"marked" | "texted" | "test" | null>(null);
+
   const links = FEES.map((fee) => ({ fee, link: lawPayLink(description, fee, amounts[fee]) }));
   const ready = links.filter((l): l is { fee: FeeType; link: string } => l.link !== null);
+  const linksText = ready.map((l) => `${FEE_TYPE_LABELS[l.fee]}: ${l.link}`).join("\n");
+
+  // A live text is the link going out, so it records the step the same as
+  // "Mark sent". A failure there is shown here; the text itself already went.
+  const onTexted = async (r: SendSmsResult) => {
+    if (r.mode !== "on") { setTexted("test"); return; }
+    if (!onMarkSent) { setTexted("texted"); return; }
+    try {
+      await onMarkSent();
+      setTexted("marked");
+    } catch (e) {
+      setTexted("texted");
+      setError(`Text sent, but the stage wasn't recorded: ${e instanceof Error ? e.message : "error"} — press Mark sent.`);
+    }
+  };
 
   const copy = async (text: string, which: FeeType | "all") => {
     try {
@@ -118,14 +140,25 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
             <p className="text-sm" style={{ color: "var(--color-ink-faint)" }}>Enter a description and at least one amount.</p>
           )}
           {error && <p className="text-sm" style={{ color: "var(--urgency-overdue)" }}>{error}</p>}
+          {texted && (
+            <p className="text-sm" style={{ color: "var(--color-ink)" }}>
+              {texted === "marked" && "✓ Links texted to the client and marked sent."}
+              {texted === "texted" && "✓ Links texted to the client."}
+              {texted === "test" && "Test text recorded (not sent) — nothing marked."}
+            </p>
+          )}
 
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2 pt-1 flex-wrap">
             {ready.length > 1 && (
               <Button type="button" variant="outline"
-                onClick={() => copy(ready.map((l) => `${FEE_TYPE_LABELS[l.fee]}: ${l.link}`).join("\n"), "all")}>
+                onClick={() => copy(linksText, "all")}>
                 {copied === "all" ? "Copied ✓" : "Copy all"}
               </Button>
             )}
+            <Button type="button" variant="outline" disabled={ready.length === 0} onClick={() => setSmsOpen(true)}
+              title={c.clientPhone || c.clientContact.phone2 ? undefined : "No phone on the client's profile — type one in"}>
+              Text links to client
+            </Button>
             <div className="ml-auto flex gap-2">
               <Button type="button" variant="outline" onClick={onClose}>Close</Button>
               {onMarkSent && (
@@ -138,6 +171,22 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
           </div>
         </div>
       </DialogContent>
+
+      {smsOpen && (
+        <SendSmsModal
+          context="payment_links"
+          templateKey="payment_links"
+          vars={{ links: linksText }}
+          phone={c.clientPhone || c.clientContact.phone2 || ""}
+          altPhones={[c.clientContact.phone2]}
+          name={c.clientName}
+          firstName={c.clientContact.firstName}
+          language={c.clientContact.preferredLanguage ?? undefined}
+          profileLocalId={c.clientLocalId}
+          onSent={(r) => void onTexted(r)}
+          onClose={() => setSmsOpen(false)}
+        />
+      )}
     </Dialog>
   );
 }
