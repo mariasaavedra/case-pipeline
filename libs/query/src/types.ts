@@ -32,6 +32,13 @@ export interface ProfileSummary {
    */
   displayName?: string | null;
   /**
+   * The Profiles board's First Name / Last Name columns as typed (notes and all)
+   * — what a new e-file folder is named from (consultFolderName). Only the full
+   * client detail sets them.
+   */
+  firstName?: string | null;
+  lastName?: string | null;
+  /**
    * The client's page in DMS (Innovation Law Lab), from the Profiles "DMS"
    * column. Null when there is none — expected for cases opened from 2025 on.
    * Only the full client detail sets it.

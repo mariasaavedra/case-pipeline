@@ -142,6 +142,7 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
     ...profile,
     ...readSharePointLinks(rawColumnValues),
     displayName: readDisplayName(rawColumnValues),
+    ...readNameColumns(rawColumnValues),
     dmsUrl: readDmsUrl(rawColumnValues),
     detainedAt: getDetainedAt(db, localId),
   };
@@ -166,6 +167,12 @@ export function readDisplayName(rawColumnValues: string | null | undefined): str
   const clean = (v: unknown): string => stripNameNotes(asNonEmptyString(v) ?? "");
   const full = [clean(cvs.first_name), clean(cvs.last_name)].filter(Boolean).join(" ");
   return full || null;
+}
+
+/** First Name / Last Name exactly as stored. */
+function readNameColumns(rawColumnValues: string | null | undefined): { firstName: string | null; lastName: string | null } {
+  const cvs = safeParseJson(rawColumnValues);
+  return { firstName: asNonEmptyString(cvs.first_name) ?? null, lastName: asNonEmptyString(cvs.last_name) ?? null };
 }
 
 /** An open court case whose Det. Facility says where the client is held. */

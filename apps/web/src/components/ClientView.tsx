@@ -227,7 +227,10 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
           )}
 
           {activeTab === "documents" && (
-            <DocumentsTab data={data} />
+            <DocumentsTab
+              data={data}
+              eFile={{ profileLocalId: data.profile.localId, firstName: data.profile.firstName, lastName: data.profile.lastName }}
+            />
           )}
 
           {activeTab === "relations" && (

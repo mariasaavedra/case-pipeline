@@ -4,10 +4,12 @@ import { GenerateDocModal } from "./GenerateDocModal";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { mondayItemUrl, MONDAY_PROFILES_BOARD_ID } from "../config";
 import { boardDisplayName } from "@case-pipeline/query/types";
+import { collectClientFolders } from "../sharepoint/collectFolders";
 
 // P3.0's ⋯ menu (D37): every header action except Watch, which stays a button
 // beside it. Open in DMS only when the profile has a DMS link (cases up to the
-// end of 2024). The M3 popup header passes no `data`, so it gets just the links.
+// end of 2024); Open e-file only when there is an e-file (or closed e-file)
+// folder link. The M3 popup header passes no `data`, so it gets just the links.
 
 interface Props {
   profile: ProfileSummary;
@@ -114,7 +116,12 @@ export function ActionButtons({ profile, data, onViewRelations }: Props) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const hasLinks = !!profile.dmsUrl || !!profile.mondayItemId;
+  // The live e-file first (the profile's own link leads the list), then a closed
+  // one (SCALClosed) — never a consult folder. Repeats are labelled "e-file (2)".
+  const folders = collectClientFolders(data ?? { profile });
+  const eFile = folders.find((f) => f.label.startsWith("e-file")) ?? folders.find((f) => f.label.startsWith("Archived")) ?? null;
+
+  const hasLinks = !!profile.dmsUrl || !!profile.mondayItemId || !!eFile;
   if (!hasLinks && !data) return null;
 
   return (
@@ -154,6 +161,20 @@ export function ActionButtons({ profile, data, onViewRelations }: Props) {
               >
                 <ExternalIcon />
                 Open in Monday.com
+              </a>
+            )}
+            {eFile && (
+              <a
+                role="menuitem"
+                className="status-menu-item"
+                style={menuItemStyle}
+                href={eFile.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setOpen(false)}
+              >
+                <ExternalIcon />
+                {eFile.label.startsWith("Archived") ? "Open closed e-file in SharePoint" : "Open e-file in SharePoint"}
               </a>
             )}
             {data && (
