@@ -104,6 +104,7 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 | P3.6 | Documents tab | `/clients/:id/documents` | SharePoint files; click a file → M12. Inside a folder: **New folder**, **Upload files**. No e-file link → **Find or create e-file folder** (writes the profile's E-File) |
 | P3.7 | Relations tab | `/clients/:id/relations` | |
 | P3.8 | Debug tab | — | Admins only. Click an entry → M13 |
+| P3.9 | Timeline tab | `/clients/:id/timeline` | Where it stands / Needs attention / Coming up; lane chart (court, USCIS, fees, meetings, notes per month) with 12 months / 18 months / 3 years / Everything; click a marker → its row in the story list (filter by track, newest/oldest first). Milestones per board = `config/timeline.yaml`; rules = `libs/query/src/case-timeline.ts`. Read-only |
 
 ### Inside P4 Appointments
 

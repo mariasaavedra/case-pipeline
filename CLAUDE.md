@@ -62,7 +62,7 @@ Document generation: Monday.com item → `libs/template` (Handlebars context) �
 
 ### Configuration
 
-Board definitions live in `config/boards.yaml` — board IDs, column mappings, and inter-board relationships are YAML, not hardcoded. The `libs/config` package loads this at runtime. `config/templates.yaml` maps Monday.com data to template variables.
+Board definitions live in `config/boards.yaml` — board IDs, column mappings, and inter-board relationships are YAML, not hardcoded. The `libs/config` package loads this at runtime. `config/templates.yaml` maps Monday.com data to template variables. `config/timeline.yaml` names the case-timeline milestones per board (`loadTimelineConfig`).
 
 ### Environment Variables
 
@@ -130,6 +130,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `mail-writeback.ts` | What an assigned notice writes to its Open Form (plan, by column title), write-back state per notice |
 | `mail-layout.ts` | Reads labelled fields by word position (I-797 grid: value under its label, or inline "Label: value") |
 | `mail.ts` | Mail intake: OCR-misread repair, all notice fields (receipt, case type, dates, petitioner/beneficiary/applicant, A#, DOB, section), name + date matching, auto-split of one scan into notices, match to profile + Open Form |
+| `case-timeline.ts` | P3.9 Case timeline: one profile's dated milestones on five tracks (court, USCIS, fees, meetings, notes) from `config/timeline.yaml` (column → milestone per board) + rules in code (court outcome from the item name, hearing outcomes incl. "CONT. FROM", appeals with stored due date over removal + 30, motions, RFEs/denials, appointments, Fee K signing), key E&A types folded into same-day filings; summary = Where it stands / Needs attention / Coming up |
 | `dashboard.ts` | KPI card queries (6 cards, 7-day windows) |
 | `search.ts` | Cross-type search (contracts, court cases, etc.) |
 | `status-options.ts` | Each board's real status labels + colors (write-back validates against these) |
@@ -177,6 +178,7 @@ Data reads:
 | `GET /api/clients/:id/board-items` | Board items grouped by board key |
 | `GET /api/clients/:id/updates` | Timeline updates for one client |
 | `GET /api/clients/:id/relationships` | Item relationships for one client |
+| `GET /api/clients/:id/timeline` | P3.9 case timeline: dated milestones, notes per month, summary (`routes/case-timeline.ts`; mapping `config/timeline.yaml`, read once per process) |
 | `GET /api/board-items/:id` | Single board item detail |
 
 Writes and user/account routes:
@@ -230,7 +232,7 @@ Writes and user/account routes:
 
 | Path | Purpose |
 |---|---|
-| `config/` | `boards.yaml` (board & column definitions), `templates.yaml` (template variable mappings) |
+| `config/` | `boards.yaml` (board & column definitions), `templates.yaml` (template variable mappings), `timeline.yaml` (which board dates are case-timeline milestones, P3.9) |
 | `data/` | SQLite databases — `seed.db` (local dev, gitignored), `live.db` (real data, gitignored) |
 | `templates/` | Handlebars `.txt` and DOCX template files used by the render pipeline; `templates/forms/` = official fillable PDFs (G-28) filled by `apps/api/src/documents/` |
 | `output/` | Rendered document output (gitignored) |

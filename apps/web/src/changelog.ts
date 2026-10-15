@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-15",
+    title: "Client page: a timeline of the whole case",
+    items: [
+      "A new Timeline tab on each client shows the case on one page: court, USCIS, fees, meetings and how busy the notes were, month by month.",
+      "At the top: where the case stands, what needs attention (a missed deadline, a hearing with no outcome, a motion waiting on the judge) and what's coming up.",
+      "Below the chart, the same events as a list you can filter. Click a dot on the chart to jump to it in the list.",
+      "Rescheduled hearings are crossed out. Monday only keeps today's status, so the timeline can't yet show when a hearing was moved.",
+    ],
+  },
+  {
+    date: "2026-10-15",
     title: "Client page: e-file shortcuts and new folders",
     items: [
       "The ⋯ menu at the top of a client's page has “Open e-file in SharePoint”, which opens their e-file folder in a new tab.",

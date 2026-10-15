@@ -19,6 +19,8 @@ export type { MyCasesData, MyOpenForm, MyPreschedulingCase } from "@case-pipelin
 export type { PreschedulingResult, PreschedulingCase, WaitLevel } from "@case-pipeline/query";
 export type { PendingContractsResult, PendingContract, ContractStep } from "@case-pipeline/query";
 export type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness, CaseMotion, CourtMotion, MotionFlag, MotionPhase } from "@case-pipeline/query";
+import type { CaseTimeline } from "@case-pipeline/query";
+export type { CaseTimeline, TimelineEvent, TimelineEventStatus, TimelineNote, TimelineTrack, TimelineKind } from "@case-pipeline/query";
 export type { AddressChangesResult, AddressChange, AddressChangePhase, AddressChangeFlag } from "@case-pipeline/query";
 export type { FoiasResult, Foia, FoiaPhase, FoiaFlag } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
@@ -560,6 +562,11 @@ export async function addCallLogNote(
 
 export async function fetchClientRelationships(localId: string): Promise<RelationshipWithDetails[]> {
   return apiFetch<RelationshipWithDetails[]>(`/api/clients/${encodeURIComponent(localId)}/relationships`);
+}
+
+/** P3.9 — the client's case as dated milestones + a short summary. */
+export async function fetchCaseTimeline(localId: string): Promise<CaseTimeline> {
+  return apiFetch<CaseTimeline>(`/api/clients/${encodeURIComponent(localId)}/timeline`);
 }
 
 export async function fetchAppointments(
