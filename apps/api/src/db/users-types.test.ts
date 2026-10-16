@@ -94,4 +94,23 @@ describe("preferences validation", () => {
     expect(sanitizeSidebarNav({ order: "home" })).toEqual({ order: [], hidden: [] });
     expect(parsePreferences('{"theme":"light"}').sidebarNav).toEqual({ order: [], hidden: [] });
   });
+
+  it("keeps clean folders: unique ids, trimmed names, each page in one folder", () => {
+    const nav = sanitizeSidebarNav({
+      order: ["home", "folder-a"],
+      hidden: [],
+      folders: [
+        { id: "folder-a", name: "  Boards\u0007 ", items: ["foias", "court-cases", "foias"] },
+        { id: "folder-a", name: "dupe", items: [] },
+        { id: "Bad Id", name: "x", items: [] },
+        { id: "folder-b", name: "", items: ["foias", "map"] },
+        "junk",
+      ],
+    });
+    expect(nav.folders).toEqual([
+      { id: "folder-a", name: "Boards", items: ["foias", "court-cases"] },
+      { id: "folder-b", name: "Folder", items: ["map"] },
+    ]);
+    expect(sanitizeSidebarNav({ order: [], hidden: [], folders: "x" })).toEqual({ order: [], hidden: [] });
+  });
 });

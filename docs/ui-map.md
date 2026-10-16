@@ -67,7 +67,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 
 | Code | Name | Notes |
 |---|---|---|
-| G1 | Sidebar | Page links, Settings, your name and sign-out (`Sidebar.tsx`). **Customize** (above Settings) lets each user drag pages into their own order and hide ones they don't use; saved per user in `preferences.sidebarNav` |
+| G1 | Sidebar | Page links, Settings, your name and sign-out (`Sidebar.tsx`). **Customize** (above Settings) lets each user drag pages into their own order, hide ones they don't use, and group pages into named folders (one level, foldable; open/closed is per device); saved per user in `preferences.sidebarNav`. The collapsed icon rail lists folder pages flat |
 | G2 | Top bar | Back and **+ Log call** (`app.tsx`); not on Settings |
 
 The **Version badge** (opens M14) sits in the Home header and on Sign in
