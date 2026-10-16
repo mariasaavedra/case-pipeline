@@ -330,7 +330,7 @@ export function registerContractFeesRoutes(app: Express, deps: ContractFeesDeps)
         return;
       }
       if (attorneyUserId == null) {
-        res.status(400).json({ error: `"${attorney}" is not a Monday user — pick the attorney from the list` });
+        res.status(400).json({ error: `"${attorney}" matches no Monday user — add their Monday e-mail in Settings → Documents` });
         return;
       }
       values[FEE_K_ATTORNEY.id] = peopleValue(attorneyUserId) as never;

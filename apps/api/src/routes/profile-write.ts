@@ -415,7 +415,7 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       return;
     }
     if (attorneyUserId == null) {
-      res.status(400).json({ error: `"${attorney}" is not a Monday user — pick the attorney from the list` });
+      res.status(400).json({ error: `"${attorney}" matches no Monday user — add their Monday e-mail in Settings → Documents` });
       return;
     }
 
