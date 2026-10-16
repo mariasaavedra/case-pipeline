@@ -14,6 +14,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-16",
+    title: "Timeline: FOIAs, NVC, I-918Bs and federal cases",
+    items: [
+      "The Timeline tab now also shows FOIAs (filed and results received), NVC notices, I-918B certifications (requested, signed, expires) and federal cases (work due, hearings).",
+      "From Emails & Activities it also picks up hearing notes, interview notices and EOIR filing fee payments.",
+    ],
+  },
+  {
     date: "2026-10-15",
     title: "Client page: a timeline of the whole case",
     items: [

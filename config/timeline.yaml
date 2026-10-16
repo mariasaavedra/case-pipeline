@@ -53,6 +53,16 @@ boards:
     milestones:
       - { column: date_sent, kind: filing, label: "Change of address filed" }
 
+  # Federal cases (habeas, petitions for review, mandamus). The board has no
+  # filed date and its outcome (Status of Complaint) has none either, so only
+  # work due and federal hearings show. Its "Immigration Hearing Date" mirrors
+  # the court case's hearing, which Calendaring already shows.
+  litigation:
+    track: court
+    milestones:
+      - { column: due_date, kind: deadline, label: "{type_of_case|Federal case}: {work_due|work} due" }
+      - { column: hearing_date, kind: milestone, label: "{type_of_case|Federal case} hearing (federal court)" }
+
   _cd_open_forms:
     track: uscis
     # The interview item ("... I589 INTERVIEW ...") is skipped: Calendaring
@@ -72,6 +82,33 @@ boards:
     track: uscis
     milestones:
       - { column: date_received, kind: milestone, label: "Originals received: {what_we_have|documents}", detail: "Status: {status}" }
+
+  # Consular processing: one item per NVC notice.
+  nvc_notices:
+    track: uscis
+    milestones:
+      - { column: notice_date, kind: milestone, label: "NVC: {notice_type|notice}", detail: "Status: {status|open}" }
+
+  # FOIA requests (EOIR, USCIS, FBI, OBIM, CBP). "FOIA filed" is a milestone,
+  # not a filing: a filing on the USCIS track would hide a missed RFE deadline
+  # in "Needs attention".
+  foias:
+    track: uscis
+    milestones:
+      - { column: filed_on, kind: milestone, label: "FOIA filed: {foias_filed|agencies}", detail: "Status: {status}" }
+      - { column: results_received, kind: milestone, label: "FOIA results received" }
+
+  # U visa law-enforcement certification. Expiration and the hire deadline are
+  # milestones, not deadlines: a U visa filed BEFORE the date is the good case,
+  # and "nothing filed since" would flag it. Upcoming ones still show in
+  # "Coming up"; the I-918B alerts cover expiring certifications.
+  _lt_i918b_s:
+    track: uscis
+    milestones:
+      - { column: hire_date_for_i918b_request, kind: milestone, label: "I-918B certification requested", detail: "Status: {status}" }
+      - { column: signed_date, kind: decision, label: "I-918B signed by the agency" }
+      - { column: due_date_for_u_visa_hire, kind: milestone, label: "Hire for the U visa by" }
+      - { column: expiration_date, kind: milestone, label: "I-918B expires" }
 
   call_log:
     track: meetings
@@ -99,5 +136,11 @@ activities:
   "HEARING NOTICE": { track: court, kind: milestone, label: "Hearing notice: {first}" }
   "IJ - Order/Decision": { track: court, kind: decision, label: "IJ order received" }
   "USCIS FF Payment": { track: uscis, kind: milestone, label: "USCIS filing fee paid" }
+  "EOIR FF Payment": { track: court, kind: milestone, label: "EOIR filing fee paid" }
+  # Logged the day the notice arrives; the interview itself is on Calendaring.
+  # Fixed label: the first line is free text ("N400 INTERVIEW Fees: $2,500…").
+  "INTERVIEW NOTICE": { track: uscis, kind: milestone, label: "Interview notice" }
+  # The attorney's notes from a hearing; the first line is just date + names.
+  "HEARING NOTES": { track: court, kind: note, label: "Hearing notes" }
   "CASE STRAT": { track: notes, kind: note, label: "Case strategy discussed" }
   "Deadline": { track: notes, kind: note, label: "Deadline logged" }
