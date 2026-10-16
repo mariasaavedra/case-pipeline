@@ -35,6 +35,7 @@
     "consult:folders": "tsx --env-file-if-exists=.env scripts/consult-folders.ts",
     "consult:sweep": "tsx --env-file-if-exists=.env scripts/consult-sweep.ts",
     "drive:intake": "tsx --env-file-if-exists=.env scripts/drive-intake.ts",
+    "lawpay:slack": "tsx --env-file-if-exists=.env scripts/lawpay-slack.ts",
     "lawpay:mail": "tsx --env-file-if-exists=.env scripts/lawpay-mail.ts",
     "esign:efile": "tsx --env-file-if-exists=.env scripts/esign-efile.ts",
     "feek:autofill": "tsx --env-file-if-exists=.env scripts/fee-k-autofill.ts",

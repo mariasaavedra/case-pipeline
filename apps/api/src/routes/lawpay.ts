@@ -112,6 +112,26 @@ async function paidGroup(boardId: string): Promise<string | null> {
   return g?.id ?? null;
 }
 
+interface LinkRow { id: number; contract_local_id: string; user_id: number | null; paid_at: string | null }
+
+/**
+ * Which Fee K a payment is for — read-only (the dry run uses it too): the Fee
+ * K's own code in the reference first, then the link the app recorded with
+ * that exact reference, then a Pending Fee K by the client's name.
+ */
+export function findFeeK(db: DatabaseInstance, payment: Pick<LawPayPayment, "reference">) {
+  const ref = parseReference(payment.reference);
+  const link = usersDb.prepare(
+    "SELECT * FROM payment_links WHERE reference = ? ORDER BY paid_at IS NOT NULL, id DESC LIMIT 1",
+  ).get(payment.reference) as LinkRow | undefined;
+  const codedId = ref ? feeKIdFromReference(ref.description) : null;
+  const byCode = codedId ? feeK(db, "c.monday_item_id = ?", codedId) : undefined;
+  const byLink = !byCode && link ? feeK(db, "c.local_id = ?", link.contract_local_id) : undefined;
+  const byName = !byCode && !byLink && ref ? feeKByName(db, ref.description) : undefined;
+  const row = byCode ?? byLink ?? byName;
+  return { ref, link, codedId: byCode ? codedId : null, row, by: byCode ? "code" : byLink ? "link" : byName ? "name" : null } as const;
+}
+
 export type LawPayResult =
   | "duplicate" | "not_ours" | "failed" | "refunded" | "other" | "unmatched" | "matched" | "fully_paid";
 
@@ -137,17 +157,11 @@ export async function applyLawPayEvent(deps: LawPayDeps, eventId: number, paymen
     if (seen) return done("duplicate");
   }
 
-  // The link the app handed out with this exact reference, if recorded.
-  const ref = parseReference(payment.reference);
-  const link = usersDb.prepare(
-    "SELECT * FROM payment_links WHERE reference = ? ORDER BY paid_at IS NOT NULL, id DESC LIMIT 1",
-  ).get(payment.reference) as { id: number; contract_local_id: string; user_id: number | null; paid_at: string | null } | undefined;
-  if (link?.paid_at) return done("duplicate", link.contract_local_id);
-  // The Fee K's own code in the reference first, then the recorded link, then the client's name.
-  const codedId = ref ? feeKIdFromReference(ref.description) : null;
-  const row = (codedId ? feeK(db, "c.monday_item_id = ?", codedId) : undefined)
-    ?? (link ? feeK(db, "c.local_id = ?", link.contract_local_id) : undefined)
-    ?? (ref ? feeKByName(db, ref.description) : undefined);
+  const found = findFeeK(db, payment);
+  const { ref, codedId, row } = found;
+  if (found.link?.paid_at) return done("duplicate", found.link.contract_local_id);
+  // The recorded link counts only when it is this Fee K's (the code wins).
+  const link = found.link && row && found.link.contract_local_id === row.localId ? found.link : undefined;
   if (!row || !ref || !FEES.has(ref.fee)) {
     await notifyEvent("payment_unmatched",
       `:warning: LawPay payment the app couldn't tie to a Fee K: *${usd.format(payment.amount)}*, reference _${slackEscape(payment.reference)}_ — please file it by hand.`);

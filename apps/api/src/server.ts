@@ -74,6 +74,7 @@ import { registerContractDocumentRoutes } from "./routes/contract-document.js";
 import { registerEsignPublicRoutes, registerEsignRoutes } from "./routes/esign.js";
 import { registerLawPayRoutes } from "./routes/lawpay.js";
 import { runLawPayMailJob } from "./lawpay/mail-job.js";
+import { runLawPaySlackJob } from "./lawpay/slack-job.js";
 import { registerDocumentRoutes } from "./routes/documents.js";
 import { initDocumentSettings } from "./documents/document-settings.js";
 import { registerSmsRoutes } from "./routes/sms.js";
@@ -679,6 +680,7 @@ const server = app.listen(PORT, HOST, () => {
     scheduleNightlySync();
     scheduleConsultSweep();
     scheduleDriveIntake();
+    scheduleLawPaySlack();
     scheduleLawPayMail();
     scheduleFeeKAutofill();
     scheduleWalCheckpoint();
@@ -983,6 +985,32 @@ function scheduleDriveIntake() {
     { timezone: FIRM_TIMEZONE },
   );
   console.log(`[drive] Intake scheduled — cron "${intakeCron}" (${FIRM_TIMEZONE}).`);
+}
+
+/**
+ * LawPay payments → Fee Ks from Slack #payments (the "Payment Bot" posts), read
+ * with the app's Slack bot — no Microsoft permission needed. The preferred
+ * source since 2026-10-16. Off unless LAWPAY_SLACK=on. In-process, one run at a
+ * time. See docs/features/lawpay-payments.md.
+ */
+function scheduleLawPaySlack() {
+  if (process.env.LAWPAY_SLACK !== "on") {
+    console.log("[lawpay] #payments reader DISABLED (set LAWPAY_SLACK=on). Check by hand: npm run lawpay:slack");
+    return;
+  }
+  const cronExpr = process.env.LAWPAY_SLACK_CRON ?? "*/2 * * * *";
+  cron.schedule(cronExpr, () => {
+    void runLawPaySlackJob({ db, mondayApiToken: MONDAY_API_TOKEN }).then((r) => {
+      if (!r) return;
+      if (!r.ok) {
+        console.error(`[lawpay] #payments failed: ${r.error}`);
+        inBackground(notifyOps("ops_lawpay_mail", `Reading LawPay payments from Slack #payments failed: ${r.error}`));
+      } else if (r.applied.length) {
+        console.log(`[lawpay] #payments: ${r.payments} payment(s), applied: ${r.applied.join(", ")}`);
+      }
+    });
+  }, { timezone: FIRM_TIMEZONE });
+  console.log(`[lawpay] #payments reader scheduled — cron "${cronExpr}" (${FIRM_TIMEZONE}).`);
 }
 
 /**
