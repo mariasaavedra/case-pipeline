@@ -28,7 +28,7 @@ interface HistoryPage { ok: boolean; error?: string; messages?: SlackMessage[]; 
 
 export type SlackFetch = (url: string, init: RequestInit) => Promise<Response>;
 
-export interface DryRunRow { ts: string; payer: string | null; amount: number; reference: string; feeK: string | null; by: string | null }
+export interface DryRunRow { ts: string; payer: string | null; amount: number; reference: string; feeK: string | null; by: string | null; closed?: string | null }
 
 export type SlackJobOutcome =
   | { ok: true; read: number; payments: number; applied: LawPayResult[]; dryRun?: DryRunRow[] }
@@ -41,6 +41,13 @@ function readCursor(): string | null {
     return null;
   }
 }
+/** "Start from now": the reader then only sees posts made after this moment. */
+export function startFromNow(now = Date.now()): string {
+  const ts = (now / 1000).toFixed(6);
+  writeCursor(ts);
+  return ts;
+}
+
 function writeCursor(ts: string): void {
   fs.writeFileSync(CURSOR_FILE(), JSON.stringify({ ts, at: new Date().toISOString() }));
 }
@@ -94,7 +101,7 @@ export async function runLawPaySlackJob(
       // What it would do — nothing stored, nothing written, the cursor stays.
       const dryRun = receipts.map((r) => {
         const m = findFeeK(deps.db, r);
-        return { ts: r.messageId, payer: r.payer, amount: r.amount, reference: r.reference, feeK: m.row ? `${m.row.clientName} (${m.row.group ?? "?"})` : null, by: m.by };
+        return { ts: r.messageId, payer: r.payer, amount: r.amount, reference: r.reference, feeK: m.row ? `${m.row.clientName} (${m.row.group ?? "?"})` : null, by: m.by, closed: m.closed };
       });
       return { ok: true, read: posts.length, payments: receipts.length, applied: [], dryRun };
     }

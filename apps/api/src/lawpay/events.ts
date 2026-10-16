@@ -37,6 +37,19 @@ export function parseReference(ref: string): ParsedReference | null {
 export const normalizeReference = (ref: string) => ref.replace(/\s+/g, " ").trim().toUpperCase();
 
 /**
+ * A profile / Fee K name reduced to the person, for finding it in a reference:
+ * "Isaac GONZALEZ MOLINA A214-099-391 [DETAINED IN CHASE]" → "ISAAC GONZALEZ
+ * MOLINA"; "[10/19/26 - BOND] - Isaac GONZALEZ MOLINA" → the same. Leading
+ * [tags] go, then everything from the first [, (, A-number or " - " on.
+ */
+export function personName(raw: string): string {
+  let s = raw.replace(/\s+/g, " ").trim();
+  while (/^\[[^\]]*\]\s*(-\s*)?/.test(s)) s = s.replace(/^\[[^\]]*\]\s*(-\s*)?/, "");
+  const cut = s.search(/\[|\(|\bA[#\s-]*\d{3}-?\d{3}-?\d{3}\b|\b\d{3}-\d{3}-\d{3}\b|\s-\s/i);
+  return (cut >= 0 ? s.slice(0, cut) : s).replace(/[^\p{L}\p{N}' .-]/gu, " ").replace(/\s+/g, " ").trim().toUpperCase();
+}
+
+/**
  * The Fee K a reference names: M21 ends every description with "K" + the Fee
  * K's Monday id in base 36 (apps/web/src/lib/lawpay.ts feeKCode). Null when
  * the reference has none (links made by hand).
