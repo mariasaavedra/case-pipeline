@@ -15,6 +15,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import type { WaitLevel } from "./prescheduling";
+import { makeStaffNames, type StaffResolver } from "./staff-names";
 
 // =============================================================================
 // Types
@@ -59,9 +60,13 @@ export interface FoiasResult {
   /** Results received in the last 30 days. */
   doneLast30: number;
   thresholds: typeof THRESHOLDS;
+  /** People on this page the roster marks inactive (roster names). */
+  inactiveStaff: string[];
 }
 
 export interface FoiasOptions {
+  /** The roster's name matcher: names come back as one entry per person. */
+  resolveStaff?: StaffResolver;
   /** ISO date to measure from (tests). Default today. */
   today?: string;
 }
@@ -180,6 +185,7 @@ interface RawRow {
 export function getFoias(db: Database, options: FoiasOptions = {}): FoiasResult {
   const today = options.today ?? new Date().toISOString().slice(0, 10);
   const done = new Set(FOIA_DONE.map((s) => s.toLowerCase()));
+  const staff = makeStaffNames(options.resolveStaff);
 
   const rows = db.prepare(`
     SELECT b.local_id AS localId, b.name, b.group_title AS groupTitle, b.status, b.paralegals,
@@ -218,7 +224,7 @@ export function getFoias(db: Database, options: FoiasOptions = {}): FoiasResult 
     const ageDays = from ? Math.max(0, daysBetween(from, today)) : null;
     const quoted = agenciesOf(labels(cv.foias_quoted));
     const filed = agenciesOf(labels(cv.foias_filed));
-    const paralegals = splitNames(r.paralegals ?? label(cv.paralegal));
+    const paralegals = staff.list(splitNames(r.paralegals ?? label(cv.paralegal)));
 
     const flags: FoiaFlag[] = [];
     if (phase === "agency" && status?.toLowerCase() !== "inquired" && inquiryEligible && inquiryEligible <= today) flags.push("inquiry_due");
@@ -235,7 +241,7 @@ export function getFoias(db: Database, options: FoiasOptions = {}): FoiasResult 
       status,
       phase,
       paralegals,
-      attorney: splitNames(label(cv.attorney))[0] ?? null,
+      attorney: staff.list(splitNames(label(cv.attorney)))[0] ?? null,
       quoted,
       filed,
       toFile: quoted.filter((a) => !filed.includes(a)),
@@ -259,5 +265,5 @@ export function getFoias(db: Database, options: FoiasOptions = {}): FoiasResult 
       a.clientName.localeCompare(b.clientName),
   );
 
-  return { items, doneCount, doneLast30, thresholds: THRESHOLDS };
+  return { items, doneCount, doneLast30, thresholds: THRESHOLDS, inactiveStaff: staff.inactive() };
 }

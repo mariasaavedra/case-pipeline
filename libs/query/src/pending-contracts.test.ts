@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { getPendingContracts, nextContractStep, NO_CONTRACT_STAGE } from "./pending-contracts";
+import { testResolver } from "./staff-names.fixture";
 
 // =============================================================================
 // Helpers
@@ -202,5 +203,17 @@ describe("payment links after an app-sent contract is signed", () => {
     expect(by.app).toMatchObject({ paymentMethod: "CREDIT Card - Surcharge Applies", signedInApp: { clientEmail: "ana@mail.com" } });
     expect(by.manual).toMatchObject({ paymentMethod: null, signedInApp: null });
     expect(by.pending!.signedInApp).toBeNull(); // not signed yet
+  });
+});
+
+describe("getPendingContracts with the roster", () => {
+  test("attorneys by roster name; Monday's spelling kept for M25", () => {
+    const db = freshDb();
+    insertFeeK(db, { localId: "a", attorney: "Mayra R." });
+    const r = getPendingContracts(db, { today: TODAY, resolveStaff: testResolver });
+    expect(r.contracts[0]!.attorneys).toEqual(["Mayra Ruiz"]);
+    expect(r.contracts[0]!.mondayAttorneys).toEqual(["Mayra R."]);
+    expect(r.inactiveStaff).toEqual(["Mayra Ruiz"]);
+    db.close();
   });
 });

@@ -12,6 +12,7 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 import { getCourtMotions, getMotionWriteSchema, type CourtMotion, type MotionPhase } from "./court-motions";
+import { makeStaffNames, type StaffResolver } from "./staff-names";
 type Database = BetterSqlite3.Database;
 
 // =============================================================================
@@ -88,6 +89,8 @@ export interface CourtCasesResult {
   motions: CourtMotion[];
   /** Status labels for the motion status picker (empty until the board schema syncs). */
   motionStatusOptions: string[];
+  /** People on this page the roster marks inactive (roster names). */
+  inactiveStaff: string[];
 }
 
 export interface ReadinessThresholds {
@@ -100,6 +103,8 @@ export interface ReadinessThresholds {
 }
 
 export interface CourtCasesOptions extends Partial<ReadinessThresholds> {
+  /** The roster's name matcher: names come back as one entry per person. */
+  resolveStaff?: StaffResolver;
   /** ISO date to measure from (tests). Default today. */
   today?: string;
 }
@@ -289,6 +294,7 @@ export function getCourtCases(db: Database, options: CourtCasesOptions = {}): Co
     ),
     mchBehindDays: options.mchBehindDays ?? DEFAULT_THRESHOLDS.mchBehindDays,
   };
+  const staff = makeStaffNames(options.resolveStaff);
 
   const rows = db.prepare(`
     SELECT
@@ -347,8 +353,8 @@ export function getCourtCases(db: Database, options: CourtCasesOptions = {}): Co
       method,
       needsWebex: /needs webex|check if needs webex/i.test(method ?? ""),
       detained: /detained/i.test(hearingType ?? "") || /detained/i.test(method ?? "") || !!text(label(cv.det_facility)),
-      attorney: r.attorney?.trim() || null,
-      paralegals: splitNames(r.paralegals),
+      attorney: staff.cell(r.attorney),
+      paralegals: staff.list(splitNames(r.paralegals)),
       prepStage,
       service: label(cv.ecas_or_eservice),
       deadlineType: label(cv.deadline_type),
@@ -374,6 +380,7 @@ export function getCourtCases(db: Database, options: CourtCasesOptions = {}): Co
   const motions = getCourtMotions(db, { today, hearings: new Map(cases.map((c) => [c.localId, c.hearingDate])) });
   const caseById = new Map(cases.map((c) => [c.localId, c]));
   for (const m of motions) {
+    m.attorney = staff.cell(m.attorney);
     const c = m.courtCaseLocalId ? caseById.get(m.courtCaseLocalId) : undefined;
     if (c && (m.phase === "to_send" || m.phase === "waiting")) {
       c.openMotions.push({ localId: m.localId, types: m.types, phase: m.phase, daysWaiting: m.daysWaiting });
@@ -396,5 +403,5 @@ export function getCourtCases(db: Database, options: CourtCasesOptions = {}): Co
     stageOptions = [];
   }
 
-  return { cases, stages, stageOptions, stageColumnId: col?.column_id ?? null, thresholds, motions, motionStatusOptions: getMotionWriteSchema(db).statusOptions };
+  return { cases, stages, stageOptions, stageColumnId: col?.column_id ?? null, thresholds, motions, motionStatusOptions: getMotionWriteSchema(db).statusOptions, inactiveStaff: staff.inactive() };
 }

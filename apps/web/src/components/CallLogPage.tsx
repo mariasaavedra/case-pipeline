@@ -18,6 +18,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { fetchCallLog } from "../api";
+import { staffLabel } from "../lib/staff-label";
 import type { CallLogEntry } from "../api";
 import { StatusEditor } from "./StatusEditor";
 import { HighlightedForEditor } from "./HighlightedForEditor";
@@ -169,6 +170,7 @@ export function CallLogPage() {
   const [entries, setEntries] = useState<CallLogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [staffOptions, setStaffOptions] = useState<string[]>([]);
+  const [inactiveStaff, setInactiveStaff] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
@@ -203,6 +205,7 @@ export function CallLogPage() {
       setEntries((prev) => (replace ? res.entries : [...prev, ...res.entries]));
       setTotal(res.total);
       setStaffOptions(res.staffOptions);
+      setInactiveStaff(res.inactiveStaff ?? []);
       setOffset(nextOffset);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load the call log");
@@ -218,7 +221,7 @@ export function CallLogPage() {
   const groups = useMemo(() => groupByDay(entries), [entries]);
 
   const statusItems = [{ value: "", label: "All statuses" }, ...(statusDef?.options.map((o) => ({ value: o.label, label: o.label })) ?? [])];
-  const staffItems = [{ value: "", label: "All staff" }, ...staffOptions.map((s) => ({ value: s, label: s }))];
+  const staffItems = [{ value: "", label: "All staff" }, ...staffOptions.map((s) => ({ value: s, label: staffLabel(s, inactiveStaff) }))];
 
   const countSuffix = dayFilter === todayIso() ? " today" : dayFilter ? ` on ${formatGroupDate(dayFilter)}` : "";
 

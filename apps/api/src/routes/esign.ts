@@ -45,7 +45,8 @@ import { getUserMondayToken, markMondayTokenRejected } from "./monday-oauth.js";
 import { executeContractStep } from "./contract-step.js";
 import { CONTRACT_NOTE_ACTIVITY_ID } from "./profile-write.js";
 import { DATA_DIR } from "../paths.js";
-import { fetchWorkspaceUsers } from "@case-pipeline/monday";
+import { usersDb } from "../db/users-db.js";
+import { makeMondayUserByLogin } from "../contract-info.js";
 import { getBoardColumnsFor } from "@case-pipeline/query";
 import {
   OPEN_STATUSES, PAY_METHOD_LABELS, agreementNameOf, classifyEsignEvent, esignRefOf, payMethodFrom, planEsignEvent,
@@ -400,15 +401,10 @@ function fileInEfile(
 export function registerEsignRoutes(app: Express, deps: EsignDeps): void {
   const { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions } = deps;
 
-  let staffCache: { users: Awaited<ReturnType<typeof fetchWorkspaceUsers>>; at: number } | null = null;
+  const mondayUser = makeMondayUserByLogin(MONDAY_API_TOKEN, usersDb);
   async function mondayUserIdOf(req: Request): Promise<string | null> {
-    const email = (req.user?.preferred_username ?? req.user?.email ?? "").toLowerCase();
-    const name = (req.user?.name ?? "").trim().toLowerCase();
     try {
-      if (!staffCache || Date.now() - staffCache.at > 10 * 60 * 1000) {
-        staffCache = { users: await fetchWorkspaceUsers(MONDAY_API_TOKEN), at: Date.now() };
-      }
-      const hit = staffCache.users.find((u) => (email && u.email?.toLowerCase() === email) || (name && u.name.trim().toLowerCase() === name));
+      const hit = await mondayUser(String(req.user?.preferred_username ?? req.user?.email ?? ""), String(req.user?.name ?? ""));
       return hit ? String(hit.id) : null;
     } catch (err) {
       console.error("[esign] could not resolve the sender to a Monday user:", err);

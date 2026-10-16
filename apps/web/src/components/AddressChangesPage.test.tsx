@@ -36,6 +36,7 @@ const result: AddressChangesResult = {
   ],
   statusOptions: [],
   statusColumnId: null,
+  inactiveStaff: [],
   dateSentColumnId: null,
   thresholds: {
     firm: { waitingDays: 7, lateDays: 14 },

@@ -11,6 +11,8 @@ function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
 }
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { getAppointments, getAttorneyList } from "./appointments";
+import { makeStaffNames } from "./staff-names";
+import { testResolver } from "./staff-names.fixture";
 import { listAppointmentBoardKeys } from "./appointment-boards";
 import { isAppointmentBoard, boardDisplayName } from "./types";
 
@@ -380,6 +382,29 @@ describe("getAppointments", () => {
 });
 
 describe("getAttorneyList", () => {
+  test("with the roster: one option per person however the boards spell them", () => {
+    const db = freshDb();
+    insertBoardItem(db, { localId: "a1", boardKey: "appointments_mr", name: "C1", attorney: "Mayra R." });
+    insertBoardItem(db, { localId: "a2", boardKey: "appointments_mr", name: "C2", attorney: "Ana Reyes, mayra ruiz" });
+    const names = makeStaffNames(testResolver);
+    expect(getAttorneyList(db, undefined, names)).toEqual(["Ana Reyes", "Mayra Ruiz"]);
+    expect(names.inactive()).toEqual(["Mayra Ruiz"]);
+    db.close();
+  });
+
+  test("filtering appointments by the roster name matches every spelling", () => {
+    const db = freshDb();
+    const today = todayStr();
+    insertBoardItem(db, { localId: "a1", boardKey: "appointments_mr", name: "C1", attorney: "Mayra R.", nextDate: today });
+    insertBoardItem(db, { localId: "a2", boardKey: "appointments_mr", name: "C2", attorney: "Ana Reyes, mayra ruiz", nextDate: today });
+    insertBoardItem(db, { localId: "a3", boardKey: "appointments_mr", name: "C3", attorney: "Ana Reyes", nextDate: today });
+    const r = getAppointments(db, { attorney: "Mayra Ruiz", date: today, resolveStaff: testResolver });
+    expect(r.entries.map((e) => e.appointment.localId).sort()).toEqual(["a1", "a2"]);
+    expect(r.attorneys).toEqual(["Ana Reyes", "Mayra Ruiz"]);
+    expect(r.inactiveStaff).toEqual(["Mayra Ruiz"]);
+    db.close();
+  });
+
   test("returns distinct attorneys from appointment boards", () => {
     const db = freshDb();
 

@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { getCourtCases, parseHearing, readinessOf, NO_PREP_STAGE } from "./court-cases";
+import { testResolver } from "./staff-names.fixture";
 
 // =============================================================================
 // Helpers
@@ -191,6 +192,18 @@ describe("getCourtCases", () => {
       stageOptions: ["1 - Initial Set Up", "2 - MCH Prep", "WD Warning"],
       stageColumnId: "color_mkp7t3ds",
     });
+    db.close();
+  });
+});
+
+describe("getCourtCases with the roster", () => {
+  test("paralegal spellings group under one person", () => {
+    const db = freshDb();
+    insertCase(db, { localId: "a", paralegals: "Mayra R." });
+    insertCase(db, { localId: "b", paralegals: "mayra ruiz" });
+    const r = getCourtCases(db, { today: TODAY, resolveStaff: testResolver });
+    expect(new Set(r.cases.flatMap((c) => c.paralegals))).toEqual(new Set(["Mayra Ruiz"]));
+    expect(r.inactiveStaff).toEqual(["Mayra Ruiz"]);
     db.close();
   });
 });

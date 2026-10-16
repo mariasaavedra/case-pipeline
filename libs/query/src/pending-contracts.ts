@@ -12,6 +12,7 @@ import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import type { WaitLevel } from "./prescheduling";
 import { readTextingContact, type TextingContact } from "./client";
+import { makeStaffNames, type StaffResolver } from "./staff-names";
 
 // =============================================================================
 // Types
@@ -28,7 +29,10 @@ export interface PendingContract {
   contractFor: string[];
   /** Contract Stage (deal_stage). Null when not set. */
   contractStage: string | null;
+  /** One entry per person (roster names). */
   attorneys: string[];
+  /** The Attorney column exactly as Monday spells it — what M25's stale check compares. */
+  mondayAttorneys: string[];
   assistant: string | null;
   addedOn: string | null;
   sentOn: string | null;
@@ -81,9 +85,13 @@ export interface PendingContractsResult {
    *  Missing when the schema hasn't been synced or the label isn't in it. */
   stageColors: Record<string, string>;
   thresholds: { waitingDays: number; lateDays: number };
+  /** People on this page the roster marks inactive (roster names). */
+  inactiveStaff: string[];
 }
 
 export interface PendingContractsOptions {
+  /** The roster's name matcher: names come back as one entry per person. */
+  resolveStaff?: StaffResolver;
   /** Days before a contract turns yellow. Default 30 (same as Prescheduling). */
   waitingDays?: number;
   /** Days before a contract turns red. Default 60. */
@@ -257,6 +265,7 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
   // everything went red. 30 / 60 separates them and matches Prescheduling.
   const waitingDays = options.waitingDays ?? 30;
   const lateDays = Math.max(waitingDays, options.lateDays ?? 60);
+  const staff = makeStaffNames(options.resolveStaff);
 
   const rows = db.prepare(`
     SELECT
@@ -308,8 +317,9 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       contractFor,
       contractStage: r.contractStage?.trim() || null,
       nextStep: nextContractStep(r.contractStage),
-      attorneys,
-      assistant: r.assistant?.trim() || null,
+      attorneys: staff.list(attorneys),
+      mondayAttorneys: attorneys,
+      assistant: staff.cell(r.assistant),
       addedOn: r.addedOn,
       sentOn: r.sentOn,
       signedOn: r.signedOn,
@@ -339,7 +349,7 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
     (a, b) => stageRank(a) - stageRank(b) || a.localeCompare(b),
   );
 
-  return { contracts, stages, stageColors: getStageColors(db), thresholds: { waitingDays, lateDays } };
+  return { contracts, stages, stageColors: getStageColors(db), thresholds: { waitingDays, lateDays }, inactiveStaff: staff.inactive() };
 }
 
 /** Contract Stage label → its Monday colour, from the synced Fee Ks column schema. */

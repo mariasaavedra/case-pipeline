@@ -37,6 +37,8 @@ export { getFoias } from "./foias";
 export { getWorkload, buildWorkload, collectWorkloadItems, getInactiveAssigneeAlertGroup, WORKLOAD_SOURCES, PRIMARY_COLUMN } from "./workload";
 export type { WorkloadResult, WorkloadPerson, WorkloadItem, WorkloadAssignment, WorkloadSource, WorkloadColumn, WorkloadLevel, StaffResolver, WorkloadOptions } from "./workload";
 export { getCallLogEntries, getCallLogStaffOptions } from "./call-log";
+export { makeStaffNames, spellingsOf } from "./staff-names";
+export type { StaffNames } from "./staff-names";
 export { getJailIntakes, getJailIntakeNotes, cutoffDate } from "./jail-intakes";
 export { scanMailPages, needsReview, extractNoticeFields, emptyFields, normalizeFields, parseNoticeDate, cleanName, compareNames, nameTokens, NAME_ROLES, splitIntoDocuments, analyzePage, repairOcrText, matchNotice, findFormsForProfile, normalizeANumber, normalizeFormType } from "./mail";
 export { saveMailScan, setMailScanPdfPath, getMailDocument, getMailReviewAlertGroup, countMailToReview, resolveMailDocument, applyFieldEdits, updateMailDocumentFields } from "./mail-review";

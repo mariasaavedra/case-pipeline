@@ -16,6 +16,7 @@ import {
   worstWait,
   waitFg,
 } from "./caseBoardParts";
+import { staffLabel } from "../lib/staff-label";
 
 // =============================================================================
 // P13 Prescheduling
@@ -220,6 +221,7 @@ export function PreschedulingPage() {
             items={active}
             rowHeader="Paralegal"
             rowsOf={peopleOf}
+            rowLabel={(r) => staffLabel(r, data.inactiveStaff)}
             lastRow={UNASSIGNED}
             columns={data.stages}
             colOf={stageOf}

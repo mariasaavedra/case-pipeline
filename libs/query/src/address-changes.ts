@@ -13,6 +13,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import type { WaitLevel } from "./prescheduling";
+import { makeStaffNames, type StaffResolver } from "./staff-names";
 
 // =============================================================================
 // Types
@@ -59,9 +60,13 @@ export interface AddressChangesResult {
   statusColumnId: string | null;
   dateSentColumnId: string | null;
   thresholds: typeof THRESHOLDS;
+  /** People on this page the roster marks inactive (roster names). */
+  inactiveStaff: string[];
 }
 
 export interface AddressChangesOptions {
+  /** The roster's name matcher: names come back as one entry per person. */
+  resolveStaff?: StaffResolver;
   /** ISO date to measure from (tests). Default today. */
   today?: string;
 }
@@ -184,6 +189,7 @@ interface CaseRow {
 export function getAddressChanges(db: Database, options: AddressChangesOptions = {}): AddressChangesResult {
   const today = options.today ?? new Date().toISOString().slice(0, 10);
   const done = ADDRESS_CHANGE_DONE.map((s) => s.toLowerCase());
+  const staff = makeStaffNames(options.resolveStaff);
 
   const rows = db.prepare(`
     SELECT b.local_id AS localId, b.name, b.status,
@@ -258,7 +264,7 @@ export function getAddressChanges(db: Database, options: AddressChangesOptions =
       method: label(cv.ecas_or_paper) ?? text(cv.ecas_or_paper_court_cases) ?? (r.clientLocalId ? methodByProfile.get(r.clientLocalId) ?? null : null),
       oldAddress: text(cv.old_addy),
       newAddress,
-      assistant: label(cv.assistant),
+      assistant: staff.cell(label(cv.assistant)),
       receivedOn,
       ageDays,
       ageLevel: ageLevelOf(phase, ageDays),
@@ -297,5 +303,6 @@ export function getAddressChanges(db: Database, options: AddressChangesOptions =
     statusColumnId: statusCol ? STATUS_COLUMN_ID : null,
     dateSentColumnId: cols.some((c) => c.column_id === DATE_SENT_COLUMN_ID) ? DATE_SENT_COLUMN_ID : null,
     thresholds: THRESHOLDS,
+    inactiveStaff: staff.inactive(),
   };
 }

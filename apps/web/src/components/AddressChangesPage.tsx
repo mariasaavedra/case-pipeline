@@ -6,6 +6,7 @@ import { SectionCode } from "./ScreenCode";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { formatDue, Tag, ListSection, WAIT_TONE, waitFg } from "./caseBoardParts";
+import { staffLabel } from "../lib/staff-label";
 
 // =============================================================================
 // P18 Address Changes
@@ -281,7 +282,7 @@ export function AddressChangesPage() {
     load();
   };
 
-  const assistantItems = [{ value: ALL, label: "All assistants" }, ...assistants.map((a) => ({ value: a, label: a }))];
+  const assistantItems = [{ value: ALL, label: "All assistants" }, ...assistants.map((a) => ({ value: a, label: staffLabel(a, data?.inactiveStaff) }))];
 
   return (
     <div>

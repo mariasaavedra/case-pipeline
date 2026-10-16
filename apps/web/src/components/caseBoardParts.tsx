@@ -31,7 +31,7 @@ export function Tag({ children, color, title }: { children: React.ReactNode; col
 }
 
 /** A person's name as a chip; clicking it filters the page to their cases. */
-export function PersonChip({ name, active, onClick }: { name: string; active: boolean; onClick: () => void }) {
+export function PersonChip({ name, active, onClick, label = name }: { name: string; active: boolean; onClick: () => void; label?: string }) {
   return (
     <button
       type="button"
@@ -44,7 +44,7 @@ export function PersonChip({ name, active, onClick }: { name: string; active: bo
       }}
       title={`Show only ${name}'s cases`}
     >
-      {name}
+      {label}
     </button>
   );
 }
@@ -77,6 +77,7 @@ export function CountTable<T>({
   items,
   rowHeader,
   rowsOf,
+  rowLabel = (r) => r,
   lastRow,
   columns,
   colOf,
@@ -88,6 +89,8 @@ export function CountTable<T>({
   items: T[];
   rowHeader: string;
   rowsOf: (item: T) => string[];
+  /** How a row's name is shown (e.g. marking inactive staff). */
+  rowLabel?: (row: string) => string;
   /** A row label that always sorts last ("Unassigned", "No attorney"). */
   lastRow?: string;
   columns: string[];
@@ -179,7 +182,7 @@ export function CountTable<T>({
                       fontWeight: rowActive ? 600 : 500,
                     }}
                   >
-                    {r}
+                    {rowLabel(r)}
                   </button>
                 </td>
                 {columns.map((c) => cell(r, c))}

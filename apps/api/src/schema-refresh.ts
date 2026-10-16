@@ -13,6 +13,8 @@ import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import { fetchBoardStructure, resolveAllColumns, parseStatusOptions } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
+import path from "node:path";
+import { REPO_ROOT } from "./paths.js";
 
 interface ResolvedMeta {
   id: string;
@@ -20,7 +22,7 @@ interface ResolvedMeta {
 }
 
 export async function refreshBoardSchema(db: Database): Promise<{ boards: number; failed: number }> {
-  const boardsConfig = await loadBoardsConfig();
+  const boardsConfig = await loadBoardsConfig(path.join(REPO_ROOT, "config/boards.yaml"));
 
   const upsertStatus = db.prepare(`
     INSERT INTO board_status_options (board_key, monday_board_id, status_column_id, options, updated_at)

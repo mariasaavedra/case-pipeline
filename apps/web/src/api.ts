@@ -436,7 +436,7 @@ export interface CallLogQuery {
   offset?: number;
 }
 
-export async function fetchCallLog(query: CallLogQuery = {}): Promise<CallLogListResult & { staffOptions: string[] }> {
+export async function fetchCallLog(query: CallLogQuery = {}): Promise<CallLogListResult & { staffOptions: string[]; inactiveStaff?: string[] }> {
   const params = new URLSearchParams();
   if (query.status) params.set("status", query.status);
   if (query.takenBy) params.set("takenBy", query.takenBy);
