@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { getFoias, phaseOf, agenciesOf } from "./foias";
+import { testResolver } from "./staff-names.fixture";
 
 const TODAY = "2026-10-05";
 
@@ -122,5 +123,17 @@ describe("getFoias", () => {
     insertFoia(db, "ours", { status: "TO-DO", since: "2026-10-01" });
     insertFoia(db, "decide", { status: "Do we need it?", since: "2026-10-01" });
     expect(run(db).items.map((i) => i.localId)).toEqual(["decide", "ours", "agency-inq", "agency-old"]);
+  });
+});
+
+describe("getFoias with the roster", () => {
+  test("paralegal spellings group under one person", () => {
+    const db = freshDb();
+    insertFoia(db, "a", { paralegals: "Mayra R." });
+    insertFoia(db, "b", { paralegals: "mayra ruiz" });
+    const r = getFoias(db, { today: TODAY, resolveStaff: testResolver });
+    expect(r.items.map((i) => i.paralegals)).toEqual([["Mayra Ruiz"], ["Mayra Ruiz"]]);
+    expect(r.inactiveStaff).toEqual(["Mayra Ruiz"]);
+    db.close();
   });
 });

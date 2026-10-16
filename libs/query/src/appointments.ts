@@ -23,6 +23,7 @@ import { listAppointmentBoardKeys } from "./appointment-boards";
 import { batchGetClientCaseSummaries } from "./case-summary";
 import { batchGetClientUpdates } from "./updates";
 import { readSharePointLinks, stripNameNotes } from "./client";
+import { makeStaffNames, spellingsOf, type StaffNames, type StaffResolver } from "./staff-names";
 
 // =============================================================================
 // Types
@@ -44,8 +45,11 @@ export interface AppointmentEntry {
 
 export interface AppointmentsResult {
   entries: AppointmentEntry[];
+  /** One entry per person (roster names when a resolver is passed). */
   attorneys: string[];
   boardKeys: string[];
+  /** Attorneys in the list the roster marks inactive. */
+  inactiveStaff: string[];
 }
 
 interface AppointmentOptions {
@@ -53,6 +57,8 @@ interface AppointmentOptions {
   date?: string;
   range?: "day" | "week" | "upcoming" | "all";
   boardKeys?: string[];
+  /** The roster's name matcher: the attorney list and filter go by person, not spelling. */
+  resolveStaff?: StaffResolver;
 }
 
 // =============================================================================
@@ -96,6 +102,10 @@ export function getAppointments(
 
   // Build query with optional attorney filter
   const hasAttorneyFilter = opts.attorney && opts.attorney !== "all";
+  // Picked by roster name: match every spelling of that person on the boards.
+  const attorneySpellings = hasAttorneyFilter
+    ? spellingsOf(opts.attorney!, rawAttorneyNames(db, boardKeyList), opts.resolveStaff)
+    : [];
   const sql = `
     SELECT
       bi.local_id AS localId,
@@ -122,7 +132,7 @@ export function getAppointments(
     LEFT JOIN profiles p ON p.local_id = bi.profile_local_id
     WHERE bi.board_key IN (${boardKeyPlaceholders})
       ${dateClause}
-      ${hasAttorneyFilter ? `AND ${ATTORNEY_MATCH_SQL}` : ""}
+      ${hasAttorneyFilter ? `AND (${attorneySpellings.map(() => ATTORNEY_MATCH_SQL).join(" OR ")})` : ""}
     ORDER BY bi.next_date ASC, bi.name ASC
   `;
 
@@ -131,7 +141,7 @@ export function getAppointments(
     ...dateParams,
   ];
   if (hasAttorneyFilter) {
-    params.push(opts.attorney!);
+    params.push(...attorneySpellings);
   }
 
   const rows = db.prepare(sql).all(...params) as RawAppointmentRow[];
@@ -195,9 +205,10 @@ export function getAppointments(
     };
   });
 
-  const attorneys = getAttorneyList(db, boardKeyList);
+  const staff = makeStaffNames(opts.resolveStaff);
+  const attorneys = getAttorneyList(db, boardKeyList, staff);
 
-  return { entries, attorneys, boardKeys: boardKeyList };
+  return { entries, attorneys, boardKeys: boardKeyList, inactiveStaff: staff.inactive() };
 }
 
 // =============================================================================
@@ -218,11 +229,8 @@ export function splitAttorneys(value: string): string[] {
     .filter(Boolean);
 }
 
-/**
- * Get the individual attorneys on the appointment boards — combinations
- * ("A, B") are split, so the filter offers one option per attorney.
- */
-export function getAttorneyList(db: Database, boardKeyList?: string[]): string[] {
+/** Every attorney name on the appointment boards, as spelled there. */
+function rawAttorneyNames(db: Database, boardKeyList?: string[]): string[] {
   const keys = boardKeyList ?? listAppointmentBoardKeys(db);
   const placeholders = keys.map(() => "?").join(",");
   const rows = db
@@ -230,13 +238,19 @@ export function getAttorneyList(db: Database, boardKeyList?: string[]): string[]
       `SELECT DISTINCT attorney
        FROM board_items
        WHERE board_key IN (${placeholders})
-         AND attorney IS NOT NULL
-       ORDER BY attorney`,
+         AND attorney IS NOT NULL`,
     )
     .all(...keys) as { attorney: string }[];
+  return [...new Set(rows.flatMap((r) => splitAttorneys(r.attorney)))];
+}
 
-  const names = new Set(rows.flatMap((r) => splitAttorneys(r.attorney)));
-  return [...names].sort((a, b) => a.localeCompare(b));
+/**
+ * Get the individual attorneys on the appointment boards — combinations
+ * ("A, B") are split, so the filter offers one option per attorney. With the
+ * roster's names, one option per person however the boards spell them.
+ */
+export function getAttorneyList(db: Database, boardKeyList?: string[], names: StaffNames = makeStaffNames()): string[] {
+  return names.list(rawAttorneyNames(db, boardKeyList)).sort((a, b) => a.localeCompare(b));
 }
 
 // =============================================================================

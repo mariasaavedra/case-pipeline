@@ -32,6 +32,7 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { getBoardColumnsFor } from "@case-pipeline/query";
+import { usersDb } from "../db/users-db.js";
 import {
   FEE_K_ATTORNEY, applyProfileContactLocally, cleanContact, contractAttorneys, makeMondayUserResolver,
   peopleValue, planProfileContact, splitPeople,
@@ -217,7 +218,7 @@ export interface ContractFeesDeps {
 
 export function registerContractFeesRoutes(app: Express, deps: ContractFeesDeps): void {
   const { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions } = deps;
-  const resolveMondayUser = makeMondayUserResolver(MONDAY_API_TOKEN);
+  const resolveMondayUser = makeMondayUserResolver(MONDAY_API_TOKEN, usersDb);
 
   // Pre-fill for M11 / M2 / M25: the client's e-mail, address and attorney
   // (from the profile), plus who can be picked as the attorney.

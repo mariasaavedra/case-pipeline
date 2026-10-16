@@ -7,6 +7,7 @@ import { SectionCode } from "./ScreenCode";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { formatDue, PersonChip, Tag, CountTable, ListSection } from "./caseBoardParts";
+import { staffLabel } from "../lib/staff-label";
 
 // =============================================================================
 // P15 Court Cases
@@ -427,10 +428,12 @@ function PipelineView({
   onPerson,
   onMoved,
   pendingIds,
+  inactiveStaff,
 }: {
   cases: CourtCase[];
   stages: string[];
   stageOptions: string[];
+  inactiveStaff: string[];
   filter: Filter;
   onPerson: (key: "attorney" | "paralegal", name: string) => void;
   onMoved: (localId: string, stage: string, pending: boolean) => void;
@@ -454,6 +457,7 @@ function PipelineView({
         items={cases}
         rowHeader="Attorney"
         rowsOf={(c) => [attorneyOf(c)]}
+        rowLabel={(r) => staffLabel(r, inactiveStaff)}
         lastRow={NO_ATTORNEY}
         columns={stages}
         colOf={stageOf}
@@ -790,14 +794,16 @@ function FilterSelect({
   options,
   onChange,
   code,
+  labelOf = (o) => o,
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (v: string) => void;
   code: string;
+  labelOf?: (option: string) => string;
 }) {
-  const items = [{ value: ALL, label: `All ${label.toLowerCase()}s` }, ...options.map((o) => ({ value: o, label: o }))];
+  const items = [{ value: ALL, label: `All ${label.toLowerCase()}s` }, ...options.map((o) => ({ value: o, label: labelOf(o) }))];
   return (
     <Select items={items} value={value} onValueChange={(v) => onChange(v ?? ALL)}>
       <SelectTrigger size="sm" className={`min-w-25 bg-secondary text-[13px] ${value ? "border-primary bg-primary/6" : ""}`} aria-label={label}>
@@ -947,8 +953,8 @@ export function CourtCasesPage({ view }: { view: View }) {
           <SectionCode code="P15.2" />
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <FilterSelect label="Judge" value={filter.judge} options={options.judges} onChange={(v) => setFilter({ ...filter, judge: v })} code="D25" />
-            <FilterSelect label="Attorney" value={filter.attorney} options={options.attorneys} onChange={(v) => setFilter({ ...filter, attorney: v })} code="D26" />
-            <FilterSelect label="Paralegal" value={filter.paralegal} options={options.paralegals} onChange={(v) => setFilter({ ...filter, paralegal: v })} code="D27" />
+            <FilterSelect label="Attorney" value={filter.attorney} options={options.attorneys} onChange={(v) => setFilter({ ...filter, attorney: v })} code="D26" labelOf={(o) => staffLabel(o, data?.inactiveStaff)} />
+            <FilterSelect label="Paralegal" value={filter.paralegal} options={options.paralegals} onChange={(v) => setFilter({ ...filter, paralegal: v })} code="D27" labelOf={(o) => staffLabel(o, data?.inactiveStaff)} />
             {isMotions && (
               <FilterSelect label="Motion" value={filter.motion} options={options.motionTypes} onChange={(v) => setFilter({ ...filter, motion: v })} code="D29" />
             )}
@@ -1024,6 +1030,7 @@ export function CourtCasesPage({ view }: { view: View }) {
               cases={visible}
               stages={data.stages.filter((s) => visible.some((c) => stageOf(c) === s))}
               stageOptions={data.stageOptions}
+              inactiveStaff={data.inactiveStaff}
               filter={filter}
               onPerson={onPerson}
               onMoved={onMoved}

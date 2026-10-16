@@ -61,7 +61,7 @@ export function EditContractModal({ contract: c, onSaved, onClose }: Props) {
       caseType: c.contractFor.length === 1 ? c.contractFor[0]! : "",
       af: feeText(c.attorneyFee), ff: feeText(c.filingFee), pf: feeText(c.processingFee),
       description: "",
-      attorney: c.attorneys.length === 1 ? c.attorneys[0]! : "",
+      attorney: c.mondayAttorneys.length === 1 ? c.mondayAttorneys[0]! : "",
       email: info.email, address: info.address,
     };
     setSeen(start);
@@ -100,7 +100,7 @@ export function EditContractModal({ contract: c, onSaved, onClose }: Props) {
       const from: Parameters<typeof updateContract>[2] = {};
       for (const k of Object.keys(diff.fees) as (keyof ContractFees)[]) from[k] = seenFees[k];
       if (diff.typeChanged) from.caseType = c.contractFor;
-      if (diff.attorneyChanged) from.attorney = c.attorneys;
+      if (diff.attorneyChanged) from.attorney = c.mondayAttorneys;
       if (diff.emailChanged) from.email = seen.email;
       if (diff.addressChanged) from.address = seen.address;
       const res = await updateContract(c.localId, {

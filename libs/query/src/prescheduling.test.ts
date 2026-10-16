@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { getPrescheduling, NO_STAGE } from "./prescheduling";
+import { testResolver } from "./staff-names.fixture";
 
 // =============================================================================
 // Helpers
@@ -143,6 +144,20 @@ describe("getPrescheduling", () => {
       contractFor: ["I-130", "I-485"],
       itWillGoTo: "Open Forms",
     });
+    db.close();
+  });
+});
+
+describe("getPrescheduling with the roster", () => {
+  test("paralegals come back once per person, inactive ones listed", () => {
+    const db = freshDb();
+    insertFeeK(db, { localId: "a", paralegal: "Mayra R." });
+    insertFeeK(db, { localId: "b", paralegal: "mayra ruiz, Ana Reyes" });
+    const r = getPrescheduling(db, { today: TODAY, resolveStaff: testResolver });
+    const by = Object.fromEntries(r.cases.map((c) => [c.localId, c]));
+    expect(by.a!.paralegals).toEqual(["Mayra Ruiz"]);
+    expect(by.b!.paralegals).toEqual(["Mayra Ruiz", "Ana Reyes"]);
+    expect(r.inactiveStaff).toEqual(["Mayra Ruiz"]);
     db.close();
   });
 });

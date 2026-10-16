@@ -27,6 +27,7 @@ import { withTokenFallback } from "../write-auth.js";
 import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { getBoardColumnsFor } from "@case-pipeline/query";
+import { usersDb } from "../db/users-db.js";
 import { FEE_K_ASSISTANT, makeMondayUserByLogin, peopleValue } from "../contract-info.js";
 import { hearingKindOf } from "@case-pipeline/query";
 import { letterAddress } from "../documents/us-address.js";
@@ -129,7 +130,7 @@ export function registerContractDocumentRoutes(
   deps: { db: DatabaseInstance; mondayApiToken?: string; writeTokenOptions?: WriteTokenOptions },
 ): void {
   const { db } = deps;
-  const mondayUser = makeMondayUserByLogin(deps.mondayApiToken);
+  const mondayUser = makeMondayUserByLogin(deps.mondayApiToken, usersDb);
 
   /** Whoever generated the contract becomes the Fee K's Assistant — only when nobody is. */
   async function assignAssistant(req: Request, localId: string, row: ContractDocRow): Promise<AssistantOutcome> {

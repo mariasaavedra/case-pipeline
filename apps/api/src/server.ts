@@ -445,7 +445,7 @@ app.get("/api/appointments", (req, res) => {
     : "day";
   const date = url.searchParams.get("date") ?? undefined;
   const boardKeys = activeBoardKeys();
-  const result = getAppointments(db, { attorney, range, date, boardKeys });
+  const result = getAppointments(db, { attorney, range, date, boardKeys, resolveStaff: makeStaffResolver(usersDb) });
   res.json({ data: result });
 });
 
@@ -468,26 +468,26 @@ app.get("/api/active-cases", (req, res) => {
 // Prescheduling — Paid Fee Ks waiting for the client's documents. Thresholds
 // are the query defaults (30 / 60 days since hire, 14 days after a reminder).
 app.get("/api/prescheduling", (_req, res) => {
-  res.json({ data: getPrescheduling(db) });
+  res.json({ data: getPrescheduling(db, { resolveStaff: makeStaffResolver(usersDb) }) });
 });
 // Contracts — Pending Fee Ks by Contract Stage, aged from the sent date (30 / 60 days).
 app.get("/api/pending-contracts", (_req, res) => {
-  res.json({ data: getPendingContracts(db) });
+  res.json({ data: getPendingContracts(db, { resolveStaff: makeStaffResolver(usersDb) }) });
 });
 // Court Cases (P15) — active court cases for the Docket and Prep Pipeline views.
 // Readiness thresholds are the query defaults (Trial 60 / 90 days, MCH 14).
 app.get("/api/court-cases", (_req, res) => {
-  res.json({ data: getCourtCases(db) });
+  res.json({ data: getCourtCases(db, { resolveStaff: makeStaffResolver(usersDb) }) });
 });
 // Address Changes (P18) — the open changes of address as a queue (payment → our
 // turn → client/attorney → submitted), aged from Date Received.
 app.get("/api/address-changes", (_req, res) => {
-  res.json({ data: getAddressChanges(db) });
+  res.json({ data: getAddressChanges(db, { resolveStaff: makeStaffResolver(usersDb) }) });
 });
 // FOIAs (P19) — open FOIA requests as a queue (decide → our turn → waiting on
 // the agency), aged from On FOIAs since / Filed On.
 app.get("/api/foias", (_req, res) => {
-  res.json({ data: getFoias(db) });
+  res.json({ data: getFoias(db, { resolveStaff: makeStaffResolver(usersDb) }) });
 });
 // Calendar — hearings, court/USCIS deadlines, interviews, and appointments
 // unified across boards. See libs/query/src/calendar.ts.
@@ -551,7 +551,7 @@ app.get("/api/clients/:localId/updates", adapt(handleClientUpdates));
 app.get("/api/clients/:localId/relationships", adapt(handleClientRelationships));
 registerCaseTimelineRoutes(app, { db });
 app.get("/api/board-items/:localId", adapt(handleBoardItemDetail));
-app.get("/api/call-log", adapt(handleCallLog));
+app.get("/api/call-log", adapt((req, d) => handleCallLog(req, d, makeStaffResolver(usersDb))));
 app.get("/api/jail-intakes", adapt(handleJailIntakes));
 
 // =============================================================================

@@ -9,6 +9,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import type { CallLogEntry, CallLogFilters, CallLogListResult } from "./types";
+import { makeStaffNames, spellingsOf, type StaffNames, type StaffResolver } from "./staff-names";
 
 interface RawRow {
   localId: string;
@@ -58,7 +59,8 @@ function shapeRow(r: RawRow): CallLogEntry {
  * List call log entries, newest first, with optional filters. Backs the Call
  * Log tab's table and its "unlinked calls" follow-up view.
  */
-export function getCallLogEntries(db: Database, filters: CallLogFilters = {}): CallLogListResult {
+/** `resolveStaff`: a "taken by" picked by roster name matches every spelling of that person. */
+export function getCallLogEntries(db: Database, filters: CallLogFilters = {}, resolveStaff?: StaffResolver): CallLogListResult {
   const { status, takenBy, dateFrom, dateTo, unlinkedOnly, limit = 50, offset = 0 } = filters;
 
   // Scoped to Monday group id "topics" (title "Call Log", verified via the
@@ -74,8 +76,9 @@ export function getCallLogEntries(db: Database, filters: CallLogFilters = {}): C
     params.push(status);
   }
   if (takenBy) {
-    where.push("json_extract(bi.column_values, '$.taken_by.label') = ?");
-    params.push(takenBy);
+    const spellings = resolveStaff ? spellingsOf(takenBy, rawTakenBy(db), resolveStaff) : [takenBy];
+    where.push(`json_extract(bi.column_values, '$.taken_by.label') IN (${spellings.map(() => "?").join(",")})`);
+    params.push(...spellings);
   }
   if (dateFrom) {
     where.push("json_extract(bi.column_values, '$.date.date') >= ?");
@@ -116,16 +119,23 @@ export function getCallLogEntries(db: Database, filters: CallLogFilters = {}): C
   return { entries: rows.map(shapeRow), total };
 }
 
-/** Distinct "Taken by" names seen on the board, for the staff filter dropdown. */
-export function getCallLogStaffOptions(db: Database): string[] {
+/** Distinct "Taken by" labels as spelled on the board. */
+function rawTakenBy(db: Database): string[] {
   const rows = db
     .prepare(`
       SELECT DISTINCT json_extract(column_values, '$.taken_by.label') AS name
       FROM board_items
       WHERE board_key = 'call_log' AND group_title = 'Call Log'
         AND json_extract(column_values, '$.taken_by.label') IS NOT NULL
-      ORDER BY name
     `)
     .all() as { name: string | null }[];
   return rows.map((r) => r.name).filter((n): n is string => !!n);
+}
+
+/**
+ * "Taken by" names for the staff filter dropdown: one per person when `names`
+ * carries the roster (its inactive() then lists who to mark).
+ */
+export function getCallLogStaffOptions(db: Database, names: StaffNames = makeStaffNames()): string[] {
+  return names.list(rawTakenBy(db)).sort((a, b) => a.localeCompare(b));
 }

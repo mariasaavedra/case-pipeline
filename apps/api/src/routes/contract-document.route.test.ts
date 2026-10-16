@@ -25,6 +25,7 @@ vi.mock("../data-source/index.js", () => ({
     },
   },
 }));
+vi.mock("../db/users-db.js", async () => ({ usersDb: (await import("../staff/test-db.js")).makeRosterDb() }));
 vi.mock("../auth/middleware.js", () => ({
   requireAuth: (req: express.Request, _res: express.Response, next: express.NextFunction) => {
     (req as unknown as { user: unknown }).user = { oid: "oid-1", name: "Ana Reyes", preferred_username: "Ana@Firm.com" };

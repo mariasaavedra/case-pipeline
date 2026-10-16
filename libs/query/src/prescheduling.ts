@@ -8,6 +8,7 @@
 // See docs/features/prescheduling-and-contracts.md.
 
 import type BetterSqlite3 from "better-sqlite3";
+import { makeStaffNames, type StaffResolver } from "./staff-names";
 type Database = BetterSqlite3.Database;
 
 // =============================================================================
@@ -54,9 +55,13 @@ export interface PreschedulingResult {
   /** PS Stages that have at least one case, in workflow order. */
   stages: string[];
   thresholds: { waitingDays: number; lateDays: number; reminderDays: number };
+  /** People on this page the roster marks inactive (roster names). */
+  inactiveStaff: string[];
 }
 
 export interface PreschedulingOptions {
+  /** The roster's name matcher: names come back as one entry per person. */
+  resolveStaff?: StaffResolver;
   /** Days since hire before a case turns yellow. Default 30. */
   waitingDays?: number;
   /** Days since hire before a case turns red. Default 60. */
@@ -155,6 +160,7 @@ export function getPrescheduling(db: Database, options: PreschedulingOptions = {
   const waitingDays = options.waitingDays ?? 30;
   const lateDays = Math.max(waitingDays, options.lateDays ?? 60);
   const reminderDays = options.reminderDays ?? 14;
+  const staff = makeStaffNames(options.resolveStaff);
 
   const rows = db.prepare(`
     SELECT
@@ -203,9 +209,9 @@ export function getPrescheduling(db: Database, options: PreschedulingOptions = {
       daysSinceReminder,
       evidenceReceivedOn: r.evidenceReceivedOn,
       notCooperating: daysSinceReminder !== null && daysSinceReminder >= reminderDays && !answered,
-      paralegals: splitNames(r.paralegal),
-      attorney: r.attorney?.trim() || null,
-      assistant: r.assistant?.trim() || null,
+      paralegals: staff.list(splitNames(r.paralegal)),
+      attorney: staff.cell(r.attorney),
+      assistant: staff.cell(r.assistant),
       parked,
       snoozed: parked && r.northPoleUntil !== null && r.northPoleUntil > today,
       northPoleUntil: parked ? r.northPoleUntil : null,
@@ -223,5 +229,5 @@ export function getPrescheduling(db: Database, options: PreschedulingOptions = {
     (a, b) => stageRank(a) - stageRank(b) || a.localeCompare(b),
   );
 
-  return { cases, stages, thresholds: { waitingDays, lateDays, reminderDays } };
+  return { cases, stages, thresholds: { waitingDays, lateDays, reminderDays }, inactiveStaff: staff.inactive() };
 }

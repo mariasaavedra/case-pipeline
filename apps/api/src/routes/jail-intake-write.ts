@@ -28,6 +28,8 @@ import { fetchBoardStructure, fetchItem } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { getJailIntakeNotes, getBoardColumnsFor } from "@case-pipeline/query";
 import { loadBoardsConfig } from "@case-pipeline/config";
+import path from "node:path";
+import { REPO_ROOT } from "../paths.js";
 import { FIRM_TIMEZONE, mondayDateTime } from "../firm.js";
 import { bookableBoards } from "../attorney-boards.js";
 
@@ -347,7 +349,7 @@ export function registerJailIntakeWriteRoutes(app: Express, deps: JailIntakeWrit
 
   async function intakeBoard(): Promise<{ boardId: string; columnIds: IntakeColumnIds; groupId: string | null } | null> {
     if (boardCache && Date.now() - boardCache.at < BOARD_TTL_MS) return boardCache;
-    const boards = await loadBoardsConfig();
+    const boards = await loadBoardsConfig(path.join(REPO_ROOT, "config/boards.yaml"));
     const board = boards[BOARD_KEY];
     if (!board) return null;
 

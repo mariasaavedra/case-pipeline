@@ -52,6 +52,22 @@ deactivated: leaving is the Offboarding flow's decision.
 private Monday-user caches (call log, consult booking, appointments) share
 `staff/workspace-users.ts`. The legacy `users` columns stay as a fallback.
 
+Contracts and e-sign (`contract-info.ts` `makeMondayUserResolver` /
+`makeMondayUserByLogin`, the e-sign sender) resolve a person through the roster
+first (e-mail, then name or alias → the staff row's Monday id) and only fetch
+the shared workspace list when the roster has no Monday id. Nothing outside
+`staff/workspace-users.ts` calls `fetchWorkspaceUsers`.
+
+Pickers and filters built from board names (Call Log "taken by", the
+Appointments attorney list, P13 paralegals, P14 attorneys + assistant, P15
+attorneys + paralegals, P18 assistants, P19 paralegals) get the roster as a
+`StaffResolver` (`libs/query/src/staff-names.ts`, so `libs/query` never opens
+users.db): one entry per person under the roster name, and an `inactiveStaff`
+list the web marks "(inactive)" rather than hiding — those people still hold
+open work. A filter picked by roster name matches every board spelling
+(`spellingsOf`). Display only: P14 also returns `mondayAttorneys`, Monday's own
+spelling, which M25's stale check compares.
+
 Not moved: the attorneys list in document settings (G-28, contracts). It keeps
 its bar admissions and USCIS account.
 

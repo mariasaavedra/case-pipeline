@@ -5,6 +5,7 @@ import { ClientLink } from "./ClientPeek";
 import { SectionCode } from "./ScreenCode";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { formatDue, Tag, FormChip, ListSection, WAIT_TONE, waitFg } from "./caseBoardParts";
+import { staffLabel } from "../lib/staff-label";
 
 // =============================================================================
 // P19 FOIAs
@@ -163,7 +164,7 @@ export function FoiasPage() {
   const stale = byParalegal.filter((f) => f.flags.includes("stale")).length;
   const t = data?.thresholds;
 
-  const paralegalItems = [{ value: ALL, label: "All paralegals" }, ...paralegals.map((p) => ({ value: p, label: p }))];
+  const paralegalItems = [{ value: ALL, label: "All paralegals" }, ...paralegals.map((p) => ({ value: p, label: staffLabel(p, data?.inactiveStaff) }))];
 
   return (
     <div>

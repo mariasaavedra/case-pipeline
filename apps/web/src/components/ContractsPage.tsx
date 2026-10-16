@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import { menuBoxStyle, useAnchoredMenu } from "./anchored-menu";
 import { Button } from "./ui/button";
 import { formatDue, PersonChip, FormChip, ListSection, waitFg } from "./caseBoardParts";
+import { staffLabel } from "../lib/staff-label";
 
 // =============================================================================
 // P14 Contracts
@@ -134,6 +135,7 @@ interface Filter {
 interface RowProps {
   c: PendingContract;
   filter: Filter;
+  inactiveStaff: string[];
   onAttorney: (name: string) => void;
   onStep: (c: PendingContract, step: ContractStep) => Promise<void>;
   onFiles: (c: PendingContract) => void;
@@ -142,7 +144,7 @@ interface RowProps {
   onEdit: (c: PendingContract) => void;
 }
 
-function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPaymentLinks, onEdit }: RowProps) {
+function ContractRow({ c, filter, inactiveStaff, onAttorney, onStep, onFiles, onGenerate, onPaymentLinks, onEdit }: RowProps) {
   return (
     <li
       className="grid gap-x-4 gap-y-1.5 px-4 py-3 items-center grid-cols-1 md:grid-cols-[minmax(0,2fr)_11rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto]"
@@ -217,7 +219,7 @@ function ContractRow({ c, filter, onAttorney, onStep, onFiles, onGenerate, onPay
       {/* People */}
       <div className="flex items-center gap-1.5 flex-wrap min-w-0">
         {attorneysOf(c).map((a) => (
-          <PersonChip key={a} name={a} active={filter.attorney === a} onClick={() => onAttorney(a)} />
+          <PersonChip key={a} name={a} label={staffLabel(a, inactiveStaff)} active={filter.attorney === a} onClick={() => onAttorney(a)} />
         ))}
         {c.assistant && (
           <span className="text-xs truncate" style={{ color: "var(--color-ink-faint)" }} title="Assistant">
@@ -381,7 +383,7 @@ export function ContractsPage() {
               return inStage.length > 0 ? (
                 <ListSection key={s} title={s} count={inStage.length} tone={null} color={data.stageColors[s]}>
                   {inStage.map((c) => (
-                    <ContractRow key={c.localId} c={c} filter={filter} onAttorney={pickAttorney} onStep={takeStep}
+                    <ContractRow key={c.localId} c={c} filter={filter} inactiveStaff={data.inactiveStaff} onAttorney={pickAttorney} onStep={takeStep}
                       onFiles={setBrowsing} onGenerate={setGenerating} onPaymentLinks={setPaying}
                       onEdit={(c) => setEditing(c)} />
                   ))}

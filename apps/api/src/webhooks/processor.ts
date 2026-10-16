@@ -37,6 +37,7 @@ import { withMondayJob } from "@case-pipeline/monday";
 import { fetchItemUpdatesBatch } from "@case-pipeline/monday";
 import type { MondayAsset } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
+import { REPO_ROOT } from "../paths.js";
 import { acquireSyncLock, releaseSyncLock } from "@case-pipeline/seed/db/sync-lock";
 
 const LOCK_HOLDER = "webhooks";
@@ -152,7 +153,7 @@ function backoffMs(attempts: number): number {
  * a board added in Settings starts resolving without an API restart.
  */
 export async function createBoardKeyResolver(dataDir: string): Promise<(mondayBoardId: string) => string | null> {
-  const boardsConfig = await loadBoardsConfig();
+  const boardsConfig = await loadBoardsConfig(path.join(REPO_ROOT, "config/boards.yaml"));
   const staticMap = new Map<string, string>();
   for (const [key, config] of Object.entries(boardsConfig)) {
     staticMap.set(String(config.id), key);

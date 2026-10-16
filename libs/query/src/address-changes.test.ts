@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 type DatabaseInstance = InstanceType<typeof Database>;
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { getAddressChanges, phaseOf, nextHearing } from "./address-changes";
+import { testResolver } from "./staff-names.fixture";
 
 const TODAY = "2026-10-02";
 
@@ -141,5 +142,17 @@ describe("getAddressChanges", () => {
     expect(r.statusColumnId).toBe("status");
     expect(r.dateSentColumnId).toBe("date__1");
     expect(r.statusOptions).toEqual(["Waiting for Payment", "Sent Out"]);
+  });
+});
+
+describe("getAddressChanges with the roster", () => {
+  test("assistant by roster name", () => {
+    const db = freshDb();
+    insertChange(db, "a", { assistant: "Mayra R." });
+    insertChange(db, "b", { assistant: "Ana Reyes" });
+    const r = getAddressChanges(db, { today: TODAY, resolveStaff: testResolver });
+    expect(r.items.map((i) => i.assistant).sort()).toEqual(["Ana Reyes", "Mayra Ruiz"]);
+    expect(r.inactiveStaff).toEqual(["Mayra Ruiz"]);
+    db.close();
   });
 });

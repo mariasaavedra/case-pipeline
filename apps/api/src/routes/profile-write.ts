@@ -31,6 +31,7 @@ import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from 
 import { parseNoteBody } from "./note-write.js";
 import { planReply } from "./note-replies.js";
 import { addLocalDropdownLabel, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
+import { usersDb } from "../db/users-db.js";
 import {
   FEE_K_ATTORNEY, applyProfileContactLocally, cleanContact, makeMondayUserResolver,
   peopleValue, planProfileContact,
@@ -86,7 +87,7 @@ export interface ProfileWriteDeps {
 
 export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps): void {
   const { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions } = deps;
-  const resolveMondayUser = makeMondayUserResolver(MONDAY_API_TOKEN);
+  const resolveMondayUser = makeMondayUserResolver(MONDAY_API_TOKEN, usersDb);
 
 
   // =============================================================================

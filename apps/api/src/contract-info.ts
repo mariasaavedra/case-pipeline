@@ -14,8 +14,10 @@
 import type BetterSqlite3 from "better-sqlite3";
 type DatabaseInstance = BetterSqlite3.Database;
 import type { BoardColumns } from "@case-pipeline/query";
-import { fetchWorkspaceUsers } from "@case-pipeline/monday";
+import type { MondayWorkspaceUser } from "@case-pipeline/monday";
 import { loadDocumentSettings } from "./documents/document-settings.js";
+import { staffForUser } from "./staff/roster.js";
+import { getWorkspaceUsers } from "./staff/workspace-users.js";
 
 /** Fee Ks "Attorney" (People) — config/boards.yaml fee_ks.attorney. */
 export const FEE_K_ATTORNEY = { id: "deal_owner", key: "attorney" } as const;
@@ -53,16 +55,16 @@ export function contractAttorneys(db: DatabaseInstance): string[] {
   return out;
 }
 
-/** Monday user id for an attorney's name (Settings e-mail first, then the name). Cached 10 min. */
-export function makeMondayUserResolver(token: string | undefined) {
-  let cache: { users: Awaited<ReturnType<typeof fetchWorkspaceUsers>>; at: number } | null = null;
+/**
+ * Monday user id for an attorney's name. The roster first (Settings e-mail,
+ * then the name or any alias), then the shared workspace list (e-mail, then
+ * name). The list is only fetched when the roster has no Monday id.
+ */
+export function makeMondayUserResolver(token: string | undefined, rosterDb: DatabaseInstance | null) {
   return async (name: string): Promise<number | null> => {
-    if (!cache || Date.now() - cache.at > 10 * 60 * 1000) cache = { users: await fetchWorkspaceUsers(token), at: Date.now() };
     const settings = loadDocumentSettings().attorneys.find((a) => same(`${a.givenName} ${a.familyName}`, name));
-    const hit = (settings?.email && cache.users.find((u) => same(u.email, settings.email)))
-      || cache.users.find((u) => same(u.name, name));
-    const id = hit ? Number(hit.id) : NaN;
-    return Number.isFinite(id) ? id : null;
+    const hit = await findMondayUser(token, rosterDb, settings?.email ?? "", name);
+    return hit?.id ?? null;
   };
 }
 
@@ -71,15 +73,29 @@ export const peopleValue = (userId: number) => ({ personsAndTeams: [{ id: userId
 /** Fee Ks "Assistant" (People) — config/boards.yaml fee_ks.assistant. */
 export const FEE_K_ASSISTANT = { id: "people__1", key: "assistant" } as const;
 
-/** The signed-in user's Monday id: by login e-mail, else by name. Cached 10 min. */
-export function makeMondayUserByLogin(token: string | undefined) {
-  let cache: { users: Awaited<ReturnType<typeof fetchWorkspaceUsers>>; at: number } | null = null;
-  return async (email: string, name: string): Promise<{ id: number; name: string } | null> => {
-    if (!cache || Date.now() - cache.at > 10 * 60 * 1000) cache = { users: await fetchWorkspaceUsers(token), at: Date.now() };
-    const hit = (email && cache.users.find((u) => same(u.email, email))) || (name && cache.users.find((u) => same(u.name, name)));
-    const id = hit ? Number(hit.id) : NaN;
-    return hit && Number.isFinite(id) ? { id, name: hit.name } : null;
-  };
+/** The signed-in user's Monday id: by login e-mail, else by name — roster first, then Monday's list. */
+export function makeMondayUserByLogin(token: string | undefined, rosterDb: DatabaseInstance | null) {
+  return (email: string, name: string): Promise<{ id: number; name: string } | null> =>
+    findMondayUser(token, rosterDb, email, name);
+}
+
+async function findMondayUser(
+  token: string | undefined,
+  rosterDb: DatabaseInstance | null,
+  email: string,
+  name: string,
+): Promise<{ id: number; name: string } | null> {
+  const staff = rosterDb ? staffForUser(rosterDb, { email, name }) : null;
+  const fromRoster = Number(staff?.mondayUserId ?? NaN);
+  if (staff && Number.isFinite(fromRoster)) return { id: fromRoster, name: staff.name };
+  const users: MondayWorkspaceUser[] = await getWorkspaceUsers(token);
+  // The roster's spellings of this person reach Monday under their own name too.
+  const names = [name, ...(staff ? [staff.name, ...staff.aliases] : [])].filter(Boolean);
+  const hit = (email && users.find((u) => same(u.email, email)))
+    || (staff?.email && users.find((u) => same(u.email, staff.email)))
+    || users.find((u) => names.some((n) => same(u.name, n)));
+  const id = hit ? Number(hit.id) : NaN;
+  return hit && Number.isFinite(id) ? { id, name: hit.name } : null;
 }
 
 /** A profile contact value in the shape its Monday column takes. */

@@ -22,8 +22,9 @@ import {
   getJailIntakes,
   getCallLogEntries,
   getCallLogStaffOptions,
+  makeStaffNames,
 } from "@case-pipeline/query";
-import type { SearchType, TimelineSourceType, TimelineCategory } from "@case-pipeline/query";
+import type { SearchType, TimelineSourceType, TimelineCategory, StaffResolver } from "@case-pipeline/query";
 
 // =============================================================================
 // Helpers
@@ -241,7 +242,8 @@ export function handleFilterOptions(_req: Request, db: Database): Response {
   return json(options);
 }
 
-export function handleCallLog(req: Request, db: Database): Response {
+/** `resolveStaff`: the roster matcher — one "taken by" option per person, inactive ones listed. */
+export function handleCallLog(req: Request, db: Database, resolveStaff?: StaffResolver): Response {
   const url = new URL(req.url);
   const status = url.searchParams.get("status") ?? undefined;
   const takenBy = url.searchParams.get("takenBy") ?? undefined;
@@ -255,9 +257,10 @@ export function handleCallLog(req: Request, db: Database): Response {
   const limit = limitParam !== null ? Math.max(0, Math.min(parseInt(limitParam, 10) || 0, 200)) : 50;
   const offset = offsetParam !== null ? Math.max(0, parseInt(offsetParam, 10) || 0) : 0;
 
-  const result = getCallLogEntries(db, { status, takenBy, dateFrom, dateTo, unlinkedOnly, limit, offset });
-  const staffOptions = getCallLogStaffOptions(db);
-  return json({ ...result, staffOptions });
+  const result = getCallLogEntries(db, { status, takenBy, dateFrom, dateTo, unlinkedOnly, limit, offset }, resolveStaff);
+  const names = makeStaffNames(resolveStaff);
+  const staffOptions = getCallLogStaffOptions(db, names);
+  return json({ ...result, staffOptions, inactiveStaff: names.inactive() });
 }
 
 export function handleJailIntakes(req: Request, db: Database): Response {

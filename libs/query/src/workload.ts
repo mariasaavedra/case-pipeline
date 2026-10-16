@@ -25,6 +25,7 @@ import { getCourtCases, type Readiness } from "./court-cases";
 import { getFoias } from "./foias";
 import { FEE_KS_BOARD_KEY } from "./my-cases";
 import type { AlertGroup, AlertItem } from "./types";
+import type { StaffResolver } from "./staff-names";
 
 type Database = BetterSqlite3.Database;
 
@@ -89,7 +90,7 @@ export interface WorkloadResult {
   inactiveAssignee: WorkloadItem[];
 }
 
-export type StaffResolver = (name: string) => { id: number; name: string; active: boolean } | null;
+export type { StaffResolver } from "./staff-names";
 
 export interface WorkloadOptions {
   activeCases?: ActiveCasesOptions;

@@ -11,6 +11,8 @@ function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
 }
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { getCallLogEntries, getCallLogStaffOptions } from "./call-log";
+import { makeStaffNames } from "./staff-names";
+import { testResolver } from "./staff-names.fixture";
 
 function freshDb(): DatabaseInstance {
   const db = new Database(":memory:");
@@ -140,5 +142,24 @@ describe("getCallLogStaffOptions", () => {
     insertCall(db, { localId: "call-4", name: "D", columnValues: {} });
 
     expect(getCallLogStaffOptions(db)).toEqual(["Cynthia de La Cruz", "Fernando Ayala"]);
+  });
+
+  test("with the roster: one option per person, inactive people listed", () => {
+    const db = freshDb();
+    insertCall(db, { localId: "call-1", name: "A", columnValues: { taken_by: { label: "Mayra R." } } });
+    insertCall(db, { localId: "call-2", name: "B", columnValues: { taken_by: { label: "mayra ruiz" } } });
+    insertCall(db, { localId: "call-3", name: "C", columnValues: { taken_by: { label: "Ana Reyes" } } });
+    const names = makeStaffNames(testResolver);
+    expect(getCallLogStaffOptions(db, names)).toEqual(["Ana Reyes", "Mayra Ruiz"]);
+    expect(names.inactive()).toEqual(["Mayra Ruiz"]);
+  });
+
+  test("filtering by the roster name matches every spelling", () => {
+    const db = freshDb();
+    insertCall(db, { localId: "call-1", name: "A", columnValues: { taken_by: { label: "Mayra R." } } });
+    insertCall(db, { localId: "call-2", name: "B", columnValues: { taken_by: { label: "mayra ruiz" } } });
+    insertCall(db, { localId: "call-3", name: "C", columnValues: { taken_by: { label: "Ana Reyes" } } });
+    expect(getCallLogEntries(db, { takenBy: "Mayra Ruiz" }, testResolver).total).toBe(2);
+    expect(getCallLogEntries(db, { takenBy: "Mayra R." }).total).toBe(1);
   });
 });

@@ -35,6 +35,7 @@ const result: FoiasResult = {
     item({ localId: "ancient", phase: "agency", status: "Sent Out", filedOn: "2025-01-01", ageDays: 640, flags: ["stale"] }),
   ],
   doneCount: 100,
+  inactiveStaff: [],
   doneLast30: 4,
   thresholds: {
     decide: { waitingDays: 14, lateDays: 30 },
