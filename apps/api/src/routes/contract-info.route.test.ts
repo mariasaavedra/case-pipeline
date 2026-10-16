@@ -126,7 +126,7 @@ describe("POST /api/profiles/:id/contracts — all five required", () => {
   it("refuses an attorney who isn't a Monday user", async () => {
     const r = await call("POST", "/api/profiles/p1/contracts", { ...complete, attorney: "Nobody Here" });
     expect(r.status).toBe(400);
-    expect(r.json.error).toMatch(/not a Monday user/);
+    expect(r.json.error).toMatch(/matches no Monday user/);
   });
 
   it("puts the attorney on the Fee K and the changed contact on the profile", async () => {

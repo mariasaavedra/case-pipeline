@@ -100,7 +100,9 @@ export const DEFAULT_DOCUMENT_SETTINGS: DocumentSettings = {
       id: "rekha",
       givenName: "Rekha",
       familyName: "Sharma-Crawford",
-      email: "",
+      // Her Monday display name is "Rekha@Sharma- com", so the Fee K attorney
+      // can only be matched by this e-mail (contract-info.ts).
+      email: "rekha@sharma-crawford.com",
       mobile: "",
       uscisAccount: "072332050022",
       bars: [{ state: "MO", number: "58404" }],
