@@ -229,7 +229,7 @@ export async function applyLawPayEvent(deps: LawPayDeps, eventId: number, paymen
     : undefined;
   if (issuer && row.mondayId) {
     try {
-      const me = await makeMondayUserByLogin(token)(issuer.email ?? "", issuer.name ?? "");
+      const me = await makeMondayUserByLogin(token, usersDb)(issuer.email ?? "", issuer.name ?? "");
       if (me) await createNotification(String(me.id), row.mondayId, `💵 ${row.clientName} paid ${FEE_WORDS[ref.fee].toLowerCase()} ${usd.format(payment.amount)}${full ? " — fully paid" : ""}.`, token);
     } catch (err) {
       console.error("[lawpay] Monday notification failed:", err);

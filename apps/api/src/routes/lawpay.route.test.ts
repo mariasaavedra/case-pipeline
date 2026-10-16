@@ -29,6 +29,7 @@ vi.mock("../db/users-db.js", async () => {
       transaction_id TEXT, reference TEXT, amount REAL, outcome TEXT, result TEXT, contract_local_id TEXT, error TEXT);
     INSERT INTO users (id, azure_oid, email, name) VALUES (7, 'oid-7', 'mayra@firm.com', 'Mayra Ruiz');
   `);
+  usersDb.exec((await import("../staff/schema.js")).createStaffTablesSql);
   return { usersDb };
 });
 vi.mock("../db/user-context.js", () => ({ currentUserId: () => 7 }));
