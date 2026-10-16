@@ -1133,6 +1133,14 @@ export interface ServerPreferences {
 export interface SidebarNavPref {
   order: string[];
   hidden: string[];
+  /** User-made folders: the folder id sits in `order`, its pages in `items`. */
+  folders?: SidebarFolder[];
+}
+
+export interface SidebarFolder {
+  id: string;
+  name: string;
+  items: string[];
 }
 
 export interface PublicUser {

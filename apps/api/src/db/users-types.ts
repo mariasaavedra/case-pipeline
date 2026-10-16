@@ -55,6 +55,15 @@ export interface Preferences {
 export interface SidebarNavPref {
   order: string[];
   hidden: string[];
+  /** User-made folders. A folder's id sits in `order`; its pages are listed in
+   *  `items` and not in `order`. Absent = no folders. */
+  folders?: SidebarFolder[];
+}
+
+export interface SidebarFolder {
+  id: string;
+  name: string;
+  items: string[];
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -104,6 +113,8 @@ export function sanitizeKpiColumns(input: unknown): Record<string, string> {
 /** Sidebar page ids are kebab-case route names ("active-cases"). */
 const NAV_ID_PATTERN = /^[a-z0-9-]{1,64}$/;
 const MAX_NAV_IDS = 50;
+const MAX_FOLDERS = 12;
+const MAX_FOLDER_NAME = 40;
 
 function sanitizeNavIds(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
@@ -122,7 +133,30 @@ export function sanitizeSidebarNav(input: unknown): SidebarNavPref {
     return { order: [], hidden: [] };
   }
   const o = input as Record<string, unknown>;
-  return { order: sanitizeNavIds(o.order), hidden: sanitizeNavIds(o.hidden) };
+  const out: SidebarNavPref = { order: sanitizeNavIds(o.order), hidden: sanitizeNavIds(o.hidden) };
+  const folders = sanitizeFolders(o.folders);
+  if (folders.length > 0) out.folders = folders;
+  return out;
+}
+
+/** Folders: unique ids, a trimmed name (control characters stripped), and pages
+ *  in at most one folder. Junk entries are dropped. */
+function sanitizeFolders(v: unknown): SidebarFolder[] {
+  if (!Array.isArray(v)) return [];
+  const out: SidebarFolder[] = [];
+  const placed = new Set<string>();
+  for (const f of v) {
+    if (out.length >= MAX_FOLDERS) break;
+    if (typeof f !== "object" || f === null || Array.isArray(f)) continue;
+    const r = f as Record<string, unknown>;
+    if (typeof r.id !== "string" || !NAV_ID_PATTERN.test(r.id) || out.some((x) => x.id === r.id)) continue;
+    // eslint-disable-next-line no-control-regex
+    const name = typeof r.name === "string" ? r.name.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_FOLDER_NAME) : "";
+    const items = sanitizeNavIds(r.items).filter((id) => id !== r.id && !placed.has(id));
+    for (const id of items) placed.add(id);
+    out.push({ id: r.id, name: name || "Folder", items });
+  }
+  return out;
 }
 
 /**

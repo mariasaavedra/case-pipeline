@@ -295,3 +295,54 @@ describe("closed case with family EADs and a denial", () => {
     expect(t.summary.standing[0]).toMatchObject({ tone: null, text: "Court: Administratively Closed" });
   });
 });
+
+describe("NVC, FOIAs, litigation, I-918B and the extra E&A types", () => {
+  function otherBoards() {
+    const db = freshDb();
+    item(db, "nvc_notices", "Ana Sofia RIVERA LOPEZ", { notice_type: { label: "Documentarily Qualified" }, notice_date: d("2026-03-02") });
+    item(db, "foias", "Ana Sofia RIVERA LOPEZ", {
+      foias_filed: { labels: ["EOIR Filed", "FBI Filed"] }, filed_on: d("2026-01-12"), results_received: d("2026-04-20"),
+    }, { status: "COMPLETED - RESULTS RECEIVED" });
+    item(db, "litigation", "Ana Sofia RIVERA LOPEZ - Habeas", {
+      type_of_case: { labels: ["Habeas"] }, work_due: { label: "Status Report" }, due_date: d("2026-10-05"), hearing_date: d("2026-11-02"),
+      immigration_hearing_date_court_cases: d("2026-12-01"),
+    });
+    item(db, "_lt_i918b_s", "Ana Sofia RIVERA LOPEZ", {
+      hire_date_for_i918b_request: d("2025-06-01"), signed_date: d("2025-09-15"), due_date_for_u_visa_hire: d("2026-01-15"), expiration_date: d("2026-03-15"),
+    }, { status: "Client has deadlines" });
+    activity(db, "2026-02-10T15:00:00Z", "EOIR FF Payment", "I-589 FF Payment: $100");
+    activity(db, "2026-07-01T15:00:00Z", "INTERVIEW NOTICE", "N400 INTERVIEW: Date: January 22, 2026 Time: 8:00AM Location: KCMO");
+    activity(db, "2026-06-03T20:00:00Z", "HEARING NOTES", "6-3-2026 Indiv. Hearing IJ Smith, TA Jones, client present");
+    return build(db);
+  }
+
+  test("each board's dates become milestones on its track", () => {
+    const t = otherBoards();
+    expect(find(t, "NVC: Documentarily Qualified", "2026-03-02")).toMatchObject({ track: "uscis", kind: "milestone" });
+    expect(find(t, "FOIA filed: EOIR Filed, FBI Filed", "2026-01-12")).toMatchObject({ track: "uscis", kind: "milestone", detail: "Status: COMPLETED - RESULTS RECEIVED" });
+    expect(find(t, "FOIA results received", "2026-04-20")).toMatchObject({ track: "uscis" });
+    expect(find(t, "Habeas: Status Report due", "2026-10-05")).toMatchObject({ track: "court", kind: "deadline" });
+    expect(find(t, "Habeas hearing (federal court)", "2026-11-02")).toMatchObject({ track: "court" });
+    expect(find(t, "I-918B certification requested", "2025-06-01")).toMatchObject({ track: "uscis" });
+    expect(find(t, "I-918B signed by the agency", "2025-09-15")).toMatchObject({ kind: "decision" });
+    expect(find(t, "Hire for the U visa by", "2026-01-15")).toMatchObject({ kind: "milestone" });
+    expect(find(t, "I-918B expires", "2026-03-15")).toMatchObject({ kind: "milestone" });
+  });
+
+  test("the litigation board's mirrored immigration hearing is not repeated", () => {
+    expect(otherBoards().events.some((e) => e.date === "2026-12-01")).toBe(false);
+  });
+
+  test("EOIR fee, interview notice and hearing notes from Emails & Activities", () => {
+    const t = otherBoards();
+    expect(find(t, "EOIR filing fee paid", "2026-02-10")).toMatchObject({ track: "court", kind: "milestone" });
+    expect(find(t, "Interview notice", "2026-07-01")).toMatchObject({ track: "uscis", detail: expect.stringContaining("N400 INTERVIEW") });
+    expect(find(t, "Hearing notes", "2026-06-03")).toMatchObject({ track: "court", kind: "note", detail: expect.stringContaining("Indiv. Hearing") });
+  });
+
+  test("a passed I-918B expiration is not a missed deadline; a passed litigation due date is", () => {
+    const attention = otherBoards().summary.attention.map((a) => a.text);
+    expect(attention.some((a) => a.includes("I-918B"))).toBe(false);
+    expect(attention).toContain("Habeas: Status Report due passed 10 days ago — nothing filed since");
+  });
+});

@@ -4,9 +4,34 @@ import { useViewport } from "../hooks/useViewport";
 import { usePreferences } from "../hooks/usePreferences";
 import type { AuthUser } from "../auth/AuthProvider";
 import { SectionCode } from "./ScreenCode";
-import { arrangeNav, moveId, normalizeNav, DEFAULT_SIDEBAR_NAV } from "./sidebar-layout";
+import {
+  arrangeTree,
+  toDraft,
+  flattenDraft,
+  movePage,
+  moveTopLevel,
+  addFolder,
+  removeFolder,
+  renameFolder,
+  newFolderId,
+  normalizeNav,
+  DEFAULT_SIDEBAR_NAV,
+  type DraftEntry,
+  type NavEntry,
+} from "./sidebar-layout";
 
 const COLLAPSED_KEY = "sidebar-collapsed";
+const CLOSED_FOLDERS_KEY = "sidebar-folders-closed";
+/** Same cap as the API's preferences check. */
+const MAX_FOLDERS = 12;
+/** Sideways drag that moves a page into or out of a folder. */
+const INDENT_PX = 24;
+
+const FOLDER_ICON = (
+  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M2.5 5.5a1 1 0 011-1h4l1.5 2h7.5a1 1 0 011 1V15a1 1 0 01-1 1h-13a1 1 0 01-1-1V5.5z" />
+  </svg>
+);
 
 interface NavItem {
   id: string;
@@ -268,19 +293,38 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
   };
 
   // Customize mode: drag rows (or arrow keys on the grip) to reorder, eye to
-  // hide. Edits live in a draft until Done; saved per user (preferences.sidebarNav).
+  // hide, folders to group pages. Edits live in a draft until Done; saved per
+  // user (preferences.sidebarNav).
   const { prefs, update } = usePreferences();
-  const [draft, setDraft] = useState<{ order: string[]; hidden: string[] } | null>(null);
+  const [draft, setDraft] = useState<{ tree: DraftEntry[]; hidden: string[] } | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [focusFolder, setFocusFolder] = useState<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const editing = draft !== null;
   const saved = prefs.sidebarNav ?? DEFAULT_SIDEBAR_NAV;
   const defaultIds = NAV_ITEMS.map((i) => i.id);
 
+  // Which folders are closed: per device, like the collapsed sidebar.
+  const [closedFolders, setClosedFolders] = useState<string[]>(() => {
+    try {
+      const v: unknown = JSON.parse(localStorage.getItem(CLOSED_FOLDERS_KEY) ?? "[]");
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  });
+  const toggleFolder = (id: string) => {
+    const next = closedFolders.includes(id) ? closedFolders.filter((x) => x !== id) : [...closedFolders, id];
+    setClosedFolders(next);
+    try {
+      localStorage.setItem(CLOSED_FOLDERS_KEY, JSON.stringify(next));
+    } catch {}
+  };
+
   const startEditing = () =>
-    setDraft({ order: arrangeNav(NAV_ITEMS, saved.order).map((i) => i.id), hidden: [...saved.hidden] });
+    setDraft({ tree: toDraft(arrangeTree(NAV_ITEMS, saved)), hidden: [...saved.hidden] });
   const finishEditing = () => {
-    if (draft) update("sidebarNav", normalizeNav(defaultIds, draft.order, draft.hidden));
+    if (draft) update("sidebarNav", normalizeNav(defaultIds, draft.tree, draft.hidden));
     setDraft(null);
     setDragId(null);
     setSavedFlash(true);
@@ -289,18 +333,37 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
     setDraft(null);
     setDragId(null);
   };
-  const resetDraft = () => setDraft({ order: defaultIds, hidden: [] });
+  const resetDraft = () => setDraft({ tree: defaultIds.map((id) => ({ kind: "page", id })), hidden: [] });
   const toggleHidden = (id: string) =>
     setDraft((d) =>
       d && { ...d, hidden: d.hidden.includes(id) ? d.hidden.filter((x) => x !== id) : [...d.hidden, id] },
     );
-  const moveTo = (id: string, to: number) => setDraft((d) => d && { ...d, order: moveId(d.order, id, to) });
+  const editTree = (fn: (tree: DraftEntry[]) => DraftEntry[]) =>
+    setDraft((d) => {
+      if (!d) return d;
+      const tree = fn(d.tree);
+      return tree === d.tree ? d : { ...d, tree };
+    });
+  const createFolder = () => {
+    const id = newFolderId();
+    editTree((t) => addFolder(t, id, "New folder"));
+    setFocusFolder(id);
+  };
+  const folderCount = draft ? draft.tree.filter((e) => e.kind === "folder").length : 0;
+
+  // Rows on screen while editing. A lifted folder travels with its pages folded
+  // away, so every row it can pass is a top-level one.
+  const draggingFolder = !!draft && draft.tree.some((e) => e.kind === "folder" && e.id === dragId);
+  const editRows = draft
+    ? flattenDraft(draft.tree).filter((r) => !(draggingFolder && r.parent))
+    : [];
 
   // Pointer drag (mouse + touch). The grabbed row follows the pointer; the
   // others slide out of its way (FLIP). Hit-testing uses each row's untransformed
   // slot (offsetTop ignores transforms) so rows mid-animation never jitter it.
+  // Sideways travel moves a page into (right) or out of (left) the folder above.
   const navRef = useRef<HTMLElement>(null);
-  const grab = useRef<{ offset: number; y: number } | null>(null);
+  const grab = useRef<{ offset: number; y: number; x0: number } | null>(null);
   const lastTops = useRef(new Map<string, number>());
   const [savedFlash, setSavedFlash] = useState(false);
   const reduceMotion = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -323,24 +386,32 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
     // makes room after half a row of travel, never later.
     const dragged = rowRefs.current.get(dragId);
     const probe = e.clientY - grab.current.offset + (dragged?.offsetHeight ?? 0) / 2;
-    let target = draft.order.length - 1;
-    for (const [i, id] of draft.order.entries()) {
-      const el = rowRefs.current.get(id);
+    let target = editRows.length - 1;
+    for (const [i, r] of editRows.entries()) {
+      const el = rowRefs.current.get(r.id);
       if (!el) continue;
       if (probe < slotTop(el) + el.offsetHeight) {
         target = i;
         break;
       }
     }
-    if (target !== draft.order.indexOf(dragId)) moveTo(dragId, target);
-    else positionDragged();
+    const dx = e.clientX - grab.current.x0;
+    const indent = dx > INDENT_PX ? "in" : dx < -INDENT_PX ? "out" : null;
+    const next = draggingFolder
+      ? moveTopLevel(draft.tree, dragId, target)
+      : movePage(draft.tree, dragId, target, indent);
+    if (next !== draft.tree) {
+      // Each sideways step counts once: measure the next one from here.
+      if (indent) grab.current.x0 = e.clientX;
+      editTree(() => next);
+    } else positionDragged();
   };
 
   const startDrag = (e: React.PointerEvent<HTMLButtonElement>, id: string) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     const row = rowRefs.current.get(id);
-    grab.current = { offset: row ? e.clientY - slotTop(row) : 0, y: e.clientY };
+    grab.current = { offset: row ? e.clientY - slotTop(row) : 0, y: e.clientY, x0: e.clientX };
     setDragId(id);
   };
 
@@ -365,23 +436,24 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
       return;
     }
     const animate = !reduceMotion();
-    for (const id of draft.order) {
-      const el = rowRefs.current.get(id);
+    for (const r of flattenDraft(draft.tree)) {
+      const el = rowRefs.current.get(r.id);
       if (!el) continue;
       const top = el.offsetTop;
-      const prev = lastTops.current.get(id);
-      if (animate && prev !== undefined && prev !== top && id !== dragId) {
+      const prev = lastTops.current.get(r.id);
+      if (animate && prev !== undefined && prev !== top && r.id !== dragId) {
         el.animate([{ transform: `translateY(${prev - top}px)` }, { transform: "none" }], {
           duration: 200,
           easing: "cubic-bezier(.2,.8,.2,1)",
         });
       }
-      lastTops.current.set(id, top);
+      lastTops.current.set(r.id, top);
     }
     positionDragged();
-    // Only a reorder moves rows; drag position updates go through positionDragged directly.
+    // Only a reorder (or a folder folding away for a drag) moves rows; drag
+    // position updates go through positionDragged directly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft?.order]);
+  }, [draft?.tree, draggingFolder]);
 
   useEffect(() => {
     if (!savedFlash) return;
@@ -413,6 +485,42 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
   // user's manual collapse preference; otherwise honour the manual toggle.
   const rail = mobileOpen || editing ? false : collapsed || isTabletRail;
   const width = rail ? 60 : 220;
+
+  // What the sidebar shows: hidden pages dropped, folders with nothing left
+  // dropped. The icon rail has no room for folder names, so it lists pages flat.
+  const visible = (item: NavItem) => !saved.hidden.includes(item.id);
+  const shownTree = arrangeTree(NAV_ITEMS, saved).flatMap((e): NavEntry<NavItem>[] => {
+    if (e.kind === "page") return visible(e.item) ? [e] : [];
+    const items = e.items.filter(visible);
+    if (items.length === 0) return [];
+    return rail ? items.map((item) => ({ kind: "page" as const, item })) : [{ ...e, items }];
+  });
+
+  const renderPage = (item: NavItem, inFolder = false) => {
+    const active = isActiveItem(item, pathname);
+    const locked = isLocked(item);
+    const building = isBuilding(item);
+    return (
+      <button
+        key={item.id}
+        onClick={() => handleNav(item)}
+        disabled={locked}
+        className={`sidebar-item ${active ? "sidebar-item-active" : ""} ${inFolder ? "sidebar-item-child" : ""}`}
+        title={building ? `${item.label} — under construction` : rail ? item.label : undefined}
+        style={{ justifyContent: rail ? "center" : "flex-start" }}
+      >
+        <span className="sidebar-icon">{item.icon}</span>
+        {!rail && <span className="sidebar-label">{item.label}</span>}
+        {building && !rail ? (
+          <span className="sidebar-soon">Building</span>
+        ) : item.disabled && !rail ? (
+          <span className="sidebar-soon">Soon</span>
+        ) : null}
+      </button>
+    );
+  };
+
+  const navById = new Map(NAV_ITEMS.map((i) => [i.id, i]));
 
   return (
     <>
@@ -455,30 +563,46 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
             aria-label="Reorder pages"
             onPointerMove={onDragMove}
           >
-            {arrangeNav(NAV_ITEMS, draft.order).map((item, index) => {
-              const hidden = draft.hidden.includes(item.id);
+            {editRows.map((row, index) => {
+              const entry = draft.tree.find((e) => e.id === row.id);
+              const folder = row.kind === "folder" && entry?.kind === "folder" ? entry : undefined;
+              const item = row.kind === "page" ? navById.get(row.id) : undefined;
+              if (!folder && !item) return null;
+              const label = folder ? folder.name || "Folder" : item!.label;
+              const hidden = !!item && draft.hidden.includes(item.id);
+              const topIndex = draft.tree.findIndex((e) => e.id === row.id);
               return (
                 <div
-                  key={item.id}
+                  key={row.id}
                   ref={(el) => {
-                    if (el) rowRefs.current.set(item.id, el);
-                    else rowRefs.current.delete(item.id);
+                    if (el) rowRefs.current.set(row.id, el);
+                    else rowRefs.current.delete(row.id);
                   }}
-                  className={`sidebar-item sidebar-edit-row ${dragId === item.id ? "sidebar-edit-dragging" : ""} ${hidden ? "sidebar-edit-hidden" : ""}`}
+                  className={`sidebar-item sidebar-edit-row ${folder ? "sidebar-edit-folder" : ""} ${row.parent ? "sidebar-item-child" : ""} ${dragId === row.id ? "sidebar-edit-dragging" : ""} ${hidden ? "sidebar-edit-hidden" : ""}`}
                   style={{ "--i": index } as React.CSSProperties}
                 >
                   <button
                     type="button"
                     className="sidebar-grip"
-                    aria-label={`Move ${item.label} (drag, or use the up and down arrow keys)`}
-                    title="Drag to reorder"
-                    onPointerDown={(e) => startDrag(e, item.id)}
+                    aria-label={
+                      folder
+                        ? `Move folder ${label} (drag, or use the up and down arrow keys)`
+                        : `Move ${label} (drag, or arrow keys: up and down to move, right and left into or out of a folder)`
+                    }
+                    title={folder ? "Drag to reorder" : "Drag to reorder — drag right into a folder, left out of it"}
+                    onPointerDown={(e) => startDrag(e, row.id)}
                     onPointerUp={endDrag}
                     onPointerCancel={endDrag}
                     onKeyDown={(e) => {
-                      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                      const up = e.key === "ArrowUp";
+                      if (up || e.key === "ArrowDown") {
                         e.preventDefault();
-                        moveTo(item.id, index + (e.key === "ArrowUp" ? -1 : 1));
+                        if (folder) editTree((t) => moveTopLevel(t, row.id, topIndex + (up ? -1 : 1)));
+                        else editTree((t) => movePage(t, row.id, index + (up ? -1 : 1)));
+                      } else if (!folder && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+                        e.preventDefault();
+                        const indent = e.key === "ArrowRight" ? "in" : "out";
+                        editTree((t) => movePage(t, row.id, index, indent));
                       }
                     }}
                   >
@@ -488,55 +612,104 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
                       <circle cx="4" cy="13" r="1.3" /><circle cx="8" cy="13" r="1.3" />
                     </svg>
                   </button>
-                  <span className="sidebar-icon">{item.icon}</span>
-                  <span className="sidebar-label">{item.label}</span>
-                  <button
-                    type="button"
-                    className="sidebar-eye"
-                    onClick={() => toggleHidden(item.id)}
-                    aria-pressed={!hidden}
-                    aria-label={hidden ? `Show ${item.label}` : `Hide ${item.label}`}
-                    title={hidden ? "Hidden — click to show" : "Click to hide"}
-                  >
-                    {hidden ? (
-                      <svg key="off" className="sidebar-eye-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
-                        <path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z" />
-                        <path d="M2.5 13.5l11-11" />
-                      </svg>
-                    ) : (
-                      <svg key="on" className="sidebar-eye-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
-                        <path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z" />
-                        <circle cx="8" cy="8" r="2" />
-                      </svg>
-                    )}
-                  </button>
+                  {folder ? (
+                    <>
+                      <span className="sidebar-icon">{FOLDER_ICON}</span>
+                      <input
+                        className="sidebar-folder-name"
+                        value={folder.name}
+                        maxLength={40}
+                        aria-label="Folder name"
+                        ref={(el) => {
+                          if (el && focusFolder === folder.id) {
+                            el.focus();
+                            el.select();
+                            setFocusFolder(null);
+                          }
+                        }}
+                        onChange={(e) => {
+                          const name = e.target.value;
+                          editTree((t) => renameFolder(t, folder.id, name));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.currentTarget.blur();
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="sidebar-eye"
+                        onClick={() => editTree((t) => removeFolder(t, folder.id))}
+                        aria-label={`Remove folder ${label} (its pages stay)`}
+                        title="Remove folder — its pages stay"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+                          <path d="M4 4l8 8M12 4l-8 8" />
+                        </svg>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="sidebar-icon">{item!.icon}</span>
+                      <span className="sidebar-label">{label}</span>
+                      <button
+                        type="button"
+                        className="sidebar-eye"
+                        onClick={() => toggleHidden(row.id)}
+                        aria-pressed={!hidden}
+                        aria-label={hidden ? `Show ${label}` : `Hide ${label}`}
+                        title={hidden ? "Hidden — click to show" : "Click to hide"}
+                      >
+                        {hidden ? (
+                          <svg key="off" className="sidebar-eye-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+                            <path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z" />
+                            <path d="M2.5 13.5l11-11" />
+                          </svg>
+                        ) : (
+                          <svg key="on" className="sidebar-eye-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+                            <path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z" />
+                            <circle cx="8" cy="8" r="2" />
+                          </svg>
+                        )}
+                      </button>
+                    </>
+                  )}
                 </div>
               );
             })}
+            <button
+              type="button"
+              className="sidebar-new-folder"
+              onClick={createFolder}
+              disabled={folderCount >= MAX_FOLDERS}
+              title={folderCount >= MAX_FOLDERS ? `Up to ${MAX_FOLDERS} folders` : "Add a folder, then drag pages into it"}
+            >
+              + New folder
+            </button>
           </nav>
         ) : (
         <nav className="sidebar-nav">
-          {arrangeNav(NAV_ITEMS, saved.order).filter((item) => !saved.hidden.includes(item.id)).map((item) => {
-            const active = isActiveItem(item, pathname);
-            const locked = isLocked(item);
-            const building = isBuilding(item);
+          {shownTree.map((entry) => {
+            if (entry.kind === "page") return renderPage(entry.item);
+            const open = !closedFolders.includes(entry.id);
+            const holdsActive = entry.items.some((i) => isActiveItem(i, pathname));
             return (
-              <button
-                key={item.id}
-                onClick={() => handleNav(item)}
-                disabled={locked}
-                className={`sidebar-item ${active ? "sidebar-item-active" : ""}`}
-                title={building ? `${item.label} — under construction` : rail ? item.label : undefined}
-                style={{ justifyContent: rail ? "center" : "flex-start" }}
-              >
-                <span className="sidebar-icon">{item.icon}</span>
-                {!rail && <span className="sidebar-label">{item.label}</span>}
-                {building && !rail ? (
-                  <span className="sidebar-soon">Building</span>
-                ) : item.disabled && !rail ? (
-                  <span className="sidebar-soon">Soon</span>
-                ) : null}
-              </button>
+              <div key={entry.id} className="sidebar-folder" role="group" aria-label={entry.name}>
+                <button
+                  type="button"
+                  onClick={() => toggleFolder(entry.id)}
+                  aria-expanded={open}
+                  className={`sidebar-item sidebar-folder-head ${!open && holdsActive ? "sidebar-folder-holds-active" : ""}`}
+                >
+                  <span className={`sidebar-chevron ${open ? "sidebar-chevron-open" : ""}`} aria-hidden>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path d="M3.5 2l3 3-3 3" />
+                    </svg>
+                  </span>
+                  <span className="sidebar-label">{entry.name}</span>
+                  {!open && <span className="sidebar-folder-count">{entry.items.length}</span>}
+                </button>
+                {open && entry.items.map((item) => renderPage(item, true))}
+              </div>
             );
           })}
         </nav>
