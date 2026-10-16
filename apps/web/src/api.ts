@@ -20,7 +20,8 @@ export type { PreschedulingResult, PreschedulingCase, WaitLevel } from "@case-pi
 export type { PendingContractsResult, PendingContract, ContractStep } from "@case-pipeline/query";
 export type { CourtCasesResult, CourtCase, CourtCaseFlag, Readiness, CaseMotion, CourtMotion, MotionFlag, MotionPhase } from "@case-pipeline/query";
 import type { CaseTimeline } from "@case-pipeline/query";
-export type { CaseTimeline, TimelineEvent, TimelineEventStatus, TimelineNote, TimelineTrack, TimelineKind } from "@case-pipeline/query";
+import type { BoardColumn as QueryBoardColumn } from "@case-pipeline/query/types";
+export type { CaseTimeline, TimelineEvent, TimelineEventStatus, TimelineFix, TimelineNote, TimelineTrack, TimelineKind } from "@case-pipeline/query";
 export type { AddressChangesResult, AddressChange, AddressChangePhase, AddressChangeFlag } from "@case-pipeline/query";
 export type { FoiasResult, Foia, FoiaPhase, FoiaFlag } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
@@ -565,6 +566,23 @@ export async function fetchClientRelationships(localId: string): Promise<Relatio
 }
 
 /** P3.9 — the client's case as dated milestones + a short summary. */
+/** One timeline event's Monday item for the event panel (M29); mirrors routes/case-timeline.ts. */
+export interface TimelineItem {
+  localId: string;
+  boardKey: string;
+  boardName: string;
+  name: string;
+  status: string | null;
+  group: string | null;
+  mondayBoardId: string | null;
+  mondayItemId: string | null;
+  fields: (Omit<QueryBoardColumn, "position"> & { key: string; value: string; primary: boolean })[];
+}
+
+export async function fetchTimelineItem(localId: string): Promise<TimelineItem> {
+  return apiFetch<TimelineItem>(`/api/timeline/items/${encodeURIComponent(localId)}`);
+}
+
 export async function fetchCaseTimeline(localId: string): Promise<CaseTimeline> {
   return apiFetch<CaseTimeline>(`/api/clients/${encodeURIComponent(localId)}/timeline`);
 }

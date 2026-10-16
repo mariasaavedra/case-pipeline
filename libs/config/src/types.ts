@@ -70,6 +70,12 @@ export interface TimelineBoardConfig {
   /** Skip items whose name contains this text. */
   skip_name?: string;
   milestones?: TimelineMilestoneConfig[];
+  /**
+   * Columns (logical keys) the event panel shows first, before the item's
+   * other fields: what a rule reads. A milestone's own column and `status`
+   * are always included.
+   */
+  edit?: string[];
 }
 
 export interface TimelineActivityConfig {
