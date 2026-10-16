@@ -1,9 +1,22 @@
 # LawPay payments → Fee Ks
 
 Decided 2026-10-16. Until now a payment was known from LawPay's receipt e-mail to
-rafael@sharma-crawford.com. Now the app reads those receipts and updates the Fee K.
-(LawPay webhooks need someone with LawPay developer access, which we don't have,
-so the receipts are the source.)
+rafael@sharma-crawford.com or the "Payment Bot" posts in Slack **#payments**. Now
+the app reads them and updates the Fee K. (LawPay webhooks need LawPay developer
+access, which we don't have.)
+
+**Source, preferred: Slack #payments** (`LAWPAY_SLACK=on`). The app's Slack bot
+is in the channel and may read its history, so it needs no Microsoft admin
+approval. Every 2 minutes `apps/api/src/lawpay/slack-job.ts` reads new posts,
+keeps the LawPay "Payment Bot" transactions (`lawpay/slack.ts`; "Paypal Bot"
+consult payments are skipped) and applies each post once (`lawpay_events.source
+= slack:<ts>`; how far it has read: `data/lawpay-slack-cursor.json`). Check
+first, read-only: `npm run lawpay:slack` lists each payment with the Fee K it
+would match and how.
+
+**Source, fallback: the receipt e-mails** (`LAWPAY_MAIL=on`), below — waits on
+admin consent for Mail.Read. Use one source at a time; a payment seen in both is
+still applied once.
 
 ## What happens
 
@@ -23,7 +36,7 @@ A receipt the app can't tie to a Fee K → Slack **"Payment to match"**; nothing
 written to Monday. Refunds are recorded only. A second copy of the same payment
 (same LawPay transaction id, or the same e-mail) does nothing.
 
-## How it gets the receipts
+## The e-mail source (fallback)
 
 1. rafael@'s Outlook rule forwards LawPay receipts to
    **importantdocuments@sharma-crawford.com** (and keeps a copy).

@@ -38,7 +38,7 @@ export const NOTIFY_EVENTS = [
   { key: "ops_consult_sweep", kind: "ops", label: "Consult sweep failed", description: "The consult-folder / summary sweep failed" },
   { key: "ops_drive_intake", kind: "ops", label: "Drive intake failed", description: "Copying client uploads from Google Drive failed" },
   { key: "ops_fee_k_autofill", kind: "ops", label: "Fee K auto-fill failed", description: "The Fee K auto-fill run failed" },
-  { key: "ops_lawpay_mail", kind: "ops", label: "LawPay receipts failed", description: "Reading LawPay receipts from the importantdocuments@ inbox failed (often: the sign-in needs --login again)" },
+  { key: "ops_lawpay_mail", kind: "ops", label: "LawPay payments failed", description: "Reading LawPay payments (Slack #payments or the receipts inbox) failed" },
   { key: "ops_backup", kind: "ops", label: "Backup failed", description: "The daily database backup failed" },
 ] as const satisfies readonly NotifyEventDef[];
 
