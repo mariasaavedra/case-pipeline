@@ -642,6 +642,21 @@ export async function sendContractForSignature(
   });
 }
 
+/**
+ * Record the LawPay links M21 hands out (routes/lawpay.ts), so the payment
+ * LawPay reports back finds its Fee K. Best-effort: never blocks staff.
+ */
+export async function recordPaymentLinks(
+  localId: string,
+  info: { channel: "email" | "text" | "copy" | "mark"; method: string | null; links: { fee: "AF" | "PF" | "FF"; amount: number; reference: string }[] },
+): Promise<void> {
+  if (info.links.length === 0) return;
+  const headers = { ...(await authHeaders()), "Content-Type": "application/json" };
+  await fetch(`/api/contracts/${encodeURIComponent(localId)}/payment-links`, {
+    method: "POST", headers, body: JSON.stringify(info),
+  }).catch(() => {});
+}
+
 /** Audit a generated contract (template name + fees only). Best-effort. */
 export async function logContractGenerated(
   localId: string,
