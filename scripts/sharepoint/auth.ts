@@ -38,6 +38,12 @@ const DEFAULT_CLIENT_ID = "2b0a7d88-6a8b-4913-90a7-9926fd8f6335";
 
 /** offline_access is what makes the refresh token — without it every run prompts. */
 const SCOPES = "https://graph.microsoft.com/Files.ReadWrite.All offline_access";
+/**
+ * Reading mail (scripts/lawpay-mail.ts: LawPay receipts forwarded to this
+ * account). Asked for separately so the files token above never depends on it:
+ * a sign-in without Mail.Read keeps SharePoint working. Added 2026-10-16.
+ */
+export const MAIL_SCOPES = "https://graph.microsoft.com/Mail.Read offline_access";
 
 const TOKEN_CACHE = path.join("data", ".graph-token.json");
 
@@ -99,11 +105,13 @@ export function cachedAccount(): string | null {
  * Run the device code flow, printing the code for the operator. Blocks until
  * they finish signing in, then stores the refresh token.
  */
-export async function deviceLogin(): Promise<void> {
+export async function deviceLogin(opts: { mail?: boolean } = {}): Promise<void> {
+  // With mail: one sign-in consents to both; the refresh token then serves each.
+  const scope = opts.mail ? `${SCOPES} https://graph.microsoft.com/Mail.Read` : SCOPES;
   const res = await fetch(`https://login.microsoftonline.com/${tenantId()}/oauth2/v2.0/devicecode`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: clientId(), scope: SCOPES }),
+    body: new URLSearchParams({ client_id: clientId(), scope }),
   });
   const flow = (await res.json()) as {
     device_code?: string; user_code?: string; verification_uri?: string;
@@ -180,6 +188,8 @@ function accountFrom(accessToken: string): string | null {
 class DeviceCodeAuth implements GraphAuth {
   private token: { value: string; expiresAt: number } | null = null;
 
+  constructor(private readonly scopes: string = SCOPES) {}
+
   async getToken(): Promise<string> {
     if (this.token && Date.now() < this.token.expiresAt) return this.token.value;
 
@@ -210,7 +220,7 @@ class DeviceCodeAuth implements GraphAuth {
         grant_type: "refresh_token",
         client_id: clientId(),
         refresh_token: refreshToken,
-        scope: SCOPES,
+        scope: this.scopes,
       }),
     });
     const body = (await res.json()) as TokenResponse;
@@ -281,4 +291,9 @@ class AppOnlyAuth implements GraphAuth {
 export function graphAuthFromEnv(): GraphAuth {
   const secret = process.env.GRAPH_CLIENT_SECRET?.trim();
   return secret ? new AppOnlyAuth(secret) : new DeviceCodeAuth();
+}
+
+/** Delegated Mail.Read as the signed-in account (needs `--login --mail` once). */
+export function graphMailAuthFromEnv(): GraphAuth {
+  return new DeviceCodeAuth(MAIL_SCOPES);
 }

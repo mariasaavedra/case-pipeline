@@ -1,7 +1,7 @@
 // =============================================================================
 // Staff roster — who works here, in which role, under which names
 // =============================================================================
-// One row per person (users.db `staff`, schema v14), whether or not they ever
+// One row per person (users.db `staff`, schema v15), whether or not they ever
 // sign in. Every name the boards use for them is an alias, so a Monday people
 // column ("Mayra Ruiz"), a legacy paralegal_link ("mayra ruiz ") and the Azure
 // display name all land on the same person. resolveStaffByName is THE name

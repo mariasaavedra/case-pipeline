@@ -31,3 +31,13 @@ export const loginRequest = {
 export const graphRequest = {
   scopes: ["Files.ReadWrite.All"],
 };
+
+/**
+ * Sending e-mail as the signed-in person (M21 "Email links to client"), from
+ * their own Outlook so it sits in their Sent Items. Asked for only when someone
+ * first sends; needs the delegated Mail.Send permission on the app registration
+ * (admin consent), added 2026-10-16.
+ */
+export const mailRequest = {
+  scopes: ["Mail.Send"],
+};

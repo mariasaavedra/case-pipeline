@@ -17,6 +17,10 @@
 # Tracks: court · uscis · fees · meetings · notes
 # Kinds:  milestone · filing · decision · hearing · deadline · meeting · call · note
 #
+# `edit` (optional): columns the event panel shows first when someone clicks an
+# event, before the item's other fields. A milestone's column and `status` are
+# always first; list here what a rule reads (rules have no milestone columns).
+#
 # Rows whose name contains "(copy)" are skipped everywhere (Monday duplicates).
 #
 # Rules that need more than a date + label (court outcome from the item name,
@@ -29,6 +33,7 @@ boards:
   court_cases:
     track: court
     rule: court_outcome
+    edit: [case_prep_status]
     milestones:
       - { column: nta_date, kind: milestone, label: "NTA issued" }
       - { column: app_filed, kind: filing, label: "{relief|Application} filed with court" }
@@ -39,14 +44,20 @@ boards:
   calendaring:
     track: court
     rule: calendaring
+    # Status is the hearing's outcome (ATTENDED, RECHED/ CONT/ … NOT HAPPENING,
+    # WITHDREW, VISITING IJ NO SHOW); "Needs attention" asks for it.
+    edit: [hearing_date_calendaring, interview_date, due_date, calendaring_quick_note]
 
   appeals:
     track: court
     rule: appeal
+    edit: [appeal_due, appeal_filed_on]
 
   motions:
     track: court
     rule: motion
+    # Granted / Denied + Dec. Date record the judge's decision.
+    edit: [mtn_filed_on, dec_date]
 
   address_changes:
     track: court
@@ -59,6 +70,7 @@ boards:
   # the court case's hearing, which Calendaring already shows.
   litigation:
     track: court
+    edit: [status_of_complaint, work_due, current_status]
     milestones:
       - { column: due_date, kind: deadline, label: "{type_of_case|Federal case}: {work_due|work} due" }
       - { column: hearing_date, kind: milestone, label: "{type_of_case|Federal case} hearing (federal court)" }
@@ -77,6 +89,8 @@ boards:
   rfes_all:
     track: uscis
     rule: rfe
+    # Its dates mirror Calendaring (read-only here); Status records the
+    # response — "Sent out" meets the deadline (see the rfe rule).
 
   _na_originals_cards_notices:
     track: uscis
@@ -119,6 +133,7 @@ boards:
   appointments_*:
     track: meetings
     rule: appointment
+    edit: [consult_date]
 
 # Fee Ks live in the contracts table, not board_items.
 contracts:

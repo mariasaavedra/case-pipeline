@@ -28,6 +28,7 @@ import type { TimelineFilter } from "./TimelineFilters";
 import { UpdatesTimeline } from "./UpdatesTimeline";
 import { DocumentsTab } from "./DocumentsTab";
 import { ContractsTab } from "./ContractsTab";
+import { CaseTimelineTab } from "./CaseTimelineTab";
 import { Link } from "./Link";
 import { clientPath } from "../router";
 import { ClientHeaderSticky } from "./ClientHeaderSticky";
@@ -49,7 +50,7 @@ interface Props {
   allowOpenFullView?: boolean;
 }
 
-type Panel = "notes" | "documents" | "contracts";
+type Panel = "notes" | "timeline" | "documents" | "contracts";
 
 export function ClientCaseModal({
   profileLocalId,
@@ -120,8 +121,8 @@ export function ClientCaseModal({
         )}
         <DialogDescription className="sr-only">
           {allowOpenFullView
-            ? "Notes, documents and contracts for this client"
-            : "Notes, documents and contracts — the call you are logging stays open behind this"}
+            ? "Notes, timeline, documents and contracts for this client"
+            : "Notes, timeline, documents and contracts — the call you are logging stays open behind this"}
         </DialogDescription>
 
         {error ? (
@@ -155,6 +156,17 @@ export function ClientCaseModal({
                 onClick={() => setPanel("notes")}
               >
                 Notes
+              </button>
+              <button
+                role="tab"
+                id="case-tab-timeline"
+                aria-selected={panel === "timeline"}
+                aria-controls="case-panel-timeline"
+                className="tab-button"
+                style={{ padding: "8px 14px", fontSize: 13 }}
+                onClick={() => setPanel("timeline")}
+              >
+                Timeline
               </button>
               <button
                 role="tab"
@@ -205,6 +217,13 @@ export function ClientCaseModal({
                     filter={notesFilter}
                     loading={feed === null && data === null}
                   />
+                </div>
+              ) : panel === "timeline" ? (
+                // The 360 view's Timeline tab (P3.9) itself: where the case
+                // stands, what needs attention and what's next, with the same
+                // event panel (M29) for recording an outcome mid-call.
+                <div role="tabpanel" id="case-panel-timeline" aria-labelledby="case-tab-timeline">
+                  <CaseTimelineTab profileLocalId={profileLocalId} />
                 </div>
               ) : panel === "documents" ? (
                 <div role="tabpanel" id="case-panel-documents" aria-labelledby="case-tab-documents">

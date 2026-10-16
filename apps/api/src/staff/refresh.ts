@@ -38,7 +38,7 @@ export async function runStaffRefresh(caseDb: BetterSqlite3.Database, token: str
   return { ...result, mondaySkipped };
 }
 
-/** First boot after v14: fill an empty roster so My Cases / My Day keep working. */
+/** First boot after v15: fill an empty roster so My Cases / My Day keep working. */
 export function seedStaffIfEmpty(caseDb: BetterSqlite3.Database, token: string | undefined): void {
   const { n } = usersDb.prepare("SELECT COUNT(*) AS n FROM staff").get() as { n: number };
   if (n > 0) return;

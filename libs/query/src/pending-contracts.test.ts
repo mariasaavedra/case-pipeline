@@ -182,3 +182,25 @@ describe("nextContractStep", () => {
     expect(nextContractStep("Payment link sent")).toBeNull();
   });
 });
+
+describe("payment links after an app-sent contract is signed", () => {
+  test("Payment Method, and the signer's e-mail only for a contract signed in Adobe from the app", () => {
+    const db = freshDb();
+    insertFeeK(db, { localId: "app", stage: "Needs Payment Link" });
+    insertFeeK(db, { localId: "manual", stage: "Needs Payment Link" });
+    insertFeeK(db, { localId: "pending", stage: "Atty Reviewing" });
+    db.prepare("UPDATE contracts SET monday_item_id = local_id || '-m'").run();
+    db.prepare("UPDATE contracts SET raw_column_values = json_set(raw_column_values, '$.payment_method', json(?)) WHERE local_id = 'app'")
+      .run(JSON.stringify({ labels: ["CREDIT Card - Surcharge Applies"] }));
+    const agreement = db.prepare(`INSERT INTO esign_agreements
+      (contract_local_id, contract_monday_id, client_name, client_email, attorney_email, file_token, status)
+      VALUES (?, ?, 'Ana LOPEZ', ?, 'atty@firm.com', ?, ?)`);
+    agreement.run("app", "app-m", "ana@mail.com", "t1", "signed");
+    agreement.run("pending", "pending-m", "ana@mail.com", "t2", "out_for_signature");
+
+    const by = Object.fromEntries(get(db).contracts.map((c) => [c.localId, c]));
+    expect(by.app).toMatchObject({ paymentMethod: "CREDIT Card - Surcharge Applies", signedInApp: { clientEmail: "ana@mail.com" } });
+    expect(by.manual).toMatchObject({ paymentMethod: null, signedInApp: null });
+    expect(by.pending!.signedInApp).toBeNull(); // not signed yet
+  });
+});

@@ -147,11 +147,42 @@ The receiver URL used in Zaps 1–3 is `https://app.ra-codel.com/api/webhooks/za
 
 1. **Adobe Acrobat Sign → Agreement Signed by All Participants.**
 2. **Adobe Acrobat Sign → Create a PDF of Signed Agreement.** Agreement ID = from step 1.
-3. **Webhooks by Zapier → POST** to the receiver URL. Payload Type = json. Data:
+3. **Adobe Acrobat Sign → Find Form Field Data of Agreement in JSON Format** (a
+   search step). Agreement ID = from step 1. Added 2026-10-16: it carries the
+   client's Credit / Debit / Cash pick (the `PayMethod` radio buttons).
+4. **Webhooks by Zapier → POST** to the receiver URL. Payload Type = json. Data:
    - `event` = `signed_pdf`
    - `agreementId` = from step 1
    - `agreementName` = from step 1
    - `pdfUrl` = the file from step 2
+   - `formData` = the form data from step 3 (the whole JSON; the app finds the
+     PayMethod field in it, whatever its shape — `payMethodFrom` in
+     `apps/api/src/esign/events.ts`)
+
+## Payment links after signing (decided 2026-10-16)
+
+Only for contracts sent from the app (M22) and signed by everyone in Adobe.
+
+1. Zap 3's `formData` → the client's pick fills the Fee K's **Payment Method**
+   (`CREDIT Card - Surcharge Applies` / `DEBIT Card` / `Cash`) when it's empty;
+   a label staff set (e.g. `SPLIT PAYMENTS`) stays and the note flags the
+   difference. Credit also sets off the Fee K auto-fill's 3% surcharge columns.
+   A note on the Fee K says the links are ready (or, for cash, that none are
+   needed). Repeats are no-ops.
+2. P14 → ⋯ → **Payment links** (M21) shows how the client pays and the links:
+   by credit card **each link carries its own 3%** (AF + 3% and PF + 3% into
+   Operating, FF + 3% into Trust; the user's choice over a separate surcharge
+   link), debit the fee as is, cash no links.
+3. **Email links to client** — the one-click check while this is new: staff see
+   the amounts and a preview, then the app sends one English + Spanish e-mail
+   (`apps/web/src/lib/payment-email.ts`) **from the staff member's own Outlook**
+   (Microsoft Graph `/me/sendMail`, kept in their Sent Items) to the address the
+   client signed with, and records **Payment link sent** (stage + Payment Link
+   Sent On). No Zapier in this step.
+
+Setup: the app registration (client id `2b0a7d88-…`) needs the **delegated
+Microsoft Graph `Mail.Send`** permission with admin consent. Each person
+allows it once, the first time they press the button.
 
 Event names the app understands (case and punctuation don't matter): the Adobe
 ones (`AGREEMENT_ACTION_COMPLETED`, `AGREEMENT_WORKFLOW_COMPLETED`,
