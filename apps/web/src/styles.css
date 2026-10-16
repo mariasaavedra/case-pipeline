@@ -759,6 +759,111 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* G1 folders — a user's group of pages, one level deep */
+.sidebar-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-folder-head {
+  gap: 6px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.sidebar-chevron {
+  display: flex;
+  width: 20px;
+  justify-content: center;
+  transition: transform 0.15s ease;
+}
+
+.sidebar-chevron-open {
+  transform: rotate(90deg);
+}
+
+.sidebar-folder-count {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0;
+}
+
+/* A closed folder holding the page you're on */
+.sidebar-folder-holds-active,
+.sidebar-folder-holds-active:hover:not(:disabled) {
+  color: var(--color-amber);
+}
+
+.sidebar-item-child {
+  padding-left: 26px;
+}
+
+.sidebar-edit-row.sidebar-item-child {
+  padding-left: 20px;
+  transition: opacity 0.2s ease, filter 0.2s ease, background-color 0.15s ease, box-shadow 0.15s ease, padding-left 0.15s ease;
+}
+
+.sidebar-edit-folder {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.sidebar-folder-name {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+}
+
+.sidebar-folder-name:focus {
+  outline: none;
+  border-color: var(--color-amber);
+}
+
+.sidebar-new-folder {
+  margin: 4px 0 2px;
+  padding: 6px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-new-folder:hover:not(:disabled) {
+  color: var(--color-amber);
+  border-color: rgba(180, 83, 9, 0.6);
+}
+
+.sidebar-new-folder:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-chevron {
+    transition: none;
+  }
+}
+
 /* G1 Customize mode — reorder (grip) + hide (eye) */
 .sidebar-nav-editing {
   position: relative; /* rows' offsetTop is measured against the list */

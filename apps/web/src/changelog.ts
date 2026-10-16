@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-16",
+    title: "Sidebar: folders for your pages",
+    items: [
+      "In Customize (bottom of the sidebar), “+ New folder” makes a folder. Name it, then drag pages into it.",
+      "Drag a page onto a folder's pages to put it inside; drag it to the right or left to move it into or out of the folder just above.",
+      "Click a folder's name in the sidebar to fold it away; it shows how many pages it holds.",
+      "Removing a folder (the ×) keeps its pages. Your folders are saved to your account, so they follow you to other computers.",
+    ],
+  },
+  {
+    date: "2026-10-16",
     title: "Timeline: FOIAs, NVC, I-918Bs and federal cases",
     items: [
       "The Timeline tab now also shows FOIAs (filed and results received), NVC notices, I-918B certifications (requested, signed, expires) and federal cases (work due, hearings).",
