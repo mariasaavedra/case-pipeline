@@ -62,6 +62,59 @@ export const agreementNameFor = (clientName: string, id: number) =>
 export const agreementNameOf = (documentName: string | null, clientName: string, id: number) =>
   documentName ? `${documentName} [CP-${id}]` : agreementNameFor(clientName, id);
 
+export type PayMethod = "credit" | "debit" | "cash";
+
+/** The Fee K's Payment Method label (config/boards.yaml fee_ks.payment_method) for each pick. */
+export const PAY_METHOD_LABELS: Record<PayMethod, string> = {
+  credit: "CREDIT Card - Surcharge Applies",
+  debit: "DEBIT Card",
+  cash: "Cash",
+};
+
+const asPayMethod = (v: unknown): PayMethod | null => {
+  const s = typeof v === "string" ? v.toLowerCase() : "";
+  return /credit|cr[eé]dito/.test(s) ? "credit" : /debit|d[eé]bito/.test(s) ? "debit" : /cash|efectivo/.test(s) ? "cash" : null;
+};
+
+/**
+ * The client's Credit / Debit / Cash pick in the signed contract (the
+ * PayMethod radio group in every template), from Zap 3's "Find Form Field Data
+ * of Agreement in JSON Format" — or a plain `payMethod` value. Adobe's exact
+ * JSON shape isn't documented, so any key named like PayMethod is read, at any
+ * depth, in an object, an array or a JSON string.
+ */
+export function payMethodFrom(raw: unknown, depth = 0): PayMethod | null {
+  if (depth > 6 || raw === null || raw === undefined) return null;
+  if (typeof raw === "string") {
+    const t = raw.trim();
+    if (/^[[{]/.test(t)) {
+      try { return payMethodFrom(JSON.parse(t), depth + 1); } catch { /* not JSON — read as text */ }
+    }
+    // CSV, as Adobe's form-data download is: field names on line 1, values on line 2.
+    const [head, values] = t.split(/\r?\n/);
+    if (head && values !== undefined) {
+      const cells = (line: string) => line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+      const at = cells(head).findIndex((h) => /^pay_?method$/i.test(h.replace(/\s/g, "")));
+      if (at >= 0) return asPayMethod(cells(values)[at]);
+    }
+    const m = /pay_?method["']?\s*[:=]\s*["']?([a-zéá]+)/i.exec(t);
+    return m ? asPayMethod(m[1]) : depth === 0 ? asPayMethod(t) : null;
+  }
+  if (Array.isArray(raw)) {
+    for (const x of raw) { const hit = payMethodFrom(x, depth + 1); if (hit) return hit; }
+    return null;
+  }
+  if (typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    for (const [k, v] of Object.entries(o)) if (/^pay_?method$/i.test(k.replace(/\s/g, ""))) { const hit = asPayMethod(v); if (hit) return hit; }
+    // { name: "PayMethod", value: "Credit" } pairs.
+    const name = Object.values(o).find((v) => typeof v === "string" && /^pay_?method$/i.test(v));
+    if (name) for (const v of Object.values(o)) { const hit = v === name ? null : asPayMethod(v); if (hit) return hit; }
+    for (const v of Object.values(o)) { const hit = typeof v === "object" ? payMethodFrom(v, depth + 1) : null; if (hit) return hit; }
+  }
+  return null;
+}
+
 /** The signed copy's file name (no extension), from the agreement name on Zap 3's event. */
 export function signedDocumentName(agreementName: string | null | undefined, clientName: string): string {
   const base = (agreementName ?? "").replace(/\s*\[CP-\d+\]\s*$/i, "").trim();

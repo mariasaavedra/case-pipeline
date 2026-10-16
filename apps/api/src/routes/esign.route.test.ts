@@ -209,6 +209,34 @@ describe("Adobe Sign via Zapier", () => {
     await vi.waitFor(() => expect(String(calls.find((c) => c.op === "update")?.body)).toContain("E-File: FEE Ks / x.pdf"));
   });
 
+  it("the client's Credit / Debit / Cash pick fills an empty Payment Method, once, and tells staff", async () => {
+    await send();
+    await event({ event: "sent", ref: "CP-1", agreementId: "A1" });
+    calls = [];
+    await event({ event: "AGREEMENT_WORKFLOW_COMPLETED", agreementId: "A1", formData: JSON.stringify({ PayMethod: "Credit" }) });
+    expect(calls.find((c) => c.op === "columns" && (c.values as Record<string, unknown>).dropdown_mm7v5eeb)).toMatchObject({
+      itemId: "555", values: { dropdown_mm7v5eeb: { labels: ["CREDIT Card - Surcharge Applies"] } },
+    });
+    expect(calls.filter((c) => c.op === "update").map((c) => String(c.body)).join("\n")).toContain("chose to pay by credit card. Payment links are ready");
+    const local = db.prepare("SELECT json_extract(raw_column_values, '$.payment_method.labels[0]') AS m FROM contracts WHERE local_id = 'c1'").get() as { m: string };
+    expect(local.m).toBe("CREDIT Card - Surcharge Applies");
+
+    // Zap 3 repeats it with the signed copy: nothing new.
+    calls = [];
+    await event({ event: "AGREEMENT_WORKFLOW_COMPLETED", agreementId: "A1", formData: { PayMethod: "Credit" } });
+    expect(calls.filter((c) => c.op === "columns" || c.op === "update")).toEqual([]);
+  });
+
+  it("a Payment Method staff already set stays; the note flags the difference", async () => {
+    db.prepare("UPDATE contracts SET raw_column_values = json_set(raw_column_values, '$.payment_method', json(?)) WHERE local_id = 'c1'")
+      .run(JSON.stringify({ labels: ["SPLIT PAYMENTS"] }));
+    await send();
+    calls = [];
+    await event({ event: "AGREEMENT_REJECTED", ref: "CP-1", formData: "PayMethod\nCash" });
+    expect(calls.find((c) => c.op === "columns" && (c.values as Record<string, unknown>).dropdown_mm7v5eeb)).toBeUndefined();
+    expect(calls.map((c) => String(c.body ?? "")).join("\n")).toContain('says "SPLIT PAYMENTS" — left as it is');
+  });
+
   it("needs two different e-mails", async () => {
     expect((await send("attorneyEmail=atty@firm.com&clientEmail=")).status).toBe(400);
     expect((await send("attorneyEmail=a@b.com&clientEmail=A@b.com")).status).toBe(400);

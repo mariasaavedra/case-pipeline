@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { agreementNameFor, agreementNameOf, classifyEsignEvent, esignRefOf, planEsignEvent, signedDocumentName, type EsignRow } from "./events";
+import { agreementNameFor, agreementNameOf, classifyEsignEvent, esignRefOf, payMethodFrom, planEsignEvent, signedDocumentName, type EsignRow } from "./events";
 
 const row = (status: EsignRow["status"]): EsignRow => ({
   status, attorney_email: "atty@firm.com", client_email: "client@mail.com", client_name: "Ana Pérez",
@@ -29,6 +29,23 @@ describe("esignRefOf", () => {
     expect(esignRefOf("CP-12")).toBe(12);
     expect(esignRefOf(undefined, agreementNameFor("Ana  Pérez", 7))).toBe(7);
     expect(esignRefOf(null, "Some other agreement")).toBeNull();
+  });
+});
+
+describe("payMethodFrom (Zap 3's form field data)", () => {
+  it("reads the PayMethod radio in whatever shape Adobe sends", () => {
+    expect(payMethodFrom({ PayMethod: "Credit" })).toBe("credit");
+    expect(payMethodFrom('{"PayMethod":"Debit","Sig_es_":""}')).toBe("debit");
+    expect(payMethodFrom([{ fieldName: "PayMethod", value: "Cash" }])).toBe("cash");
+    expect(payMethodFrom({ data: [{ "Pay Method": "x", PayMethod: "Credit" }] })).toBe("credit");
+    expect(payMethodFrom("PayMethod,Email\nDebit,ana@mail.com")).toBe("debit");
+    expect(payMethodFrom("Credit")).toBe("credit"); // a plain payMethod value
+  });
+  it("nothing chosen, or no such field → null", () => {
+    expect(payMethodFrom({ PayMethod: "" })).toBeNull();
+    expect(payMethodFrom({ Name: "Credit Union" })).toBeNull();
+    expect(payMethodFrom(null)).toBeNull();
+    expect(payMethodFrom('{"Email":"ana@mail.com"}')).toBeNull();
   });
 });
 

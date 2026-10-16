@@ -46,6 +46,12 @@ M21 makes one link per fee on the contract. The description starts as
 "client name + Contract for…" and amounts from Monday's AF / PF / FF; both are
 editable before copying.
 
+How the client pays sets the amounts (since 2026-10-16): by credit card each
+link carries its own 3%, debit the fee as is, cash no links — from the Fee K's
+Payment Method, changeable in M21. A contract sent from the app and signed in
+Adobe also gets **Email links to client**: one English + Spanish e-mail from the
+staff member's own Outlook. See [esign-zapier.md](esign-zapier.md#payment-links-after-signing-decided-2026-10-16).
+
 ## Generating the contract (M22)
 
 Decided 2026-10-05: **the templates live in SharePoint and staff maintain them
