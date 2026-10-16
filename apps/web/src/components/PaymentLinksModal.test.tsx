@@ -16,6 +16,12 @@ const mocks = vi.hoisted(() => ({
   props: null as null | Record<string, unknown>,
   mail: [] as { to: string; subject: string; html: string; interactive: boolean }[],
   needConsent: false,
+  recorded: [] as { localId: string; info: { channel: string; method: string | null; links: { fee: string; amount: number; reference: string }[] } }[],
+}));
+
+vi.mock("../api", async (orig) => ({
+  ...(await orig<typeof import("../api")>()),
+  recordPaymentLinks: async (localId: string, info: (typeof mocks.recorded)[number]["info"]) => { mocks.recorded.push({ localId, info }); },
 }));
 
 vi.mock("../auth/useAuth", () => ({ useAuth: () => ({ user: { name: "Mayra Ruiz" } }) }));
@@ -66,6 +72,7 @@ beforeEach(() => {
   mocks.props = null;
   mocks.mail = [];
   mocks.needConsent = false;
+  mocks.recorded = [];
 });
 
 describe("PaymentLinksModal → Text links to client", () => {
@@ -129,6 +136,12 @@ describe("PaymentLinksModal → Email links to client (contracts signed in the a
     expect(mocks.mail[0]!.html).toContain("Honorarios de abogado");
     expect(onMarkSent).toHaveBeenCalledTimes(1);
     expect(document.body.textContent).toContain("E-mailed to the client and marked sent");
+    // Recorded, so LawPay's payment finds this Fee K (the references in the e-mail, exactly).
+    expect(mocks.recorded).toEqual([{ localId: "c1", info: { channel: "email", method: "credit", links: [
+      { fee: "AF", amount: 4120, reference: "ANA LOPEZ I-212 - AF 4120" },
+      { fee: "FF", amount: 1210.25, reference: "ANA LOPEZ I-212 - FF 1210.25" },
+    ] } }]);
+    expect(mocks.mail[0]!.html).toContain(encodeURIComponent("ANA LOPEZ I-212 - AF 4120"));
   });
 
   it("first time: asks to allow Outlook sending, then sends from that click", async () => {

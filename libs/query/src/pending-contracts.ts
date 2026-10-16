@@ -20,6 +20,8 @@ import { makeStaffNames, type StaffResolver } from "./staff-names";
 
 export interface PendingContract {
   localId: string;
+  /** The Fee K's Monday id (its short form is the "K…" code in LawPay references). */
+  mondayItemId: string | null;
   clientName: string;
   clientLocalId: string | null;
   /** The Monday item's own name ("Areli REYES for … (copy)"). */
@@ -219,6 +221,7 @@ function stageRank(stage: string): number {
 // =============================================================================
 
 interface RawRow {
+  mondayItemId: string | null;
   localId: string;
   name: string;
   clientLocalId: string | null;
@@ -267,6 +270,7 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
   const rows = db.prepare(`
     SELECT
       c.local_id AS localId,
+      c.monday_item_id AS mondayItemId,
       c.name,
       p.local_id AS clientLocalId,
       p.name     AS clientName,
@@ -306,6 +310,7 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
     const attorneyFee = toAmount(r.af);
     return {
       localId: r.localId,
+      mondayItemId: r.mondayItemId ?? null,
       clientName: r.clientName ?? r.name,
       clientLocalId: r.clientLocalId,
       itemName: r.name,

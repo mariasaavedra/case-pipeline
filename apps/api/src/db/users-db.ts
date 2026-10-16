@@ -357,6 +357,52 @@ const MIGRATIONS: Migration[] = [
     },
   },
   {
+    // LawPay payments → Fee Ks (routes/lawpay.ts, 2026-10-16).
+    // payment_links: every LawPay link M21 hands out (e-mailed, texted, copied or
+    //   marked sent), keyed by its exact reference, so a payment finds its Fee K
+    //   and fee. paid_* is stamped when LawPay reports it paid.
+    // lawpay_events: every LawPay receipt e-mail read (source = the e-mail's id;
+    //   only the fields read, never the card) + what the app did with it.
+    version: 14,
+    up: () => {
+      usersDb.exec(`
+        CREATE TABLE IF NOT EXISTS payment_links (
+          id                  INTEGER PRIMARY KEY,
+          created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+          user_id             INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          contract_local_id   TEXT NOT NULL,
+          contract_monday_id  TEXT,
+          client_name         TEXT NOT NULL,
+          fee_type            TEXT NOT NULL,
+          amount              REAL NOT NULL,
+          reference           TEXT NOT NULL,
+          method              TEXT,
+          channel             TEXT NOT NULL,
+          paid_at             TEXT,
+          paid_event_id       INTEGER
+        )
+      `);
+      usersDb.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_links_ref ON payment_links(contract_local_id, reference)`);
+      usersDb.exec(`CREATE INDEX IF NOT EXISTS idx_payment_links_reference ON payment_links(reference)`);
+      usersDb.exec(`
+        CREATE TABLE IF NOT EXISTS lawpay_events (
+          id                 INTEGER PRIMARY KEY,
+          received_at        TEXT NOT NULL DEFAULT (datetime('now')),
+          source             TEXT UNIQUE,
+          body               TEXT NOT NULL,
+          transaction_id     TEXT,
+          reference          TEXT,
+          amount             REAL,
+          outcome            TEXT,
+          result             TEXT,
+          contract_local_id  TEXT,
+          error              TEXT
+        )
+      `);
+      usersDb.exec(`CREATE INDEX IF NOT EXISTS idx_lawpay_events_tx ON lawpay_events(transaction_id)`);
+    },
+  },
+  {
     // The staff roster (staff/roster.ts): one row per person who works at the
     // firm, whether or not they ever sign in, with their roles and every
     // spelling of their name the boards use. Until now a person was a login
@@ -364,7 +410,7 @@ const MIGRATIONS: Migration[] = [
     // Monday people column, and nothing tied the four together. users.staff_id
     // links a login to its person; paralegal_link / attorney_board stay as a
     // fallback until the roster has been seeded (syncStaff carries them over).
-    version: 14,
+    version: 15,
     up: () => {
       usersDb.exec(createStaffTablesSql);
       if (!columnExists("users", "staff_id")) {
@@ -376,7 +422,7 @@ const MIGRATIONS: Migration[] = [
     // Staff offboarding (staff/offboarding.ts): who started it, which manual
     // steps (Monday seat, Microsoft 365, RingCentral, Slack) are done, and when
     // it finished. Reassigning the open work itself is audited, not stored here.
-    version: 15,
+    version: 16,
     up: () => {
       usersDb.exec(createOffboardingTableSql);
     },
@@ -449,6 +495,6 @@ export interface UserRow {
   monday_token_error: string | null;
   // v12 — the attorney appointment board P4 My Day opens on (boardKey)
   attorney_board: string | null;
-  // v14 — the staff roster person this login belongs to
+  // v15 — the staff roster person this login belongs to
   staff_id: number | null;
 }

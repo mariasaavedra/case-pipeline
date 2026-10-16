@@ -1,5 +1,5 @@
 // =============================================================================
-// Staff roster tables (users.db v14)
+// Staff roster tables (users.db v15)
 // =============================================================================
 // Kept apart from users-db.ts so tests can build the same tables in memory.
 
@@ -57,7 +57,7 @@ export const createStaffTablesSql = `
 export const OFFBOARDING_MANUAL_STEPS = ["monday_seat", "microsoft_365", "ringcentral", "slack"] as const;
 export type OffboardingManualStep = (typeof OFFBOARDING_MANUAL_STEPS)[number];
 
-/** users.db v15: one offboarding per person (a rehire reopens the same row). */
+/** users.db v16: one offboarding per person (a rehire reopens the same row). */
 export const createOffboardingTableSql = `
   CREATE TABLE IF NOT EXISTS staff_offboarding (
     id            INTEGER PRIMARY KEY,

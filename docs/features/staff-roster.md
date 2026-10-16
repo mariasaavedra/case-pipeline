@@ -18,7 +18,7 @@ people column. Nothing said who is an attorney or a paralegal, staff who never
 sign in didn't exist, and two spellings of one name were two people. When
 someone left, their open work stayed on a name nobody watched.
 
-## Roster (users.db v14)
+## Roster (users.db v15)
 
 - `staff` — one row per person: name, email, `monday_user_id`, ext., attorney
   board, active, start/end date, `source` (`monday` / `board_name` / `manual`),
@@ -90,7 +90,7 @@ once per person, however many columns name them. Two gap lists: **no one
 assigned** (primary column empty: paralegal, or attorney for Fee Ks) and **held
 only by inactive staff** — also shown in Alerts as "Assigned to inactive staff".
 
-## Offboarding (users.db v15 `staff_offboarding`)
+## Offboarding (users.db v16 `staff_offboarding`)
 
 1. **Hand over open work** — the person's Workload items, per column. A default
    replacement per column (pickers list people whose roles fit first), overridable

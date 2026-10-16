@@ -284,6 +284,8 @@ export function checkEnvironment(opts: CheckOptions = {}): EnvIssue[] {
     }
     if (!env.API_URL?.trim()) err("API_URL", "is required for Adobe Sign — Zapier downloads the contract PDF from it");
   }
+  const lawpayMail = env.LAWPAY_MAIL?.trim().toLowerCase();
+  if (lawpayMail && !["on", "off"].includes(lawpayMail)) err("LAWPAY_MAIL", "must be on or off");
   // ---------------------------------------------------------------------------
   // SMS (RingCentral) — "on" without credentials would fail every send
   // ---------------------------------------------------------------------------
