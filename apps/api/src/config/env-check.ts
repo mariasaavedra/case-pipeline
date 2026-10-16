@@ -286,6 +286,10 @@ export function checkEnvironment(opts: CheckOptions = {}): EnvIssue[] {
   }
   const lawpayMail = env.LAWPAY_MAIL?.trim().toLowerCase();
   if (lawpayMail && !["on", "off"].includes(lawpayMail)) err("LAWPAY_MAIL", "must be on or off");
+  const lawpaySlack = env.LAWPAY_SLACK?.trim().toLowerCase();
+  if (lawpaySlack && !["on", "off"].includes(lawpaySlack)) err("LAWPAY_SLACK", "must be on or off");
+  if (lawpaySlack === "on" && !env.SLACK_BOT_TOKEN?.trim()) err("SLACK_BOT_TOKEN", "is required when LAWPAY_SLACK=on", "The app's Slack bot reads #payments.");
+  if (lawpaySlack === "on" && lawpayMail === "on") warn("LAWPAY_MAIL", "is on together with LAWPAY_SLACK — use one source; a payment seen in both is applied once, but the second copy is extra work");
   // ---------------------------------------------------------------------------
   // SMS (RingCentral) — "on" without credentials would fail every send
   // ---------------------------------------------------------------------------
