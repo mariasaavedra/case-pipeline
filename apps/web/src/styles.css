@@ -1496,6 +1496,23 @@ body {
   color: var(--color-card);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
 }
-.case-tl-row { display: grid; grid-template-columns: 56px 16px 1fr; gap: 8px; padding: 6px; border-radius: 8px; align-items: start; }
+.case-tl-row { display: grid; grid-template-columns: 56px 16px 1fr; gap: 8px; padding: 6px; border-radius: 8px; align-items: start; cursor: pointer; }
 .case-tl-row:hover, .case-tl-row[data-hl="true"] { background: var(--color-surface-warm); }
+.case-tl-row:focus-visible { outline: 2px solid var(--color-status-blue); outline-offset: 1px; }
 .case-tl-row[data-cancelled="true"] .case-tl-label { text-decoration: line-through; color: var(--color-ink-faint); }
+/* "Coming up" items open M29; "Fix" on a "Needs attention" item too. */
+.case-tl-link { background: none; border: none; padding: 0; font: inherit; color: var(--color-ink); text-align: left; cursor: pointer; }
+.case-tl-link:hover { text-decoration: underline; }
+.case-tl-fix {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--tl-warn);
+  background: color-mix(in srgb, var(--tl-warn) 10%, transparent);
+  color: var(--color-ink);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.case-tl-fix:hover { background: color-mix(in srgb, var(--tl-warn) 22%, transparent); }

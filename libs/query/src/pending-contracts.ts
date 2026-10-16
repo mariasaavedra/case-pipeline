@@ -51,6 +51,14 @@ export interface PendingContract {
   clientPhone: string | null;
   /** Phone 2 / Preferred Language / First Name from the linked profile. */
   clientContact: TextingContact;
+  /** Payment Method on Monday ("CREDIT Card - Surcharge Applies", "DEBIT Card", "Cash", "SPLIT PAYMENTS"), or null. */
+  paymentMethod: string | null;
+  /**
+   * Signed by everyone in Adobe Sign after being sent from the app (M22) — the
+   * only contracts whose payment links M21 e-mails (decided 2026-10-16). The
+   * e-mail the client signed with, which the links go to.
+   */
+  signedInApp: { clientEmail: string } | null;
 }
 
 /**
@@ -222,6 +230,8 @@ interface RawRow {
   address: string | null;
   phone: string | null;
   profileRaw: string | null;
+  paymentMethod: string | null;
+  signedClientEmail: string | null;
 }
 
 /** Which MISSING_FIELDS a Fee K has empty. */
@@ -267,7 +277,11 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       COALESCE(NULLIF(TRIM(p.email), ''), json_extract(c.raw_column_values, '$.e_mail'))     AS email,
       COALESCE(NULLIF(TRIM(p.address), ''), json_extract(c.raw_column_values, '$.address')) AS address,
       NULLIF(TRIM(p.phone), '') AS phone,
-      p.raw_column_values       AS profileRaw
+      p.raw_column_values       AS profileRaw,
+      json_extract(c.raw_column_values, '$.payment_method.labels[0]')   AS paymentMethod,
+      (SELECT e.client_email FROM esign_agreements e
+        WHERE e.contract_monday_id = c.monday_item_id AND e.status = 'signed'
+        ORDER BY e.id DESC LIMIT 1)                                      AS signedClientEmail
     FROM contracts c
     LEFT JOIN profiles p ON p.local_id = c.profile_local_id
     WHERE c.group_title = ? AND c.deleted_at IS NULL
@@ -304,6 +318,8 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       missing: missingFeeKFields({ contractFor, attorneyFee, attorneys, email: r.email, address: r.address }),
       clientPhone: r.phone,
       clientContact: readTextingContact(r.profileRaw),
+      paymentMethod: r.paymentMethod?.trim() || null,
+      signedInApp: r.signedClientEmail ? { clientEmail: r.signedClientEmail } : null,
     };
   });
 

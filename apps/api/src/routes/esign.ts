@@ -48,8 +48,8 @@ import { DATA_DIR } from "../paths.js";
 import { fetchWorkspaceUsers } from "@case-pipeline/monday";
 import { getBoardColumnsFor } from "@case-pipeline/query";
 import {
-  OPEN_STATUSES, agreementNameOf, classifyEsignEvent, esignRefOf, planEsignEvent, signedDocumentName,
-  type EsignStatus,
+  OPEN_STATUSES, PAY_METHOD_LABELS, agreementNameOf, classifyEsignEvent, esignRefOf, payMethodFrom, planEsignEvent,
+  signedDocumentName, type EsignStatus, type PayMethod,
 } from "../esign/events.js";
 import { notifyMonday, notifySlack } from "../esign/notify.js";
 import { fileSignedContract } from "../esign/efile.js";
@@ -157,6 +157,8 @@ export function registerEsignPublicRoutes(app: Express, deps: EsignDeps): void {
       const result = await applyEvent(db, row, kind, {
         agreementId, participantEmail: str(b.participantEmail), pdfUrl: str(b.pdfUrl), rawEvent: str(b.event),
         agreementName: str(b.agreementName),
+        // Zap 3's "Find Form Field Data" (the client's Credit / Debit / Cash pick).
+        formData: b.formData ?? b.payMethod ?? null,
       }, MONDAY_API_TOKEN);
       res.json({ ok: true, ...result });
     } catch (err) {
@@ -206,7 +208,10 @@ async function applyEvent(
   db: DatabaseInstance,
   row: AgreementRow,
   kind: ReturnType<typeof classifyEsignEvent>,
-  ev: { agreementId: string | null; participantEmail: string | null; pdfUrl: string | null; rawEvent: string | null; agreementName: string | null },
+  ev: {
+    agreementId: string | null; participantEmail: string | null; pdfUrl: string | null; rawEvent: string | null;
+    agreementName: string | null; formData?: unknown;
+  },
   sharedToken: string | undefined,
 ): Promise<Record<string, unknown>> {
   const tokenOptions = senderTokenOptions(row, sharedToken);
@@ -219,6 +224,9 @@ async function applyEvent(
 
   db.prepare("UPDATE esign_agreements SET last_event = ?, agreement_id = COALESCE(agreement_id, ?), updated_at = datetime('now') WHERE id = ?")
     .run(ev.rawEvent, ev.agreementId, row.id);
+
+  const pick = payMethodFrom(ev.formData);
+  if (pick) await recordPayMethod(db, row, pick, tokenOptions, audit);
 
   if (kind === "signed_pdf") {
     const documentName = safeFileName(signedDocumentName(ev.agreementName, row.client_name));
@@ -305,6 +313,60 @@ async function attachSignedPdf(
   }
   audit("esign.signed_pdf", { attached: true, on: target.table });
   return { attached: true, on: target.table };
+}
+
+const PAY_METHOD_COLUMN = "dropdown_mm7v5eeb"; // fee_ks.payment_method
+const PAY_METHOD_WORDS: Record<PayMethod, string> = { credit: "credit card", debit: "debit card", cash: "cash" };
+
+/**
+ * The client's Credit / Debit / Cash pick → the Fee K's Payment Method, when
+ * it's empty (a label staff set, e.g. SPLIT PAYMENTS, stays). Credit also sets
+ * off the Fee K auto-fill's 3% surcharge columns. A note tells staff the
+ * payment links are ready to e-mail (M21) — once, whatever Zapier repeats.
+ */
+async function recordPayMethod(
+  db: DatabaseInstance,
+  row: AgreementRow,
+  pick: PayMethod,
+  tokenOptions: TokenFallbackOptions,
+  audit: (action: string, metadata: Record<string, unknown>) => void,
+): Promise<void> {
+  const label = PAY_METHOD_LABELS[pick];
+  const current = db.prepare(
+    "SELECT json_extract(raw_column_values, '$.payment_method.labels[0]') AS m FROM contracts WHERE local_id = ?",
+  ).get(row.contract_local_id) as { m: string | null } | undefined;
+  if (current?.m === label) return; // already recorded (a repeated event)
+  const boardId = getBoardColumnsFor(db, "fee_ks")?.mondayBoardId;
+  let written = false;
+  if (!current?.m && boardId) {
+    const value = { labels: [label] };
+    try {
+      await withTokenFallback(
+        (token) => dataSource.setColumnValues(boardId, row.contract_monday_id, { [PAY_METHOD_COLUMN]: value }, token),
+        tokenOptions,
+      );
+    } catch (err) {
+      console.error("[esign] payment method write failed; queueing:", err);
+      enqueueWrite(db, {
+        opType: "change_column_json", targetTable: "contracts", targetLocalId: row.contract_local_id,
+        mondayItemId: row.contract_monday_id, authorOid: row.sent_by_oid,
+        payload: { boardId, columnId: PAY_METHOD_COLUMN, value },
+      });
+    }
+    db.prepare("UPDATE contracts SET raw_column_values = json_set(COALESCE(raw_column_values, '{}'), '$.payment_method', json(?)) WHERE local_id = ?")
+      .run(JSON.stringify({ labels: [label] }), row.contract_local_id);
+    written = true;
+  }
+  audit("esign.pay_method", { pick, written, kept: written ? null : current?.m ?? null });
+  const next = pick === "cash"
+    ? "No payment links: the client pays in cash during lobby hours."
+    : "Payment links are ready: Contracts → ⋯ → Payment links → Email links to client.";
+  const body = written
+    ? `💳 In the contract, ${row.client_name} chose to pay by ${PAY_METHOD_WORDS[pick]}. ${next}`
+    : `💳 In the contract, ${row.client_name} chose to pay by ${PAY_METHOD_WORDS[pick]}, but the Fee K's Payment Method says "${current?.m}" — left as it is. Check with the client before sending links.`;
+  await postNote(db, {
+    feeKItemId: row.contract_monday_id, profileItemId: null, title: "Payment method", body, localId: row.contract_local_id,
+  }, tokenOptions, row.sent_by_oid);
 }
 
 /**

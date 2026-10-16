@@ -48,10 +48,12 @@ function contract(db: DatabaseInstance, name: string, cv: Record<string, unknown
 }
 
 function activity(db: DatabaseInstance, at: string, type: string | null, body: string, source = "activity") {
+  const id = `u${++n}`;
   db.prepare(
     `INSERT INTO client_updates (batch_id, local_id, profile_local_id, author_name, text_body, source_type, activity_type_name, created_at_source)
      VALUES (1, ?, 'p1', 'Staff', ?, ?, ?, ?)`,
-  ).run(`u${++n}`, body, source, type, at);
+  ).run(id, body, source, type, at);
+  return id;
 }
 
 const build = (db: DatabaseInstance, today = TODAY): CaseTimeline =>
@@ -344,5 +346,66 @@ describe("NVC, FOIAs, litigation, I-918B and the extra E&A types", () => {
     const attention = otherBoards().summary.attention.map((a) => a.text);
     expect(attention.some((a) => a.includes("I-918B"))).toBe(false);
     expect(attention).toContain("Habeas: Status Report due passed 10 days ago — nothing filed since");
+  });
+});
+
+describe("what the event panel (M29) needs", () => {
+  test("each Needs attention item names the Monday item to fix", () => {
+    const db = freshDb();
+    const hearing = item(db, "calendaring", "[9/30/26] IN PERSON MASTER: Ana S. RIVERA LOPEZ", {
+      type: { label: "Master" }, hearing_date_calendaring: d("2026-09-30"),
+    }, { status: "Added on Cal" });
+    const rfe = item(db, "rfes_all", "[10/1/26] - M - I765 RFE: Ana S. RIVERA LOPEZ", {
+      type: { labels: ["RFE"] }, issue_date_calendaring: d("2026-08-01"), due_date_calendaring: d("2026-10-01"),
+    });
+    const motion = item(db, "motions", "[MTAC] - LB - Ana S. RIVERA LOPEZ", { motion: { label: "MTAC" } }, { status: "Filed" });
+    const t = build(db);
+    expect(t.summary.attention).toEqual([
+      expect.objectContaining({ text: "I-765 RFE response due passed 14 days ago — nothing filed since", fix: { kind: "deadline", itemLocalId: rfe } }),
+      expect.objectContaining({ text: "Master hearing — no outcome recorded", fix: { kind: "hearing_outcome", itemLocalId: hearing } }),
+      expect.objectContaining({ text: "Motion waiting on the judge: MTAC", fix: { kind: "motion", itemLocalId: motion } }),
+    ]);
+  });
+
+  test("WITHDREW and VISITING IJ NO SHOW are outcomes: the hearing didn't go ahead", () => {
+    for (const status of ["WITHDREW", "VISITING IJ NO SHOW"]) {
+      const db = freshDb();
+      item(db, "calendaring", "[9/30/26] IN PERSON MASTER: Ana S. RIVERA LOPEZ", {
+        type: { label: "Master" }, hearing_date_calendaring: d("2026-09-30"),
+      }, { status });
+      const t = build(db);
+      expect(find(t, "Master hearing", "2026-09-30")?.status).toBe("cancelled");
+      expect(t.summary.attention).toEqual([]);
+    }
+  });
+
+  test("the fix sticks: a status that records the response closes the deadline", () => {
+    const rfe = (status: string) => {
+      const db = freshDb();
+      item(db, "rfes_all", "[10/1/26] - M - I765 RFE: Ana S. RIVERA LOPEZ", {
+        type: { labels: ["RFE"] }, issue_date_calendaring: d("2026-08-01"), due_date_calendaring: d("2026-10-01"),
+      }, { status });
+      return build(db);
+    };
+    expect(rfe("Sent out").summary.attention).toEqual([]);
+    expect(find(rfe("Sent out"), "I-765 RFE response due")?.status).toBe("met");
+    expect(rfe("Not Responding").summary.attention).toEqual([]);
+    expect(find(rfe("Client self Responding to RFE"), "I-765 RFE response due")?.status).toBe("cancelled");
+    expect(rfe("Appointment to be Scheduled").summary.attention).toHaveLength(1);
+
+    const db = freshDb();
+    item(db, "calendaring", "[11/20/26] IN PERSON TRIAL: Ana S. RIVERA LOPEZ", {
+      type: { label: "Trial" }, hearing_date_calendaring: d("2026-11-20"), due_date: d("2026-10-06"),
+    }, { status: "Deadline Complete" });
+    expect(find(build(db), "Filing deadline before trial hearing")?.status).toBe("met");
+  });
+
+  test("an E&A event carries its entry's id (for a reply); a board event its item's", () => {
+    const db = freshDb();
+    const entry = activity(db, "2026-06-03T20:00:00Z", "HEARING NOTES", "6-3-2026 Indiv. Hearing, client present");
+    const nvc = item(db, "nvc_notices", "Ana Sofia RIVERA LOPEZ", { notice_type: { label: "Case Created" }, notice_date: d("2026-03-02") });
+    const t = build(db);
+    expect(find(t, "Hearing notes")).toMatchObject({ updateLocalId: entry, itemLocalId: null });
+    expect(find(t, "NVC: Case Created")).toMatchObject({ updateLocalId: null, itemLocalId: nvc, boardKey: "nvc_notices" });
   });
 });
