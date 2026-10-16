@@ -151,6 +151,18 @@ describe("LawPay payments", () => {
     expect((usersDb.prepare("SELECT channel FROM payment_links WHERE contract_local_id = 'c2'").get() as { channel: string }).channel).toBe("matched-by-code");
   });
 
+  it("names with A-numbers / [tags] still match; a client whose Fee K is already Closed is recorded quietly", async () => {
+    db.prepare("UPDATE profiles SET name = 'Ana LOPEZ A214-099-391 [DETAINED IN CHASE]' WHERE local_id = 'p1'").run();
+    expect(await pay("NORA TEST FOR ANA LOPEZ ADMIN FEE - AF 4000", 400000, "n1")).toBe("matched");
+
+    db.prepare("UPDATE contracts SET group_title = 'Closed Fee Ks' WHERE local_id = 'c1'").run();
+    state.calls = [];
+    state.slack = [];
+    expect(await pay("ANA LOPEZ BOND MOTION - AF 3500", 350000, "n2")).toBe("already_closed");
+    expect(state.calls).toEqual([]);
+    expect(state.slack).toEqual([]);
+  });
+
   it("no matching Fee K → Slack 'Payment to match', nothing on Monday", async () => {
     await pay("SOMEONE ELSE - AF 900.00", 90000, "t5");
     expect(state.slack.map(([k]) => k)).toEqual(["payment_unmatched"]);

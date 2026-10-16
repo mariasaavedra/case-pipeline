@@ -3,6 +3,7 @@
 // =============================================================================
 //   npm run lawpay:slack                  # last 3 days (LAWPAY_SLACK_SINCE_DAYS)
 //   npm run lawpay:slack -- --db=seed
+//   npm run lawpay:slack -- --start-now   # before LAWPAY_SLACK=on: skip the backlog
 //
 // Reads #payments with the app's Slack bot, picks the LawPay "Payment Bot"
 // posts with one of our references, and prints which Fee K each one matches and
@@ -11,7 +12,14 @@
 // =============================================================================
 
 import Database from "better-sqlite3";
-import { runLawPaySlackJob } from "../apps/api/src/lawpay/slack-job.js";
+import { runLawPaySlackJob, startFromNow } from "../apps/api/src/lawpay/slack-job.js";
+
+if (process.argv.includes("--start-now")) {
+  // The only write this script makes: where the reader starts.
+  const ts = startFromNow();
+  console.log(`The #payments reader will start with posts after ${new Date(Number(ts) * 1000).toISOString()}.`);
+  process.exit(0);
+}
 
 const dbArg = process.argv.find((a) => a.startsWith("--db="))?.split("=")[1] ?? "live";
 const db = new Database(dbArg === "live" ? "data/live.db" : "data/seed.db", { readonly: true });
@@ -23,5 +31,8 @@ if (!r.ok) {
 }
 console.log(`${r.read} post(s) read, ${r.payments} LawPay payment(s) with one of our references:`);
 for (const p of r.dryRun ?? []) {
-  console.log(`  $${p.amount.toFixed(2)}  ${p.reference}  →  ${p.feeK ? `${p.feeK} [by ${p.by}]` : "NO MATCH (would go to Slack 'Payment to match')"}`);
+  const outcome = p.feeK ? `${p.feeK} [by ${p.by}]`
+    : p.closed ? `client's Fee K is already in ${p.closed} — recorded quietly, no alert`
+      : "NO MATCH (would go to Slack 'Payment to match')";
+  console.log(`  $${p.amount.toFixed(2)}  ${p.reference}  →  ${outcome}`);
 }

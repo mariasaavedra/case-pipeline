@@ -12,7 +12,8 @@ keeps the LawPay "Payment Bot" transactions (`lawpay/slack.ts`; "Paypal Bot"
 consult payments are skipped) and applies each post once (`lawpay_events.source
 = slack:<ts>`; how far it has read: `data/lawpay-slack-cursor.json`). Check
 first, read-only: `npm run lawpay:slack` lists each payment with the Fee K it
-would match and how.
+would match and how. Turning it on: `npm run lawpay:slack -- --start-now` first, so it
+starts with new posts instead of the last 3 days' backlog.
 
 **Source, fallback: the receipt e-mails** (`LAWPAY_MAIL=on`), below — waits on
 admin consent for Mail.Read. Use one source at a time; a payment seen in both is
@@ -67,9 +68,12 @@ the client): `<DESCRIPTION> - <AF|PF|FF> <AMOUNT>`, e.g. `ANA LOPEZ I-212 - AF 4
    `feeKIdFromReference` in `apps/api/src/lawpay/events.ts`.)
 2. **The links M21 handed out** are recorded (users.db `payment_links`, v14)
    with their exact reference.
-3. Otherwise (links made by hand, or before this): a Fee K in **Pending Fee Ks**
-   whose client's name appears in the reference as whole words
-   ("… FOR ISAAC GONZALEZ MOLINA ADMIN FEE - AF 50"), only when exactly one does.
+3. Otherwise (links made by hand, or before this): the client's name in the
+   reference, as whole words — the **person's name only** (`personName` drops
+   A-numbers and [tags]: "Isaac GONZALEZ MOLINA A214-… [DETAINED IN CHASE]" →
+   "ISAAC GONZALEZ MOLINA"). One **Pending** Fee K matching = that one. None
+   pending but the client's Fee K is already **Paid / Closed** = staff handled
+   it: recorded quietly (`already_closed`), no alert.
 
 "Every fee paid" = every fee among the links handed out for that Fee K; with none
 recorded, its AF / FF / PF on Monday. Rules: `apps/api/src/lawpay/events.ts`.

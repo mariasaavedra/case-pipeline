@@ -35,3 +35,15 @@ describe("feeKIdFromReference", () => {
     expect(feeKIdFromReference("KIM LEE I-130")).toBeNull();
   });
 });
+
+describe("personName", () => {
+  it("keeps the person, drops A-numbers and [tags]", async () => {
+    const { personName } = await import("./events");
+    expect(personName("Isaac GONZALEZ MOLINA A214-099-391 [DETAINED IN CHASE]")).toBe("ISAAC GONZALEZ MOLINA");
+    expect(personName("[10/19/26 - BOND] - Isaac GONZALEZ MOLINA A214-099-391 [DETAINED IN CHASE]")).toBe("ISAAC GONZALEZ MOLINA");
+    expect(personName("Keyra Crystal MOLINA OLIVAS [A241-089-171] DETAINED CHASE")).toBe("KEYRA CRYSTAL MOLINA OLIVAS");
+    expect(personName("Claudio MOLINA AVILA [A201-510-130]")).toBe("CLAUDIO MOLINA AVILA");
+    expect(personName("Luis A. SANDOVAL-MOLINA")).toBe("LUIS A. SANDOVAL-MOLINA");
+    expect(personName("Ana LOPEZ")).toBe("ANA LOPEZ");
+  });
+});

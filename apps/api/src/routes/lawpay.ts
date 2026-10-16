@@ -48,7 +48,7 @@ import { createNotification, fetchBoardStructure } from "@case-pipeline/monday";
 import { notifyEvent, slackEscape, withLink } from "../notify/slack.js";
 import { makeMondayUserByLogin } from "../contract-info.js";
 import {
-  FEE_WORDS, feeKIdFromReference, isFullyPaid, normalizeReference, parseReference,
+  FEE_WORDS, feeKIdFromReference, isFullyPaid, normalizeReference, parseReference, personName,
   type FeeType, type IssuedLink, type LawPayPayment,
 } from "../lawpay/events.js";
 import type { LawPayReceipt } from "../lawpay/email.js";
@@ -91,16 +91,24 @@ function feeK(db: DatabaseInstance, where: string, arg: string): FeeKRow | undef
      WHERE ${where} AND c.deleted_at IS NULL`).get(arg) as FeeKRow | undefined;
 }
 
-/** A Pending Fee K whose client's name appears in the reference — only when exactly one does. */
-function feeKByName(db: DatabaseInstance, description: string): FeeKRow | undefined {
-  const norm = (s: string) => s.replace(/\s+/g, " ").trim().toUpperCase();
+/**
+ * By the client's name in the reference (whole words; the person's name only —
+ * personName drops A-numbers and [tags]). A Pending Fee K counts only when
+ * exactly one matches. With none pending, a match among the client's other Fee
+ * Ks (Paid / Closed…) means staff already handled it: `closed`, applied quietly.
+ */
+function feeKByName(db: DatabaseInstance, description: string): { row?: FeeKRow; closed?: string } {
   const rows = db.prepare(`
-    SELECT c.local_id AS id, COALESCE(p.name, c.name) AS name
+    SELECT c.local_id AS id, c.group_title AS g, COALESCE(p.name, c.name) AS name
       FROM contracts c LEFT JOIN profiles p ON p.local_id = c.profile_local_id
-     WHERE c.group_title = ? AND c.deleted_at IS NULL`).all(PENDING_GROUP) as { id: string; name: string }[];
-  // Whole words: "ANA LOPEZ" in "ANA LOPEZ I-212", "… FOR ISAAC GONZALEZ MOLINA ADMIN FEE".
-  const hits = rows.filter((r) => r.name.trim() && ` ${norm(description)} `.includes(` ${norm(r.name)} `));
-  return hits.length === 1 ? feeK(db, "c.local_id = ?", hits[0]!.id) : undefined;
+     WHERE c.deleted_at IS NULL`).all() as { id: string; g: string | null; name: string }[];
+  const ref = ` ${description.replace(/\s+/g, " ").trim().toUpperCase()} `;
+  // At least two words, so a lone first name never matches.
+  const hits = rows.filter((r) => { const n = personName(r.name); return n.includes(" ") && ref.includes(` ${n} `); });
+  const pending = hits.filter((r) => r.g === PENDING_GROUP);
+  if (pending.length === 1) return { row: feeK(db, "c.local_id = ?", pending[0]!.id) };
+  if (pending.length === 0 && hits.length > 0) return { closed: hits[0]!.g ?? "another group" };
+  return {};
 }
 
 let paidGroupId: { boardId: string; id: string } | null = null;
@@ -127,13 +135,18 @@ export function findFeeK(db: DatabaseInstance, payment: Pick<LawPayPayment, "ref
   const codedId = ref ? feeKIdFromReference(ref.description) : null;
   const byCode = codedId ? feeK(db, "c.monday_item_id = ?", codedId) : undefined;
   const byLink = !byCode && link ? feeK(db, "c.local_id = ?", link.contract_local_id) : undefined;
-  const byName = !byCode && !byLink && ref ? feeKByName(db, ref.description) : undefined;
-  const row = byCode ?? byLink ?? byName;
-  return { ref, link, codedId: byCode ? codedId : null, row, by: byCode ? "code" : byLink ? "link" : byName ? "name" : null } as const;
+  const name = !byCode && !byLink && ref ? feeKByName(db, ref.description) : {};
+  const row = byCode ?? byLink ?? name.row;
+  return {
+    ref, link, codedId: byCode ? codedId : null, row,
+    by: byCode ? "code" : byLink ? "link" : name.row ? "name" : null,
+    /** No Fee K waiting: the client's Fee K is already in this group (Paid / Closed…). */
+    closed: row ? null : name.closed ?? null,
+  } as const;
 }
 
 export type LawPayResult =
-  | "duplicate" | "not_ours" | "failed" | "refunded" | "other" | "unmatched" | "matched" | "fully_paid";
+  | "duplicate" | "not_ours" | "failed" | "refunded" | "other" | "unmatched" | "already_closed" | "matched" | "fully_paid";
 
 export interface LawPayDeps {
   db: DatabaseInstance;
@@ -159,6 +172,8 @@ export async function applyLawPayEvent(deps: LawPayDeps, eventId: number, paymen
 
   const found = findFeeK(db, payment);
   const { ref, codedId, row } = found;
+  // A hand-made link for a Fee K staff already moved on (Paid / Closed): nothing to do, no alert.
+  if (!row && found.closed) return done("already_closed");
   if (found.link?.paid_at) return done("duplicate", found.link.contract_local_id);
   // The recorded link counts only when it is this Fee K's (the code wins).
   const link = found.link && row && found.link.contract_local_id === row.localId ? found.link : undefined;
