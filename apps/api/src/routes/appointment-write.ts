@@ -25,7 +25,9 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { getBoardColumnsFor } from "@case-pipeline/query";
-import { fetchWorkspaceUsers, fetchBoardStructure } from "@case-pipeline/monday";
+import { fetchBoardStructure } from "@case-pipeline/monday";
+import { usersDb } from "../db/users-db.js";
+import { mondayUserIdForName } from "../staff/workspace-users.js";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { FIRM_TIMEZONE, mondayDateTime } from "../firm.js";
 import { randomUUID } from "node:crypto";
@@ -286,21 +288,9 @@ export function registerAppointmentWriteRoutes(app: Express, deps: AppointmentWr
     }
   }
 
-  /** The staff directory, cached — filling a people column should not cost a round trip each time. */
-  let staffCache: { users: Awaited<ReturnType<typeof fetchWorkspaceUsers>>; at: number } | null = null;
-  const STAFF_TTL_MS = 10 * 60 * 1000;
-
   async function mondayUserIdFor(name: string | undefined): Promise<number | null> {
-    if (!name) return null;
     try {
-      const now = Date.now();
-      if (!staffCache || now - staffCache.at > STAFF_TTL_MS) {
-        staffCache = { users: await fetchWorkspaceUsers(MONDAY_API_TOKEN), at: now };
-      }
-      const wanted = name.trim().toLowerCase();
-      const hit = staffCache.users.find((u) => u.name.trim().toLowerCase() === wanted);
-      const id = hit ? Number(hit.id) : NaN;
-      return Number.isFinite(id) ? id : null;
+      return await mondayUserIdForName(MONDAY_API_TOKEN, name, usersDb);
     } catch (err) {
       // A people column we cannot fill is not a reason to lose the consult —
       // the board already identifies the attorney.

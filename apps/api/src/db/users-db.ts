@@ -5,6 +5,7 @@ import { openDatabase } from "@case-pipeline/seed/db/connection";
 import { backupEncryptionKey, encryptFileSync } from "../backup/crypto.js";
 import { protect, isEncrypted } from "../crypto/secrets.js";
 import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP } from "../backup/prune.js";
+import { createStaffTablesSql, createOffboardingTableSql } from "../staff/schema.js";
 
 const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -355,6 +356,31 @@ const MIGRATIONS: Migration[] = [
       usersDb.exec(`CREATE INDEX IF NOT EXISTS idx_sms_messages_profile ON sms_messages(profile_monday_id)`);
     },
   },
+  {
+    // The staff roster (staff/roster.ts): one row per person who works at the
+    // firm, whether or not they ever sign in, with their roles and every
+    // spelling of their name the boards use. Until now a person was a login
+    // (users), a free-text paralegal_link, an attorney_board and a string in a
+    // Monday people column, and nothing tied the four together. users.staff_id
+    // links a login to its person; paralegal_link / attorney_board stay as a
+    // fallback until the roster has been seeded (syncStaff carries them over).
+    version: 14,
+    up: () => {
+      usersDb.exec(createStaffTablesSql);
+      if (!columnExists("users", "staff_id")) {
+        usersDb.exec(`ALTER TABLE users ADD COLUMN staff_id INTEGER REFERENCES staff(id) ON DELETE SET NULL`);
+      }
+    },
+  },
+  {
+    // Staff offboarding (staff/offboarding.ts): who started it, which manual
+    // steps (Monday seat, Microsoft 365, RingCentral, Slack) are done, and when
+    // it finished. Reassigning the open work itself is audited, not stored here.
+    version: 15,
+    up: () => {
+      usersDb.exec(createOffboardingTableSql);
+    },
+  },
 ];
 
 const TARGET_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
@@ -423,4 +449,6 @@ export interface UserRow {
   monday_token_error: string | null;
   // v12 — the attorney appointment board P4 My Day opens on (boardKey)
   attorney_board: string | null;
+  // v14 — the staff roster person this login belongs to
+  staff_id: number | null;
 }

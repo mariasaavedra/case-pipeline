@@ -1,7 +1,8 @@
 // =============================================================================
 // "My Cases" (P6) — one paralegal's Prescheduling + Open Forms cases
 // =============================================================================
-// Defaults to the caller's own paralegal_link; `?paralegal=<name>` shows
+// Defaults to the caller's own staff record (staff/roster.ts; every name they go
+// by counts), else their legacy paralegal_link; `?paralegal=<name>` shows
 // someone else's and `?paralegal=all` everyone's (the page's switcher). A user
 // who hasn't linked their board name gets needsLink=true and everyone's cases,
 // so the page can prompt them without being empty. Query = libs/query/src/my-cases.ts.
@@ -11,6 +12,8 @@ import type { Request, Response } from "express";
 import type BetterSqlite3 from "better-sqlite3";
 import { getMyCases, type ActiveCasesOptions, type MyCasesData } from "@case-pipeline/query";
 import { currentUser } from "../db/user-context.js";
+import { usersDb } from "../db/users-db.js";
+import { makeStaffResolver, staffForUser } from "../staff/roster.js";
 
 type Database = BetterSqlite3.Database;
 
@@ -41,11 +44,16 @@ export function handleMyCases(
     return;
   }
 
-  const link = user.paralegal_link?.trim() ?? "";
+  const staff = staffForUser(usersDb, user);
+  const link = staff?.name ?? user.paralegal_link?.trim() ?? "";
   const param = typeof req.query.paralegal === "string" ? req.query.paralegal : undefined;
   const selected = resolveSelected(param, link);
   const includeSnoozed = req.query.includeSnoozed === "1";
-  const data = getMyCases(caseDb, { paralegal: selected, includeSnoozed, activeCases });
+  // The selected name's roster person, when it has one: their aliases count too.
+  const resolve = makeStaffResolver(usersDb);
+  const person = selected ? resolve(selected) : null;
+  const isSelected = person ? (n: string) => resolve(n)?.id === person.id : undefined;
+  const data = getMyCases(caseDb, { paralegal: selected, isSelected, includeSnoozed, activeCases });
 
   const result: MyCasesResult = {
     needsLink: !link,

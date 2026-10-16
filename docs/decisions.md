@@ -523,3 +523,18 @@ A date column's time is stored in UTC; its display `text` is rendered in the API
 - **Read:** the sync fetches `value` for `DateValue` columns only (not every column — payload) and converts with `utcToFirm` (Intl, DST-safe). Date-only values are calendar days and are never shifted.
 - **Write:** every timed write converts with `firmToUtc` / `mondayDateTime` (M10 booking, M9 jail-intake scheduling, M20). Neither had sent a timed value yet.
 - **Not chosen:** changing the token owner's Monday timezone to Central. It would have fixed reads silently, and broken again the day the token changes hands.
+
+## 2026-10-16 — Staff roster: its own table, aliases as the name matcher
+
+A person was a login, a free-text `paralegal_link`, an `attorney_board` and a name in a Monday people column, with nothing tying them together. Spec: `docs/features/staff-roster.md`.
+
+**Decisions**:
+- **`staff` apart from `users`.** Most staff never sign in, and a login isn't a role. `users.staff_id` links the two. In `users.db`, not the mirror: it's firm config the sync must never rebuild.
+- **Aliases, not name equality.** Every spelling is an alias of one person, normalised for case, accents and spaces. `makeStaffResolver` is the only place names are compared.
+- **Unmatched board names become inactive rows**, not errors. They are almost always former staff, and they are exactly what Offboarding and the "held only by inactive staff" list need to see.
+- **Role suggestions stop once an admin sets roles** (`roles_reviewed`), so a refresh never undoes a decision.
+- **Missing from Monday is reported, not acted on.** Leaving is decided in Offboarding.
+- **Reassignment reads the people column live** and keeps co-assignees. The mirror has names only; writing from it would drop whoever it couldn't map to an id.
+- **Not moved:** the document-settings attorneys (G-28, contracts are live). Linking them to staff by email is a follow-up.
+
+**Revisit if**: roles need to gate permissions (today `users.role` admin/user still does), or Monday stops returning deactivated users from `users(ids:)`.

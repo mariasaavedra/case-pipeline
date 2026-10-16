@@ -23,8 +23,9 @@ import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { FIRM_TIMEZONE } from "../firm.js";
 import { getBoardColumnsFor, getBoardStatusOptionsFor } from "@case-pipeline/query";
-import { fetchWorkspaceUsers, fetchItemUpdatesBatch } from "@case-pipeline/monday";
-import type { MondayWorkspaceUser, CreateTimelineItemInput } from "@case-pipeline/monday";
+import { fetchItemUpdatesBatch } from "@case-pipeline/monday";
+import type { CreateTimelineItemInput } from "@case-pipeline/monday";
+import { getWorkspaceUsers } from "../staff/workspace-users.js";
 import {
   parseCallLogBody,
   validateCallLogBody,
@@ -59,9 +60,6 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
   // the shape scripts/sync/mapper.ts produces) so the new call appears in the
   // Call Log list right away instead of waiting for the next sync.
 
-  let staffDirectoryCache: { users: MondayWorkspaceUser[]; fetchedAt: number } | null = null;
-  const STAFF_DIRECTORY_TTL_MS = 5 * 60 * 1000;
-
   // Every "now" stamped onto a call goes through FIRM_TIMEZONE explicitly
   // rather than the process's local time: a call logged at 2:11pm Central was
   // landing on the Date/Hour columns as 7:11pm, via unzoned `new Date()` calls
@@ -75,16 +73,13 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
    */
   async function resolveStaffName(userId: number | null): Promise<string | null> {
     if (userId == null) return null;
-    const now = Date.now();
-    if (!staffDirectoryCache || now - staffDirectoryCache.fetchedAt >= STAFF_DIRECTORY_TTL_MS) {
-      try {
-        staffDirectoryCache = { users: await fetchWorkspaceUsers(MONDAY_API_TOKEN!), fetchedAt: now };
-      } catch (err) {
-        console.error("[call-log] resolveStaffName: fetchWorkspaceUsers failed:", err);
-        return null;
-      }
+    try {
+      const users = await getWorkspaceUsers(MONDAY_API_TOKEN!);
+      return users.find((u) => Number(u.id) === userId)?.name ?? null;
+    } catch (err) {
+      console.error("[call-log] resolveStaffName: fetchWorkspaceUsers failed:", err);
+      return null;
     }
-    return staffDirectoryCache.users.find((u) => Number(u.id) === userId)?.name ?? null;
   }
 
   app.get("/api/call-log/staff-directory", async (_req, res) => {
@@ -92,15 +87,8 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
       res.status(503).json({ error: "Monday.com not configured" });
       return;
     }
-    const now = Date.now();
-    if (staffDirectoryCache && now - staffDirectoryCache.fetchedAt < STAFF_DIRECTORY_TTL_MS) {
-      res.json({ data: staffDirectoryCache.users });
-      return;
-    }
     try {
-      const users = await fetchWorkspaceUsers(MONDAY_API_TOKEN);
-      staffDirectoryCache = { users, fetchedAt: now };
-      res.json({ data: users });
+      res.json({ data: await getWorkspaceUsers(MONDAY_API_TOKEN) });
     } catch (err) {
       console.error("[call-log] fetchWorkspaceUsers failed:", err);
       res.status(502).json({ error: "Could not load Monday.com users" });

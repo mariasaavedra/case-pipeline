@@ -56,6 +56,11 @@ export interface MyCasesData {
 export interface MyCasesOptions {
   /** A paralegal's board name, or null for everyone. Case-insensitive. */
   paralegal: string | null;
+  /**
+   * Whether a board name is the selected person — the staff roster's matcher,
+   * so every spelling they go by counts. Absent = compare with `paralegal`.
+   */
+  isSelected?: (boardName: string) => boolean;
   includeSnoozed?: boolean;
   activeCases?: ActiveCasesOptions;
   prescheduling?: PreschedulingOptions;
@@ -143,8 +148,10 @@ export function getMyCases(db: Database, options: MyCasesOptions): MyCasesData {
     snoozedCount++;
     return !!options.includeSnoozed;
   };
-  const forms = active.cases.filter((c) => has(c.assignees, wanted)).filter((c) => keep(c.snoozed));
-  const fees = presched.cases.filter((c) => has(c.paralegals, wanted)).filter((c) => keep(c.snoozed));
+  const mine = (names: string[]) =>
+    wanted !== null && options.isSelected ? names.some(options.isSelected) : has(names, wanted);
+  const forms = active.cases.filter((c) => mine(c.assignees)).filter((c) => keep(c.snoozed));
+  const fees = presched.cases.filter((c) => mine(c.paralegals)).filter((c) => keep(c.snoozed));
 
   // What getActiveCases doesn't carry: dates for the card, the item's own E-File mirror.
   const formExtras = new Map<string, Record<string, unknown> & { mondayItemId: string | null }>();

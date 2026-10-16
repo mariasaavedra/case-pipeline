@@ -25,11 +25,10 @@ import {
   handleBoardItemDetail,
   handleClientUpdates,
   handleClientRelationships,
-  handleAlerts,
   handleCallLog,
   handleJailIntakes,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getAddressChanges, getFoias, getSyncHealth, getArchivedRows, getCalendarEvents, addMondayCallCounts, getMondayCallCounts } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getAddressChanges, getFoias, getSyncHealth, getArchivedRows, getCalendarEvents, addMondayCallCounts, getMondayCallCounts, getAlerts, getWorkload, getInactiveAssigneeAlertGroup } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
 import { setApiToken, withMondayJob, drainMondayCallCounts, fetchPlatformUsage } from "@case-pipeline/monday";
 import { mondayFeeKIo, runFeeKAutofill } from "./fee-k-autofill.js";
@@ -89,6 +88,10 @@ import { registerConsultScheduleRoutes } from "./routes/consult-schedule.js";
 import { registerConsultLinkRoutes } from "./routes/consult-link.js";
 import { registerJailIntakeWriteRoutes } from "./routes/jail-intake-write.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
+import { registerStaffRoutes } from "./routes/staff.js";
+import { registerStaffOffboardingRoutes } from "./routes/staff-offboarding.js";
+import { seedStaffIfEmpty } from "./staff/refresh.js";
+import { makeStaffResolver } from "./staff/roster.js";
 import { REPO_ROOT } from "./paths.js";
 import { FIRM_TIMEZONE } from "./firm.js";
 import { activeBoardKeys } from "./attorney-boards.js";
@@ -384,6 +387,21 @@ app.get("/api/my-cases", (req, res) => {
 });
 app.get("/api/paralegals", (req, res) => handleParalegals(req, res, db));
 
+// Workload — open work per person across P5/P13/P14/P15/P19 (admin-only for
+// now). Names resolve through the staff roster. Query = libs/query/src/workload.ts.
+function activeCasesOptions() {
+  const u = loadUrgencySettings();
+  return {
+    criticalDays: u.criticalDays,
+    soonDays: u.soonDays,
+    statusUrgency: statusUrgencyMap(),
+    statusUrgencyAffectsBoard: u.statusUrgencyAffectsBoard,
+  };
+}
+app.get("/api/workload", requireAdmin, (_req, res) => {
+  res.json({ data: getWorkload(db, makeStaffResolver(usersDb), { activeCases: activeCasesOptions() }) });
+});
+
 // API routes
 //
 // Dashboard — inline rather than adapt()ed because the per-card display column
@@ -498,7 +516,17 @@ app.get("/api/calendar", (req, res) => {
   res.json({ data: getCalendarEvents(db, { from, to, categories, attorney }) });
 });
 
-app.get("/api/alerts", adapt(handleAlerts));
+// Alerts — inline so the roster (users.db) can add "Assigned to inactive staff".
+app.get("/api/alerts", (req, res) => {
+  const attorney = typeof req.query.attorney === "string" && req.query.attorney ? req.query.attorney : undefined;
+  const result = getAlerts(db, { attorney });
+  const inactive = getInactiveAssigneeAlertGroup(db, makeStaffResolver(usersDb), { attorney });
+  if (inactive.count > 0) {
+    result.groups.push(inactive);
+    result.totalCount += inactive.count;
+  }
+  res.json({ data: result });
+});
 app.get("/api/search", adapt(handleTypedSearch));
 app.get("/api/filter-options", adapt(handleFilterOptions));
 app.get("/api/clients", adapt(handleListClients));
@@ -574,6 +602,18 @@ registerMailRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOption
 // =============================================================================
 registerSettingsRoutes(app, db);
 
+// Staff roster (Settings → Staff) — see routes/staff.ts
+registerStaffRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN });
+// Offboarding (Settings → Staff → Offboard) — see routes/staff-offboarding.ts.
+// Seed data never writes to Monday: there the mirror alone changes.
+registerStaffOffboardingRoutes(app, {
+  db,
+  mondayApiToken: MONDAY_API_TOKEN,
+  writeTokenOptions,
+  liveWrites: DB_SOURCE === "live" && !!MONDAY_API_TOKEN,
+  activeCasesOptions,
+});
+
 // Health check — cheap liveness/readiness probe for container orchestration.
 // Confirms the DB handle is alive; intentionally outside /api so it is trivial
 // to point a Docker HEALTHCHECK / load balancer at it.
@@ -629,6 +669,8 @@ const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? "127.0.0.1";
 const server = app.listen(PORT, HOST, () => {
   console.log(`Server running at http://${HOST}:${PORT}`);
+  // An empty roster (first boot after users.db v14) is filled from Monday + the boards.
+  seedStaffIfEmpty(db, MONDAY_API_TOKEN);
 
   if (DB_SOURCE === "live") {
     scheduleNightlySync();
