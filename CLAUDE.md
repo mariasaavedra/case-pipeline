@@ -178,7 +178,8 @@ Data reads:
 | `GET /api/clients/:id/board-items` | Board items grouped by board key |
 | `GET /api/clients/:id/updates` | Timeline updates for one client |
 | `GET /api/clients/:id/relationships` | Item relationships for one client |
-| `GET /api/clients/:id/timeline` | P3.9 case timeline: dated milestones, notes per month, summary (`routes/case-timeline.ts`; mapping `config/timeline.yaml`, read once per process) |
+| `GET /api/clients/:id/timeline` | P3.9 case timeline: dated milestones, notes per month, summary (`routes/case-timeline.ts`; mapping `config/timeline.yaml`, read once per process). Needs attention items carry `fix` = the Monday item to open; E&A events carry `updateLocalId` (for a reply) |
+| `GET /api/timeline/items/:localId` | M29 event panel: one board item's editable fields with values, the ones the timeline reads first (`status`, milestone columns, the board's `edit` list). Logical key ↔ Monday column id re-resolved from `boards.yaml` (`apps/api/src/board-column-keys.ts`). Edits go through `PATCH /api/board-items/:localId/columns`, which now also updates the local `column_values` (every key the column is stored under) |
 | `GET /api/board-items/:id` | Single board item detail |
 
 Writes and user/account routes:

@@ -21,6 +21,7 @@ import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { getBoardStatusOptionsFor, getBoardColumnsFor } from "@case-pipeline/query";
 import { planStatusWrite, type BoardItemStatusRow } from "./status-write.js";
+import { getBoardsConfig, keysForColumn, applyColumnLocally } from "../board-column-keys.js";
 
 export interface BoardItemWriteDeps {
   db: DatabaseInstance;
@@ -164,11 +165,23 @@ export function registerBoardItemWriteRoutes(app: Express, deps: BoardItemWriteD
 
     const mondayItemId = item.monday_item_id; // narrowed; the write closure below can't re-narrow a field
 
+    // The local copy, so the timeline (and every page) shows the change before
+    // the next sync. Best-effort: Monday has the value either way.
+    const applyLocal = async () => {
+      try {
+        const config = (await getBoardsConfig())[item.board_key];
+        for (const key of config ? keysForColumn(config, schema.columns, columnId) : []) applyColumnLocally(db, localId, key, col.type, value);
+      } catch (err) {
+        console.warn("[write-back] local column update skipped:", err);
+      }
+    };
+
     try {
       const outcome = await withTokenFallback(
         (token) => dataSource.setColumnValue(schema.mondayBoardId, mondayItemId, columnId, value, token),
         writeTokenOptions(req),
       );
+      await applyLocal();
       auditFromReq(req, "monday.column_changed", {
         targetType: "board_item", targetId: localId, targetMondayId: mondayItemId,
         metadata: {
@@ -179,6 +192,7 @@ export function registerBoardItemWriteRoutes(app: Express, deps: BoardItemWriteD
       res.json({ data: { localId, columnId, value, pending: false } });
     } catch (err) {
       console.error("[write-back] column change failed; queueing for retry:", err);
+      await applyLocal();
       enqueueWrite(db, {
         opType: "change_column", targetTable: "board_items", targetLocalId: localId,
         mondayItemId: item.monday_item_id, authorOid: req.user?.oid ?? null,

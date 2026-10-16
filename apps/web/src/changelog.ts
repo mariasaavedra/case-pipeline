@@ -15,6 +15,16 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-16",
+    title: "Timeline: open an event to fix it",
+    items: [
+      "Click anything on a client's Timeline (a dot on the chart, a line in the story, a “Coming up” item) to open it: its Monday fields, the ones that matter first, editable right there.",
+      "“Needs attention” items have a button: “Record outcome” for a hearing nobody updated (one click: Attended, Rescheduled / not happening, Withdrew, IJ no-show), “Fix” for a missed deadline, “Record decision” for a motion still waiting on the judge.",
+      "Each event also takes a note: a reply under an Emails & Activities entry, or a note on the client that says which event it's about.",
+      "The client popup (opened from a client's name, or from a call) now has a Timeline tab too.",
+    ],
+  },
+  {
+    date: "2026-10-16",
     title: "Sidebar: folders for your pages",
     items: [
       "In Customize (bottom of the sidebar), “+ New folder” makes a folder. Name it, then drag pages into it.",

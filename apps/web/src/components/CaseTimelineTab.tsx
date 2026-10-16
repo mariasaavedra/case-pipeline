@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { fetchCaseTimeline } from "../api";
 import type { CaseTimeline, TimelineEvent, TimelineNote, TimelineTrack } from "../api";
+import { TimelineEventPanel, type TimelineEventTarget } from "./TimelineEventPanel";
 
 // P3.9 Case timeline — the client's case as dated milestones on five tracks.
 // Data + rules: GET /api/clients/:id/timeline (libs/query/src/case-timeline.ts,
-// config/timeline.yaml). This file only draws it.
+// config/timeline.yaml). This file draws it; clicking an event (or "Fix" on a
+// "Needs attention" item) opens M29, TimelineEventPanel, to edit its Monday item.
 
 const TRACKS: { key: TimelineTrack; name: string; color: string }[] = [
   { key: "court", name: "Immigration court", color: "var(--tl-court)" },
@@ -46,10 +48,17 @@ export function CaseTimelineTab({ profileLocalId }: { profileLocalId: string }) 
   const [tracks, setTracks] = useState<Set<TimelineTrack>>(() => new Set(TRACKS.map((t) => t.key)));
   const [newestFirst, setNewestFirst] = useState(true);
   const [highlight, setHighlight] = useState<number | null>(null);
+  const [panel, setPanel] = useState<TimelineEventTarget | null>(null);
+  /** Bumped after an edit in M29: reload without blanking what's on screen. */
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    setData(null);
+    setHighlight(null);
+  }, [profileLocalId]);
 
   useEffect(() => {
     let cancelled = false;
-    setData(null);
     setError(null);
     fetchCaseTimeline(profileLocalId)
       .then((t) => !cancelled && setData(t))
@@ -57,7 +66,7 @@ export function CaseTimelineTab({ profileLocalId }: { profileLocalId: string }) 
     return () => {
       cancelled = true;
     };
-  }, [profileLocalId]);
+  }, [profileLocalId, version]);
 
   if (error) {
     return (
@@ -87,11 +96,25 @@ export function CaseTimelineTab({ profileLocalId }: { profileLocalId: string }) 
   const pick = (i: number) => {
     setHighlight(i);
     document.querySelector(`[data-tl-row="${i}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const event = data.events[i];
+    if (event) setPanel({ event });
+  };
+  const openRow = (i: number) => {
+    setHighlight(i);
+    const event = data.events[i];
+    if (event) setPanel({ event });
+  };
+  const openFix = (n: TimelineNote) => {
+    if (!n.fix) return;
+    const fix = n.fix;
+    // The dated event behind the item, when there is one (a motion waiting on the judge may have none).
+    const event = data.events.find((e) => e.itemLocalId === fix.itemLocalId && (!n.date || e.date === n.date));
+    setPanel({ fix, event, title: n.text });
   };
 
   return (
     <div className="space-y-4 animate-in" style={{ fontFamily: "var(--font-body)" }}>
-      <Summary data={data} />
+      <Summary data={data} onFix={openFix} onOpen={(e) => setPanel({ event: e })} />
 
       <section className="card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -131,8 +154,19 @@ export function CaseTimelineTab({ profileLocalId }: { profileLocalId: string }) 
             </div>
           </div>
         </div>
-        <Story events={data.events} tracks={tracks} newestFirst={newestFirst} highlight={highlight} today={data.today} />
+        <Story events={data.events} tracks={tracks} newestFirst={newestFirst} highlight={highlight} today={data.today} onOpen={openRow} />
       </section>
+
+      {panel && (
+        <TimelineEventPanel
+          profileLocalId={profileLocalId}
+          target={panel}
+          onClose={(changed) => {
+            setPanel(null);
+            if (changed) setVersion((v) => v + 1);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -149,9 +183,9 @@ function SectionTitle({ children }: { children: ReactNode }) {
 // Summary
 // =============================================================================
 
-function Summary({ data }: { data: CaseTimeline }) {
+function Summary({ data, onFix, onOpen }: { data: CaseTimeline; onFix: (n: TimelineNote) => void; onOpen: (e: TimelineEvent) => void }) {
   const { standing, attention, next } = data.summary;
-  const col = (title: string, items: TimelineNote[], empty: string, emptyTone?: "good") => (
+  const col = (title: string, items: TimelineNote[], empty: string, emptyTone?: "good", open?: (i: number) => void) => (
     <div>
       <SectionTitle>{title}</SectionTitle>
       <ul className="mt-2 m-0 p-0 list-none">
@@ -165,7 +199,19 @@ function Summary({ data }: { data: CaseTimeline }) {
                   {fmtShort(n.date)}
                 </span>
               )}
-              <span style={{ color: n.tone ? TONE_COLOR[n.tone] : "var(--color-ink)", fontWeight: n.tone ? 600 : 400 }}>{n.text}</span>
+              {open ? (
+                <button type="button" className="case-tl-link" onClick={() => open(i)}>{n.text}</button>
+              ) : (
+                <span style={{ color: n.tone ? TONE_COLOR[n.tone] : "var(--color-ink)", fontWeight: n.tone ? 600 : 400 }}>{n.text}</span>
+              )}
+              {n.fix && (() => {
+                const action = n.fix.kind === "hearing_outcome" ? "Record outcome" : n.fix.kind === "motion" ? "Record decision" : "Fix";
+                return (
+                  <button type="button" className="case-tl-fix" onClick={() => onFix(n)} aria-label={`${action}: ${n.text}`}>
+                    {action}
+                  </button>
+                );
+              })()}
             </li>
           ))
         )}
@@ -176,7 +222,10 @@ function Summary({ data }: { data: CaseTimeline }) {
     <section className="card p-4 grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
       {col("Where it stands", standing, "Nothing recorded yet")}
       {col("Needs attention", attention, "Nothing flagged", "good")}
-      {col("Coming up", next.map((e) => ({ tone: null, date: e.date, text: e.label })), "Nothing scheduled")}
+      {col("Coming up", next.map((e) => ({ tone: null, date: e.date, text: e.label })), "Nothing scheduled", undefined, (i) => {
+        const e = next[i];
+        if (e) onOpen(e);
+      })}
     </section>
   );
 }
@@ -201,6 +250,7 @@ function Marker({ e, x, y, color }: { e: Pick<TimelineEvent, "kind" | "status" |
     case "decision":
       return <rect x={x - 5.5} y={y - 5.5} width={11} height={11} rx={1.5} {...p} />;
     case "deadline": {
+      if (cancelled) return <path d={`M${x} ${y - 7}L${x + 6.5} ${y + 5}L${x - 6.5} ${y + 5}Z`} {...p} />;
       const c = e.status === "met" ? "var(--tl-good)" : "var(--tl-bad)";
       const solid = e.status === "met" || e.status === "upcoming";
       return <path d={`M${x} ${y - 7}L${x + 6.5} ${y + 5}L${x - 6.5} ${y + 5}Z`} stroke={c} strokeWidth={2} fill={solid ? c : "var(--color-card)"} />;
@@ -411,7 +461,7 @@ function Chart({ data, range, tracks, onPick }: { data: CaseTimeline; range: Ran
 // Story
 // =============================================================================
 
-function Story({ events, tracks, newestFirst, highlight, today }: { events: TimelineEvent[]; tracks: Set<TimelineTrack>; newestFirst: boolean; highlight: number | null; today: string }) {
+function Story({ events, tracks, newestFirst, highlight, today, onOpen }: { events: TimelineEvent[]; tracks: Set<TimelineTrack>; newestFirst: boolean; highlight: number | null; today: string; onOpen: (i: number) => void }) {
   const rows = events.map((e, i) => ({ e, i })).filter(({ e }) => tracks.has(e.track));
   if (newestFirst) rows.reverse();
   if (rows.length === 0) {
@@ -429,7 +479,22 @@ function Story({ events, tracks, newestFirst, highlight, today }: { events: Time
             {header && (
               <div className="text-xs font-semibold mt-4 mb-1 py-1" style={{ color: "var(--color-ink-muted)" }}>{header}</div>
             )}
-            <div className="case-tl-row" data-tl-row={i} data-hl={highlight === i} data-cancelled={e.status === "cancelled"}>
+            <div
+              className="case-tl-row"
+              data-tl-row={i}
+              data-hl={highlight === i}
+              data-cancelled={e.status === "cancelled"}
+              role="button"
+              tabIndex={0}
+              aria-label={`${e.label}, ${fmtLong(e.date)}: open`}
+              onClick={() => onOpen(i)}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter" || ev.key === " ") {
+                  ev.preventDefault();
+                  onOpen(i);
+                }
+              }}
+            >
               <div className="text-xs pt-0.5" style={{ color: "var(--color-ink-faint)", fontVariantNumeric: "tabular-nums" }}>{fmtShort(e.date)}</div>
               <svg width={16} height={16} viewBox="0 0 16 16" aria-hidden>
                 <Marker e={e} x={8} y={8} color={TRACK[e.track].color} />
@@ -460,6 +525,7 @@ function Tag({ e, today }: { e: TimelineEvent; today: string }) {
     </span>
   );
   if (e.status === "met") return tag("deadline met", "var(--tl-good)");
+  if (e.kind === "deadline" && e.status === "cancelled") return tag("not ours any more", "var(--color-ink-muted)");
   if (e.kind === "deadline") return tag("deadline", e.date <= today ? "var(--tl-bad)" : "var(--tl-warn)");
   if (e.status === "bad") return tag(e.kind === "decision" ? "adverse" : "!", "var(--tl-bad)");
   if (e.status === "good") return tag("✓", "var(--tl-good)");

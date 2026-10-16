@@ -53,13 +53,27 @@ export interface TimelineEvent {
   /** The Monday item's name, or "E&A · <type>". */
   source: string;
   boardKey: string | null;
+  /** The board item (or, on the fees track, the Fee K) the event was read from. */
   itemLocalId: string | null;
+  /** The Emails & Activities entry an E&A event was read from (client_updates.local_id). */
+  updateLocalId: string | null;
+}
+
+/**
+ * What a "Needs attention" item asks someone to record, and on which Monday
+ * item: the outcome of a past hearing, the filing behind a missed deadline,
+ * the judge's decision on a motion. The tab opens that item's fields.
+ */
+export interface TimelineFix {
+  kind: "hearing_outcome" | "deadline" | "motion";
+  itemLocalId: string;
 }
 
 export interface TimelineNote {
   tone: "bad" | "warn" | "good" | null;
   date: string | null;
   text: string;
+  fix?: TimelineFix;
 }
 
 export interface CaseTimeline {
@@ -155,7 +169,7 @@ export function renderTemplate(tpl: string, cv: Columns, vars: Record<string, st
   });
 }
 
-function boardConfigFor(config: TimelineConfig, boardKey: string): TimelineBoardConfig | undefined {
+export function boardConfigFor(config: TimelineConfig, boardKey: string): TimelineBoardConfig | undefined {
   const exact = config.boards[boardKey];
   if (exact) return exact;
   for (const [key, cfg] of Object.entries(config.boards)) {
@@ -181,7 +195,12 @@ interface RuleContext {
   today: string;
   /** The profile has an Appeals board item (its stored due date wins over +30 days). */
   hasAppeal: boolean;
-  pendingMotions: string[];
+  pendingMotions: PendingMotion[];
+}
+
+interface PendingMotion {
+  name: string;
+  itemLocalId: string;
 }
 
 type Add = (date: string | null, kind: TimelineKind, label: string, extra?: { status?: TimelineEventStatus | null; detail?: string | null; track?: TimelineTrack }) => void;
@@ -223,7 +242,8 @@ const RULES: Record<string, (item: Item, add: Add, ctx: RuleContext) => void> = 
   calendaring(item, add, ctx) {
     const type = textOf(item.cv, "type") ?? "";
     const st = item.status ?? "";
-    const cancelled = /NOT HAPPENING|RESCHED/i.test(st) || /RESCHEDULED|CONTINUED/i.test(item.group ?? "");
+    // WITHDREW and VISITING IJ NO SHOW are outcomes too: the hearing didn't go ahead.
+    const cancelled = /NOT HAPPENING|RESCHED|WITHDREW|NO SHOW/i.test(st) || /RESCHEDULED|CONTINUED/i.test(item.group ?? "");
     const hearing = dateOf(item.cv, "hearing_date_calendaring");
     if (hearing) {
       const status: TimelineEventStatus = cancelled
@@ -234,7 +254,9 @@ const RULES: Record<string, (item: Item, add: Add, ctx: RuleContext) => void> = 
             ? "upcoming"
             : "unknown";
       add(hearing, "hearing", type ? `${type} hearing` : "Hearing", { status, detail: st ? `Calendaring status: ${st}` : null });
-      add(dateOf(item.cv, "due_date"), "deadline", `Filing deadline before ${type ? type.toLowerCase() + " " : ""}hearing`, { status: "deadline" });
+      add(dateOf(item.cv, "due_date"), "deadline", `Filing deadline before ${type ? type.toLowerCase() + " " : ""}hearing`, {
+        status: /deadline complete/i.test(st) ? "met" : "deadline",
+      });
     }
     const interview = dateOf(item.cv, "interview_date");
     add(interview, "hearing", "USCIS interview", {
@@ -265,7 +287,7 @@ const RULES: Record<string, (item: Item, add: Add, ctx: RuleContext) => void> = 
     if (decided && item.status) {
       add(decided, "decision", `Motion ${item.status.toLowerCase()}: ${name}`, { status: /granted/i.test(item.status) ? "good" : "bad" });
     } else if (/^filed$/i.test(item.status ?? "")) {
-      ctx.pendingMotions.push(name);
+      ctx.pendingMotions.push({ name, itemLocalId: item.localId });
     }
   },
 
@@ -274,12 +296,17 @@ const RULES: Record<string, (item: Item, add: Add, ctx: RuleContext) => void> = 
     const form = item.name.match(/I-?(\d{3}[A-Z]?)\s+(?:RFE|DENIED)/i) ?? item.name.match(/I-?(\d{3}[A-Z]?)/i);
     const formName = form?.[1] ? `I-${form[1].toUpperCase()}` : "Application";
     const detail = item.status ? `Status: ${item.status}` : null;
+    // The board's dates mirror Calendaring, so its Status is what records the
+    // response: "Sent out" = met; not responding / the client responding
+    // themselves = not our deadline any more.
+    const st = item.status ?? "";
+    const due: TimelineEventStatus = /^sent out$/i.test(st) ? "met" : /not responding|self respond/i.test(st) ? "cancelled" : "deadline";
     if (/DENIAL/i.test(type)) {
       add(dateOf(item.cv, "issue_date_calendaring"), "decision", `${formName} denied`, { status: "bad" });
-      add(dateOf(item.cv, "due_date_calendaring"), "deadline", /290/.test(item.name) ? "I-290B appeal due" : "Response to denial due", { status: "deadline", detail });
+      add(dateOf(item.cv, "due_date_calendaring"), "deadline", /290/.test(item.name) ? "I-290B appeal due" : "Response to denial due", { status: due, detail });
     } else {
       add(dateOf(item.cv, "issue_date_calendaring"), "decision", `${formName} RFE issued`, { status: "bad" });
-      add(dateOf(item.cv, "due_date_calendaring"), "deadline", `${formName} RFE response due`, { status: "deadline", detail });
+      add(dateOf(item.cv, "due_date_calendaring"), "deadline", `${formName} RFE response due`, { status: due, detail });
     }
   },
 
@@ -323,6 +350,7 @@ interface BoardRow {
 }
 
 interface ActivityRow {
+  local_id: string;
   created_at_source: string;
   type: string;
   body: string | null;
@@ -401,6 +429,7 @@ export function getCaseTimeline(
         source: row.name,
         boardKey: row.board_key === "contracts" ? null : row.board_key,
         itemLocalId: row.local_id,
+        updateLocalId: null,
       });
     };
 
@@ -444,7 +473,7 @@ function addActivities(db: Database, profileLocalId: string, config: TimelineCon
   if (types.length === 0) return;
   const rows = db
     .prepare(
-      `SELECT created_at_source, TRIM(activity_type_name) AS type, COALESCE(title, text_body) AS body
+      `SELECT local_id, created_at_source, TRIM(activity_type_name) AS type, COALESCE(title, text_body) AS body
          FROM client_updates
         WHERE profile_local_id = ? AND TRIM(activity_type_name) IN (${types.map(() => "?").join(",")})
           AND created_at_source IS NOT NULL
@@ -481,7 +510,7 @@ function addActivities(db: Database, profileLocalId: string, config: TimelineCon
         continue;
       }
     }
-    events.push({ date, track, kind: cfg.kind, label, status: null, detail, source: `E&A · ${row.type}`, boardKey: null, itemLocalId: null });
+    events.push({ date, track, kind: cfg.kind, label, status: null, detail, source: `E&A · ${row.type}`, boardKey: null, itemLocalId: null, updateLocalId: row.local_id });
   }
 }
 
@@ -531,7 +560,7 @@ function notesPerMonth(db: Database, profileLocalId: string, timeZone?: string):
 
 export function summarize(
   events: TimelineEvent[],
-  pendingMotions: string[],
+  pendingMotions: PendingMotion[],
   notesByMonth: { month: string; count: number }[],
   today: string,
 ): CaseTimeline["summary"] {
@@ -556,18 +585,32 @@ export function summarize(
 
   const attention: TimelineNote[] = [];
   for (const e of events) {
-    if (e.kind !== "deadline" || e.status === "met" || e.date > today) continue;
+    if (e.kind !== "deadline" || e.status === "met" || e.status === "cancelled" || e.date > today) continue;
     const ago = daysBetween(e.date, today);
     if (ago > ATTENTION_LOOKBACK_DAYS) continue;
     const filedSince = events.some((x) => x.kind === "filing" && x.track === e.track && x.date >= e.date && x.date <= today);
     if (!filedSince) {
-      attention.push({ tone: "bad", date: e.date, text: `${e.label} passed ${ago === 0 ? "today" : `${ago} day${ago === 1 ? "" : "s"} ago`} — nothing filed since` });
+      attention.push({
+        tone: "bad",
+        date: e.date,
+        text: `${e.label} passed ${ago === 0 ? "today" : `${ago} day${ago === 1 ? "" : "s"} ago`} — nothing filed since`,
+        ...(e.itemLocalId && e.boardKey ? { fix: { kind: "deadline" as const, itemLocalId: e.itemLocalId } } : {}),
+      });
     }
   }
   for (const e of events) {
-    if (e.kind === "hearing" && e.status === "unknown") attention.push({ tone: "warn", date: e.date, text: `${e.label} — no outcome recorded` });
+    if (e.kind === "hearing" && e.status === "unknown") {
+      attention.push({
+        tone: "warn",
+        date: e.date,
+        text: `${e.label} — no outcome recorded`,
+        ...(e.itemLocalId ? { fix: { kind: "hearing_outcome" as const, itemLocalId: e.itemLocalId } } : {}),
+      });
+    }
   }
-  for (const m of pendingMotions) attention.push({ tone: "warn", date: null, text: `Motion waiting on the judge: ${m}` });
+  for (const m of pendingMotions) {
+    attention.push({ tone: "warn", date: null, text: `Motion waiting on the judge: ${m.name}`, fix: { kind: "motion", itemLocalId: m.itemLocalId } });
+  }
 
   const next = events.filter((e) => e.date > today && e.status !== "cancelled").slice(0, 4);
   return { standing, attention, next };
