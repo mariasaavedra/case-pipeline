@@ -73,6 +73,8 @@ import { registerContractFeesRoutes } from "./routes/contract-fees.js";
 import { registerCaseCardWriteRoutes } from "./routes/case-card-write.js";
 import { registerContractDocumentRoutes } from "./routes/contract-document.js";
 import { registerEsignPublicRoutes, registerEsignRoutes } from "./routes/esign.js";
+import { registerLawPayRoutes } from "./routes/lawpay.js";
+import { runLawPayMailJob } from "./lawpay/mail-job.js";
 import { registerDocumentRoutes } from "./routes/documents.js";
 import { initDocumentSettings } from "./documents/document-settings.js";
 import { registerSmsRoutes } from "./routes/sms.js";
@@ -549,6 +551,7 @@ registerContractFeesRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTok
 registerCaseCardWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractDocumentRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerEsignRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerLawPayRoutes(app, { db });
 registerDocumentRoutes(app, { db });
 
 // =============================================================================
@@ -634,6 +637,7 @@ const server = app.listen(PORT, HOST, () => {
     scheduleNightlySync();
     scheduleConsultSweep();
     scheduleDriveIntake();
+    scheduleLawPayMail();
     scheduleFeeKAutofill();
     scheduleWalCheckpoint();
     // Write this process's Monday call counts to monday_api_calls every minute.
@@ -937,6 +941,34 @@ function scheduleDriveIntake() {
     { timezone: FIRM_TIMEZONE },
   );
   console.log(`[drive] Intake scheduled — cron "${intakeCron}" (${FIRM_TIMEZONE}).`);
+}
+
+/**
+ * LawPay receipts → Fee Ks: reads the receipts forwarded to importantdocuments@
+ * and applies each once (note, Slack, bell; fully paid → Paid needs action +
+ * Paid Fee Ks). See docs/features/lawpay-payments.md.
+ *
+ * Off unless LAWPAY_MAIL=on. Its own process (the Microsoft sign-in lives in
+ * scripts/); one run at a time. A failure goes to Slack ops at most once an hour.
+ */
+function scheduleLawPayMail() {
+  if (process.env.LAWPAY_MAIL !== "on") {
+    console.log("[lawpay] Receipts DISABLED (set LAWPAY_MAIL=on to enable). Check by hand: npm run lawpay:mail");
+    return;
+  }
+  const cronExpr = process.env.LAWPAY_MAIL_CRON ?? "*/10 * * * *";
+  cron.schedule(cronExpr, () => {
+    void runLawPayMailJob({ db, mondayApiToken: MONDAY_API_TOKEN }).then((r) => {
+      if (!r) return;
+      if (!r.ok) {
+        console.error(`[lawpay] Receipts failed: ${r.error}`);
+        inBackground(notifyOps("ops_lawpay_mail", `Reading LawPay receipts failed: ${r.error}`));
+      } else if (r.applied.length) {
+        console.log(`[lawpay] ${r.receipts} receipt(s) found, applied: ${r.applied.join(", ")}`);
+      }
+    });
+  }, { timezone: FIRM_TIMEZONE });
+  console.log(`[lawpay] Receipts scheduled — cron "${cronExpr}" (${FIRM_TIMEZONE}).`);
 }
 
 /**

@@ -20,13 +20,13 @@
 // =============================================================================
 
 import { useState } from "react";
-import type { PendingContract } from "../api";
+import { recordPaymentLinks, type PendingContract } from "../api";
 import { useAuth } from "../auth/useAuth";
 import { GraphConsentRequiredError, sendMailAsMe } from "../sharepoint/graph";
 import { chargeFor, payMethodOf, paymentEmail, paymentLines, type PayMethod } from "../lib/payment-email";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { lawPayLink, FEE_TYPE_LABELS, type FeeType } from "../lib/lawpay";
+import { formatLawPayAmount, lawPayLink, lawPayReference, withFeeKCode, FEE_TYPE_LABELS, type FeeType } from "../lib/lawpay";
 import { SendSmsModal } from "./SendSmsModal";
 import type { SendSmsResult } from "../api";
 
@@ -70,7 +70,19 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
     const n = fee(f);
     return n === null ? null : method === "credit" ? chargeFor(n, "credit") : n;
   };
-  const links = method === "cash" ? [] : FEES.map((f) => ({ fee: f, link: lawPayLink(description, f, charged(f) ?? "") }));
+  // Every reference carries the Fee K's code, so LawPay's receipt names its Fee K.
+  const reference = withFeeKCode(description, c.mondayItemId);
+  const links = method === "cash" ? [] : FEES.map((f) => ({ fee: f, link: lawPayLink(reference, f, charged(f) ?? "") }));
+
+  // Every way the links leave M21 is recorded, so LawPay's payment finds this Fee K.
+  const record = (channel: "email" | "text" | "copy" | "mark") => {
+    const out = method === "cash" ? [] : FEES.flatMap((f) => {
+      const amount = charged(f);
+      const text = amount === null ? null : formatLawPayAmount(amount);
+      return text && reference ? [{ fee: f, amount: Number(text), reference: lawPayReference(reference, f, text) }] : [];
+    });
+    void recordPaymentLinks(c.localId, { channel, method, links: out });
+  };
 
   // The e-mail (app-signed contracts only).
   const emailTo = c.signedInApp?.clientEmail ?? null;
@@ -78,7 +90,7 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
     ? paymentEmail({
         clientName: c.clientName,
         matter: c.contractFor.join(", "),
-        lines: paymentLines(description, { AF: fee("AF"), FF: fee("FF"), PF: fee("PF") }, method),
+        lines: paymentLines(reference, { AF: fee("AF"), FF: fee("FF"), PF: fee("PF") }, method),
         method,
         senderName: user?.name ?? "",
       })
@@ -93,6 +105,7 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
     try {
       await sendMailAsMe({ to: emailTo, subject: email.subject, html: email.html }, interactive);
       setNeedsMailConsent(false);
+      record("email");
     } catch (e) {
       if (e instanceof GraphConsentRequiredError) setNeedsMailConsent(true);
       else setError(e instanceof Error ? `The e-mail was not sent: ${e.message}` : "The e-mail was not sent");
@@ -116,6 +129,7 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
   // "Mark sent". A failure there is shown here; the text itself already went.
   const onTexted = async (r: SendSmsResult) => {
     if (r.mode !== "on") { setTexted("test"); return; }
+    record("text");
     if (!onMarkSent) { setTexted("texted"); return; }
     try {
       await onMarkSent();
@@ -129,6 +143,7 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
   const copy = async (text: string, which: FeeType | "all") => {
     try {
       await navigator.clipboard.writeText(text);
+      record("copy");
       setCopied(which);
       setTimeout(() => setCopied((w) => (w === which ? null : w)), 1500);
     } catch {
@@ -142,6 +157,7 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
     setError(null);
     try {
       await onMarkSent();
+      record("mark");
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not record the payment link");
@@ -162,6 +178,11 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
             <label style={labelStyle} htmlFor="m21-desc">Description (the reference the client sees)</label>
             <input id="m21-desc" value={description} onChange={(e) => setDescription(e.target.value)}
               className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
+            {reference !== description.trim() && (
+              <p className="text-xs mt-1" style={{ color: "var(--color-ink-faint)" }}>
+                The links add <strong>{reference.slice(description.trim().length).trim()}</strong>: the Fee K&apos;s code, so the payment finds this Fee K by itself.
+              </p>
+            )}
           </div>
 
           <fieldset>

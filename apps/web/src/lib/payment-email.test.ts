@@ -45,3 +45,14 @@ describe("paymentEmail", () => {
     expect(m.subject).toBe("Payment links / Enlaces de pago — Ana <b>");
   });
 });
+
+describe("the Fee K code in references", () => {
+  it("web and API agree: K + Monday id in base 36, added once", async () => {
+    const { feeKCode, withFeeKCode } = await import("./lawpay");
+    expect(feeKCode("18323456789")).toBe(`K${(18323456789).toString(36).toUpperCase()}`);
+    const d = withFeeKCode("Ana LOPEZ I-212", "18323456789");
+    expect(d).toBe(`Ana LOPEZ I-212 ${feeKCode("18323456789")}`);
+    expect(withFeeKCode(d, "18323456789")).toBe(d);
+    expect(withFeeKCode("Ana", null)).toBe("Ana");
+  });
+});
