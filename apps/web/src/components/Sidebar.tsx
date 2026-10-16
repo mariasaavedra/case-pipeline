@@ -43,7 +43,7 @@ interface NavItem {
 
 /** Pages still being built: admins use them, everyone else sees them greyed
  *  out here and a notice on the page itself (app.tsx). Remove an id to open it. */
-export const UNDER_CONSTRUCTION_PAGES = new Set(["alerts", "mail", "court-cases", "address-changes", "foias", "map"]);
+export const UNDER_CONSTRUCTION_PAGES = new Set(["alerts", "mail", "court-cases", "address-changes", "foias", "workload", "map"]);
 
 const NAV_ITEMS: NavItem[] = [
   {
@@ -215,6 +215,18 @@ const NAV_ITEMS: NavItem[] = [
         <path d="M12 2.5v4h4" />
         <circle cx="9" cy="11.5" r="2.5" />
         <path d="M10.8 13.3L13 15.5" />
+      </svg>
+    ),
+  },
+  {
+    id: "workload",
+    label: "Workload",
+    path: "/workload",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="6" cy="5.5" r="2" />
+        <path d="M2.5 12c0-1.9 1.6-3.5 3.5-3.5S9.5 10.1 9.5 12" />
+        <path d="M11.5 16.5h6M11.5 13h4M11.5 9.5h2" />
       </svg>
     ),
   },

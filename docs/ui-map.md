@@ -62,6 +62,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P17 | Receptionists | `/reception` | Sidebar → Receptionists (below Appointments) | `components/ReceptionPage.tsx` |
 | P18 | Address Changes | `/address-changes` | Sidebar → Address Changes (admins only for now) | `components/AddressChangesPage.tsx` |
 | P19 | FOIAs | `/foias` | Sidebar → FOIAs (admins only for now) | `components/FoiasPage.tsx` |
+| P20 | Workload | `/workload` | Sidebar → Workload (admins only for now) | `components/WorkloadPage.tsx` |
 
 ### Global
 
@@ -235,12 +236,16 @@ Four tabs, each with its own URL (`/settings/<tab>`); `/settings` opens My accou
 | P11.3.4 | Documents | Firm address/phone/fax, attorneys (email, USCIS account, bars — first is used), detention facility addresses by Det. Facility label — what M23 fills that Monday doesn't hold |
 | P11.3.5 | Text templates | The texts M28 can send: name + English + Spanish text, placeholders listed, segment count per language, SMS mode (off / test / live). `data/sms-templates.json`, audited |
 | P11.4 | **Admin** tab *(admin)* | `/settings/admin` |
-| P11.4.1 | Users | Per user: paralegal name (My Cases), **attorney board** (P4 opens on it), role, disable |
+| P11.4.1 | Users | Per user: **staff record** (which roster person this login is — sets their My Cases lane and My Day board), role, disable |
 | P11.4.2 | Sync health | |
 | P11.4.3 | Audit log: filter by what / who / dates, grouped by day, client names link to their page | |
 | P11.4.4 | Monday API usage | Calls today vs the account's daily limit (Monday's `platform_api` report), last 14 days, calls by job (`monday_api_calls`), by app / user. Shown above the audit log |
 | P11.5 | **Integrations** tab *(admin)* | `/settings/integrations` (`IntegrationsSection.tsx`). Shown between Firm setup and Admin |
 | P11.5.1 | Slack | Mode badge (SLACK_MODE), bot + workspace, then every notification (Workflow events / Failure alerts) with an on/off box and a channel picker (Default = the kind's .env channel; private channels the bot isn't in are greyed out); "the same failure posts again only after N minutes"; **Save** (audited). **Send test message** to any channel the bot can post in (posts even in test mode); Refresh channels. `data/notify-settings.json` |
+| P11.6 | **Staff** tab *(admin)* | `/settings/staff` (`StaffSection.tsx`). Shown between Integrations and Admin. See `docs/features/staff-roster.md` |
+| P11.6.1 | Roster | Refresh from Monday (summary: added / updated / board names / roles suggested / logins linked / no longer in Monday), Add person, role filter, show inactive; counts (suggested roles to confirm, without a role). Row: name + Monday / board-name-only / inactive tags, e-mail · ext. · app login, role chips (dashed = suggested; Confirm), Edit → name, e-mail, ext., start date, attorney board, Offboard…, names on the boards (aliases) |
+| P11.6.2 | Names on the boards with no Monday account | Board spellings no Monday user matches; "This is…" moves the spelling to a person |
+| P11.6.3 | Offboarding | 1 Hand over open work (default per column + per-item picker, results: changed / queued / skipped + why) · 2 Turn off access · 3 Outside this app (Monday seat, Microsoft 365, RingCentral, Slack) · 4 Finish |
 | P11.5.2 | Texting (RingCentral) | Mode badge (SMS_MODE), sending number, template count → P11.3.5; **Check connection** = the `npm run sms:check` steps (✓/✗ + fix); 10DLC note |
 
 Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P11.2.1 (Language moved to P11.2.2), P11.3 → P11.1.2, P11.4 → P11.1.3, P11.5 → P11.3.1, P11.6 → P11.3.2, P11.7 → P11.3.3, P11.8 → P11.4.2, P11.9 → P11.4.1, P11.10 → P11.4.3.

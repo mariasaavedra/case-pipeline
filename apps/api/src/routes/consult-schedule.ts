@@ -33,7 +33,9 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { getBoardColumnsFor } from "@case-pipeline/query";
-import { fetchBoardStructure, fetchWorkspaceUsers } from "@case-pipeline/monday";
+import { fetchBoardStructure } from "@case-pipeline/monday";
+import { usersDb } from "../db/users-db.js";
+import { mondayUserIdForName } from "../staff/workspace-users.js";
 import { loadAttorneyBoards } from "../attorney-boards.js";
 import { FIRM_TIMEZONE, mondayDateTime } from "../firm.js";
 import { TODAY_GROUP_RE, UPCOMING_GROUP_RE, type BoardGroup } from "./appointment-write.js";
@@ -98,16 +100,9 @@ export interface ConsultScheduleDeps {
 export function registerConsultScheduleRoutes(app: Express, deps: ConsultScheduleDeps): void {
   const { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions } = deps;
 
-  let staffCache: { users: Awaited<ReturnType<typeof fetchWorkspaceUsers>>; at: number } | null = null;
   async function mondayUserIdFor(name: string | null): Promise<number | null> {
-    if (!name) return null;
     try {
-      if (!staffCache || Date.now() - staffCache.at > 10 * 60 * 1000) {
-        staffCache = { users: await fetchWorkspaceUsers(MONDAY_API_TOKEN), at: Date.now() };
-      }
-      const hit = staffCache.users.find((u) => u.name.trim().toLowerCase() === name.trim().toLowerCase());
-      const id = hit ? Number(hit.id) : NaN;
-      return Number.isFinite(id) ? id : null;
+      return await mondayUserIdForName(MONDAY_API_TOKEN, name, usersDb);
     } catch (err) {
       console.error("[consult-schedule] could not resolve the attorney to a Monday user:", err);
       return null;

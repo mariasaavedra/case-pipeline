@@ -5,12 +5,12 @@
 import type { TabId } from "./components/ClientTabs";
 
 export interface Route {
-  page: "landing" | "clients" | "client-detail" | "appointments" | "reception" | "contracts" | "prescheduling" | "address-changes" | "foias" | "active-cases" | "my-cases" | "calendar" | "alerts" | "call-log" | "jail-intakes" | "mail" | "court-cases" | "map" | "login" | "admin" | "settings";
+  page: "landing" | "clients" | "client-detail" | "appointments" | "reception" | "contracts" | "prescheduling" | "address-changes" | "foias" | "workload" | "active-cases" | "my-cases" | "calendar" | "alerts" | "call-log" | "jail-intakes" | "mail" | "court-cases" | "map" | "login" | "admin" | "settings";
   params: Record<string, string>;
 }
 
 const VALID_TABS = new Set<string>(["overview", "timeline", "appointments", "contracts", "active_cases", "court_cases", "documents", "relations"]);
-const SETTINGS_TABS = new Set<string>(["account", "preferences", "firm", "integrations", "admin"]);
+const SETTINGS_TABS = new Set<string>(["account", "preferences", "firm", "integrations", "staff", "admin"]);
 
 /**
  * Match a pathname to a route definition.
@@ -62,6 +62,10 @@ export function matchRoute(pathname: string): Route {
 
   if (path === "/foias") {
     return { page: "foias", params: {} };
+  }
+
+  if (path === "/workload") {
+    return { page: "workload", params: {} };
   }
 
   if (path === "/active-cases") {

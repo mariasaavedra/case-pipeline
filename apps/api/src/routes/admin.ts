@@ -92,6 +92,23 @@ export function handleAdminUpdateUser(req: Request, res: Response): void {
   strField("paralegal_link", "paralegal_link");
   strField("attorney_board", "attorney_board");
 
+  // The staff roster person this login belongs to (Settings → Users, "Staff record").
+  if ("staff_id" in body) {
+    const v = body.staff_id;
+    if (v === null) {
+      sets.push("staff_id = NULL");
+      changed.staff_id = null;
+    } else if (typeof v === "number" && Number.isInteger(v)) {
+      if (!usersDb.prepare("SELECT 1 FROM staff WHERE id = ?").get(v)) {
+        res.status(400).json({ error: "Unknown staff record" });
+        return;
+      }
+      sets.push("staff_id = ?");
+      vals.push(v);
+      changed.staff_id = v;
+    }
+  }
+
   if ("active" in body) {
     const active = body.active === true || body.active === 1 ? 1 : 0;
     // Never disable the last active admin — that would lock everyone out of admin.

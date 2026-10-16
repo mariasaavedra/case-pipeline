@@ -123,6 +123,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `pending-contracts.ts` | P14 Contracts: Pending Fee Ks by Contract Stage, aged from sent (else added) date, 30/60 days; `CONTRACT_STEPS` = the Acrobat signing + payment-link steps; `missing` = empty Contract for / AF / Attorney / E-mail / Address |
 | `court-cases.ts` | P15 Court Cases: active court cases with hearing/judge/method, Case Prep Status, readiness (Trial 60/90, MCH 14 days), data-cleanup flags |
 | `address-changes.ts` | P18 Address Changes: open changes of address by phase (paid/our turn → client/attorney → submitted → waiting on payment), aged from Date Received (7/14 days on our turn, else 30/60), next hearing for court changes, cleanup flags |
+| `workload.ts` | P20 Workload: open items per person across P5/P13/P14/P15/P19 (each page's own query, North Pole out), names resolved by the staff roster's matcher (passed in); "no one assigned" + "held only by inactive staff" (also an Alerts group) |
 | `foias.ts` | P19 FOIAs: open FOIA requests by phase (decide / our turn / waiting on the agency / North Pole); "Done FOIAS" group, COMPLETED, NOT PROCEEDING or a Results Received date = done; agencies quoted vs filed; inquiry due |
 | `board-columns.ts` | Per-board column schema for the in-place field editors |
 | `board-items.ts` | Per-profile board item queries + `batchGetClientBoardItems` |
@@ -170,7 +171,8 @@ Data reads:
 | `GET /api/court-cases` | P15 data: active court cases (Docket + Prep Pipeline views), stages in workflow order, Case Prep Status options |
 | `GET /api/address-changes` | P18 data: open address changes with phase, age level, next hearing, flags; the board's status labels + the Status / Date Sent column ids for write-back (via `PATCH /api/board-items/:localId/status` and `/columns`) |
 | `GET /api/foias` | P19 data: open FOIAs with phase, age (14/30 days our turn, 30/60 since filed), agencies still to file, cleanup flags; done count |
-| `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Appeal & Federal Deadlines", "I-918B Expiring", "I-918B Requests Pending" and "Mail to review" |
+| `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Appeal & Federal Deadlines", "I-918B Expiring", "I-918B Requests Pending", "Mail to review" and "Assigned to inactive staff" |
+| `GET /api/workload` | P20 (admin): open work per person + no one assigned + held only by inactive staff. Query = `libs/query/src/workload.ts` |
 | `GET /api/search` | Cross-type search: profiles, contracts, court cases, etc. |
 | `GET /api/filter-options` | Distinct values for filter dropdowns (priorities, statuses, attorneys, board types) |
 | `GET /api/clients` | Filtered + paginated profile listing |
@@ -219,7 +221,9 @@ Writes and user/account routes:
 | `GET/PUT /api/settings/urgency` | Urgency thresholds (criticalDays/soonDays) + whether status urgency reorders Active Cases (PUT admin-only, audited) |
 | `GET /api/settings/integrations`, `GET …/slack/channels`, `PUT /api/settings/notify`, `POST …/slack/test`, `POST …/sms/check` | Settings → Integrations (P11.5, admin-only): Slack + RingCentral status (never a secret — only whether it's set and whose it is), per-event Slack on/off + channel + failure repeat limit (`data/notify-settings.json`, audited), test post (audited, posts even in dry-run), RingCentral check (`sms/check.ts`, same as `npm run sms:check`). Channel list cached 5 min (`?refresh=1`). Plan = `routes/integrations.ts`, catalog = `notify/settings.ts` |
 | `GET/PUT /api/settings/documents` | Firm address/phone/fax, attorneys (email, USCIS account, bar admissions) and detention facility addresses for generated forms, `data/document-settings.json` (defaults in `documents/document-settings.ts`; PUT admin-only, audited) |
-| `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only) |
+| `GET/PATCH /api/admin/users*`, `GET /api/admin/audit` | User management + audit trail (admin-only). `PATCH /api/admin/users/:id` takes `staff_id` |
+| `GET/POST /api/staff`, `PATCH /api/staff/:id`, `PUT /api/staff/:id/roles`, `POST/DELETE /api/staff/:id/aliases`, `POST /api/staff/sync`, `GET /api/staff/unmatched` | Staff roster, P11.6 (admin, audited `staff.*`): everyone who works here with roles (attorney, paralegal, court paralegal, reception, billing, manager) and every spelling of their name; refresh = Monday users + names on the boards + legacy login links. users.db v15. Rules = `apps/api/src/staff/roster.ts`; the ONE name matcher is `makeStaffResolver`. See `docs/features/staff-roster.md` |
+| `GET/PATCH /api/staff/:id/offboarding`, `POST /api/staff/:id/offboarding/reassign` | Offboarding (admin): hand over open work (people column read live from Monday, co-assignees kept, queued on outage, mirror updated; seed data = mirror only), access off, manual steps, finish. users.db v16. Plan = `apps/api/src/staff/offboarding.ts` |
 | `GET /api/admin/monday-usage` | Monday API usage (admin-only, Settings → Admin → P11.4.4): Monday's own report (`platform_api`: daily limit, per day / app / user; one call, cached 10 min, `?refresh=1`) + our per-job counts for 14 days. The limit (10,000/day) is account-wide — Zapier too — and resets at midnight UTC |
 | `GET /api/admin/users/presence` | Who's online (admin-only): each active user as online (≤5 min) / idle (≤1 h) / offline, from `last_active_at`, which `requireAuth` stamps at most once a minute per user (`auth/presence.ts`). Shown in Settings → Users, polled every 30 s |
 | `/api/auth/monday`, `/callback`, `/status` | Personal Monday.com OAuth connection (`routes/monday-oauth.ts`) |

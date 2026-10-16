@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../auth/useAuth";
 import { usePreferences } from "../hooks/usePreferences";
 import type { Theme, DefaultPage, DateFormat } from "../hooks/usePreferences";
-import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser, fetchUserPresence } from "../api";
-import type { AttorneyBoard, PublicUser, MondayConnectionStatus, UserPresence, PresenceStatus } from "../api";
+import { apiFetch, fetchAttorneyBoards, addAttorneyBoard, deleteAttorneyBoard, fetchMondayStatus, updateMyProfile, getParalegals, fetchAdminUsers, updateAdminUser, fetchUserPresence, fetchStaff, STAFF_ROLE_LABEL } from "../api";
+import type { AttorneyBoard, PublicUser, MondayConnectionStatus, UserPresence, PresenceStatus, StaffMember } from "../api";
+import { StaffSection } from "../components/StaffSection";
 import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { DocumentSettingsSection } from "../components/DocumentSettingsSection";
@@ -44,8 +45,7 @@ function presenceLabel(p: UserPresence | undefined): string {
 function UsersSection() {
   const { user } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [boardPeople, setBoardPeople] = useState<string[]>([]);
-  const [attyBoards, setAttyBoards] = useState<AttorneyBoard[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<number | null>(null);
@@ -68,8 +68,7 @@ function UsersSection() {
       .then(setUsers)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-    getParalegals().then(setBoardPeople).catch(() => {});
-    fetchAttorneyBoards().then((b) => setAttyBoards(b.filter((x) => x.active))).catch(() => {});
+    fetchStaff().then((r) => setStaff(r.staff)).catch(() => {});
   }, []);
 
   async function toggleRole(target: UserRow) {
@@ -90,7 +89,7 @@ function UsersSection() {
     }
   }
 
-  async function patchUser(target: UserRow, patch: { paralegal_link?: string | null; attorney_board?: string | null; active?: boolean }) {
+  async function patchUser(target: UserRow, patch: { staff_id?: number | null; active?: boolean }) {
     setUpdating(target.id);
     try {
       const updated = await updateAdminUser(target.id, patch);
@@ -107,8 +106,8 @@ function UsersSection() {
       <h2 style={styles.sectionTitle}>Users<SectionCode code="P11.4.1" inline /></h2>
       <p style={styles.sectionDesc}>
         Users sign in with their firm Microsoft account (created as a regular user on first login).
-        Promote to admin, link them to their board name for “My Cases”, link an attorney to the
-        appointment board Appointments opens on for them, or disable access here.
+        Promote to admin, link them to their staff record (which sets their My Cases lane and the
+        appointment board My Day opens on — see the Staff tab), or disable access here.
       </p>
 
       {error && <div style={styles.errorBox}>{error}</div>}
@@ -179,38 +178,22 @@ function UsersSection() {
                 </div>
               )}
 
-              {/* Admin-assigned board identity (for My Cases) */}
+              {/* The roster person this login is (My Cases lane, My Day board, roles) */}
               <select
-                value={u.paralegal_link ?? ""}
-                onChange={(e) => patchUser(u, { paralegal_link: e.target.value || null })}
+                value={u.staff_id ?? ""}
+                onChange={(e) => patchUser(u, { staff_id: e.target.value ? Number(e.target.value) : null })}
                 disabled={updating === u.id}
-                style={{ ...styles.select, maxWidth: 150 }}
-                title="Link this user to their paralegal name on the boards (for My Cases)"
+                style={{ ...styles.select, maxWidth: 220 }}
+                title="Which staff member this login is — their roles, board names and attorney board come from Settings → Staff"
               >
-                <option value="">— paralegal —</option>
-                {boardPeople.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-                {u.paralegal_link && !boardPeople.includes(u.paralegal_link) && (
-                  <option value={u.paralegal_link}>{u.paralegal_link}</option>
-                )}
-              </select>
-
-              {/* Admin-assigned attorney board (P4 Appointments opens on it) */}
-              <select
-                value={u.attorney_board ?? ""}
-                onChange={(e) => patchUser(u, { attorney_board: e.target.value || null })}
-                disabled={updating === u.id}
-                style={{ ...styles.select, maxWidth: 150 }}
-                title="The attorney appointment board Appointments opens on for this user"
-              >
-                <option value="">— attorney board —</option>
-                {attyBoards.map((b) => (
-                  <option key={b.boardKey} value={b.boardKey}>{b.attorneyName ?? b.displayName} ({b.displayName})</option>
-                ))}
-                {u.attorney_board && !attyBoards.some((b) => b.boardKey === u.attorney_board) && (
-                  <option value={u.attorney_board}>{u.attorney_board}</option>
-                )}
+                <option value="">— staff record —</option>
+                {staff
+                  .filter((p) => p.active || p.id === u.staff_id)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.roles.length ? ` · ${p.roles.map((r) => STAFF_ROLE_LABEL[r]).join(", ")}` : ""}
+                    </option>
+                  ))}
               </select>
 
               <button
@@ -887,16 +870,17 @@ function PreferencesSections() {
 }
 
 // =============================================================================
-// Main Settings page — five tabs, each with its own URL (/settings/:tab)
+// Main Settings page — six tabs, each with its own URL (/settings/:tab)
 // =============================================================================
 
-type SettingsTab = "account" | "preferences" | "firm" | "integrations" | "admin";
+type SettingsTab = "account" | "preferences" | "firm" | "integrations" | "staff" | "admin";
 
 const TABS: { id: SettingsTab; label: string; code: string; hint: string; adminOnly?: boolean }[] = [
   { id: "account", label: "My account", code: "P11.1", hint: "Profile, board identity, Monday.com" },
   { id: "preferences", label: "Preferences", code: "P11.2", hint: "Theme, dates, language" },
   { id: "firm", label: "Firm setup", code: "P11.3", hint: "Attorney boards, status tags, urgency, documents", adminOnly: true },
   { id: "integrations", label: "Integrations", code: "P11.5", hint: "Slack notifications, texting", adminOnly: true },
+  { id: "staff", label: "Staff", code: "P11.6", hint: "Roster, roles, names on the boards", adminOnly: true },
   { id: "admin", label: "Admin", code: "P11.4", hint: "Users, sync health, audit log", adminOnly: true },
 ];
 
@@ -978,6 +962,8 @@ export function SettingsPage({ tab }: { tab: string }) {
           )}
 
           {active.id === "integrations" && <IntegrationsSection />}
+
+          {active.id === "staff" && <StaffSection />}
 
           {active.id === "admin" && (
             <>

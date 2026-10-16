@@ -57,6 +57,12 @@ describe("resolveMyBoard", () => {
   it("matches the Monday name too", () => {
     expect(resolveMyBoard(user({ monday_name: "Rekha Sharma-Crawford" }), BOARDS)).toBe("appointments_r");
   });
+  it("prefers the staff record's board, and matches its aliases", () => {
+    const staff = { attorneyBoard: "appointments_r", name: "R S-C", aliases: [] };
+    expect(resolveMyBoard({ ...user({ attorney_board: "appointments_m" }), staff }, BOARDS)).toBe("appointments_r");
+    const aliased = { attorneyBoard: null, name: "M S-C", aliases: ["Michael  Sharma-Crawford"] };
+    expect(resolveMyBoard({ ...user(), staff: aliased }, BOARDS)).toBe("appointments_m");
+  });
   it("is null for staff who are not attorneys, and for no user", () => {
     expect(resolveMyBoard(user(), BOARDS)).toBeNull();
     expect(resolveMyBoard(null, BOARDS)).toBeNull();

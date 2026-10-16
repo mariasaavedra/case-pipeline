@@ -8,6 +8,7 @@
 
 import type { Request, Response } from "express";
 import type BetterSqlite3 from "better-sqlite3";
+import { resolveStaffByName } from "../staff/roster.js";
 import { usersDb, type UserRow } from "../db/users-db.js";
 import { currentUser, currentUserId } from "../db/user-context.js";
 import { toPublicUser, type SavedViewRow } from "../db/users-types.js";
@@ -84,6 +85,13 @@ export function handleUpdateMyProfile(req: Request, res: Response): void {
   strField("timezone", "timezone");
   strField("phone_ext", "phone_ext");
   strField("paralegal_link", "paralegal_link"); // self-service link to a board name
+  // "I am X" picks a roster person too, so My Cases follows every name they go by.
+  if ("paralegal_link" in body) {
+    const v = body.paralegal_link;
+    const picked = typeof v === "string" && v.trim() ? resolveStaffByName(usersDb, v) : null;
+    sets.push("staff_id = ?");
+    vals.push(picked?.id ?? null);
+  }
 
   if (sets.length === 0) {
     res.status(400).json({ error: "No valid profile fields to update" });

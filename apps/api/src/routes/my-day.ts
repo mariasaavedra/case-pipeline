@@ -36,6 +36,8 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { currentUser } from "../db/user-context.js";
+import { usersDb } from "../db/users-db.js";
+import { normName, staffForUser } from "../staff/roster.js";
 import { getAppointments, getBoardColumnsFor } from "@case-pipeline/query";
 import { MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
 import type { ClientCaseSummary, ClientUpdate, ProfileSummary } from "@case-pipeline/query";
@@ -65,22 +67,27 @@ export interface MyBoardUser {
   attorney_board: string | null;
   name: string;
   monday_name: string | null;
+  /** From the caller's staff roster record (staff/roster.ts), when they have one. */
+  staff?: { attorneyBoard: string | null; name: string; aliases: string[] } | null;
 }
 
 /**
- * The board P4 opens on for this user: the board an admin linked them to, else
- * the board whose attorneyName is their name (Azure or Monday), else none.
+ * The board P4 opens on for this user: their staff record's board, else the
+ * board an admin linked the login to (pre-roster), else the board whose
+ * attorneyName is one of their names (staff aliases, Azure, Monday), else none.
  * Only active boards count — a link to a switched-off board is ignored.
  */
 export function resolveMyBoard(user: MyBoardUser | null, boards: AttorneyBoard[]): string | null {
   if (!user) return null;
   const active = boards.filter((b) => b.active);
-  const linked = user.attorney_board?.trim();
-  if (linked && active.some((b) => b.boardKey === linked)) return linked;
-  const names = [user.name, user.monday_name]
-    .map((n) => n?.trim().toLowerCase())
-    .filter((n): n is string => !!n);
-  const byName = active.find((b) => b.attorneyName && names.includes(b.attorneyName.trim().toLowerCase()));
+  for (const link of [user.staff?.attorneyBoard, user.attorney_board]) {
+    const linked = link?.trim();
+    if (linked && active.some((b) => b.boardKey === linked)) return linked;
+  }
+  const names = [user.name, user.monday_name, user.staff?.name, ...(user.staff?.aliases ?? [])]
+    .filter((n): n is string => !!n?.trim())
+    .map(normName);
+  const byName = active.find((b) => b.attorneyName && names.includes(normName(b.attorneyName)));
   return byName?.boardKey ?? null;
 }
 
@@ -316,7 +323,8 @@ export function registerMyDayRoutes(app: Express, deps: MyDayDeps): void {
     const today = new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TIMEZONE });
     const date = typeof req.query.date === "string" && DATE_RE.test(req.query.date) ? req.query.date : today;
     const active = loadAttorneyBoards().filter((b) => b.active);
-    const myBoard = resolveMyBoard(currentUser(req) ?? null, active);
+    const me = currentUser(req) ?? null;
+    const myBoard = resolveMyBoard(me && { ...me, staff: staffForUser(usersDb, me) }, active);
     const asked = typeof req.query.board === "string" ? req.query.board : "";
     const board = active.find((b) => b.boardKey === asked) ?? active.find((b) => b.boardKey === myBoard) ?? active[0] ?? null;
     const result: MyDayResult = {

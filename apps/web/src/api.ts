@@ -24,6 +24,7 @@ import type { BoardColumn as QueryBoardColumn } from "@case-pipeline/query/types
 export type { CaseTimeline, TimelineEvent, TimelineEventStatus, TimelineFix, TimelineNote, TimelineTrack, TimelineKind } from "@case-pipeline/query";
 export type { AddressChangesResult, AddressChange, AddressChangePhase, AddressChangeFlag } from "@case-pipeline/query";
 export type { FoiasResult, Foia, FoiaPhase, FoiaFlag } from "@case-pipeline/query";
+export type { WorkloadResult, WorkloadPerson, WorkloadItem, WorkloadAssignment, WorkloadSource, WorkloadColumn, WorkloadLevel } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
 export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail, MailWriteBackPlan, StepOutcome, WriteBackState, NoticeFields, FieldEdits } from "@case-pipeline/query";
@@ -924,6 +925,11 @@ export async function fetchAddressChanges(): Promise<import("@case-pipeline/quer
   return apiFetch("/api/address-changes");
 }
 
+/** Open work per person (admin-only) — apps/api/src/server.ts, libs/query/src/workload.ts. */
+export async function fetchWorkload(): Promise<import("@case-pipeline/query").WorkloadResult> {
+  return apiFetch("/api/workload");
+}
+
 export async function fetchFoias(): Promise<import("@case-pipeline/query").FoiasResult> {
   return apiFetch("/api/foias");
 }
@@ -1190,6 +1196,8 @@ export interface PublicUser {
   login_count: number;
   last_active_at: string | null;
   mondayConnected: boolean;
+  /** The staff roster person this login belongs to (Settings → Staff). */
+  staff_id: number | null;
 }
 
 export interface MyCasesResult extends MyCasesData {
@@ -1378,7 +1386,7 @@ export function fetchUserPresence(): Promise<UserPresence[]> {
 }
 export function updateAdminUser(
   id: number,
-  patch: { job_title?: string | null; paralegal_link?: string | null; attorney_board?: string | null; active?: boolean },
+  patch: { job_title?: string | null; paralegal_link?: string | null; attorney_board?: string | null; active?: boolean; staff_id?: number | null },
 ): Promise<PublicUser> {
   return apiFetch<PublicUser>(`/api/admin/users/${id}`, {
     method: "PATCH",
@@ -1386,6 +1394,137 @@ export function updateAdminUser(
     body: JSON.stringify(patch),
   });
 }
+// =============================================================================
+// Staff roster (Settings → Staff) — see apps/api/src/routes/staff.ts
+// =============================================================================
+
+export type StaffRole = "attorney" | "paralegal" | "court_paralegal" | "reception" | "billing" | "manager";
+
+export const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
+  attorney: "Attorney",
+  paralegal: "Paralegal",
+  court_paralegal: "Court paralegal",
+  reception: "Reception",
+  billing: "Billing",
+  manager: "Manager",
+};
+
+export interface StaffMember {
+  id: number;
+  name: string;
+  email: string | null;
+  mondayUserId: string | null;
+  phoneExt: string | null;
+  attorneyBoard: string | null;
+  active: boolean;
+  startDate: string | null;
+  endDate: string | null;
+  /** monday = a Monday user; board_name = only seen on the boards; manual = added here. */
+  source: "monday" | "board_name" | "manual";
+  mondaySeenAt: string | null;
+  rolesReviewed: boolean;
+  roles: StaffRole[];
+  aliases: string[];
+  login: { userId: number; email: string; active: boolean } | null;
+}
+
+export interface StaffRefreshResult {
+  mondayAdded: number;
+  mondayUpdated: number;
+  boardNamesAdded: number;
+  rolesSuggested: number;
+  loginsLinked: number;
+  missingFromMonday: string[];
+  mondaySkipped: string | null;
+}
+
+export type StaffPatch = Partial<{
+  name: string;
+  email: string | null;
+  phoneExt: string | null;
+  attorneyBoard: string | null;
+  active: boolean;
+  startDate: string | null;
+  endDate: string | null;
+}>;
+
+const jsonInit = (method: string, body: unknown): RequestInit => ({
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+export function fetchStaff(): Promise<{ staff: StaffMember[]; roles: StaffRole[] }> {
+  return apiFetch("/api/staff");
+}
+export function fetchUnmatchedStaffNames(): Promise<Array<{ name: string; items: number }>> {
+  return apiFetch("/api/staff/unmatched");
+}
+export function createStaff(input: StaffPatch & { name: string; roles?: StaffRole[] }): Promise<StaffMember> {
+  return apiFetch("/api/staff", jsonInit("POST", input));
+}
+export function updateStaff(id: number, patch: StaffPatch): Promise<StaffMember> {
+  return apiFetch(`/api/staff/${id}`, jsonInit("PATCH", patch));
+}
+export function setStaffRoles(id: number, roles: StaffRole[]): Promise<StaffMember> {
+  return apiFetch(`/api/staff/${id}/roles`, jsonInit("PUT", { roles }));
+}
+/** `move` = take the name from whoever holds it (else a 409 says who). */
+export function addStaffAlias(id: number, alias: string, move = false): Promise<StaffMember> {
+  return apiFetch(`/api/staff/${id}/aliases`, jsonInit("POST", { alias, move }));
+}
+export function removeStaffAlias(id: number, alias: string): Promise<StaffMember> {
+  return apiFetch(`/api/staff/${id}/aliases?alias=${encodeURIComponent(alias)}`, { method: "DELETE" });
+}
+export function refreshStaff(): Promise<StaffRefreshResult> {
+  return apiFetch("/api/staff/sync", { method: "POST" });
+}
+
+// ---- Offboarding (apps/api/src/routes/staff-offboarding.ts) ----------------
+
+export type OffboardingStep = "monday_seat" | "microsoft_365" | "ringcentral" | "slack";
+
+export interface OffboardingState {
+  staff: StaffMember;
+  items: import("@case-pipeline/query").WorkloadAssignment[];
+  record: {
+    startedAt: string;
+    startedBy: number | null;
+    completedAt: string | null;
+    steps: Partial<Record<OffboardingStep, { at: string; by: string | null }>>;
+  } | null;
+  steps: OffboardingStep[];
+  /** false = seed data / no token: only the local mirror changes. */
+  liveWrites: boolean;
+  candidates: Array<{ id: number; name: string; roles: StaffRole[]; hasMonday: boolean }>;
+  done: boolean;
+  canComplete: boolean;
+}
+
+export interface OffboardingItemResult {
+  source: import("@case-pipeline/query").WorkloadSource;
+  localId: string;
+  column: import("@case-pipeline/query").WorkloadColumn;
+  outcome: "written" | "queued" | "local_only" | "skipped";
+  reason?: string;
+}
+
+export function fetchOffboarding(staffId: number): Promise<OffboardingState> {
+  return apiFetch(`/api/staff/${staffId}/offboarding`);
+}
+export function reassignOffboarding(
+  staffId: number,
+  assignments: Array<{ source: string; localId: string; column: string; toStaffId: number | null }>,
+): Promise<OffboardingState & { results: OffboardingItemResult[] }> {
+  return apiFetch(`/api/staff/${staffId}/offboarding/reassign`, jsonInit("POST", { assignments }));
+}
+export function patchOffboarding(
+  staffId: number,
+  patch: { step: OffboardingStep; done: boolean } | { deactivate: true } | { complete: true },
+): Promise<OffboardingState> {
+  return apiFetch(`/api/staff/${staffId}/offboarding`, jsonInit("PATCH", patch));
+}
+
 export function fetchAuditLog(
   limit = 100,
   offset = 0,

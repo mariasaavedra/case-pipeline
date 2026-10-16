@@ -1262,6 +1262,73 @@ export interface MondayWorkspaceUser {
   email: string;
 }
 
+/** One people column on one item, with the ids behind its display text. */
+export interface PeopleCell {
+  itemId: string;
+  columnId: string;
+  text: string | null;
+  persons: Array<{ id: string; kind: string }>;
+}
+
+/**
+ * The live value of people columns: who is in them, by Monday id. The mirror
+ * only keeps the display text, and a write has to send ids — so a change that
+ * must keep the other assignees (staff offboarding) reads them here first.
+ */
+export async function fetchPeopleCells(itemIds: string[], columnIds: string[], tokenOverride?: string): Promise<PeopleCell[]> {
+  const unique = [...new Set(itemIds.filter(Boolean))];
+  const cols = [...new Set(columnIds.filter(Boolean))];
+  if (unique.length === 0 || cols.length === 0) return [];
+  const query = `
+    query ($ids: [ID!], $limit: Int!, $cols: [String!]) {
+      items(ids: $ids, limit: $limit) {
+        id
+        column_values(ids: $cols) {
+          id
+          text
+          ... on PeopleValue { persons_and_teams { id kind } }
+        }
+      }
+    }
+  `;
+  const out: PeopleCell[] = [];
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    const result = await mondayRequest<{
+      data: { items: Array<{ id: string; column_values: Array<{ id: string; text: string | null; persons_and_teams?: Array<{ id: string | number; kind: string }> | null }> }> };
+    }>(query, { ids: chunk, limit: chunk.length, cols }, tokenOverride);
+    for (const item of result.data.items ?? []) {
+      for (const cv of item.column_values) {
+        out.push({
+          itemId: String(item.id),
+          columnId: cv.id,
+          text: cv.text,
+          persons: (cv.persons_and_teams ?? []).map((p) => ({ id: String(p.id), kind: p.kind })),
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Users by id, deactivated ones included — the names behind ids in a people
+ * column that the workspace list (non-guests, active) no longer shows.
+ */
+export async function fetchUsersByIds(
+  ids: string[],
+  tokenOverride?: string,
+): Promise<Array<{ id: string; name: string; enabled: boolean }>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return [];
+  const result = await mondayRequest<{ data: { users: Array<{ id: string | number; name: string; enabled: boolean }> | null } }>(
+    `query ($ids: [ID!]) { users(ids: $ids, limit: ${Math.min(unique.length, 1000)}) { id name enabled } }`,
+    { ids: unique },
+    tokenOverride,
+  );
+  return (result.data.users ?? []).map((u) => ({ id: String(u.id), name: u.name, enabled: u.enabled }));
+}
+
 /**
  * Active (non-guest) workspace users — id, name, email. Used to populate a
  * "who logged this" people picker and to resolve it to the numeric Monday id
