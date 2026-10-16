@@ -8,10 +8,22 @@
 // into their own message and press "Mark sent" (records Payment Link Sent On,
 // stage → Payment link sent), or press "Text links to client" (M28): a live
 // text marks it sent by itself; a test-mode text doesn't.
+//
+// How the client pays (Credit / Debit / Cash — their pick in the Adobe-signed
+// contract lands in the Fee K's Payment Method) sets the amounts: by credit
+// card each link carries its own 3%, cash gets no links. For a contract signed
+// in Adobe after being sent from the app — only those (decided 2026-10-16) —
+// "Email links to client" sends one English + Spanish e-mail
+// (lib/payment-email.ts) from the staff member's own Outlook (Graph Mail.Send)
+// to the address the client signed with, then marks it sent. Staff see the
+// e-mail before sending: the one-click check while this is new.
 // =============================================================================
 
 import { useState } from "react";
 import type { PendingContract } from "../api";
+import { useAuth } from "../auth/useAuth";
+import { GraphConsentRequiredError, sendMailAsMe } from "../sharepoint/graph";
+import { chargeFor, payMethodOf, paymentEmail, paymentLines, type PayMethod } from "../lib/payment-email";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { lawPayLink, FEE_TYPE_LABELS, type FeeType } from "../lib/lawpay";
@@ -48,7 +60,55 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
   /** After a text: "marked" = live text + stage recorded; "texted" = sent, nothing to mark; "test" = dry run. */
   const [texted, setTexted] = useState<"marked" | "texted" | "test" | null>(null);
 
-  const links = FEES.map((fee) => ({ fee, link: lawPayLink(description, fee, amounts[fee]) }));
+  const { user } = useAuth();
+  const [method, setMethod] = useState<PayMethod | null>(payMethodOf(c.paymentMethod));
+  const fee = (f: FeeType) => {
+    const n = Number(amounts[f].replace(/[^0-9.]/g, ""));
+    return amounts[f].trim() !== "" && Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const charged = (f: FeeType) => {
+    const n = fee(f);
+    return n === null ? null : method === "credit" ? chargeFor(n, "credit") : n;
+  };
+  const links = method === "cash" ? [] : FEES.map((f) => ({ fee: f, link: lawPayLink(description, f, charged(f) ?? "") }));
+
+  // The e-mail (app-signed contracts only).
+  const emailTo = c.signedInApp?.clientEmail ?? null;
+  const email = emailTo && method && method !== "cash"
+    ? paymentEmail({
+        clientName: c.clientName,
+        matter: c.contractFor.join(", "),
+        lines: paymentLines(description, { AF: fee("AF"), FF: fee("FF"), PF: fee("PF") }, method),
+        method,
+        senderName: user?.name ?? "",
+      })
+    : null;
+  const [mailing, setMailing] = useState(false);
+  const [needsMailConsent, setNeedsMailConsent] = useState(false);
+  const [mailed, setMailed] = useState<"marked" | "sent" | null>(null);
+  const sendEmail = async (interactive: boolean) => {
+    if (!email || !emailTo) return;
+    setMailing(true);
+    setError(null);
+    try {
+      await sendMailAsMe({ to: emailTo, subject: email.subject, html: email.html }, interactive);
+      setNeedsMailConsent(false);
+    } catch (e) {
+      if (e instanceof GraphConsentRequiredError) setNeedsMailConsent(true);
+      else setError(e instanceof Error ? `The e-mail was not sent: ${e.message}` : "The e-mail was not sent");
+      setMailing(false);
+      return;
+    }
+    if (!onMarkSent) { setMailed("sent"); setMailing(false); return; }
+    try {
+      await onMarkSent();
+      setMailed("marked");
+    } catch (e) {
+      setMailed("sent");
+      setError(`E-mail sent, but the stage wasn't recorded: ${e instanceof Error ? e.message : "error"} — press Mark sent.`);
+    }
+    setMailing(false);
+  };
   const ready = links.filter((l): l is { fee: FeeType; link: string } => l.link !== null);
   const linksText = ready.map((l) => `${FEE_TYPE_LABELS[l.fee]}: ${l.link}`).join("\n");
 
@@ -104,8 +164,24 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
               className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
           </div>
 
+          <fieldset>
+            <legend style={labelStyle}>How the client pays{c.paymentMethod ? <span style={{ fontWeight: 400 }}> · Monday: {c.paymentMethod}</span> : null}</legend>
+            <div className="flex gap-3 text-sm" style={{ color: "var(--color-ink)" }}>
+              {([["credit", "Credit card (+3%)"], ["debit", "Debit card"], ["cash", "Cash"]] as const).map(([m, label]) => (
+                <label key={m} className="flex items-center gap-1.5">
+                  <input type="radio" name="m21-method" checked={method === m} onChange={() => setMethod(m)} /> {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {method === "cash" ? (
+            <p className="text-sm" style={{ color: "var(--color-ink-muted)" }}>
+              The client pays in cash during lobby hours — no payment links.
+            </p>
+          ) : (
           <ul className="space-y-3">
-            {links.map(({ fee, link }) => (
+            {FEES.map((fee) => ({ fee, link: links.find((l) => l.fee === fee)?.link ?? null })).map(({ fee, link }) => (
               <li key={fee}>
                 <div className="flex items-center gap-2">
                   <label htmlFor={`m21-${fee}`} className="text-sm w-36 shrink-0" style={{ color: "var(--color-ink)" }}>
@@ -115,7 +191,10 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
                   <input id={`m21-${fee}`} inputMode="decimal" value={amounts[fee]} placeholder="—"
                     onChange={(e) => setAmounts((a) => ({ ...a, [fee]: e.target.value }))}
                     className="w-24 rounded-md px-2 py-1 text-sm tabular-nums" style={inputStyle} />
-                  <span className="text-xs" style={{ color: "var(--color-ink-faint)" }}>{fee === "FF" ? "Trust" : "Operating"}</span>
+                  <span className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
+                    {fee === "FF" ? "Trust" : "Operating"}
+                    {method === "credit" && charged(fee) !== null && <> · link ${charged(fee)!.toFixed(2)} with 3%</>}
+                  </span>
                   {link && (
                     <div className="ml-auto flex gap-1.5">
                       <Button type="button" size="sm" variant="outline" onClick={() => copy(link, fee)}>
@@ -135,8 +214,37 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
               </li>
             ))}
           </ul>
+          )}
 
-          {ready.length === 0 && (
+          {email && emailTo && (
+            <div className="rounded-md border p-3 space-y-2" style={{ borderColor: "var(--color-border-light)" }}>
+              <div className="text-sm" style={{ color: "var(--color-ink)" }}>
+                E-mail the links to <strong>{emailTo}</strong> <span style={{ color: "var(--color-ink-faint)" }}>(the address the client signed with)</span>
+              </div>
+              <details>
+                <summary className="text-xs cursor-pointer" style={{ color: "var(--color-ink-muted)" }}>Preview the e-mail · {email.subject}</summary>
+                <pre className="mt-2 text-xs whitespace-pre-wrap" style={{ color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>{email.text}</pre>
+              </details>
+              {mailed ? (
+                <p className="text-sm" style={{ color: "var(--color-ink)" }}>
+                  {mailed === "marked" ? "✓ E-mailed to the client and marked sent." : "✓ E-mailed to the client."}
+                </p>
+              ) : needsMailConsent ? (
+                <Button type="button" disabled={mailing} onClick={() => void sendEmail(true)}>
+                  Allow sending from your Outlook, then send
+                </Button>
+              ) : (
+                <Button type="button" disabled={mailing || ready.length === 0} onClick={() => void sendEmail(false)}>
+                  {mailing ? "Sending…" : "Email links to client"}
+                </Button>
+              )}
+            </div>
+          )}
+          {c.signedInApp && !method && (
+            <p className="text-sm" style={{ color: "var(--color-ink-muted)" }}>Pick how the client pays to e-mail the links.</p>
+          )}
+
+          {method !== "cash" && ready.length === 0 && (
             <p className="text-sm" style={{ color: "var(--color-ink-faint)" }}>Enter a description and at least one amount.</p>
           )}
           {error && <p className="text-sm" style={{ color: "var(--urgency-overdue)" }}>{error}</p>}

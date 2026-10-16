@@ -12,7 +12,23 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { PendingContract, SendSmsResult } from "../api";
 
-const mocks = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }));
+const mocks = vi.hoisted(() => ({
+  props: null as null | Record<string, unknown>,
+  mail: [] as { to: string; subject: string; html: string; interactive: boolean }[],
+  needConsent: false,
+}));
+
+vi.mock("../auth/useAuth", () => ({ useAuth: () => ({ user: { name: "Mayra Ruiz" } }) }));
+vi.mock("../sharepoint/graph", () => {
+  class GraphConsentRequiredError extends Error {}
+  return {
+    GraphConsentRequiredError,
+    sendMailAsMe: async (msg: { to: string; subject: string; html: string }, interactive = false) => {
+      if (mocks.needConsent && !interactive) throw new GraphConsentRequiredError("consent");
+      mocks.mail.push({ ...msg, interactive });
+    },
+  };
+});
 
 vi.mock("./SendSmsModal", () => ({
   SendSmsModal: (p: Record<string, unknown>) => {
@@ -48,6 +64,8 @@ const sent = async (r: Partial<SendSmsResult>) => {
 beforeEach(() => {
   document.body.innerHTML = "";
   mocks.props = null;
+  mocks.mail = [];
+  mocks.needConsent = false;
 });
 
 describe("PaymentLinksModal → Text links to client", () => {
@@ -85,5 +103,63 @@ describe("PaymentLinksModal → Text links to client", () => {
     await open(vi.fn().mockRejectedValue(new Error("Monday said no")));
     await sent({ mode: "on" });
     expect(document.body.textContent).toContain("Text sent, but the stage wasn't recorded: Monday said no");
+  });
+});
+
+describe("PaymentLinksModal → Email links to client (contracts signed in the app)", () => {
+  const signed = {
+    ...contract, attorneyFee: 4000, filingFee: 1175, contractFor: ["I-212"],
+    paymentMethod: "CREDIT Card - Surcharge Applies", signedInApp: { clientEmail: "ana@mail.com" },
+  } as unknown as PendingContract;
+  const render = async (c: PendingContract, onMarkSent?: () => Promise<void>) => {
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => { root.render(<PaymentLinksModal contract={c} onMarkSent={onMarkSent} onClose={() => {}} />); });
+  };
+
+  it("credit: links carry 3%; one bilingual e-mail to the signer, then marked sent", async () => {
+    const onMarkSent = vi.fn(async () => {});
+    await render(signed, onMarkSent);
+    expect(document.body.textContent).toContain("ana@mail.com");
+    await act(async () => { button("Email links to client")!.click(); });
+    await flush();
+    expect(mocks.mail).toHaveLength(1);
+    expect(mocks.mail[0]).toMatchObject({ to: "ana@mail.com", subject: "Payment links / Enlaces de pago — Ana LOPEZ — I-212", interactive: false });
+    expect(mocks.mail[0]!.html).toContain("amount=4120&amp;");
+    expect(mocks.mail[0]!.html).toContain("amount=1210.25&amp;");
+    expect(mocks.mail[0]!.html).toContain("Honorarios de abogado");
+    expect(onMarkSent).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain("E-mailed to the client and marked sent");
+  });
+
+  it("first time: asks to allow Outlook sending, then sends from that click", async () => {
+    mocks.needConsent = true;
+    await render(signed, async () => {});
+    await act(async () => { button("Email links to client")!.click(); });
+    await flush();
+    expect(mocks.mail).toEqual([]);
+    await act(async () => { button("Allow sending from your Outlook, then send")!.click(); });
+    await flush();
+    expect(mocks.mail.map((m) => m.interactive)).toEqual([true]);
+  });
+
+  it("cash: no links and no e-mail; a contract not signed in the app has no e-mail button", async () => {
+    await render({ ...signed, paymentMethod: "Cash" } as unknown as PendingContract);
+    expect(document.body.textContent).toContain("no payment links");
+    expect(button("Email links to client")).toBeUndefined();
+    document.body.innerHTML = "";
+    await render({ ...signed, signedInApp: null } as unknown as PendingContract);
+    expect(button("Email links to client")).toBeUndefined();
+  });
+
+  it("split / unknown method: staff pick it before the e-mail shows", async () => {
+    await render({ ...signed, paymentMethod: "SPLIT PAYMENTS" } as unknown as PendingContract);
+    expect(button("Email links to client")).toBeUndefined();
+    expect(document.body.textContent).toContain("Pick how the client pays");
+    const debit = Array.from(document.querySelectorAll("label")).find((l) => l.textContent?.includes("Debit card"))!.querySelector("input")!;
+    await act(async () => { debit.click(); });
+    await act(async () => { button("Email links to client")!.click(); });
+    await flush();
+    expect(mocks.mail[0]!.html).toContain("amount=4000&amp;");
+    expect(mocks.mail[0]!.html).not.toContain("surcharge");
   });
 });

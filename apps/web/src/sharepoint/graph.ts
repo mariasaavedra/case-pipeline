@@ -12,7 +12,7 @@
 
 import { InteractionRequiredAuthError } from "@azure/msal-browser";
 import { msalInstance } from "../auth/AuthProvider";
-import { graphRequest } from "../auth/msal-config";
+import { graphRequest, mailRequest } from "../auth/msal-config";
 import { parseSharePointLink, type SharePointFolder } from "./parseLink";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
@@ -64,6 +64,10 @@ export interface ResolvedItem {
  * click handler to run the consent popup.
  */
 export async function getGraphToken(interactive = false): Promise<string> {
+  return tokenFor(graphRequest, interactive);
+}
+
+async function tokenFor(request: { scopes: string[] }, interactive: boolean): Promise<string> {
   const account = msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0];
   if (!account) throw new Error("Not signed in");
 
@@ -73,12 +77,12 @@ export async function getGraphToken(interactive = false): Promise<string> {
   // is redundant anyway — we only get here because it already failed.
   if (interactive) {
     try {
-      const result = await msalInstance.acquireTokenPopup({ ...graphRequest, account });
+      const result = await msalInstance.acquireTokenPopup({ ...request, account });
       return result.accessToken;
     } catch (err) {
       // Some browsers block popups outright; fall back to a full-page redirect.
       if (isPopupBlocked(err)) {
-        await msalInstance.acquireTokenRedirect({ ...graphRequest, account });
+        await msalInstance.acquireTokenRedirect({ ...request, account });
         // acquireTokenRedirect navigates away; this never resolves.
         return new Promise<string>(() => {});
       }
@@ -87,7 +91,7 @@ export async function getGraphToken(interactive = false): Promise<string> {
   }
 
   try {
-    const result = await msalInstance.acquireTokenSilent({ ...graphRequest, account });
+    const result = await msalInstance.acquireTokenSilent({ ...request, account });
     return result.accessToken;
   } catch (err) {
     if (err instanceof InteractionRequiredAuthError) throw new GraphConsentRequiredError();
@@ -418,6 +422,38 @@ export async function loadFeeSheet(): Promise<{ name: string; webUrl: string; va
   if (!first) throw new GraphError(404, "The fee sheet has no worksheet.");
   const range = await graphFetch<{ values: unknown[][] }>(`${base}/${encodeURIComponent(first.id)}/usedRange(valuesOnly=true)?$select=values`);
   return { name: sheet.name, webUrl: sheet.webUrl, values: range.values };
+}
+
+// ---- E-mail -----------------------------------------------------------------
+
+/** Mail.Send token; same consent rules as getGraphToken (popup only from a click). */
+export function getMailToken(interactive = false): Promise<string> {
+  return tokenFor(mailRequest, interactive);
+}
+
+/**
+ * Send an HTML e-mail from the signed-in person's own mailbox (Microsoft 365),
+ * kept in their Sent Items. Throws GraphConsentRequiredError until they've
+ * allowed sending once (call again with interactive=true from a click).
+ */
+export async function sendMailAsMe(
+  msg: { to: string; subject: string; html: string },
+  interactive = false,
+): Promise<void> {
+  const token = await getMailToken(interactive);
+  const res = await fetch(`${GRAPH}/me/sendMail`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: {
+        subject: msg.subject,
+        body: { contentType: "HTML", content: msg.html },
+        toRecipients: [{ emailAddress: { address: msg.to } }],
+      },
+      saveToSentItems: true,
+    }),
+  });
+  if (!res.ok) throw new GraphError(res.status, await describeError(res));
 }
 
 // ---- Word → PDF -------------------------------------------------------------
