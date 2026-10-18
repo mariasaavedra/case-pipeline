@@ -17,6 +17,10 @@
 //      battle-tested sync pipeline — mapper, upsert, watermark — instead of
 //      re-implementing per-table writes here.
 //
+// Before any of that, every new event is copied into item_events, the
+// permanent activity log (item-events.ts); the 30-day prune only drops events
+// already copied.
+//
 // Events for boards not in config/boards.yaml (or attorney-boards.json) are
 // marked 'skipped'. delete_update is also skipped: removals of notes are only
 // reconciled by the nightly full sweep.
@@ -39,6 +43,7 @@ import type { MondayAsset } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { REPO_ROOT } from "../paths.js";
 import { acquireSyncLock, releaseSyncLock } from "@case-pipeline/seed/db/sync-lock";
+import { recordItemEvents } from "./item-events.js";
 
 const LOCK_HOLDER = "webhooks";
 const MAX_ATTEMPTS = 5;
@@ -367,6 +372,16 @@ export async function refreshItemNotes(db: Database, mondayItemId: string): Prom
 export async function processWebhookEvents(db: Database, deps: WebhookProcessorDeps): Promise<DrainStats> {
   const stats: DrainStats = { processed: 0, skipped: 0, failed: 0, syncedBoards: [], syncSkippedBusy: false };
 
+  // History first: copy new inbox events into the permanent activity log. A
+  // failure here must not stop the mirror from refreshing; prune() below won't
+  // delete anything the log hasn't copied, so it is retried next tick.
+  try {
+    const recorded = recordItemEvents(db, deps.boardKeyForId);
+    if (recorded > 0) console.log(`[webhooks] activity log: +${recorded} event(s)`);
+  } catch (err) {
+    console.error("[webhooks] activity log copy failed:", err);
+  }
+
   const now = new Date().toISOString();
   const rows = db
     .prepare(
@@ -512,10 +527,15 @@ export async function processWebhookEvents(db: Database, deps: WebhookProcessorD
   return stats;
 }
 
-/** Drop processed/skipped events past the retention window. */
-function prune(db: Database): void {
+/**
+ * Drop processed/skipped events past the retention window — only ones the
+ * activity log (item_events) has already copied, so pruning never loses history.
+ */
+export function prune(db: Database): void {
   db.prepare(
-    `DELETE FROM webhook_events WHERE status IN ('processed', 'skipped') AND received_at < datetime('now', ?)`,
+    `DELETE FROM webhook_events
+      WHERE status IN ('processed', 'skipped') AND received_at < datetime('now', ?)
+        AND id <= COALESCE((SELECT last_webhook_event_id FROM item_events_cursor WHERE id = 1), 0)`,
   ).run(RETENTION);
 }
 

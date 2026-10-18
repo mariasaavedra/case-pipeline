@@ -568,3 +568,25 @@ describe("v31 → v32 consult fee quotes", () => {
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'consult_fee_quotes'").get()).toBeTruthy();
   });
 });
+
+describe("v34 → v35 item activity log", () => {
+  test("creates item_events + its cursor on an existing database", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (34);
+    `);
+    initializeSchema(db);
+    expect(columns(db, "item_events")).toEqual(expect.arrayContaining([
+      "webhook_event_id", "trigger_uuid", "monday_item_id", "column_id", "value_text", "previous_text", "monday_user_id", "changed_at",
+    ]));
+    expect(columns(db, "item_events_cursor")).toEqual(["id", "last_webhook_event_id"]);
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+  });
+
+  test("a fresh database has it too", () => {
+    const db = new Database(":memory:");
+    initializeSchema(db);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'item_events'").get()).toBeTruthy();
+  });
+});
