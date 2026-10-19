@@ -38,7 +38,7 @@ export { getAddressChanges } from "./address-changes";
 export { getFoias } from "./foias";
 export { getWorkload, buildWorkload, collectWorkloadItems, getInactiveAssigneeAlertGroup, WORKLOAD_SOURCES, PRIMARY_COLUMN } from "./workload";
 export type { WorkloadResult, WorkloadPerson, WorkloadItem, WorkloadAssignment, WorkloadSource, WorkloadColumn, WorkloadLevel, StaffResolver, WorkloadOptions } from "./workload";
-export { getCallLogEntries, getCallLogStaffOptions } from "./call-log";
+export { getCallLogEntries, getCallLogStaffOptions, searchJailIntakesByPocPhone } from "./call-log";
 export { makeStaffNames, spellingsOf } from "./staff-names";
 export type { StaffNames } from "./staff-names";
 export { getJailIntakes, getJailIntakeNotes, cutoffDate } from "./jail-intakes";
@@ -50,7 +50,7 @@ export type { MailDocumentDetail, MailReviewState, ResolveMailInput, SaveScanInp
 export { readLayout, wordsFromText } from "./mail-layout";
 export type { Word, LayoutValues, LayoutKey } from "./mail-layout";
 export type { MailPageInput, MailScanResult, MailScanDocument, NoticeMatch, NoticeFields, MatchStatus, AttentionReason, SplitReason, MatchedProfile, MatchedOpenForm } from "./mail";
-export type { CallLogEntry, CallLogFilters, CallLogListResult } from "./types";
+export type { CallLogEntry, CallLogFilters, CallLogIntakeMatch, CallLogListResult } from "./types";
 export type { ActiveCase, ActiveCasesAssignee, ActiveCasesResult, ActiveCasesOptions, Urgency } from "./active-cases";
 export type { PreschedulingCase, PreschedulingResult, PreschedulingOptions, WaitLevel } from "./prescheduling";
 export type { MyCasesData, MyCasesOptions, MyOpenForm, MyPreschedulingCase } from "./my-cases";

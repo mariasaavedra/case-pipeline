@@ -27,6 +27,12 @@
 // create-only "add a note" box — submitting through PATCH /api/call-log/:localId
 // instead of POST.
 //
+// When no profile has the number that called, the phone lookup falls back to
+// jail intakes whose POC phone matches: a detainee's family calls before there
+// is any profile. Picking one links the call to that intake through the same
+// "link to Profiles" column (Monday lets it hold Jail Intakes items too). An
+// intake that already became a client is not offered: the profile is the link.
+//
 // A call can also BE something: a jail intake (a detainee's family calling) or
 // a contract request (an existing client hiring us for a new case). Never both
 // — a detainee has no Fee K yet — so the two toggles are exclusive. Either one
@@ -37,6 +43,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   searchClients,
+  searchCallLogIntakes,
   createCallLogEntry,
   updateCallLogEntry,
   fetchCallLogStaffDirectory,
@@ -44,7 +51,7 @@ import {
   addCallLogNote,
   stripMentionMarkers,
 } from "../api";
-import type { SearchResult, MondayStaffUser, CallLogEntry, MentionedUser, NoteThreadEntry } from "../api";
+import type { SearchResult, MondayStaffUser, CallLogEntry, CallLogIntakeMatch, MentionedUser, NoteThreadEntry } from "../api";
 import { useBoardStatusOptions } from "../StatusOptionsProvider";
 import { useAuth } from "../auth/useAuth";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -139,6 +146,8 @@ function NoteEntry({ entry, indent }: { entry: NoteThreadEntry; indent?: boolean
  */
 function useClientLookup() {
   const [matches, setMatches] = useState<SearchResult[]>([]);
+  // Jail intakes by POC phone — only looked up when no profile matched.
+  const [intakes, setIntakes] = useState<CallLogIntakeMatch[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -148,6 +157,7 @@ function useClientLookup() {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (controllerRef.current) controllerRef.current.abort();
     setMatches([]);
+    setIntakes([]);
     setSearched(false);
     setSearching(false);
   }, []);
@@ -158,6 +168,7 @@ function useClientLookup() {
 
     if (!minLength(value)) {
       setMatches([]);
+      setIntakes([]);
       setSearched(false);
       return;
     }
@@ -168,11 +179,22 @@ function useClientLookup() {
       setSearching(true);
       try {
         const results = await searchClients(value.trim(), controller.signal);
+        // A profile wins: intakes are asked for only when no client has this
+        // number (the server answers [] for anything that isn't a number).
+        const intakeResults =
+          results.length === 0 && value.replace(/\D/g, "").length >= MIN_PHONE_DIGITS
+            ? await searchCallLogIntakes(value.trim(), controller.signal).catch((err: unknown) => {
+                if ((err as Error).name === "AbortError") throw err;
+                return [];
+              })
+            : [];
         setMatches(results);
+        setIntakes(intakeResults);
         setSearched(true);
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
         setMatches([]);
+        setIntakes([]);
       } finally {
         setSearching(false);
       }
@@ -184,13 +206,41 @@ function useClientLookup() {
     if (controllerRef.current) controllerRef.current.abort();
   }, []);
 
-  return { matches, searching, searched, run, reset };
+  return { matches, intakes, searching, searched, run, reset };
 }
 
-/** The suggestion list under either search box. */
-function MatchList({ matches, onSelect }: { matches: SearchResult[]; onSelect: (p: SearchResult) => void }) {
+/** The suggestion list under either search box: profiles, else jail intakes by POC phone. */
+function MatchList({
+  matches, intakes, onSelect, onSelectIntake,
+}: {
+  matches: SearchResult[];
+  intakes: CallLogIntakeMatch[];
+  onSelect: (p: SearchResult) => void;
+  onSelectIntake: (i: CallLogIntakeMatch) => void;
+}) {
   return (
     <div style={{ marginBottom: 12, border: "1px solid var(--color-border-light)", borderRadius: 8, overflow: "hidden" }}>
+      {intakes.slice(0, 5).map((m, i) => (
+        <button
+          key={m.localId}
+          type="button"
+          onClick={() => onSelectIntake(m)}
+          style={{
+            display: "block", width: "100%", textAlign: "left", padding: "8px 10px",
+            background: "var(--color-surface)", border: "none",
+            borderTop: i === 0 ? "none" : "1px solid var(--color-border-light)",
+            cursor: "pointer", fontFamily: "var(--font-body)",
+          }}
+        >
+          <div style={{ fontSize: 13, color: "var(--color-ink)" }}>
+            {m.name}{" "}
+            <span style={{ fontSize: 11, color: "var(--color-ink-muted)", fontWeight: 600 }}>· Jail intake, no profile</span>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--color-ink-faint)" }}>
+            {[m.pocName && `POC: ${m.pocName}`, m.pocPhone, m.status].filter(Boolean).join(" · ")}
+          </div>
+        </button>
+      ))}
       {matches.slice(0, 5).map((m, i) => (
         <button
           key={m.localId}
@@ -221,6 +271,12 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
   const [selectedProfile, setSelectedProfile] = useState<SearchResult | null>(
     entry?.profileLocalId
       ? { localId: entry.profileLocalId, name: entry.profileName ?? "", email: null, phone: null, phone2: null, address: null }
+      : null,
+  );
+
+  const [selectedIntake, setSelectedIntake] = useState<{ localId: string; name: string } | null>(
+    !entry?.profileLocalId && entry?.jailIntakeLocalId
+      ? { localId: entry.jailIntakeLocalId, name: entry.jailIntakeName ?? "" }
       : null,
   );
 
@@ -299,7 +355,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
   // list at all until staff manually retyped the number (the lookup only fires
   // from the input's onChange otherwise).
   useEffect(() => {
-    if (isEdit && phone && !selectedProfile) {
+    if (isEdit && phone && !selectedProfile && !selectedIntake) {
       phoneLookup.run(phone, (v) => v.replace(/\D/g, "").length >= MIN_PHONE_DIGITS);
     }
     // Deliberately mount-only — re-running on every phone/selectedProfile
@@ -331,6 +387,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
   const onPhoneChange = (value: string) => {
     setPhone(value);
     setSelectedProfile(null);
+    setSelectedIntake(null);
     nameLookup.reset();
     phoneLookup.run(value, (v) => v.replace(/\D/g, "").length >= MIN_PHONE_DIGITS);
   };
@@ -343,6 +400,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
 
   const selectProfile = (p: SearchResult) => {
     setSelectedProfile(p);
+    setSelectedIntake(null);
     phoneLookup.reset();
     nameLookup.reset();
     setClientQuery("");
@@ -356,8 +414,22 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
     if (!phone.trim() && p.phone) setPhone(p.phone);
   };
 
+  const selectIntake = (i: CallLogIntakeMatch) => {
+    setSelectedIntake({ localId: i.localId, name: i.name });
+    setSelectedProfile(null);
+    phoneLookup.reset();
+    nameLookup.reset();
+    setClientQuery("");
+    // The caller is most likely the intake's point of contact, not the detainee.
+    if (!name.trim() && i.pocName) setName(i.pocName);
+    if (!phone.trim() && i.pocPhone) setPhone(i.pocPhone);
+    // Linking to the existing intake; creating a second one would duplicate it.
+    setIsIntake(false);
+  };
+
   const unlink = () => {
     setSelectedProfile(null);
+    setSelectedIntake(null);
     // Re-open the match list immediately so staff can pick a different client
     // without having to retype the phone.
     if (phone) phoneLookup.run(phone, (v) => v.replace(/\D/g, "").length >= MIN_PHONE_DIGITS);
@@ -398,6 +470,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
           name: effectiveName,
           phone: phone.trim(),
           profileLocalId: selectedProfile?.localId ?? null,
+          jailIntakeLocalId: selectedProfile ? null : selectedIntake?.localId ?? null,
           status,
           language,
           takenByUserId: takenById || null,
@@ -415,6 +488,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
         status: status || undefined,
         language: language || undefined,
         profileLocalId: selectedProfile?.localId ?? null,
+        jailIntakeLocalId: selectedProfile ? null : selectedIntake?.localId ?? null,
         takenByUserId: takenById || null,
         highlightedForUserId: highlightedForId || null,
         mentionedUserIds: noteMentions.length ? noteMentions.map((m) => m.id) : undefined,
@@ -500,6 +574,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
     phoneLookup.reset();
     nameLookup.reset();
     setSelectedProfile(null);
+    setSelectedIntake(null);
     setName("");
     setNote("");
     setNoteMentions([]);
@@ -521,7 +596,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
   const languageItems = [{ value: "", label: "—" }, ...LANGUAGE_OPTIONS.map((l) => ({ value: l, label: l }))];
 
   // Whichever box the front desk is using drives the suggestions shown.
-  const activeLookup = nameLookup.matches.length > 0 || nameLookup.searching || nameLookup.searched
+  const activeLookup = nameLookup.matches.length > 0 || nameLookup.intakes.length > 0 || nameLookup.searching || nameLookup.searched
     ? nameLookup
     : phoneLookup;
 
@@ -541,6 +616,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
               <p style={{ marginBottom: 8 }}>
                 ✓ Call logged as <strong>{done.name}</strong>
                 {selectedProfile ? <> and linked to <strong>{selectedProfile.name}</strong></> : null}
+                {!selectedProfile && selectedIntake ? <> and linked to the jail intake for <strong>{selectedIntake.name}</strong></> : null}
                 {done.pending ? " — queued (Monday was unreachable, will sync shortly)." : "."}
               </p>
               {done.intake && (
@@ -622,6 +698,25 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                   </div>
                   <ProfileNotesPreview profileLocalId={selectedProfile.localId} profileName={selectedProfile.name} />
                 </>
+              ) : selectedIntake ? (
+                <div
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                    padding: "6px 10px", marginBottom: 12, borderRadius: 8,
+                    background: "var(--color-amber-light)", border: "1px solid var(--color-border-light)",
+                  }}
+                >
+                  <span style={{ fontSize: 13, fontFamily: "var(--font-body)", color: "var(--color-ink)" }}>
+                    Linking to the jail intake for <strong>{selectedIntake.name}</strong> (no profile yet)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={unlink}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--color-ink-faint)" }}
+                  >
+                    Unlink
+                  </button>
+                </div>
               ) : (
                 <>
                   {/* Linking is not limited to the number that called: this searches
@@ -638,8 +733,13 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                     />
                   </label>
 
-                  {activeLookup.matches.length > 0 ? (
-                    <MatchList matches={activeLookup.matches} onSelect={selectProfile} />
+                  {activeLookup.matches.length > 0 || activeLookup.intakes.length > 0 ? (
+                    <MatchList
+                      matches={activeLookup.matches}
+                      intakes={activeLookup.intakes}
+                      onSelect={selectProfile}
+                      onSelectIntake={selectIntake}
+                    />
                   ) : activeLookup.searching ? (
                     <p style={{ fontSize: 12, color: "var(--color-ink-faint)", marginBottom: 12 }}>Searching…</p>
                   ) : activeLookup.searched ? (
@@ -688,6 +788,8 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                     borderBottom: "1px solid var(--color-border-light)",
                   }}
                 >
+                  {/* Already linked to an existing intake: a new one would duplicate it. */}
+                  {!selectedIntake && (
                   <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                     <input
                       type="checkbox"
@@ -702,6 +804,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                       This call is a jail intake
                     </span>
                   </label>
+                  )}
 
                   {isIntake && (
                     <div style={{ marginTop: 10 }}>

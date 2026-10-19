@@ -22,7 +22,7 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
 import { FIRM_TIMEZONE } from "../firm.js";
-import { getBoardColumnsFor, getBoardStatusOptionsFor } from "@case-pipeline/query";
+import { getBoardColumnsFor, getBoardStatusOptionsFor, searchJailIntakesByPocPhone } from "@case-pipeline/query";
 import { fetchItemUpdatesBatch } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { getWorkspaceUsers } from "../staff/workspace-users.js";
@@ -37,6 +37,8 @@ import {
   resolveCallerName,
   resolveEditedCallerName,
   readMirroredPhone,
+  mirroredLinkValue,
+  type LinkedItem,
 } from "./call-log-write.js";
 import { parseNoteBody } from "./note-write.js";
 
@@ -95,6 +97,20 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
     }
   });
 
+  /** A jail intake's Monday id + name, for linking a call to it. */
+  function findIntake(localId: string): { monday_item_id: string | null; name: string } | undefined {
+    return db
+      .prepare("SELECT monday_item_id, name FROM board_items WHERE local_id = ? AND board_key = '_fa_jail_intakes'")
+      .get(localId) as { monday_item_id: string | null; name: string } | undefined;
+  }
+
+  // Jail intakes whose POC phone matches the number that called. The web asks
+  // only when no profile matched — a profile wins over an intake.
+  app.get("/api/call-log/intake-matches", requireAuth, (req, res) => {
+    const q = String(req.query.q ?? "");
+    res.json({ data: searchJailIntakesByPocPhone(db, q) });
+  });
+
   app.post("/api/call-log", requireAuth, async (req, res) => {
     if (!MONDAY_API_TOKEN) {
       res.status(503).json({ error: "Monday.com write-back not configured" });
@@ -106,7 +122,7 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
     // local mirror, audit) and delegates every decision, so the decisions are
     // unit-testable without standing up Express or a database.
     const parsed = parseCallLogBody(req.body);
-    const { note, phone, language, profileLocalId, takenByUserId, highlightedForUserId, noteMentions } = parsed;
+    const { note, phone, language, profileLocalId, jailIntakeLocalId, takenByUserId, highlightedForUserId, noteMentions } = parsed;
     // Blank name → the number that called. See resolveCallerName.
     const name = resolveCallerName(parsed.name, parsed.phone);
 
@@ -148,13 +164,26 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
         return;
       }
     }
+    // No profile: the call may be about a detainee's jail intake instead.
+    let intake: { monday_item_id: string | null; name: string } | null = null;
+    if (jailIntakeLocalId) {
+      intake = findIntake(jailIntakeLocalId) ?? null;
+      if (!intake) {
+        res.status(404).json({ error: "Linked jail intake not found" });
+        return;
+      }
+    }
+    const linkMondayItemId = profile?.monday_item_id ?? intake?.monday_item_id ?? null;
+    const link: LinkedItem | null = linkMondayItemId
+      ? { mondayItemId: linkMondayItemId, name: profile?.name ?? intake!.name }
+      : null;
 
     const today = new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TIMEZONE }); // en-CA => YYYY-MM-DD
     const nowTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: FIRM_TIMEZONE });
 
     // Column values for Monday's create_item mutation — keyed by real column id.
     const columnValues = buildCallLogColumnValues({
-      schema, parsed, status, today, profileMondayItemId: profile?.monday_item_id ?? null,
+      schema, parsed, status, today, linkMondayItemId,
     });
 
     // Resolved up front so a Monday outage below still lets the call get logged
@@ -171,7 +200,7 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
     const mirroredColumnValues = buildMirroredColumnValues({
       parsed, status, today, nowTime,
       lastUpdated: new Date().toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC"),
-      takenByName, highlightedForName,
+      takenByName, highlightedForName, link,
     });
 
     // "topics" is the Monday group id (title "Call Log") the front desk actively
@@ -310,11 +339,11 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
       auditFromReq(req, "monday.call_logged", {
         targetType: "board_item", targetId: localId, targetMondayId: outcome.result,
         metadata: {
-          mondayItemId: outcome.result, profileLocalId, status, name, hasNote: !!note,
+          mondayItemId: outcome.result, profileLocalId, jailIntakeLocalId, status, name, hasNote: !!note,
           usedPersonalToken: outcome.usedPersonalToken, fellBackToSharedToken: outcome.fellBackToSharedToken,
         },
       });
-      res.json({ data: { localId, mondayItemId: outcome.result, name, status, profileLocalId, pending: false } });
+      res.json({ data: { localId, mondayItemId: outcome.result, name, status, profileLocalId, jailIntakeLocalId, pending: false } });
     } catch (err) {
       console.error("[write-back] call log createItem failed; queueing for retry:", err);
       insertLocal(null, "pending");
@@ -339,9 +368,9 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
       await Promise.all([postProfileNote(), postActivityLog()]);
       auditFromReq(req, "monday.call_logged", {
         targetType: "board_item", targetId: localId, targetMondayId: null,
-        metadata: { profileLocalId, status, name, hasNote: !!note, queued: true },
+        metadata: { profileLocalId, jailIntakeLocalId, status, name, hasNote: !!note, queued: true },
       });
-      res.status(202).json({ data: { localId, mondayItemId: null, name, status, profileLocalId, pending: true } });
+      res.status(202).json({ data: { localId, mondayItemId: null, name, status, profileLocalId, jailIntakeLocalId, pending: true } });
     }
   });
 
@@ -382,12 +411,14 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
     const mondayItemId = item.monday_item_id; // narrowed; the write closures below can't re-narrow a field
 
     const body = req.body as {
-      name?: unknown; phone?: unknown; profileLocalId?: unknown;
+      name?: unknown; phone?: unknown; profileLocalId?: unknown; jailIntakeLocalId?: unknown;
       highlightedForUserId?: unknown; takenByUserId?: unknown; status?: unknown; language?: unknown;
     };
     const hasName = "name" in body;
     const hasPhone = "phone" in body;
-    const hasProfile = "profileLocalId" in body;
+    // Either one rewrites the same "link to Profiles" column (which takes jail
+    // intakes too), so they travel together: a profile wins over an intake.
+    const hasProfile = "profileLocalId" in body || "jailIntakeLocalId" in body;
     const hasHighlightedFor = "highlightedForUserId" in body;
     const hasTakenBy = "takenByUserId" in body;
     const hasStatus = "status" in body;
@@ -415,6 +446,7 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
       name = resolved.name;
     }
     const profileLocalId = hasProfile ? (body.profileLocalId ? String(body.profileLocalId) : null) : undefined;
+    const jailIntakeLocalId = hasProfile && !profileLocalId && body.jailIntakeLocalId ? String(body.jailIntakeLocalId) : null;
     const toUserId = (v: unknown): number | null => {
       if (v == null || v === "") return null;
       const n = Number(v);
@@ -469,6 +501,15 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
         return;
       }
     }
+    let newIntake: { monday_item_id: string | null; name: string } | null = null;
+    if (jailIntakeLocalId) {
+      newIntake = findIntake(jailIntakeLocalId) ?? null;
+      if (!newIntake) {
+        res.status(404).json({ error: "Linked jail intake not found" });
+        return;
+      }
+    }
+    const linkMondayItemId = newProfile?.monday_item_id ?? newIntake?.monday_item_id ?? null;
 
     const authorOid = req.user?.oid ?? null;
     let anyQueued = false;
@@ -509,7 +550,7 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
 
     const writeProfile = async () => {
       if (!hasProfile || !profileCol) return;
-      const value = { item_ids: newProfile?.monday_item_id ? [Number(newProfile.monday_item_id)] : [] };
+      const value = { item_ids: linkMondayItemId ? [Number(linkMondayItemId)] : [] };
       try {
         await withTokenFallback(
           (token) => dataSource.setColumnValueJson(schema.mondayBoardId, mondayItemId, profileCol.columnId, value, token),
@@ -603,6 +644,13 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
       // leave cv empty
     }
     if (hasPhone) cv.phone = phone || undefined;
+    if (hasProfile) {
+      // Rewritten either way: a stale intake id left here would show the call
+      // as linked to that intake after its profile is unlinked.
+      if (linkMondayItemId) {
+        cv.profile = mirroredLinkValue({ mondayItemId: linkMondayItemId, name: newProfile?.name ?? newIntake!.name });
+      } else delete cv.profile;
+    }
     if (hasStatus) {
       if (status) cv.status = { label: status };
       else delete cv.status;
@@ -640,7 +688,7 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
       metadata: {
         mondayItemId,
         fieldsChanged: {
-          name: hasName, phone: hasPhone, profileLocalId: hasProfile,
+          name: hasName, phone: hasPhone, profileLocalId: hasProfile, jailIntakeLocalId: hasProfile && !!jailIntakeLocalId,
           highlightedForUserId: hasHighlightedFor, takenByUserId: hasTakenBy,
           status: hasStatus, language: hasLanguage,
         },
@@ -655,6 +703,8 @@ export function registerCallLogRoutes(app: Express, deps: CallLogDeps): void {
         phone: hasPhone ? (phone || null) : undefined,
         profileLocalId: hasProfile ? (profileLocalId ?? null) : undefined,
         profileName: hasProfile ? (newProfile?.name ?? null) : undefined,
+        jailIntakeLocalId: hasProfile ? jailIntakeLocalId : undefined,
+        jailIntakeName: hasProfile ? (newIntake?.name ?? null) : undefined,
         highlightedFor: hasHighlightedFor ? highlightedForName : undefined,
         takenBy: hasTakenBy ? takenByName : undefined,
         status: hasStatus ? (status || null) : undefined,

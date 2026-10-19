@@ -271,7 +271,7 @@ describe("columnByTitle", () => {
 // --- buildCallLogColumnValues -----------------------------------------------
 
 describe("buildCallLogColumnValues", () => {
-  const base = { schema, status: "Pending", today: "2026-08-28", profileMondayItemId: null };
+  const base = { schema, status: "Pending", today: "2026-08-28", linkMondayItemId: null };
 
   it("keys every value by the board's real Monday column id", () => {
     const cv = buildCallLogColumnValues({
@@ -303,7 +303,7 @@ describe("buildCallLogColumnValues", () => {
     const cv = buildCallLogColumnValues({
       ...base,
       parsed: parse({ name: "Ana" }),
-      profileMondayItemId: "998877",
+      linkMondayItemId: "998877",
     });
     expect(cv.link_1).toEqual({ item_ids: [998877] });
   });
@@ -378,5 +378,25 @@ describe("buildMirroredColumnValues", () => {
     expect(mv).not.toHaveProperty("phone");
     expect(mv).not.toHaveProperty("language");
     expect(mv).not.toHaveProperty("status");
+  });
+});
+
+// --- Jail intake link -------------------------------------------------------
+
+describe("jail intake link", () => {
+  // A detainee's family calls before there is any profile; the call links to
+  // their jail intake through the same "link to Profiles" column.
+  it("parses the intake only when no profile is given — a profile wins", () => {
+    expect(parse({ name: "Ana", jailIntakeLocalId: "ji-1" }).jailIntakeLocalId).toBe("ji-1");
+    expect(parse({ name: "Ana", profileLocalId: "p-1", jailIntakeLocalId: "ji-1" }).jailIntakeLocalId).toBeNull();
+  });
+
+  it("mirrors the link in the sync's board_relation shape", () => {
+    const mv = buildMirroredColumnValues({
+      parsed: parse({ name: "Ana" }), status: null, today: "2026-10-19", nowTime: "9:00 AM",
+      lastUpdated: "x", takenByName: null, highlightedForName: null,
+      link: { mondayItemId: "13162355517", name: "Manuel ANAYA" },
+    });
+    expect(mv.profile).toEqual({ linked_item_ids: ["13162355517"], display_value: "Manuel ANAYA" });
   });
 });

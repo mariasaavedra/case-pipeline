@@ -10,7 +10,7 @@ function run(db: DatabaseInstance, sql: string, params: unknown[] = []): void {
   db.prepare(sql).run(...(params as any[]));
 }
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
-import { getCallLogEntries, getCallLogStaffOptions } from "./call-log";
+import { getCallLogEntries, getCallLogStaffOptions, searchJailIntakesByPocPhone } from "./call-log";
 import { makeStaffNames } from "./staff-names";
 import { testResolver } from "./staff-names.fixture";
 
@@ -161,5 +161,50 @@ describe("getCallLogStaffOptions", () => {
     insertCall(db, { localId: "call-3", name: "C", columnValues: { taken_by: { label: "Ana Reyes" } } });
     expect(getCallLogEntries(db, { takenBy: "Mayra Ruiz" }, testResolver).total).toBe(2);
     expect(getCallLogEntries(db, { takenBy: "Mayra R." }).total).toBe(1);
+  });
+});
+
+function insertItem(
+  db: DatabaseInstance,
+  opts: { localId: string; boardKey: string; mondayItemId: string; name: string; profileLocalId?: string; columnValues?: Record<string, unknown> },
+) {
+  run(
+    db,
+    `INSERT INTO board_items (batch_id, local_id, monday_item_id, board_key, name, profile_local_id, column_values)
+     VALUES (1, ?, ?, ?, ?, ?, ?)`,
+    [opts.localId, opts.mondayItemId, opts.boardKey, opts.name, opts.profileLocalId ?? "", JSON.stringify(opts.columnValues ?? {})],
+  );
+}
+
+describe("jail intakes on the Call Log", () => {
+  test("a call linked to an intake shows it and is not 'unlinked'", () => {
+    const db = freshDb();
+    insertItem(db, { localId: "ji-1", boardKey: "_fa_jail_intakes", mondayItemId: "900", name: "Manuel ANAYA" });
+    insertCall(db, { localId: "call-1", name: "Jennifer", columnValues: { profile: { linked_item_ids: ["900"] } } });
+    insertCall(db, { localId: "call-2", name: "Nobody" });
+
+    const byId = Object.fromEntries(getCallLogEntries(db).entries.map((e) => [e.localId, e]));
+    expect(byId["call-1"]).toMatchObject({ jailIntakeLocalId: "ji-1", jailIntakeName: "Manuel ANAYA" });
+    expect(byId["call-2"]!.jailIntakeLocalId).toBeNull();
+    expect(getCallLogEntries(db, { unlinkedOnly: true }).entries.map((e) => e.localId)).toEqual(["call-2"]);
+  });
+
+  test("finds intakes by POC phone, any punctuation, skipping ones that became a client", () => {
+    const db = freshDb();
+    insertProfile(db, { localId: "prof-1", name: "Converted Client" });
+    insertItem(db, {
+      localId: "ji-open", boardKey: "_fa_jail_intakes", mondayItemId: "900", name: "Open Lead",
+      columnValues: { poc_phone: "(816) 462-9131", poc_name_and_relationship_with_detained: "Jennifer - Wife" },
+    });
+    insertItem(db, { localId: "appt-1", boardKey: "appointments_m", mondayItemId: "500", name: "Consult", profileLocalId: "prof-1" });
+    insertItem(db, {
+      localId: "ji-done", boardKey: "_fa_jail_intakes", mondayItemId: "901", name: "Converted",
+      columnValues: { poc_phone: "816-462-9131", x_appointments: { linked_item_ids: ["500"] } },
+    });
+
+    const matches = searchJailIntakesByPocPhone(db, "816-462-9131");
+    expect(matches.map((m) => m.localId)).toEqual(["ji-open"]);
+    expect(matches[0]).toMatchObject({ name: "Open Lead", pocName: "Jennifer - Wife", pocPhone: "(816) 462-9131" });
+    expect(searchJailIntakesByPocPhone(db, "Jennifer")).toEqual([]);
   });
 });
