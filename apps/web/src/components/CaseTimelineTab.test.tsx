@@ -12,11 +12,19 @@ const notes = {
   date: "2026-06-03", track: "court" as const, kind: "note" as const, label: "Hearing notes", status: null,
   detail: "6-3-2026 Indiv. Hearing, client present", source: "E&A · HEARING NOTES", boardKey: null, itemLocalId: null, updateLocalId: "u7",
 };
+const moved = {
+  date: "2026-08-20", track: "court" as const, kind: "hearing" as const, label: "Master hearing", status: "cancelled" as const,
+  detail: "moved to Sep 30, 2026 on Aug 4, 2026 by Mayra Ruiz", source: "[9/30/26] MASTER: Ana RIVERA", boardKey: "calendaring", itemLocalId: "h1", updateLocalId: null,
+};
+const change = {
+  date: "2026-08-04", track: "court" as const, kind: "change" as const, label: "Calendaring Status: Check dates → Added on Cal", status: null,
+  detail: "by Mayra Ruiz", source: "[9/30/26] MASTER: Ana RIVERA", boardKey: "calendaring", itemLocalId: "h1", updateLocalId: null,
+};
 let fetches = 0;
 const timeline = (): CaseTimeline => ({
   profileLocalId: "p1",
   today: "2026-10-16",
-  events: [notes, hearing],
+  events: [notes, change, moved, hearing],
   notesByMonth: [],
   summary: {
     standing: [],
@@ -34,6 +42,11 @@ const item: TimelineItem = {
     },
     { key: "hearing_date_calendaring", columnId: "date_9", title: "Hearing Date", type: "date", value: "2026-09-30", primary: true, options: [] },
     { key: "judge", columnId: "text_3", title: "Judge", type: "text", value: "", primary: false, options: [] },
+  ],
+  history: [
+    { changedAt: "2026-08-04T15:00:00Z", what: "Hearing Date - Calendaring", from: "2026-08-20", to: "2026-09-30", by: "Mayra Ruiz" },
+    { changedAt: "2026-08-04T14:00:00Z", what: "Calendaring Status", from: "Check dates", to: "Added on Cal", by: "a Monday automation" },
+    { changedAt: "2026-07-11T02:52:00Z", what: "Created", from: null, to: null, by: null },
   ],
 };
 
@@ -114,5 +127,26 @@ describe("CaseTimelineTab → M29 event panel", () => {
     await settle();
     expect(api.postTimelineReply).toHaveBeenCalledWith("u7", "IJ set the individual for March");
     expect(api.postProfileUpdate).not.toHaveBeenCalled();
+  });
+
+  it("history: the moved date is crossed out, status changes can be hidden, M29 lists who changed what", async () => {
+    await mount();
+    const rows = () => Array.from(document.querySelectorAll<HTMLElement>("[data-tl-row]"));
+    const movedRow = rows().find((r) => r.textContent?.includes("moved to Sep 30, 2026"))!;
+    expect(movedRow.dataset.cancelled).toBe("true");
+    expect(rows().some((r) => r.textContent?.includes("Check dates → Added on Cal"))).toBe(true);
+
+    const toggle = Array.from(document.querySelectorAll("label")).find((l) => l.textContent === "Status changes")!.querySelector("input")!;
+    await act(async () => toggle.click());
+    expect(rows().some((r) => r.textContent?.includes("Check dates → Added on Cal"))).toBe(false);
+    expect(rows().some((r) => r.textContent?.includes("moved to Sep 30, 2026"))).toBe(true); // a reschedule isn't a status change
+
+    await act(async () => movedRow.click());
+    await settle();
+    const history = document.querySelector('section[aria-label="History"]')!;
+    expect(history.textContent).toContain("Hearing Date - Calendaring: 2026-08-20 → 2026-09-30");
+    expect(history.textContent).toContain("Mayra Ruiz");
+    expect(history.textContent).toContain("a Monday automation");
+    expect(history.querySelectorAll("li")).toHaveLength(3);
   });
 });

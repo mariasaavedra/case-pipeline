@@ -552,7 +552,7 @@ app.get("/api/clients/:localId/contracts", adapt(handleClientContracts));
 app.get("/api/clients/:localId/board-items", adapt(handleClientBoardItems));
 app.get("/api/clients/:localId/updates", adapt(handleClientUpdates));
 app.get("/api/clients/:localId/relationships", adapt(handleClientRelationships));
-registerCaseTimelineRoutes(app, { db });
+registerCaseTimelineRoutes(app, { db, usersDb });
 app.get("/api/board-items/:localId", adapt(handleBoardItemDetail));
 app.get("/api/call-log", adapt((req, d) => handleCallLog(req, d, makeStaffResolver(usersDb))));
 app.get("/api/jail-intakes", adapt(handleJailIntakes));

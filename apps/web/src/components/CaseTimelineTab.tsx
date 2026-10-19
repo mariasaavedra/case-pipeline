@@ -47,6 +47,8 @@ export function CaseTimelineTab({ profileLocalId }: { profileLocalId: string }) 
   const [range, setRange] = useState<Range>("18");
   const [tracks, setTracks] = useState<Set<TimelineTrack>>(() => new Set(TRACKS.map((t) => t.key)));
   const [newestFirst, setNewestFirst] = useState(true);
+  /** Status / group changes from the item activity log (kind "change"). */
+  const [showChanges, setShowChanges] = useState(true);
   const [highlight, setHighlight] = useState<number | null>(null);
   const [panel, setPanel] = useState<TimelineEventTarget | null>(null);
   /** Bumped after an edit in M29: reload without blanking what's on screen. */
@@ -132,7 +134,7 @@ export function CaseTimelineTab({ profileLocalId }: { profileLocalId: string }) 
             No dated milestones for this client yet.
           </p>
         ) : (
-          <Chart data={data} range={range} tracks={tracks} onPick={pick} />
+          <Chart data={data} range={range} tracks={tracks} showChanges={showChanges} onPick={pick} />
         )}
         <Legend />
       </section>
@@ -148,13 +150,17 @@ export function CaseTimelineTab({ profileLocalId }: { profileLocalId: string }) 
                 {t.name}
               </label>
             ))}
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" checked={showChanges} onChange={() => setShowChanges((v) => !v)} />
+              Status changes
+            </label>
             <div className="case-tl-seg" role="group" aria-label="Order">
               <button type="button" aria-pressed={newestFirst} onClick={() => setNewestFirst(true)}>Newest first</button>
               <button type="button" aria-pressed={!newestFirst} onClick={() => setNewestFirst(false)}>Oldest first</button>
             </div>
           </div>
         </div>
-        <Story events={data.events} tracks={tracks} newestFirst={newestFirst} highlight={highlight} today={data.today} onOpen={openRow} />
+        <Story events={data.events} tracks={tracks} showChanges={showChanges} newestFirst={newestFirst} highlight={highlight} today={data.today} onOpen={openRow} />
       </section>
 
       {panel && (
@@ -245,6 +251,9 @@ function Marker({ e, x, y, color }: { e: Pick<TimelineEvent, "kind" | "status" |
     strokeDasharray: cancelled ? "2 2" : undefined,
   };
   switch (e.kind) {
+    case "change":
+      // A status change: a thin tick, so it never crowds the milestones.
+      return <rect x={x - 1.25} y={y - 5} width={2.5} height={10} rx={1} fill={color} opacity={0.75} />;
     case "hearing":
       return <path d={`M${x} ${y - 7}L${x + 7} ${y}L${x} ${y + 7}L${x - 7} ${y}Z`} {...p} />;
     case "decision":
@@ -269,7 +278,8 @@ function Legend() {
     [{ kind: "hearing", status: null, date: "" }, "Hearing / interview"],
     [{ kind: "deadline", status: "upcoming", date: "" }, "Deadline"],
     [{ kind: "meeting", status: null, date: "" }, "Meeting / milestone"],
-    [{ kind: "hearing", status: "cancelled", date: "" }, "Rescheduled / cancelled"],
+    [{ kind: "hearing", status: "cancelled", date: "" }, "Rescheduled / cancelled / moved"],
+    [{ kind: "change", status: null, date: "" }, "Status change"],
   ];
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs" style={{ color: "var(--color-ink-muted)" }}>
@@ -296,7 +306,7 @@ interface Tip {
   lines: string[];
 }
 
-function Chart({ data, range, tracks, onPick }: { data: CaseTimeline; range: Range; tracks: Set<TimelineTrack>; onPick: (i: number) => void }) {
+function Chart({ data, range, tracks, showChanges, onPick }: { data: CaseTimeline; range: Range; tracks: Set<TimelineTrack>; showChanges: boolean; onPick: (i: number) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(900);
   const [tip, setTip] = useState<Tip | null>(null);
@@ -350,6 +360,11 @@ function Chart({ data, range, tracks, onPick }: { data: CaseTimeline; range: Ran
       let early = 0;
       data.events.forEach((e, i) => {
         if (e.track !== t.key) return;
+        if (e.kind === "change") {
+          // Along the lane's bottom edge, unstacked; none in the "Earlier" gutter.
+          if (showChanges && ms(e.date) >= minD) points.push({ i, x: X(ms(e.date)), y: y + LANE / 2 - 8 });
+          return;
+        }
         if (ms(e.date) < minD) {
           points.push({ i, x: LEFT + (GUTTER - 8) / 2 + ((early % 3) - 1) * 14, y: y - 10 + Math.floor(early / 3) * 14 });
           early++;
@@ -364,7 +379,7 @@ function Chart({ data, range, tracks, onPick }: { data: CaseTimeline; range: Ran
     });
 
     return { minD, X, x1, hasGutter, ticks, points };
-  }, [data, range, width, shown.map((t) => t.key).join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, range, width, showChanges, shown.map((t) => t.key).join()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { minD, X, x1, hasGutter, ticks, points } = layout;
   const todayX = X(ms(data.today));
@@ -461,8 +476,8 @@ function Chart({ data, range, tracks, onPick }: { data: CaseTimeline; range: Ran
 // Story
 // =============================================================================
 
-function Story({ events, tracks, newestFirst, highlight, today, onOpen }: { events: TimelineEvent[]; tracks: Set<TimelineTrack>; newestFirst: boolean; highlight: number | null; today: string; onOpen: (i: number) => void }) {
-  const rows = events.map((e, i) => ({ e, i })).filter(({ e }) => tracks.has(e.track));
+function Story({ events, tracks, showChanges, newestFirst, highlight, today, onOpen }: { events: TimelineEvent[]; tracks: Set<TimelineTrack>; showChanges: boolean; newestFirst: boolean; highlight: number | null; today: string; onOpen: (i: number) => void }) {
+  const rows = events.map((e, i) => ({ e, i })).filter(({ e }) => tracks.has(e.track) && (showChanges || e.kind !== "change"));
   if (newestFirst) rows.reverse();
   if (rows.length === 0) {
     return <p className="text-sm py-6 text-center" style={{ color: "var(--color-ink-faint)" }}>No events on the selected tracks.</p>;

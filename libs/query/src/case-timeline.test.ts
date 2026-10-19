@@ -409,3 +409,57 @@ describe("what the event panel (M29) needs", () => {
     expect(find(t, "NVC: Case Created")).toMatchObject({ updateLocalId: null, itemLocalId: nvc, boardKey: "nvc_notices" });
   });
 });
+
+describe("history from the item activity log (item_events)", () => {
+  const STATUS = "color_mkrjc7n8";
+  const HEARING = "date_mkrjnbth";
+  function withHistory() {
+    const db = freshDb();
+    const id = item(db, "calendaring", "[11/20/26] IN PERSON MASTER: Ana S. RIVERA LOPEZ", {
+      type: { label: "Master" }, hearing_date_calendaring: d("2026-11-20"), due_date: d("2026-11-06"),
+    }, { status: "MR Hearing Confirmed" });
+    db.prepare("UPDATE board_items SET monday_item_id = '555' WHERE local_id = ?").run(id);
+    db.prepare("INSERT INTO board_status_options (board_key, monday_board_id, status_column_id, options) VALUES ('calendaring', '9287895872', ?, '[]')").run(STATUS);
+    const ev = db.prepare(
+      `INSERT INTO item_events (source, activity_log_id, event_type, monday_item_id, column_id, column_title, column_type, previous_text, value_text, monday_user_id, changed_at)
+       VALUES ('activity_log', ?, ?, '555', ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    ev.run("c", "create_pulse", null, null, null, null, null, "1", "2026-07-11T02:52:00Z");
+    ev.run("s1", "update_column_value", STATUS, "Calendaring Status", "color", null, "Check dates", "-4", "2026-07-11T02:53:00Z");
+    ev.run("h1", "update_column_value", HEARING, "Hearing Date - Calendaring", "date", null, "2026-09-30", "1", "2026-07-11T02:55:00Z");
+    ev.run("h2", "update_column_value", HEARING, "Hearing Date - Calendaring", "date", "2026-09-30", "2026-11-20 09:00", "32138066", "2026-09-29T15:00:00Z");
+    ev.run("s2", "update_column_value", STATUS, "Calendaring Status", "color", "Check dates", "MR Hearing Confirmed", "32138066", "2026-09-29T15:05:00Z");
+    return { db, id };
+  }
+  const opts = {
+    columnIdFor: (board: string, key: string) => (board === "calendaring" && key === "hearing_date_calendaring" ? HEARING : null),
+    userName: (uid: string) => (uid === "32138066" ? "Mayra Ruiz" : null),
+  };
+  const buildH = (db: DatabaseInstance) => getCaseTimeline(db, "p1", config, { today: TODAY, timeZone: "America/Chicago", ...opts })!;
+
+  test("a moved hearing: the old date crossed out, with when and who", () => {
+    const { db, id } = withHistory();
+    const t = buildH(db);
+    expect(find(t, "Master hearing", "2026-09-30")).toMatchObject({
+      status: "cancelled", itemLocalId: id, detail: "moved to Nov 20, 2026 on Sep 29, 2026 by Mayra Ruiz",
+    });
+    expect(find(t, "Master hearing", "2026-11-20")?.status).toBe("upcoming");
+  });
+
+  test("…and it doesn't call off the hearing's filing deadline", () => {
+    const t = buildH(withHistory().db);
+    expect(find(t, "Filing deadline before master hearing", "2026-11-06")).toBeTruthy();
+  });
+
+  test("status changes, setup left out, by name or automation; never in Coming up", () => {
+    const t = buildH(withHistory().db);
+    expect(t.events.filter((e) => e.kind === "change").map((e) => [e.date, e.label, e.detail])).toEqual([
+      ["2026-09-29", "Calendaring Status: Check dates → MR Hearing Confirmed", "by Mayra Ruiz"],
+    ]);
+    expect(t.summary.next.some((e) => e.kind === "change")).toBe(false);
+  });
+
+  test("without the column resolver there are no moved dates", () => {
+    expect(find(build(withHistory().db), "Master hearing", "2026-09-30")).toBeUndefined();
+  });
+});

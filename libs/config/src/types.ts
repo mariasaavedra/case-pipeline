@@ -50,7 +50,9 @@ export interface AppConfig {
 
 export type TimelineTrack = "court" | "uscis" | "fees" | "meetings" | "notes";
 export type TimelineKind =
-  | "milestone" | "filing" | "decision" | "hearing" | "deadline" | "meeting" | "call" | "note";
+  | "milestone" | "filing" | "decision" | "hearing" | "deadline" | "meeting" | "call" | "note"
+  /** A status / group change read from the item activity log (item_events). */
+  | "change";
 /** Milestones that need more than a date + label — implemented in libs/query/src/case-timeline.ts. */
 export type TimelineRule =
   | "court_outcome" | "calendaring" | "appeal" | "motion" | "rfe" | "appointment" | "contract";
@@ -76,6 +78,21 @@ export interface TimelineBoardConfig {
    * are always included.
    */
   edit?: string[];
+  /**
+   * Date columns whose earlier values are history worth seeing: each time one
+   * was moved (item activity log), its old date shows as a crossed-out event.
+   */
+  moved?: TimelineMovedConfig[];
+}
+
+export interface TimelineMovedConfig {
+  /** Logical column key from boards.yaml. */
+  column: string;
+  kind: TimelineKind;
+  /** Template on the item's current values: {col}, {col|fallback}, {status}. */
+  label: string;
+  /** Defaults to the board's track. */
+  track?: TimelineTrack;
 }
 
 export interface TimelineActivityConfig {

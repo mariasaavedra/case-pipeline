@@ -15,7 +15,12 @@
 #                   than the client (a spouse or child on the same profile)
 #
 # Tracks: court · uscis · fees · meetings · notes
-# Kinds:  milestone · filing · decision · hearing · deadline · meeting · call · note
+# Kinds:  milestone · filing · decision · hearing · deadline · meeting · call · note · change
+#
+# History (item_events — the item activity log): every board here gets its
+# status / group changes as `change` events (leaving out data entry in the
+# item's first hour). `moved` (optional) lists date columns whose old values
+# show crossed out each time the date was changed (not in the first 24 h).
 #
 # `edit` (optional): columns the event panel shows first when someone clicks an
 # event, before the item's other fields. A milestone's column and `status` are
@@ -47,6 +52,11 @@ boards:
     # Status is the hearing's outcome (ATTENDED, RECHED/ CONT/ … NOT HAPPENING,
     # WITHDREW, VISITING IJ NO SHOW); "Needs attention" asks for it.
     edit: [hearing_date_calendaring, interview_date, due_date, calendaring_quick_note]
+    # Each time a hearing / interview date was changed (item activity log), the
+    # old date shows crossed out: "moved to Nov 20, 2026 on Oct 2, 2026 by …".
+    moved:
+      - { column: hearing_date_calendaring, kind: hearing, label: "{type|Court} hearing" }
+      - { column: interview_date, kind: hearing, label: "USCIS interview", track: uscis }
 
   appeals:
     track: court
@@ -134,6 +144,8 @@ boards:
     track: meetings
     rule: appointment
     edit: [consult_date]
+    moved:
+      - { column: consult_date, kind: meeting, label: "Consult (rescheduled)" }
 
 # Fee Ks live in the contracts table, not board_items.
 contracts:

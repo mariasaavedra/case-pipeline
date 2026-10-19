@@ -4,7 +4,10 @@
 //   GET /api/clients/:localId/timeline   the case as dated events + summary
 //   GET /api/timeline/items/:localId     one event's Monday item, for the event
 //                                        panel: its editable fields, the ones
-//                                        the timeline reads first
+//                                        the timeline reads first, and its
+//                                        history (item_events)
+//
+// History names people from the staff roster (users.db, staff.monday_user_id).
 //
 // Both read-only; edits go through PATCH /api/board-items/:localId/columns.
 // The milestone mapping is config/timeline.yaml, read once per process (it
@@ -17,9 +20,9 @@ import type BetterSqlite3 from "better-sqlite3";
 type DatabaseInstance = BetterSqlite3.Database;
 import { requireAuth } from "../auth/middleware.js";
 import { loadTimelineConfig, type BoardConfig, type TimelineBoardConfig, type TimelineConfig } from "@case-pipeline/config";
-import { boardConfigFor, getBoardColumnsFor, getCaseTimeline, type BoardColumn } from "@case-pipeline/query";
+import { batchGetItemHistory, boardConfigFor, isAutomationUser, getBoardColumnsFor, getCaseTimeline, type BoardColumn } from "@case-pipeline/query";
 import { FIRM_TIMEZONE } from "../firm.js";
-import { getBoardsConfig, keysByColumn } from "../board-column-keys.js";
+import { getBoardsConfig, keysByColumn, resolveColumnKeys } from "../board-column-keys.js";
 
 export interface CaseTimelineDeps {
   db: DatabaseInstance;
@@ -29,6 +32,40 @@ export interface CaseTimelineDeps {
   loadBoards?: () => Promise<Record<string, BoardConfig>>;
   /** The firm's today; defaults to the clock in FIRM_TIMEZONE. */
   today?: () => string;
+  /** users.db, for the staff roster's Monday user ids → names. Omitted = no names. */
+  usersDb?: DatabaseInstance;
+}
+
+/** At most this many history rows in the event panel. */
+const HISTORY_LIMIT = 200;
+
+export interface TimelineItemChange {
+  changedAt: string;
+  /** "Calendaring Status", "Name", "Group", or what happened ("Created"). */
+  what: string;
+  from: string | null;
+  to: string | null;
+  /** A person's name, "a Monday automation", or null when unknown. */
+  by: string | null;
+}
+
+const EVENT_WHAT: Record<string, string> = {
+  create_pulse: "Created",
+  archive_pulse: "Archived",
+  delete_pulse: "Deleted",
+  restore_pulse: "Restored",
+};
+
+/** Monday user id → name, from the staff roster. */
+export function staffNames(usersDb: DatabaseInstance | undefined): (mondayUserId: string) => string | null {
+  if (!usersDb) return () => null;
+  try {
+    const rows = usersDb.prepare("SELECT monday_user_id, name FROM staff WHERE monday_user_id IS NOT NULL").all() as { monday_user_id: string; name: string }[];
+    const byId = new Map(rows.map((r) => [String(r.monday_user_id), r.name]));
+    return (id) => byId.get(id) ?? null;
+  } catch {
+    return () => null; // no roster yet
+  }
 }
 
 /** Column types the column write-back accepts (PATCH /api/board-items/:localId/columns). */
@@ -57,6 +94,8 @@ export interface TimelineItem {
   mondayBoardId: string | null;
   mondayItemId: string | null;
   fields: TimelineItemField[];
+  /** What changed on the item, newest first (item_events; link / subitem / people noise left out). */
+  history: TimelineItemChange[];
 }
 
 interface ItemRow {
@@ -93,6 +132,7 @@ export function planTimelineItem(
   board: BoardConfig | undefined,
   timeline: TimelineBoardConfig | undefined,
   columns: { mondayBoardId: string; columns: BoardColumn[] } | null,
+  history: TimelineItemChange[] = [],
 ): TimelineItem {
   const cv = (() => {
     try {
@@ -124,6 +164,46 @@ export function planTimelineItem(
     mondayBoardId: columns?.mondayBoardId ?? board?.id ?? null,
     mondayItemId: row.monday_item_id,
     fields,
+    history,
+  };
+}
+
+/** An item's changes for the panel, newest first. */
+export function itemHistory(
+  db: DatabaseInstance,
+  mondayItemId: string | null,
+  userName: (mondayUserId: string) => string | null,
+): TimelineItemChange[] {
+  if (!mondayItemId) return [];
+  const changes = batchGetItemHistory(db, [mondayItemId]).get(mondayItemId) ?? [];
+  return changes
+    .slice(-HISTORY_LIMIT)
+    .reverse()
+    .map((c) => ({
+      changedAt: c.changedAt,
+      what: EVENT_WHAT[c.eventType] ?? (c.columnType === "group" ? "Group" : c.columnTitle ?? c.eventType),
+      from: c.from,
+      to: c.to,
+      by: !c.userId ? null : isAutomationUser(c.userId) ? "a Monday automation" : userName(c.userId),
+    }));
+}
+
+/**
+ * Logical key → Monday column id per board (boards.yaml over the synced
+ * schema), resolved on first use — for the timeline's moved-date columns.
+ */
+function columnIdResolver(db: DatabaseInstance, boards: Record<string, BoardConfig>): (boardKey: string, key: string) => string | null {
+  const cache = new Map<string, Map<string, string>>();
+  return (boardKey, key) => {
+    let keys = cache.get(boardKey);
+    if (!keys) {
+      keys = new Map();
+      const cfg = boards[boardKey];
+      const cols = getBoardColumnsFor(db, boardKey);
+      if (cfg && cols) for (const [k, c] of resolveColumnKeys(cfg, cols.columns)) keys.set(k, c.columnId);
+      cache.set(boardKey, keys);
+    }
+    return keys.get(key) ?? null;
   };
 }
 
@@ -135,9 +215,12 @@ export function registerCaseTimelineRoutes(app: Express, deps: CaseTimelineDeps)
   app.get("/api/clients/:localId/timeline", requireAuth, async (req, res) => {
     try {
       config ??= loadConfig();
+      const boards = await (deps.loadBoards ?? getBoardsConfig)();
       const timeline = getCaseTimeline(deps.db, String(req.params.localId), await config, {
         today: today(),
         timeZone: FIRM_TIMEZONE,
+        columnIdFor: columnIdResolver(deps.db, boards),
+        userName: staffNames(deps.usersDb),
       });
       if (!timeline) {
         res.status(404).json({ error: "Client not found" });
@@ -166,7 +249,13 @@ export function registerCaseTimelineRoutes(app: Express, deps: CaseTimelineDeps)
       config ??= loadConfig();
       const boards = await (deps.loadBoards ?? getBoardsConfig)();
       res.json({
-        data: planTimelineItem(row, boards[row.board_key], boardConfigFor(await config, row.board_key), getBoardColumnsFor(deps.db, row.board_key)),
+        data: planTimelineItem(
+          row,
+          boards[row.board_key],
+          boardConfigFor(await config, row.board_key),
+          getBoardColumnsFor(deps.db, row.board_key),
+          itemHistory(deps.db, row.monday_item_id, staffNames(deps.usersDb)),
+        ),
       });
     } catch (err) {
       config = null;
