@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import type { ClientCaseSummary, ClientUpdate } from "../api";
-import { fetchClientUpdates } from "../api";
+import { fetchAllClientUpdates } from "../api";
 import { BOARD_CONFIG } from "../config";
 import { NoteComposer } from "./NoteComposer";
 import { navigate, clientPath } from "../router";
@@ -49,6 +49,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("notes");
   const [timelinePeriod, setTimelinePeriod] = useState<TimelinePeriod>("all");
+  const [attorneysOnly, setAttorneysOnly] = useState(false);
   const [timelineRange, setTimelineRange] = useState<DateRange>({});
   const [pendingUpdates, setPendingUpdates] = useState<ClientUpdate[]>([]);
 
@@ -67,6 +68,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
   // Fetch the full timeline for the active category (complete per category, not
   // just the newest page filtered). Max updates for any one profile is well
   // under this cap, so this returns everything for that category.
+  // (fetchAllClientUpdates pages past the cap anyway.)
   // The date bound goes to the server too: `limit` caps the NEWEST rows, so
   // filtering a period in the browser would come back empty for an older range
   // on a client with a busy inbox.
@@ -75,11 +77,11 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
   useEffect(() => {
     let cancelled = false;
     setTimelineLoading(true);
-    fetchClientUpdates(data.profile.localId, {
+    fetchAllClientUpdates(data.profile.localId, {
       category: timelineFilter,
       from: rangeFrom,
       to: rangeTo,
-      limit: 1000,
+      author: attorneysOnly ? "attorneys" : undefined,
     })
       .then((rows) => {
         if (!cancelled) setTimelineFeed(rows);
@@ -93,7 +95,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [data.profile.localId, timelineFilter, rangeFrom, rangeTo]);
+  }, [data.profile.localId, timelineFilter, attorneysOnly, rangeFrom, rangeTo]);
 
   // A note posted from here is never an email, so it belongs to both views —
   // and it is shown regardless of the period, because it was just written.
@@ -185,6 +187,8 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
               <TimelineFilters
                 activeFilter={timelineFilter}
                 onFilterChange={setTimelineFilter}
+                attorneysOnly={attorneysOnly}
+                onAttorneysOnlyChange={setAttorneysOnly}
                 period={timelinePeriod}
                 customRange={timelineRange}
                 onPeriodChange={(p, custom) => {

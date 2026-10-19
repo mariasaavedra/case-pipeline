@@ -45,14 +45,14 @@ const result: MyDayResult = {
 const fetchMyDay = vi.fn((board?: unknown) =>
   Promise.resolve(board === "appointments_m" ? { ...result, boardKey: "appointments_m", entries: [] } : result));
 const changeBoardItemStatus = vi.fn((localId: string, status: string) => Promise.resolve({ localId, status, pending: false }));
-const fetchClientUpdates = vi.fn((..._args: unknown[]) => Promise.resolve([]));
+const fetchAllClientUpdates = vi.fn((..._args: unknown[]) => Promise.resolve([]));
 const postConsultNote = vi.fn((..._args: unknown[]) => Promise.resolve({ posted: true as const, pending: false, summary: "started" as const }));
 
 vi.mock("../api", () => ({
   fetchMyDay: (board?: unknown) => fetchMyDay(board),
   changeBoardItemStatus: (l: string, s: string) => changeBoardItemStatus(l, s),
   postConsultNote: (...a: unknown[]) => postConsultNote(...a),
-  fetchClientUpdates: (...a: unknown[]) => fetchClientUpdates(...a),
+  fetchAllClientUpdates: (...a: unknown[]) => fetchAllClientUpdates(...a),
 }));
 vi.mock("../auth/useAuth", () => ({ useAuth: () => ({ user: { name: "Rekha Sharma-Crawford" } }) }));
 vi.mock("../StatusOptionsProvider", () => ({
@@ -63,6 +63,7 @@ vi.mock("../StatusOptionsProvider", () => ({
   }),
 }));
 vi.mock("./UpdatesTimeline", () => ({ UpdatesTimeline: () => <div>timeline</div> }));
+vi.mock("./CaseTimelineTab", () => ({ CaseTimelineTab: ({ profileLocalId }: { profileLocalId: string }) => <div>case timeline {profileLocalId}</div> }));
 vi.mock("./DocumentsTab", () => ({ DocumentsTab: () => <div>sharepoint browser</div> }));
 const resolveFileLink = vi.fn();
 vi.mock("../sharepoint/graph", () => ({ resolveFileLink: (url: string) => resolveFileLink(url) }));
@@ -258,10 +259,16 @@ describe("AppointmentsPage (P4 My Day)", () => {
     await click(button("Notes"));
     expect(el.textContent).toContain("No notes yet for this client.");
     // The whole notes feed, emails left out until asked for.
-    expect(fetchClientUpdates).toHaveBeenLastCalledWith("p-ana", { category: "notes", limit: 1000 });
+    expect(fetchAllClientUpdates).toHaveBeenLastCalledWith("p-ana", { category: "notes", author: undefined });
+    await click(button("By attorneys"));
+    expect(fetchAllClientUpdates).toHaveBeenLastCalledWith("p-ana", { category: "notes", author: "attorneys" });
+    expect(el.textContent).toContain("No notes by an attorney yet.");
+    await click(button("By attorneys"));
     await click(button("All (with emails)"));
-    expect(fetchClientUpdates).toHaveBeenLastCalledWith("p-ana", { category: "all", limit: 1000 });
+    expect(fetchAllClientUpdates).toHaveBeenLastCalledWith("p-ana", { category: "all", author: undefined });
     expect(el.textContent).toContain("Nothing on this client's timeline yet.");
+    await click(button("Timeline"));
+    expect(el.textContent).toContain("case timeline p-ana");
     await click(button("E-file / Consult file"));
     expect(el.textContent).toContain("sharepoint browser");
   });

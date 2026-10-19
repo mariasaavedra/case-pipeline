@@ -44,6 +44,9 @@ interface Props {
   period: TimelinePeriod;
   customRange: DateRange;
   onPeriodChange: (period: TimelinePeriod, custom: DateRange) => void;
+  /** "By attorneys": only entries written by an attorney (staff roster role). Omit to hide the chip. */
+  attorneysOnly?: boolean;
+  onAttorneysOnlyChange?: (on: boolean) => void;
 }
 
 export function TimelineFilters({
@@ -52,6 +55,8 @@ export function TimelineFilters({
   period,
   customRange,
   onPeriodChange,
+  attorneysOnly = false,
+  onAttorneysOnlyChange,
 }: Props) {
   const [rangeOpen, setRangeOpen] = useState(false);
   // Draft state so typing a half-finished range doesn't refetch on every
@@ -96,6 +101,15 @@ export function TimelineFilters({
             {c.label}
           </button>
         ))}
+        {onAttorneysOnlyChange && (
+          <button
+            className={`filter-chip ${attorneysOnly ? "filter-chip-active" : ""}`}
+            onClick={() => onAttorneysOnlyChange(!attorneysOnly)}
+            aria-pressed={attorneysOnly}
+          >
+            By attorneys
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">

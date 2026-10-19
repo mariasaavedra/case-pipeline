@@ -18,6 +18,7 @@ import {
   handleClientBoardItems,
   handleBoardItemDetail,
   handleClientUpdates,
+  MAX_UPDATES_PAGE,
   handleClientRelationships,
 } from "./handlers";
 
@@ -289,7 +290,34 @@ describe("handleClientUpdates", () => {
     expect(Array.isArray(body.data)).toBe(true);
   });
 
-  test("caps limit=9999 to 200", async () => {
+  test("?author=attorneys keeps only notes by an attorney, cut after filtering", async () => {
+    const isAttorney = (name: string) => name === "Mayra Ruiz";
+    const req = makeRequest("http://localhost:3000/api/clients/p1/updates?author=attorneys&limit=1", { localId: "p1" });
+    const body = (await handleClientUpdates(req, db, isAttorney).json()) as any;
+    // The newest row is Rafael's; the one page still holds the attorney's note.
+    expect(body.data.map((u: any) => u.authorName)).toEqual(["Mayra Ruiz"]);
+  });
+
+  test("?author is ignored without a roster", async () => {
+    const req = makeRequest("http://localhost:3000/api/clients/p1/updates?author=attorneys", { localId: "p1" });
+    const body = (await handleClientUpdates(req, db).json()) as any;
+    expect(body.data.length).toBe(2);
+  });
+
+  test("a page holds up to MAX_UPDATES_PAGE rows, not the old 200", async () => {
+    for (let i = 0; i < 250; i++) {
+      run(db,
+        `INSERT INTO client_updates (batch_id, local_id, profile_local_id, author_name, text_body, source_type, created_at_source)
+         VALUES ((SELECT MAX(id) FROM seed_batches), ?, 'p2', 'Someone', 'n', 'update', ?)`,
+        [`bulk-${i}`, `2026-01-01T00:00:${String(i % 60).padStart(2, "0")}.${String(i).padStart(3, "0")}Z`]);
+    }
+    const req = makeRequest("http://localhost:3000/api/clients/p2/updates?limit=9999", { localId: "p2" });
+    const body = (await handleClientUpdates(req, db).json()) as any;
+    expect(body.data.length).toBe(250);
+    expect(MAX_UPDATES_PAGE).toBeGreaterThanOrEqual(250);
+  });
+
+  test("caps limit=9999", async () => {
     const req = makeRequest("http://localhost:3000/api/clients/p1/updates?limit=9999", { localId: "p1" });
     const res = handleClientUpdates(req, db);
 
