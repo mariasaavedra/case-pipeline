@@ -205,8 +205,20 @@ trigger time). `item_events_cursor` says how far the inbox has been read. A
 delivery Monday retried (same `triggerUuid`) is kept once.
 
 The first drain after the v35 deploy backfilled everything still in the inbox
-(back to 2026-08-10). Older history would have to come from Monday's activity
-log API. Roughly 275 events a day, ~35 MB a year.
+(back to 2026-08-10). Roughly 275 events a day, ~35 MB a year.
+
+**Before the webhooks (v36):** Monday keeps each board's activity log since the
+board was created (core boards from 2024-12, Appeals from 2022-11), with the
+same event names and value shapes. `npm run history:backfill` (dry run; add
+`--apply`, optionally `--boards=a,b`) pages through it per board, up to that
+board's first webhook-era event so the two never overlap, and stores rows with
+`source = 'activity_log'` and `activity_log_id` (unique, so a re-run adds
+nothing). Kept: column changes, renames, new items, group moves (`columnTitle`
+"Group", from → to group), archive / delete / restore. Left out: subscribe /
+owner noise, board views and column settings, and the Call Log board. Monday
+stops paging at 10,000 entries, so the script walks back in time instead.
+Webhook rows are `source = 'webhook'`. Group moves exist only in the backfilled
+part (we don't subscribe to them).
 
 ## Operations
 

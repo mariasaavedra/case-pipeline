@@ -590,3 +590,46 @@ describe("v34 → v35 item activity log", () => {
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'item_events'").get()).toBeTruthy();
   });
 });
+
+describe("v35 → v36 item activity log takes Monday history", () => {
+  // A v35 item_events, exactly as production has it, with one webhook row.
+  function makeV35Db(): DatabaseInstance {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (35);
+      CREATE TABLE item_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, webhook_event_id INTEGER NOT NULL UNIQUE, trigger_uuid TEXT,
+          event_type TEXT NOT NULL, monday_board_id TEXT, board_key TEXT, monday_item_id TEXT, item_name TEXT,
+          column_id TEXT, column_title TEXT, column_type TEXT, value_text TEXT, previous_text TEXT,
+          value_json TEXT, previous_json TEXT, monday_user_id TEXT, changed_at TEXT NOT NULL,
+          recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE UNIQUE INDEX idx_item_events_trigger ON item_events(trigger_uuid) WHERE trigger_uuid IS NOT NULL;
+      INSERT INTO item_events (id, webhook_event_id, trigger_uuid, event_type, monday_item_id, value_text, previous_text, changed_at, recorded_at)
+        VALUES (7, 4242, 't1', 'update_column_value', '555', 'ATTENDED', 'Added on Cal', '2026-10-17T14:31:30.085Z', '2026-10-19 14:16:00');
+    `);
+    return db;
+  }
+
+  test("keeps every webhook row (ids included) and marks it source = webhook", () => {
+    const db = makeV35Db();
+    initializeSchema(db);
+    expect(db.prepare("SELECT id, source, webhook_event_id, activity_log_id, trigger_uuid, value_text, previous_text, recorded_at FROM item_events").all()).toEqual([
+      { id: 7, source: "webhook", webhook_event_id: 4242, activity_log_id: null, trigger_uuid: "t1", value_text: "ATTENDED", previous_text: "Added on Cal", recorded_at: "2026-10-19 14:16:00" },
+    ]);
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+  });
+
+  test("history rows need no webhook event; each activity log entry is stored once; the indexes are back", () => {
+    const db = makeV35Db();
+    initializeSchema(db);
+    const ins = db.prepare(
+      "INSERT OR IGNORE INTO item_events (source, activity_log_id, event_type, changed_at) VALUES ('activity_log', ?, 'update_name', '2025-01-01T00:00:00Z')",
+    );
+    expect(ins.run("log-1").changes).toBe(1);
+    expect(ins.run("log-1").changes).toBe(0);
+    const idx = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'item_events'").all() as { name: string }[]).map((r) => r.name);
+    expect(idx).toEqual(expect.arrayContaining(["idx_item_events_trigger", "idx_item_events_item", "idx_item_events_board"]));
+  });
+});
