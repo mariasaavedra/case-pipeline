@@ -45,12 +45,14 @@ const result: MyDayResult = {
 const fetchMyDay = vi.fn((board?: unknown) =>
   Promise.resolve(board === "appointments_m" ? { ...result, boardKey: "appointments_m", entries: [] } : result));
 const changeBoardItemStatus = vi.fn((localId: string, status: string) => Promise.resolve({ localId, status, pending: false }));
+const fetchClientUpdates = vi.fn((..._args: unknown[]) => Promise.resolve([]));
 const postConsultNote = vi.fn((..._args: unknown[]) => Promise.resolve({ posted: true as const, pending: false, summary: "started" as const }));
 
 vi.mock("../api", () => ({
   fetchMyDay: (board?: unknown) => fetchMyDay(board),
   changeBoardItemStatus: (l: string, s: string) => changeBoardItemStatus(l, s),
   postConsultNote: (...a: unknown[]) => postConsultNote(...a),
+  fetchClientUpdates: (...a: unknown[]) => fetchClientUpdates(...a),
 }));
 vi.mock("../auth/useAuth", () => ({ useAuth: () => ({ user: { name: "Rekha Sharma-Crawford" } }) }));
 vi.mock("../StatusOptionsProvider", () => ({
@@ -253,8 +255,13 @@ describe("AppointmentsPage (P4 My Day)", () => {
 
   it("shows notes and documents in their tabs", async () => {
     await render();
-    await click(button("Notes (0)"));
+    await click(button("Notes"));
     expect(el.textContent).toContain("No notes yet for this client.");
+    // The whole notes feed, emails left out until asked for.
+    expect(fetchClientUpdates).toHaveBeenLastCalledWith("p-ana", { category: "notes", limit: 1000 });
+    await click(button("All (with emails)"));
+    expect(fetchClientUpdates).toHaveBeenLastCalledWith("p-ana", { category: "all", limit: 1000 });
+    expect(el.textContent).toContain("Nothing on this client's timeline yet.");
     await click(button("E-file / Consult file"));
     expect(el.textContent).toContain("sharepoint browser");
   });

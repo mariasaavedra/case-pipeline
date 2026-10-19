@@ -47,8 +47,10 @@ export function handleListClients(req: Request, db: Database): Response {
   const limitParam = url.searchParams.get("limit");
   const offsetParam = url.searchParams.get("offset");
 
+  // The cap is high enough for a whole client's timeline (the busiest had
+  // ~400 entries in Oct 2026): the notes views fetch everything at once.
   const limit = limitParam
-    ? Math.max(1, Math.min(parseInt(limitParam, 10) || 50, 200))
+    ? Math.max(1, Math.min(parseInt(limitParam, 10) || 50, MAX_UPDATES_PAGE))
     : 50;
   const offset = offsetParam
     ? Math.max(0, parseInt(offsetParam, 10) || 0)
@@ -119,6 +121,9 @@ export function handleBoardItemDetail(req: Request, db: Database): Response {
 
   return json(item);
 }
+
+/** Largest /api/clients/:id/updates page. */
+export const MAX_UPDATES_PAGE = 1000;
 
 export function handleClientUpdates(req: Request, db: Database): Response {
   const localId = extractParam(req, "localId");

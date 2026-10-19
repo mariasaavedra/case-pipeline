@@ -47,7 +47,7 @@ interface Props {
 export function ClientView({ data, initialTab = "overview" }: Props) {
   const isAdmin = useAuth().user?.role === "admin";
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
-  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
+  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("notes");
   const [timelinePeriod, setTimelinePeriod] = useState<TimelinePeriod>("all");
   const [timelineRange, setTimelineRange] = useState<DateRange>({});
   const [pendingUpdates, setPendingUpdates] = useState<ClientUpdate[]>([]);
@@ -79,7 +79,7 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
       category: timelineFilter,
       from: rangeFrom,
       to: rangeTo,
-      limit: 500,
+      limit: 1000,
     })
       .then((rows) => {
         if (!cancelled) setTimelineFeed(rows);

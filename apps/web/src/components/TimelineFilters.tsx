@@ -27,8 +27,8 @@ export { resolveRange } from "../utils/timeline-range";
 export type TimelineFilter = "all" | "notes";
 
 const CATEGORIES: { id: TimelineFilter; label: string }[] = [
-  { id: "all", label: "All" },
   { id: "notes", label: "Notes" },
+  { id: "all", label: "All (with emails)" },
 ];
 
 const PERIODS: { id: Exclude<TimelinePeriod, "custom">; label: string }[] = [

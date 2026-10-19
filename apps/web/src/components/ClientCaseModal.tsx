@@ -90,7 +90,7 @@ export function ClientCaseModal({
   useEffect(() => {
     let cancelled = false;
     setFeed(null);
-    fetchClientUpdates(profileLocalId, { category: notesFilter, limit: 500 })
+    fetchClientUpdates(profileLocalId, { category: notesFilter, limit: 1000 })
       .then((rows) => {
         if (!cancelled) setFeed(rows);
       })

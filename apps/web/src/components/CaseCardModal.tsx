@@ -198,7 +198,7 @@ export function CaseCardModal({ card, statuses, onChanged, onClose }: Props) {
     let live = true;
     setFeed(null);
     setFeedError(null);
-    fetchClientUpdates(c.clientLocalId, { category: notesFilter, limit: 500 })
+    fetchClientUpdates(c.clientLocalId, { category: notesFilter, limit: 1000 })
       .then((rows) => live && setFeed(rows))
       .catch((e: unknown) => live && setFeedError(e instanceof Error ? e.message : "Could not load the notes"));
     return () => {
