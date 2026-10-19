@@ -371,7 +371,7 @@ async function recordPayMethod(
 }
 
 /**
- * The signed copy (already in data/esign/) → the client's E-File, FEE Ks folder.
+ * The signed copy (already in data/esign/) → the client's E-File (else consult folder), FEE Ks folder.
  * Background: the outcome becomes a note on the Fee K, so staff see where it
  * went — or that it needs filing by hand.
  */
@@ -388,8 +388,8 @@ function fileInEfile(
     audit("esign.efile", r.ok ? { filed: true, folder: r.folder, already: !!r.already } : { filed: false, reason: r.reason });
     if (r.ok && r.already) return;
     const body = r.ok
-      ? `📁 Signed contract saved in the client's E-File: ${r.folder} / ${r.name}\n${r.webUrl}`
-      : `⚠️ The signed contract could not be saved in the client's E-File (${r.reason}). It is attached here — please file it by hand.`;
+      ? `📁 Signed contract saved in the client's ${r.where === "Consult File" ? "consult folder (no E-File yet)" : "E-File"}: ${r.folder} / ${r.name}\n${r.webUrl}`
+      : `⚠️ The signed contract could not be saved in the client's E-File or consult folder (${r.reason}). It is attached here — please file it by hand.`;
     await postNote(db, {
       feeKItemId: row.contract_monday_id, profileItemId: null,
       title: "Signed contract filed", body, localId: row.contract_local_id,
