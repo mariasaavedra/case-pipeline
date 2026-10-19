@@ -186,7 +186,27 @@ Every delivery lands in `webhook_events` and moves through:
 
 A drain that wants to run a board refresh while another sync is in flight
 defers — events stay `pending` untouched and retry next minute (that's not
-counted as a failure). Processed/skipped rows are pruned after 30 days.
+counted as a failure). Processed/skipped rows are pruned after 30 days, but
+only once the activity log below has copied them.
+
+## Item activity log (`item_events`, schema v35)
+
+The inbox is also history: which column of which item changed, from what to
+what, by whom, when. Monday keeps only the current value, so this is the only
+record of *changes* (a hearing moved, a status set, a date filled in).
+
+At the start of every drain, `recordItemEvents` (`apps/api/src/webhooks/item-events.ts`)
+copies each inbox event it hasn't seen into `item_events`, kept for good: one
+row per event with the board key, item id + name, column id/title/type, the new
+and previous value both readable (`value_text`, `previous_text`: status label,
+date in firm time, text, chosen labels, linked item ids, person ids) and raw
+(`value_json`, `previous_json`), Monday's user id and `changed_at` (Monday's
+trigger time). `item_events_cursor` says how far the inbox has been read. A
+delivery Monday retried (same `triggerUuid`) is kept once.
+
+The first drain after the v35 deploy backfilled everything still in the inbox
+(back to 2026-08-10). Older history would have to come from Monday's activity
+log API. Roughly 275 events a day, ~35 MB a year.
 
 ## Operations
 

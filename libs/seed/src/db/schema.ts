@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 34;
+export const SCHEMA_VERSION = 35;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -556,6 +556,39 @@ CREATE TABLE IF NOT EXISTS monday_api_calls (
     job    TEXT NOT NULL,              -- sync:full, sync:incremental, write-queue, app, …
     calls  INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, job)
+);
+
+-- Item activity log (v35): every change Monday reports by webhook, kept for
+-- good. webhook_events is an inbox pruned after 30 days; the processor copies
+-- each event here first (apps/api/src/webhooks/item-events.ts).
+CREATE TABLE IF NOT EXISTS item_events (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    webhook_event_id  INTEGER NOT NULL UNIQUE,  -- webhook_events.id it was copied from
+    trigger_uuid      TEXT,                     -- Monday's id for the change; a retried delivery repeats it
+    event_type        TEXT NOT NULL,            -- update_column_value, create_pulse, update_name, …
+    monday_board_id   TEXT,
+    board_key         TEXT,                     -- boards.yaml key at the time (NULL = untracked board)
+    monday_item_id    TEXT,
+    item_name         TEXT,                     -- the item's name when it changed
+    column_id         TEXT,                     -- Monday column id (column changes only)
+    column_title      TEXT,
+    column_type       TEXT,
+    value_text        TEXT,                     -- the new value, readable (label / date / text / names)
+    previous_text     TEXT,                     -- the value before, readable
+    value_json        TEXT,                     -- Monday's raw value, as sent
+    previous_json     TEXT,
+    monday_user_id    TEXT,                     -- who changed it in Monday
+    changed_at        TEXT NOT NULL,            -- ISO, when Monday says it happened
+    recorded_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_item_events_trigger ON item_events(trigger_uuid) WHERE trigger_uuid IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_item_events_item ON item_events(monday_item_id, changed_at);
+CREATE INDEX IF NOT EXISTS idx_item_events_board ON item_events(board_key, changed_at);
+-- How far the copy has read the inbox (one row): skipped rows (a retried
+-- delivery, a payload that isn't an event) still move it on.
+CREATE TABLE IF NOT EXISTS item_events_cursor (
+    id                     INTEGER PRIMARY KEY CHECK (id = 1),
+    last_webhook_event_id  INTEGER NOT NULL
 );
 
 -- Indices for performance
@@ -1536,6 +1569,40 @@ export function initializeSchema(db: Database): void {
             job    TEXT NOT NULL,
             calls  INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (day, job)
+        );
+      `);
+    }
+
+    // Migration v34 → v35: item activity log. New table only; the webhook
+    // processor fills it from the inbox on its next drain (backfill included).
+    if (fromVersion < 35) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS item_events (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            webhook_event_id  INTEGER NOT NULL UNIQUE,  -- webhook_events.id it was copied from
+            trigger_uuid      TEXT,                     -- Monday's id for the change; a retried delivery repeats it
+            event_type        TEXT NOT NULL,            -- update_column_value, create_pulse, update_name, …
+            monday_board_id   TEXT,
+            board_key         TEXT,                     -- boards.yaml key at the time (NULL = untracked board)
+            monday_item_id    TEXT,
+            item_name         TEXT,                     -- the item's name when it changed
+            column_id         TEXT,                     -- Monday column id (column changes only)
+            column_title      TEXT,
+            column_type       TEXT,
+            value_text        TEXT,                     -- the new value, readable (label / date / text / names)
+            previous_text     TEXT,                     -- the value before, readable
+            value_json        TEXT,                     -- Monday's raw value, as sent
+            previous_json     TEXT,
+            monday_user_id    TEXT,                     -- who changed it in Monday
+            changed_at        TEXT NOT NULL,            -- ISO, when Monday says it happened
+            recorded_at       TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_item_events_trigger ON item_events(trigger_uuid) WHERE trigger_uuid IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_item_events_item ON item_events(monday_item_id, changed_at);
+        CREATE INDEX IF NOT EXISTS idx_item_events_board ON item_events(board_key, changed_at);
+        CREATE TABLE IF NOT EXISTS item_events_cursor (
+            id                     INTEGER PRIMARY KEY CHECK (id = 1),
+            last_webhook_event_id  INTEGER NOT NULL
         );
       `);
     }
