@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 35;
+export const SCHEMA_VERSION = 36;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -558,12 +558,16 @@ CREATE TABLE IF NOT EXISTS monday_api_calls (
     PRIMARY KEY (day, job)
 );
 
--- Item activity log (v35): every change Monday reports by webhook, kept for
--- good. webhook_events is an inbox pruned after 30 days; the processor copies
--- each event here first (apps/api/src/webhooks/item-events.ts).
+-- Item activity log (v35, v36): every change to a Monday item, kept for good.
+-- source 'webhook': copied from the webhook_events inbox (pruned after 30
+-- days) by the processor (apps/api/src/webhooks/item-events.ts), from
+-- 2026-08-10 on; source 'activity_log': history before that, pulled from
+-- Monday's activity log by scripts/history-backfill.ts.
 CREATE TABLE IF NOT EXISTS item_events (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    webhook_event_id  INTEGER NOT NULL UNIQUE,  -- webhook_events.id it was copied from
+    source            TEXT NOT NULL DEFAULT 'webhook',  -- webhook | activity_log
+    webhook_event_id  INTEGER UNIQUE,           -- webhook_events.id it was copied from (webhook rows)
+    activity_log_id   TEXT UNIQUE,              -- Monday's activity log entry id (activity_log rows)
     trigger_uuid      TEXT,                     -- Monday's id for the change; a retried delivery repeats it
     event_type        TEXT NOT NULL,            -- update_column_value, create_pulse, update_name, …
     monday_board_id   TEXT,
@@ -1605,6 +1609,46 @@ export function initializeSchema(db: Database): void {
             last_webhook_event_id  INTEGER NOT NULL
         );
       `);
+    }
+
+    // Migration v35 → v36: item_events takes Monday activity-log history too
+    // (scripts/history-backfill.ts): webhook_event_id becomes nullable, plus
+    // source + activity_log_id. SQLite can't relax NOT NULL in place, so the
+    // table is rebuilt, rows and ids kept.
+    if (fromVersion < 36) {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE item_events_v36 (
+              id                INTEGER PRIMARY KEY AUTOINCREMENT,
+              source            TEXT NOT NULL DEFAULT 'webhook',
+              webhook_event_id  INTEGER UNIQUE,
+              activity_log_id   TEXT UNIQUE,
+              trigger_uuid      TEXT,
+              event_type        TEXT NOT NULL,
+              monday_board_id   TEXT,
+              board_key         TEXT,
+              monday_item_id    TEXT,
+              item_name         TEXT,
+              column_id         TEXT,
+              column_title      TEXT,
+              column_type       TEXT,
+              value_text        TEXT,
+              previous_text     TEXT,
+              value_json        TEXT,
+              previous_json     TEXT,
+              monday_user_id    TEXT,
+              changed_at        TEXT NOT NULL,
+              recorded_at       TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+          INSERT INTO item_events_v36 (id, source, webhook_event_id, trigger_uuid, event_type, monday_board_id, board_key, monday_item_id, item_name, column_id, column_title, column_type, value_text, previous_text, value_json, previous_json, monday_user_id, changed_at, recorded_at)
+            SELECT id, 'webhook', webhook_event_id, trigger_uuid, event_type, monday_board_id, board_key, monday_item_id, item_name, column_id, column_title, column_type, value_text, previous_text, value_json, previous_json, monday_user_id, changed_at, recorded_at FROM item_events;
+          DROP TABLE item_events;
+          ALTER TABLE item_events_v36 RENAME TO item_events;
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_item_events_trigger ON item_events(trigger_uuid) WHERE trigger_uuid IS NOT NULL;
+          CREATE INDEX IF NOT EXISTS idx_item_events_item ON item_events(monday_item_id, changed_at);
+          CREATE INDEX IF NOT EXISTS idx_item_events_board ON item_events(board_key, changed_at);
+        `);
+      })();
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

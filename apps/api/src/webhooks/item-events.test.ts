@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
-import { readableValue, recordItemEvents } from "./item-events.js";
+import { activityLogTime, fromActivityLog, insertHistoryEvents, readableValue, recordItemEvents, type ActivityLogEntry } from "./item-events.js";
 import { prune } from "./processor.js";
 
 // Value shapes below are what Monday sends, sampled from the production inbox.
@@ -107,5 +107,59 @@ describe("recordItemEvents", () => {
     expect(left).not.toContain(copied);
     // …and the log still has the pruned one.
     expect(rows().map((r) => r.webhook_event_id)).toEqual([copied]);
+  });
+});
+
+// Entries below follow what Monday's activity log returns (sampled from production).
+describe("history from Monday's activity log", () => {
+  const BOARD = "9287895872";
+  const entry = (event: string, data: Record<string, unknown>, id = `log-${event}`): ActivityLogEntry => ({
+    id, event, created_at: "17749886097067886", user_id: "79964547", data: JSON.stringify(data),
+  });
+
+  it("reads Monday's 100-ns timestamps", () => {
+    expect(activityLogTime("17749886097067886")).toBe("2026-03-31T20:23:29.706Z");
+    expect(activityLogTime("x")).toBeNull();
+  });
+
+  it("a column change: same shapes as the webhooks", () => {
+    const e = fromActivityLog(entry("update_column_value", {
+      pulse_id: 11639100887, pulse_name: "[3/31/26] MASTER: Ana RIVERA", board_id: 9287895872,
+      column_id: "color_mkrjc7n8", column_title: "Calendaring Status", column_type: "color",
+      value: { label: { text: "Added on Cal" } }, previous_value: { label: { text: "Check dates" } },
+    }), "calendaring", BOARD);
+    expect(e).toMatchObject({
+      activityLogId: "log-update_column_value", eventType: "update_column_value", boardKey: "calendaring", mondayBoardId: BOARD,
+      mondayItemId: "11639100887", itemName: "[3/31/26] MASTER: Ana RIVERA", columnId: "color_mkrjc7n8", columnTitle: "Calendaring Status",
+      valueText: "Added on Cal", previousText: "Check dates", mondayUserId: "79964547", changedAt: "2026-03-31T20:23:29.706Z",
+    });
+  });
+
+  it("a group move reads as Group: from → to", () => {
+    const e = fromActivityLog(entry("move_pulse_from_group", {
+      pulse: { name: "Ana RIVERA", id: 11639100887 }, pulse_id: 11639100887, board_id: 9287895872,
+      source_group: { id: "g1", title: "UPCOMING" }, dest_group: { id: "g2", title: "COURT RESCHEDULED / CONTINUED" },
+    }), "calendaring", BOARD);
+    expect(e).toMatchObject({ itemName: "Ana RIVERA", columnTitle: "Group", columnType: "group", previousText: "UPCOMING", valueText: "COURT RESCHEDULED / CONTINUED" });
+  });
+
+  it("renames and new items; housekeeping and owner noise are left out", () => {
+    expect(fromActivityLog(entry("update_name", { pulse_id: 1, value: { name: "New" }, previous_value: { name: "Old" }, column_type: "name" }), "calendaring", BOARD))
+      .toMatchObject({ itemName: "New", valueText: "New", previousText: "Old", columnId: null });
+    expect(fromActivityLog(entry("create_pulse", { pulse_id: 2, pulse_name: "Someone", group_name: "New" }), "calendaring", BOARD))
+      .toMatchObject({ eventType: "create_pulse", mondayItemId: "2", itemName: "Someone" });
+    for (const noise of ["subscribe", "add_owner", "unsubscribe", "board_view_changed", "change_column_settings", "create_column"]) {
+      expect(fromActivityLog(entry(noise, { pulse_id: 1, board_id: 9287895872 }), "calendaring", BOARD)).toBeNull();
+    }
+  });
+
+  it("stored once: re-running the backfill adds nothing", () => {
+    const db = new Database(":memory:");
+    initializeSchema(db);
+    const e = fromActivityLog(entry("update_name", { pulse_id: 1, value: { name: "New" }, previous_value: { name: "Old" } }), "calendaring", BOARD)!;
+    expect(insertHistoryEvents(db, [e])).toBe(1);
+    expect(insertHistoryEvents(db, [e])).toBe(0);
+    expect(db.prepare("SELECT source, webhook_event_id, activity_log_id FROM item_events").get())
+      .toEqual({ source: "activity_log", webhook_event_id: null, activity_log_id: "log-update_name" });
   });
 });

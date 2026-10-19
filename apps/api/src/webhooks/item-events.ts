@@ -1,6 +1,9 @@
 // =============================================================================
 // Item activity log — webhook_events → item_events (schema v35)
 // =============================================================================
+// (History from before the webhooks — Monday's activity log — is mapped at the
+// bottom of this file and loaded by scripts/history-backfill.ts.)
+//
 // webhook_events is an inbox: the processor drains it and prunes it after 30
 // days. Each event is also history — which column of which item changed, from
 // what to what, by whom, when — so before anything is pruned, every event the
@@ -190,6 +193,126 @@ export function recordItemEvents(db: Database, boardKeyForId: (mondayBoardId: st
       `INSERT INTO item_events_cursor (id, last_webhook_event_id) VALUES (1, ?)
        ON CONFLICT(id) DO UPDATE SET last_webhook_event_id = excluded.last_webhook_event_id`,
     ).run(rows[rows.length - 1]!.id);
+  })();
+  return added;
+}
+
+// =============================================================================
+// History before the webhooks — Monday's activity log (schema v36)
+// =============================================================================
+// Monday keeps every board's activity log since the board was created. Its
+// entries use the same event names and value shapes as the webhooks, plus
+// group moves. scripts/history-backfill.ts pages through it per board, up to
+// the board's first webhook-era event, and stores what matters here.
+
+/** One entry of `boards { activity_logs { … } }`. `data` is a JSON string. */
+export interface ActivityLogEntry {
+  id: string;
+  event: string;
+  /** Unix time in 100 ns units, as a 17-digit string. */
+  created_at: string;
+  user_id: string;
+  data: string;
+}
+
+/**
+ * Entries worth keeping: changes to an item. Left out: subscribe / add_owner /
+ * unsubscribe, board view and column-settings changes (board housekeeping).
+ */
+export const HISTORY_EVENTS = new Set([
+  "update_column_value",
+  "update_name",
+  "create_pulse",
+  "move_pulse_from_group",
+  "archive_pulse",
+  "delete_pulse",
+  "restore_pulse",
+]);
+
+/** created_at (100 ns since the epoch) → ISO. */
+export function activityLogTime(createdAt: string): string | null {
+  // 17 digits is past a double's exact range; BigInt keeps the milliseconds exact.
+  if (!/^\d{1,20}$/.test(createdAt)) return null;
+  const ms = Number(BigInt(createdAt) / 10_000n);
+  return ms > 0 ? new Date(ms).toISOString() : null;
+}
+
+export interface HistoryEvent extends Omit<ItemEvent, "webhookEventId"> {
+  activityLogId: string;
+}
+
+/** One activity log entry as a log row; null for an entry not worth keeping. */
+export function fromActivityLog(entry: ActivityLogEntry, boardKey: string | null, mondayBoardId: string): HistoryEvent | null {
+  if (!HISTORY_EVENTS.has(entry.event)) return null;
+  const changedAt = activityLogTime(entry.created_at);
+  if (!changedAt) return null;
+  let d: Record<string, unknown>;
+  try {
+    d = JSON.parse(entry.data) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const json = (v: unknown) => (v === undefined || v === null ? null : JSON.stringify(v));
+  const pulse = d.pulse as { id?: unknown; name?: unknown } | undefined;
+  const itemId = str(d.pulse_id) ?? str(pulse?.id) ?? str(d.item_id);
+  const base = {
+    activityLogId: entry.id,
+    triggerUuid: null,
+    eventType: entry.event,
+    mondayBoardId: str(d.board_id) ?? mondayBoardId,
+    boardKey,
+    mondayItemId: itemId,
+    mondayUserId: str(entry.user_id),
+    changedAt,
+  };
+
+  if (entry.event === "move_pulse_from_group") {
+    // A group move reads like a status change: from one group to another.
+    const title = (g: unknown) => str((g as { title?: unknown } | undefined)?.title);
+    return {
+      ...base,
+      itemName: str(d.pulse_name) ?? str(pulse?.name),
+      columnId: null,
+      columnTitle: "Group",
+      columnType: "group",
+      valueText: title(d.dest_group),
+      previousText: title(d.source_group),
+      valueJson: json(d.dest_group),
+      previousJson: json(d.source_group),
+    };
+  }
+
+  const columnType = str(d.column_type) ?? (entry.event === "update_name" ? "name" : null);
+  return {
+    ...base,
+    itemName: str(d.pulse_name) ?? (entry.event === "update_name" ? readableValue(d.value, "name") : null),
+    columnId: entry.event === "update_column_value" ? str(d.column_id) : null,
+    columnTitle: str(d.column_title),
+    columnType,
+    valueText: readableValue(d.value, columnType),
+    previousText: readableValue(d.previous_value, columnType),
+    valueJson: json(d.value),
+    previousJson: json(d.previous_value),
+  };
+}
+
+/** Store history rows; an entry already stored (same activity log id) is skipped. Returns rows added. */
+export function insertHistoryEvents(db: Database, events: HistoryEvent[]): number {
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO item_events (
+      source, activity_log_id, trigger_uuid, event_type, monday_board_id, board_key, monday_item_id, item_name,
+      column_id, column_title, column_type, value_text, previous_text, value_json, previous_json,
+      monday_user_id, changed_at
+    ) VALUES ('activity_log', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  let added = 0;
+  db.transaction(() => {
+    for (const e of events) {
+      added += insert.run(
+        e.activityLogId, e.triggerUuid, e.eventType, e.mondayBoardId, e.boardKey, e.mondayItemId, e.itemName,
+        e.columnId, e.columnTitle, e.columnType, e.valueText, e.previousText, e.valueJson, e.previousJson,
+        e.mondayUserId, e.changedAt,
+      ).changes;
+    }
   })();
   return added;
 }
