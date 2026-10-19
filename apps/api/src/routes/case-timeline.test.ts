@@ -19,6 +19,7 @@ vi.mock("../auth/middleware.js", () => ({
 const { registerCaseTimelineRoutes } = await import("./case-timeline.js");
 
 let db: Database.Database;
+let usersDb: Database.Database;
 let server: Server;
 let base: string;
 let loads = 0;
@@ -33,6 +34,10 @@ beforeEach(async () => {
      VALUES (1, 'c1', 'court_cases', '[ORDERED REMOVED 9/11/26] - LB - Ana RIVERA', 'p1', ?)`,
   ).run(JSON.stringify({ nta_date: { date: "2021-06-22" } }));
   loads = 0;
+  // The staff roster, as users.db has it (only what the names need).
+  usersDb = new Database(":memory:");
+  usersDb.exec("CREATE TABLE staff (id INTEGER PRIMARY KEY, name TEXT NOT NULL, monday_user_id TEXT UNIQUE)");
+  usersDb.prepare("INSERT INTO staff (name, monday_user_id) VALUES ('Mayra Ruiz', '32138066')").run();
   const app = express();
   registerCaseTimelineRoutes(app, {
     db,
@@ -42,6 +47,7 @@ beforeEach(async () => {
     },
     loadBoards: () => loadBoardsConfig(resolve(import.meta.dirname, "../../../../config/boards.yaml")),
     today: () => "2026-10-15",
+    usersDb,
   });
   server = app.listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -106,5 +112,23 @@ describe("GET /api/timeline/items/:localId (M29)", () => {
 
   it("404 for an unknown or deleted item", async () => {
     expect((await fetch(`${base}/api/timeline/items/nope`)).status).toBe(404);
+  });
+
+  it("history: newest first, named from the staff roster, automations said as such, noise left out", async () => {
+    calendaringItem();
+    const ev = db.prepare(
+      `INSERT INTO item_events (source, activity_log_id, event_type, monday_item_id, column_title, column_type, previous_text, value_text, monday_user_id, changed_at)
+       VALUES ('activity_log', ?, ?, '555', ?, ?, ?, ?, ?, ?)`,
+    );
+    ev.run("a", "create_pulse", null, null, null, null, "999", "2026-07-11T02:52:00Z");
+    ev.run("b", "update_column_value", "Calendaring Status", "color", null, "Check dates", "-4", "2026-07-11T02:53:00Z");
+    ev.run("c", "update_column_value", "Profile", "board-relation", null, "123", "-4", "2026-07-11T02:54:00Z");
+    ev.run("d", "update_column_value", "Hearing Date - Calendaring", "date", "2026-08-20", "2026-09-30", "32138066", "2026-08-04T15:00:00Z");
+    const { data } = (await (await fetch(`${base}/api/timeline/items/h1`)).json()) as { data: import("./case-timeline.js").TimelineItem };
+    expect(data.history).toEqual([
+      { changedAt: "2026-08-04T15:00:00Z", what: "Hearing Date - Calendaring", from: "2026-08-20", to: "2026-09-30", by: "Mayra Ruiz" },
+      { changedAt: "2026-07-11T02:53:00Z", what: "Calendaring Status", from: null, to: "Check dates", by: "a Monday automation" },
+      { changedAt: "2026-07-11T02:52:00Z", what: "Created", from: null, to: null, by: null },
+    ]);
   });
 });

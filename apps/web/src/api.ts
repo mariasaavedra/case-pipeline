@@ -578,6 +578,8 @@ export interface TimelineItem {
   mondayBoardId: string | null;
   mondayItemId: string | null;
   fields: (Omit<QueryBoardColumn, "position"> & { key: string; value: string; primary: boolean })[];
+  /** What changed on the item, newest first (item activity log). */
+  history: { changedAt: string; what: string; from: string | null; to: string | null; by: string | null }[];
 }
 
 export async function fetchTimelineItem(localId: string): Promise<TimelineItem> {

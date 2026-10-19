@@ -14,6 +14,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-19",
+    title: "Timeline: what changed, and when",
+    items: [
+      "The Timeline now shows when a hearing, interview or consult was moved: the old date stays on the timeline, crossed out, with the new date and who moved it.",
+      "Status changes show too (for example “Calendaring Status: Check dates → ATTENDED”, with who did it). Untick “Status changes” above the list to hide them.",
+      "Open any event to see its History: every change made to it in Monday, newest first, back to when the board started.",
+    ],
+  },
+  {
     date: "2026-10-16",
     title: "Timeline: open an event to fix it",
     items: [

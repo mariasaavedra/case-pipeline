@@ -28,6 +28,7 @@ import type {
   TimelineTrack,
 } from "@case-pipeline/config";
 import { BIA_APPEAL_DAYS } from "./appeal-deadlines";
+import { batchGetItemHistory, dateMoves, isAutomationUser, statusChanges, type CollapsedChange } from "./item-history";
 
 export type { TimelineTrack, TimelineKind } from "@case-pipeline/config";
 
@@ -94,6 +95,13 @@ export interface CaseTimelineOptions {
   today: string;
   /** Zone E&A timestamps are dated in. Omitted = their UTC date. */
   timeZone?: string;
+  /**
+   * The Monday column id a board's logical key resolves to (boards.yaml), for
+   * the `moved` date columns. Omitted = no moved-date events.
+   */
+  columnIdFor?: (boardKey: string, key: string) => string | null;
+  /** A Monday user's name (staff roster), for "by …" on history events. */
+  userName?: (mondayUserId: string) => string | null;
 }
 
 /** How far back "Needs attention" looks for a missed deadline. */
@@ -343,6 +351,7 @@ const RULES: Record<string, (item: Item, add: Add, ctx: RuleContext) => void> = 
 interface BoardRow {
   board_key: string;
   local_id: string;
+  monday_item_id: string | null;
   name: string;
   status: string | null;
   group_title: string | null;
@@ -361,6 +370,18 @@ function whoSuffix(itemName: string, profileName: string): string {
   const base = (itemName.split(" [")[0] ?? "").trim();
   if (base === (profileName.split(" [")[0] ?? "").trim()) return "";
   return " — " + base.split("&").map((p) => p.trim().split(/\s+/)[0]).filter(Boolean).join(" & ");
+}
+
+/** "Calendaring Status: Check dates → ATTENDED"; a group move: "Moved to group: COURT RESCHEDULED / CONTINUED". */
+function changeLabel(c: CollapsedChange): string {
+  if (c.columnType === "group") return `Moved to group: ${c.to}`;
+  return `${c.columnTitle ?? "Status"}: ${c.from} → ${c.to}`;
+}
+
+/** "2026-11-20" → "Nov 20, 2026". */
+function usLong(ymd: string): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? ymd : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
 function firmDate(ts: string, timeZone?: string): string {
@@ -383,16 +404,27 @@ export function getCaseTimeline(
 
   const boardRows = db
     .prepare(
-      `SELECT board_key, local_id, name, status, group_title, column_values
+      `SELECT board_key, local_id, monday_item_id, name, status, group_title, column_values
          FROM board_items WHERE profile_local_id = ? AND deleted_at IS NULL`,
     )
     .all(profileLocalId) as BoardRow[];
   const contractRows = db
     .prepare(
-      `SELECT 'contracts' AS board_key, local_id, name, status, group_title, raw_column_values AS column_values
+      `SELECT 'contracts' AS board_key, local_id, monday_item_id, name, status, group_title, raw_column_values AS column_values
          FROM contracts WHERE profile_local_id = ? AND deleted_at IS NULL`,
     )
     .all(profileLocalId) as BoardRow[];
+
+  // What changed on these items (item activity log), for status changes and moved dates.
+  const history = batchGetItemHistory(db, [...boardRows, ...contractRows].map((r) => r.monday_item_id ?? ""));
+  const statusColumn = new Map(
+    (db.prepare("SELECT board_key, status_column_id FROM board_status_options").all() as { board_key: string; status_column_id: string }[])
+      .map((r) => [r.board_key, r.status_column_id]),
+  );
+  /** History events: the board's own events still apply (a moved date doesn't call off the item's deadline). */
+  const historyEvents = new Set<TimelineEvent>();
+  const by = (userId: string | null) =>
+    !userId ? null : isAutomationUser(userId) ? "by a Monday automation" : opts.userName?.(userId) ? `by ${opts.userName(userId)}` : null;
 
   const events: TimelineEvent[] = [];
   const ctx: RuleContext = {
@@ -440,12 +472,51 @@ export function getCaseTimeline(
       });
     }
     if (cfg.rule) RULES[cfg.rule]?.(item, add, ctx);
+
+    const changes = row.monday_item_id ? history.get(row.monday_item_id) : undefined;
+    if (changes?.length) {
+      const push = (e: Omit<TimelineEvent, "source" | "boardKey" | "itemLocalId" | "updateLocalId">) => {
+        const ev: TimelineEvent = { ...e, source: row.name, boardKey: row.board_key === "contracts" ? null : row.board_key, itemLocalId: row.local_id, updateLocalId: null };
+        events.push(ev);
+        historyEvents.add(ev);
+      };
+      // Status and group changes: what moved the case along.
+      const statusKey = row.board_key === "contracts" ? "fee_ks" : row.board_key;
+      for (const c of statusChanges(changes, statusColumn.get(statusKey) ?? null, opts.timeZone)) {
+        push({
+          date: c.day,
+          track: cfg.track,
+          kind: "change",
+          label: changeLabel(c),
+          status: null,
+          detail: by(c.userId),
+        });
+      }
+      // Moved dates: the old date, crossed out ("moved to …").
+      for (const m of cfg.moved ?? []) {
+        const columnId = opts.columnIdFor?.(row.board_key, m.column);
+        if (!columnId) continue;
+        for (const c of dateMoves(changes, columnId, opts.timeZone)) {
+          push({
+            date: c.from!.slice(0, 10),
+            track: m.track ?? cfg.track,
+            kind: m.kind,
+            label: renderTemplate(m.label, item.cv, vars),
+            status: "cancelled",
+            detail: [`moved to ${usLong(c.to!.slice(0, 10))} on ${usLong(c.day)}`, by(c.userId)].filter(Boolean).join(" "),
+          });
+        }
+      }
+    }
   }
 
   addActivities(db, profileLocalId, config, events, opts.timeZone);
   correctHearings(events, calendaringNames);
-  // A hearing that turned out not to happen takes its filing deadline with it.
-  const called = new Set(events.filter((e) => e.kind === "hearing" && e.status === "cancelled").map((e) => e.itemLocalId));
+  // A hearing that turned out not to happen takes its filing deadline with it
+  // (an old date it was moved from doesn't: the hearing is still on).
+  const called = new Set(
+    events.filter((e) => e.kind === "hearing" && e.status === "cancelled" && !historyEvents.has(e)).map((e) => e.itemLocalId),
+  );
   const kept = events.filter((e) => !(e.kind === "deadline" && e.boardKey === "calendaring" && called.has(e.itemLocalId)));
 
   // One event per day + track + label (two Monday items often say the same thing).

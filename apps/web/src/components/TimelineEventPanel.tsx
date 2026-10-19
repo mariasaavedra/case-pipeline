@@ -170,9 +170,65 @@ export function TimelineEventPanel({ profileLocalId, target, onClose }: Props) {
               setChanged(true);
             }}
           />
+
+          {item && <History changes={item.history} />}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Changes shown before "Show all". */
+const HISTORY_PREVIEW = 8;
+
+const fmtWhen = (iso: string) =>
+  new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+
+/**
+ * What changed on this item in Monday, newest first (item activity log): who
+ * set which field from what to what. Saves made here show after Monday reports
+ * them, usually within a minute.
+ */
+function History({ changes }: { changes: TimelineItem["history"] }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? changes : changes.slice(0, HISTORY_PREVIEW);
+  return (
+    <section aria-label="History">
+      <div className="text-xs mb-1.5" style={{ color: "var(--color-ink-faint)" }}>History</div>
+      {changes.length === 0 ? (
+        <p className="text-xs m-0" style={{ color: "var(--color-ink-faint)" }}>No changes recorded for this item.</p>
+      ) : (
+        <ol className="m-0 p-0 list-none">
+          {shown.map((c, i) => (
+            <li key={i} className="py-1.5 text-sm" style={{ borderTop: i ? "1px solid var(--color-border-light)" : undefined }}>
+              <span className="font-medium" style={{ color: "var(--color-ink)" }}>{c.what}</span>
+              {(c.from || c.to) && (
+                <span style={{ color: "var(--color-ink-muted)" }}>
+                  {": "}
+                  {c.from ? <span style={{ textDecoration: "line-through" }}>{c.from}</span> : <em>empty</em>}
+                  {" → "}
+                  {c.to ?? <em>empty</em>}
+                </span>
+              )}
+              <div className="text-xs" style={{ color: "var(--color-ink-faint)", fontVariantNumeric: "tabular-nums" }}>
+                {fmtWhen(c.changedAt)}
+                {c.by ? ` · ${c.by}` : ""}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      {changes.length > HISTORY_PREVIEW && (
+        <button
+          type="button"
+          onClick={() => setAll((a) => !a)}
+          className="text-xs py-1"
+          style={{ color: "var(--color-status-blue)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+        >
+          {all ? "Show fewer" : `Show all ${changes.length}`}
+        </button>
+      )}
+    </section>
   );
 }
 
