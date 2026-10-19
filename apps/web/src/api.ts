@@ -156,13 +156,38 @@ export async function getClient(localId: string): Promise<ClientCaseSummary> {
   return apiFetch<ClientCaseSummary>(`/api/clients/${encodeURIComponent(localId)}`);
 }
 
+export interface ClientUpdatesQuery {
+  category?: string;
+  from?: string;
+  to?: string;
+  /** Only notes written by an attorney (the staff roster's "attorney" role). */
+  author?: "attorneys";
+}
+
+/** The server's largest /updates page (MAX_UPDATES_PAGE in handlers.ts). */
+const UPDATES_PAGE = 1000;
+
+/**
+ * A client's WHOLE timeline for a filter: pages until one comes back short, so
+ * nothing is cut off however busy the client is.
+ */
+export async function fetchAllClientUpdates(localId: string, query: ClientUpdatesQuery = {}): Promise<ClientUpdate[]> {
+  const all: ClientUpdate[] = [];
+  for (;;) {
+    const page = await fetchClientUpdates(localId, { ...query, limit: UPDATES_PAGE, offset: all.length });
+    all.push(...page);
+    if (page.length < UPDATES_PAGE) return all;
+  }
+}
+
 export async function fetchClientUpdates(
   localId: string,
-  opts: { limit?: number; offset?: number; category?: string; from?: string; to?: string } = {},
+  opts: ClientUpdatesQuery & { limit?: number; offset?: number } = {},
 ): Promise<ClientUpdate[]> {
-  const { limit = 50, offset = 0, category, from, to } = opts;
+  const { limit = 50, offset = 0, category, from, to, author } = opts;
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (category && category !== "all") params.set("category", category);
+  if (author) params.set("author", author);
   // Date bounds are applied server-side — `limit` caps the newest rows, so an
   // older range filtered in the browser would come back empty on a busy client.
   if (from) params.set("from", from);

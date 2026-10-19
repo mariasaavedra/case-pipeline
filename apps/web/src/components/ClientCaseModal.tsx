@@ -22,7 +22,7 @@
 // =============================================================================
 
 import { useEffect, useState } from "react";
-import { fetchClientUpdates, getClient } from "../api";
+import { fetchAllClientUpdates, getClient } from "../api";
 import type { ClientCaseSummary, ClientUpdate } from "../api";
 import type { TimelineFilter } from "./TimelineFilters";
 import { UpdatesTimeline } from "./UpdatesTimeline";
@@ -90,7 +90,7 @@ export function ClientCaseModal({
   useEffect(() => {
     let cancelled = false;
     setFeed(null);
-    fetchClientUpdates(profileLocalId, { category: notesFilter, limit: 500 })
+    fetchAllClientUpdates(profileLocalId, { category: notesFilter })
       .then((rows) => {
         if (!cancelled) setFeed(rows);
       })

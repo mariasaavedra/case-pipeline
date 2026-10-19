@@ -21,11 +21,13 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { fetchMyDay, changeBoardItemStatus, postConsultNote } from "../api";
-import type { MyDayResult, MyDayEntry } from "../api";
+import { fetchMyDay, changeBoardItemStatus, postConsultNote, fetchAllClientUpdates } from "../api";
+import type { MyDayResult, MyDayEntry, ClientUpdate } from "../api";
 import { Link } from "./Link";
 import { UpdatesTimeline } from "./UpdatesTimeline";
+import type { TimelineFilter } from "./TimelineFilters";
 import { DocumentsTab } from "./DocumentsTab";
+import { CaseTimelineTab } from "./CaseTimelineTab";
 import { FilePreviewModal } from "./FilePreviewModal";
 import { resolveFileLink, type DriveItem } from "../sharepoint/graph";
 import { NewContractModal } from "./NewContractModal";
@@ -283,7 +285,64 @@ function DayRail({
 // P4.5 — the client
 // =============================================================================
 
-type Tab = "prep" | "notes" | "docs";
+type Tab = "prep" | "notes" | "timeline" | "docs";
+
+/**
+ * The client's whole notes feed, fetched when the tab opens — My Day itself
+ * only carries the newest 20 notes. Emails are hidden until asked for, and
+ * every filter runs server-side, so nothing is cut off by a page size.
+ */
+function NotesTab({ entry }: { entry: MyDayEntry }) {
+  const profileId = entry.profile?.localId ?? null;
+  const [filter, setFilter] = useState<TimelineFilter>("notes");
+  const [attorneysOnly, setAttorneysOnly] = useState(false);
+  const [feed, setFeed] = useState<ClientUpdate[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!profileId) return;
+    let live = true;
+    setFeed(null);
+    setError(null);
+    fetchAllClientUpdates(profileId, { category: filter, author: attorneysOnly ? "attorneys" : undefined })
+      .then((rows) => live && setFeed(rows))
+      .catch((e: unknown) => live && setError(e instanceof Error ? e.message : "Could not load the notes"));
+    return () => {
+      live = false;
+    };
+  }, [profileId, filter, attorneysOnly]);
+
+  const muted = { fontSize: 14, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" } as const;
+  if (!profileId) return <p style={muted}>No client profile, so no notes to show.</p>;
+  const chip = (label: string, on: boolean, toggle: () => void) => (
+    <button key={label} type="button" className={`filter-chip ${on ? "filter-chip-active" : ""}`}
+      onClick={toggle} aria-pressed={on}>
+      {label}
+    </button>
+  );
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2 pb-3" role="group" aria-label="Notes filter">
+        {chip("Notes", filter === "notes", () => setFilter("notes"))}
+        {chip("All (with emails)", filter === "all", () => setFilter("all"))}
+        {chip("By attorneys", attorneysOnly, () => setAttorneysOnly((v) => !v))}
+        {feed && feed.length > 0 && (
+          <span style={{ ...muted, fontSize: 13 }}>{feed.length} {feed.length === 1 ? "entry" : "entries"}</span>
+        )}
+      </div>
+      {error ? (
+        <p className="text-sm" style={{ color: "var(--urgency-overdue)" }}>{error}</p>
+      ) : feed === null ? (
+        <p style={muted}>Loading…</p>
+      ) : feed.length === 0 ? (
+        <p style={muted}>
+          {attorneysOnly ? "No notes by an attorney yet." : filter === "notes" ? "No notes yet for this client." : "Nothing on this client's timeline yet."}
+        </p>
+      ) : (
+        <UpdatesTimeline updates={feed} filter={filter} />
+      )}
+    </div>
+  );
+}
 
 function ClientPanel({ entry, tab, setTab }: { entry: MyDayEntry; tab: Tab; setTab: (t: Tab) => void }) {
   const t = formatTime(entry.time);
@@ -313,7 +372,8 @@ function ClientPanel({ entry, tab, setTab }: { entry: MyDayEntry; tab: Tab; setT
   };
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: "prep", label: "Consult prep" },
-    { id: "notes", label: `Notes (${entry.updates.length})` },
+    { id: "notes", label: "Notes" },
+    { id: "timeline", label: "Timeline" },
     { id: "docs", label: "E-file / Consult file" },
   ];
 
@@ -426,9 +486,15 @@ function ClientPanel({ entry, tab, setTab }: { entry: MyDayEntry; tab: Tab; setT
 
       {tab === "notes" && (
         <div style={{ padding: "12px 24px 24px" }}>
-          {entry.updates.length === 0
-            ? <p style={{ fontSize: 14, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>No notes yet for this client.</p>
-            : <UpdatesTimeline updates={entry.updates} />}
+          <NotesTab entry={entry} />
+        </div>
+      )}
+
+      {tab === "timeline" && (
+        <div style={{ padding: "12px 24px 24px" }}>
+          {entry.profile
+            ? <CaseTimelineTab profileLocalId={entry.profile.localId} />
+            : <p style={{ fontSize: 14, color: "var(--color-ink-muted)", fontFamily: "var(--font-body)" }}>No client profile, so no timeline to show.</p>}
         </div>
       )}
 

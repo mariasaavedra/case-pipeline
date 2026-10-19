@@ -120,15 +120,28 @@ export function handleBoardItemDetail(req: Request, db: Database): Response {
   return json(item);
 }
 
-export function handleClientUpdates(req: Request, db: Database): Response {
+/** Largest /api/clients/:id/updates page. */
+export const MAX_UPDATES_PAGE = 1000;
+
+/**
+ * `isAttorney` backs `?author=attorneys` (notes written by an attorney, by the
+ * staff roster's "attorney" role). Without it the parameter is ignored.
+ */
+export function handleClientUpdates(
+  req: Request,
+  db: Database,
+  isAttorney?: (authorName: string) => boolean,
+): Response {
   const localId = extractParam(req, "localId");
   if (!localId) return error("Missing localId", 400);
 
   const url = new URL(req.url);
   const limitParam = url.searchParams.get("limit");
   const offsetParam = url.searchParams.get("offset");
+  // The cap is high enough for a whole client's timeline (the busiest had
+  // ~400 entries in Oct 2026): the notes views fetch everything at once.
   const limit = limitParam
-    ? Math.max(1, Math.min(parseInt(limitParam, 10) || 50, 200))
+    ? Math.max(1, Math.min(parseInt(limitParam, 10) || 50, MAX_UPDATES_PAGE))
     : 50;
   const offset = offsetParam
     ? Math.max(0, parseInt(offsetParam, 10) || 0)
@@ -166,13 +179,17 @@ export function handleClientUpdates(req: Request, db: Database): Response {
   const from = dateParam("from");
   const to = dateParam("to");
 
-  const updates = getClientUpdates(
-    db, localId, limit, offset,
-    types && types.length ? types : undefined,
-    category,
-    from || to ? { from, to } : undefined,
-  );
-  return json(updates);
+  const typeList = types && types.length ? types : undefined;
+  const range = from || to ? { from, to } : undefined;
+
+  // The author is a roster lookup, not a column, so the page is cut after
+  // filtering: every matching row, then offset/limit — a page is never short.
+  if (url.searchParams.get("author") === "attorneys" && isAttorney) {
+    const all = getClientUpdates(db, localId, Number.MAX_SAFE_INTEGER, 0, typeList, category, range);
+    return json(all.filter((u) => isAttorney(u.authorName)).slice(offset, offset + limit));
+  }
+
+  return json(getClientUpdates(db, localId, limit, offset, typeList, category, range));
 }
 
 export function handleClientRelationships(req: Request, db: Database): Response {
