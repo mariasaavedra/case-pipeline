@@ -1,5 +1,5 @@
 // =============================================================================
-// The signed contract → the client's E-File (FEE Ks folder)
+// The signed contract → the client's E-File (FEE Ks folder), else consult folder
 // =============================================================================
 // Runs scripts/esign-efile.ts, which has the SharePoint (Graph) sign-in the
 // consult sweep and Drive intake use. Started after Zap 3's signed copy is
@@ -12,7 +12,7 @@ import { spawn } from "node:child_process";
 import { REPO_ROOT } from "../paths.js";
 
 export type EfileResult =
-  | { ok: true; folder: string; name: string; webUrl: string; already?: boolean }
+  | { ok: true; where?: "E-File" | "Consult File"; folder: string; name: string; webUrl: string; already?: boolean }
   | { ok: false; reason: string };
 
 const inFlight = new Set<number>();

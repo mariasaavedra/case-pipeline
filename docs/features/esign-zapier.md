@@ -29,9 +29,9 @@ for contracts sent by hand.
    Received On is stamped, with a note. The sender gets a **Monday notification**
    and a **Slack** message. The signed PDF goes onto the Fee K's file column, or
    the client profile's Files column if the Fee K has none, **and into the
-   client's E-File**, in their Fee K folder (below). A note on the Fee K says
-   where it went, or why it couldn't (no E-File link, link broken) so staff file
-   it by hand.
+   client's E-File** (else their consult folder), in their Fee K folder
+   (below). A note on the Fee K says where it went, or why it couldn't (no
+   E-File or Consult File link, link broken) so staff file it by hand.
    Every note in this flow also goes into the **client profile's Emails &
    Activities** as a "Contract note" (titles: Contract sent for signature /
    signed by the attorney / signed / rejected / expired / recalled).
@@ -49,7 +49,9 @@ name is used for the download, Adobe's document, the agreement (`… [CP-12]`,
 which is also the client's e-mail subject) and the signed copy.
 
 **The E-File copy** (`scripts/esign-efile.ts`, started by the API after Zap 3):
-the profile's E-File link → the client's existing fee-contract folder, whatever
+the profile's E-File link — else its Consult File link, since a client often
+signs before staff open the E-File (2026-10-19) — → the client's existing
+fee-contract folder, whatever
 its spelling (`FEE Ks`, `FEE K's`, `Fee K's`, `FEEKs`…, else `Contracts`), and a
 new `FEE Ks` only when there is none (`scripts/sharepoint/fee-k-folder.ts`). It
 never creates the client folder. Same file name already there = already filed.
