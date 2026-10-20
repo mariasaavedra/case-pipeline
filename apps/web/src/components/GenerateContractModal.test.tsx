@@ -29,6 +29,13 @@ vi.mock("../api", () => ({
   logContractGenerated: mocks.log,
   sendContractForSignature: mocks.send,
 }));
+vi.mock("./ClientCaseModal", () => ({
+  ClientCaseModal: ({ profileLocalId, behind, onClose }: { profileLocalId: string; behind: string; onClose: () => void }) => (
+    <div data-testid="case-modal" data-profile={profileLocalId}>
+      <button onClick={onClose}>{`Back to ${behind}`}</button>
+    </div>
+  ),
+}));
 vi.mock("../auth/useAuth", () => ({ useAuth: () => ({ user: { name: "Rafael Cruz" } }) }));
 vi.mock("../sharepoint/graph", () => ({
   CONTRACT_TEMPLATES_FOLDER: "https://example.test/folder",
@@ -108,5 +115,31 @@ describe("M22 preview", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:preview-1");
     expect(button("Preview PDF")).toBeDefined();
     expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it("opens the client's notes / timeline / documents over the form and comes back to it", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await act(async () => {
+      createRoot(host).render(<GenerateContractModal contract={{ ...contract, clientLocalId: "p7" }} onClose={() => {}} />);
+    });
+    await flush();
+
+    await act(async () => { button("Notes · Timeline · Documents")!.click(); });
+    const modal = document.querySelector("[data-testid='case-modal']");
+    expect(modal?.getAttribute("data-profile")).toBe("p7");
+    expect(button("Preview PDF")).toBeDefined(); // the form stays underneath
+
+    await act(async () => { button("Back to the contract")!.click(); });
+    expect(document.querySelector("[data-testid='case-modal']")).toBeNull();
+    expect(button("Preview PDF")?.disabled).toBe(false);
+  });
+
+  it("has no case button when the Fee K has no linked profile", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
+    await flush();
+    expect(button("Notes · Timeline · Documents")).toBeUndefined();
   });
 });

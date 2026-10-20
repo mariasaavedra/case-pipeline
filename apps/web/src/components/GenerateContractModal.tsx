@@ -19,6 +19,9 @@
 // (template + fees). Send hands the PDF to Adobe Sign — attorney first, then
 // the client — and the API moves the stage, leaves a note and follows the
 // signatures (routes/esign.ts).
+// "Notes · Timeline · Documents" opens the client's case (M3, ClientCaseModal)
+// stacked over this form, so checking what was quoted or what is on file never
+// throws away a half-filled contract.
 // =============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +38,7 @@ import {
 } from "../lib/contract-fill";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { FeeSheetPicker } from "./FeeSheetPicker";
+import { ClientCaseModal } from "./ClientCaseModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 
@@ -110,6 +114,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [needsConsent, setNeedsConsent] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [showCase, setShowCase] = useState(false);
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -278,6 +283,13 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Generate contract</DialogTitle>
           <DialogDescription>{c.clientName}{c.contractFor.length > 0 ? ` · ${c.contractFor.join(", ")}` : ""}</DialogDescription>
+          {c.clientLocalId && (
+            <button type="button" onClick={() => setShowCase(true)}
+              className="self-start text-xs underline mt-1" style={{ color: "var(--color-amber)", fontFamily: "var(--font-body)" }}
+              title="The client's notes, timeline and documents, over this form — nothing here is lost">
+              Notes · Timeline · Documents
+            </button>
+          )}
         </DialogHeader>
 
         {preview && input ? (
@@ -439,6 +451,14 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
             </div>
           </div>
         </div>
+        )}
+        {showCase && c.clientLocalId && (
+          <ClientCaseModal
+            profileLocalId={c.clientLocalId}
+            profileName={c.clientName}
+            onClose={() => setShowCase(false)}
+            behind="the contract"
+          />
         )}
       </DialogContent>
     </Dialog>
