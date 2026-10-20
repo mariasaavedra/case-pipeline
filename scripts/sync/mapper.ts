@@ -220,3 +220,21 @@ export function firstLinkedId(shaped: unknown): string | null {
   }
   return null;
 }
+
+/**
+ * Split fetched items into live ones and ones Monday has deleted or archived.
+ * `items(ids:)` (the --items= re-read) returns a deleted item with
+ * `state: "deleted"` for weeks, so upserting it as-is brings it back: a Fee K
+ * created and deleted seconds apart was archived by its delete webhook, then
+ * re-inserted by the targeted sync the create webhook started (2026-10-20).
+ * No state = an older query that didn't ask, treated as live.
+ */
+export function splitByState(items: MondayItem[]): { live: MondayItem[]; inactive: MondayItem[] } {
+  const live: MondayItem[] = [];
+  const inactive: MondayItem[] = [];
+  for (const item of items) {
+    if (item.state && item.state !== "active") inactive.push(item);
+    else live.push(item);
+  }
+  return { live, inactive };
+}

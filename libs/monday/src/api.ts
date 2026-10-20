@@ -61,6 +61,17 @@ export class TimeoutError extends MondayApiError {
   }
 }
 
+/**
+ * Monday refused a write because the item is deleted or archived (a
+ * ColumnValueException with `column_validation_error_code: "inactiveItems"`,
+ * "Cannot change column value for inactive items"). Permanent: the item will
+ * not come back by retrying, so a queued write should give up at once.
+ */
+export function isInactiveItemError(err: unknown): boolean {
+  if (!(err instanceof MondayApiError)) return false;
+  return /inactiveItems|inactive items?\b/i.test(err.message);
+}
+
 // =============================================================================
 // API Configuration
 // =============================================================================
@@ -594,6 +605,7 @@ export async function fetchBoardItems(
             id
             name
             updated_at
+            state
             group {
               id
               title
@@ -761,6 +773,7 @@ export async function fetchItemsByIds(ids: string[]): Promise<MondayItem[]> {
         id
         name
         updated_at
+        state
         board {
           id
           name

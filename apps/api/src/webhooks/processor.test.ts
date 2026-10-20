@@ -257,6 +257,17 @@ describe("archiveItemByMondayId", () => {
     expect(archiveItemByMondayId(db, "does-not-exist")).toBe(false);
     db.close();
   });
+
+  it("records the sync run that archived it (a re-read found it deleted in Monday)", () => {
+    const db = freshDb();
+    insertProfile(db, "1", "prof-1");
+    insertContract(db, "13340802680", "prof-1");
+
+    expect(archiveItemByMondayId(db, "13340802680", 42)).toBe(true);
+    expect(db.prepare("SELECT run_id FROM archived_rows WHERE monday_item_id = '13340802680'").get()).toEqual({ run_id: 42 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM contracts").get()).toEqual({ n: 0 });
+    db.close();
+  });
 });
 
 describe("note deletions (delete_update)", () => {

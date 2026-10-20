@@ -16,6 +16,9 @@ import {
   createUpdate,
   addFileToColumn,
   AuthError,
+  MondayApiError,
+  RateLimitError,
+  isInactiveItemError,
 } from "./api";
 import type { MondayItem, MondayColumn } from "./types";
 
@@ -465,5 +468,22 @@ describe("addFileToColumn", () => {
     await addFileToColumn('1") { id } evil(', "c", "f.pdf", new Uint8Array([1]), "application/pdf", "tok");
     const query = (fetchMock.mock.calls[0]![1].body as FormData).get("query") as string;
     expect(query).toContain('item_id: "1\\") { id } evil("');
+  });
+});
+
+describe("isInactiveItemError", () => {
+  test("matches Monday's refusal to write to a deleted or archived item", () => {
+    const err = new MondayApiError(
+      'Monday API errors: [{"message":"Cannot change column value for inactive items",' +
+        '"extensions":{"code":"ColumnValueException","error_data":{"column_validation_error_code":"inactiveItems"}}}]',
+    );
+    expect(isInactiveItemError(err)).toBe(true);
+  });
+
+  test("ignores other errors", () => {
+    expect(isInactiveItemError(new MondayApiError("Server error: 502 Bad Gateway", 502, true))).toBe(false);
+    expect(isInactiveItemError(new RateLimitError("Rate limit exceeded", 1000))).toBe(false);
+    expect(isInactiveItemError(new Error("inactive items"))).toBe(false); // not from Monday
+    expect(isInactiveItemError("inactiveItems")).toBe(false);
   });
 });

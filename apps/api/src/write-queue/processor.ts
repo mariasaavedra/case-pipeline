@@ -14,7 +14,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 import cron from "node-cron";
-import { withMondayJob } from "@case-pipeline/monday";
+import { withMondayJob, isInactiveItemError } from "@case-pipeline/monday";
 import fs from "node:fs";
 import path from "node:path";
 import { createUpdate, changeSimpleColumnValue, changeColumnValue, createItem, createTimelineItem, addFileToColumn } from "@case-pipeline/monday";
@@ -25,6 +25,7 @@ import { withTokenFallback } from "../write-auth.js";
 import { DATA_DIR } from "../paths.js";
 import { settleQueuedMailStep } from "@case-pipeline/query";
 import { notifyOps, inBackground } from "../notify/slack.js";
+import { archiveItemByMondayId } from "../webhooks/processor.js";
 
 /** A queued step of a scanned notice's write-back reports back to that notice. */
 function settleMailStep(db: Database, row: QueueRow, result: "done" | "failed", detail?: string): void {
@@ -341,18 +342,38 @@ export async function drainWriteQueue(
       } catch (err) {
         const attempts = row.attempts + 1;
         const message = err instanceof Error ? err.message : String(err);
-        if (attempts >= row.max_attempts) {
+        // The item is deleted or archived in Monday: no retry can land, and the
+        // local row is a ghost staff would keep acting on. Give up now and take
+        // it out of the mirror (archived_rows keeps the snapshot).
+        const inactiveItem = isInactiveItemError(err) && !!row.monday_item_id;
+        if (inactiveItem || attempts >= row.max_attempts) {
           // Dead-letter: stop retrying, keep the error for inspection.
           db.prepare(
             `UPDATE write_queue SET status = 'failed', attempts = ?, last_error = ?, updated_at = ? WHERE id = ?`,
           ).run(attempts, message, new Date().toISOString(), row.id);
-          console.error(`[write-queue] op ${row.id} (${row.op_type}) dead-lettered after ${attempts} attempts: ${message}`);
+          let archived = false;
+          if (inactiveItem) {
+            try {
+              archived = archiveItemByMondayId(db, row.monday_item_id!);
+            } catch (archiveErr) {
+              console.warn(`[write-queue] op ${row.id}: could not archive inactive item ${row.monday_item_id}:`, archiveErr);
+            }
+          }
+          console.error(
+            inactiveItem
+              ? `[write-queue] op ${row.id} (${row.op_type}) dead-lettered: item ${row.monday_item_id} is deleted or archived in Monday` +
+                  (archived ? " (local row archived)" : "")
+              : `[write-queue] op ${row.id} (${row.op_type}) dead-lettered after ${attempts} attempts: ${message}`,
+          );
           // Monday never got this write and nothing will retry it. The error is
           // cut short: Monday sometimes echoes the value it refused.
           inBackground(notifyOps(
             "ops_write_queue",
-            `A Monday write gave up after ${attempts} tries (${row.op_type}, item ${row.monday_item_id ?? "new"}): ${message.slice(0, 160)}. ` +
-              "It is in Settings → Admin → Sync health. More failures within the hour are not posted.",
+            (inactiveItem
+              ? `A Monday write was refused: item ${row.monday_item_id} is deleted or archived in Monday (${row.op_type})` +
+                (archived ? "; it is now removed from the app too" : "")
+              : `A Monday write gave up after ${attempts} tries (${row.op_type}, item ${row.monday_item_id ?? "new"}): ${message.slice(0, 160)}`) +
+              ". It is in Settings → Admin → Sync health. More failures within the hour are not posted.",
           ));
           settleMailStep(db, row, "failed", message);
         } else {

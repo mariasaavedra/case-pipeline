@@ -190,9 +190,11 @@ const SOURCE_TABLES = ["profiles", "contracts", "board_items"] as const;
 /**
  * Archive-then-delete a row by its Monday item id, mirroring the sync's
  * reconciliation (same archived_rows shape, run_id NULL = webhook-initiated).
+ * The sync passes its run id when a re-read finds the item deleted or archived
+ * in Monday; the write queue passes none when Monday refuses a write to one.
  * Returns true if a row was found and removed.
  */
-export function archiveItemByMondayId(db: Database, mondayItemId: string): boolean {
+export function archiveItemByMondayId(db: Database, mondayItemId: string, runId: number | null = null): boolean {
   for (const table of SOURCE_TABLES) {
     const row = db
       .prepare(`SELECT * FROM ${table} WHERE monday_item_id = ?`)
@@ -201,13 +203,14 @@ export function archiveItemByMondayId(db: Database, mondayItemId: string): boole
     const remove = db.transaction(() => {
       db.prepare(
         `INSERT INTO archived_rows (source_table, board_key, monday_item_id, local_id, snapshot_json, run_id, archived_at)
-         VALUES (?, ?, ?, ?, ?, NULL, datetime('now'))`,
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
       ).run(
         table,
         (row.board_key as string) ?? null,
         mondayItemId,
         (row.local_id as string) ?? null,
         JSON.stringify(row),
+        runId,
       );
       db.prepare(`DELETE FROM ${table} WHERE monday_item_id = ?`).run(mondayItemId);
     });

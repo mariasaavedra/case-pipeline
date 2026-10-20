@@ -10,6 +10,7 @@ import {
   buildColumnValues,
   extractBoardItemFields,
   firstLinkedId,
+  splitByState,
   type ResolvedColumnMeta,
 } from "./mapper";
 
@@ -162,5 +163,21 @@ describe("firstLinkedId", () => {
     expect(firstLinkedId(null)).toBeNull();
     expect(firstLinkedId({ label: "x" })).toBeNull();
     expect(firstLinkedId({ linked_item_ids: [] })).toBeNull();
+  });
+});
+
+describe("splitByState", () => {
+  const item = (id: string, state?: "active" | "archived" | "deleted") => ({
+    id, name: id, column_values: [], ...(state ? { state } : {}),
+  });
+
+  it("keeps active items and items with no state, sets deleted/archived aside", () => {
+    // The 2026-10-20 case: items(ids:) handed back a Fee K deleted 6 s after
+    // it was created, and the targeted sync upserted it as live.
+    const { live, inactive } = splitByState([
+      item("1", "active"), item("2", "deleted"), item("3"), item("4", "archived"),
+    ]);
+    expect(live.map((i) => i.id)).toEqual(["1", "3"]);
+    expect(inactive.map((i) => i.id)).toEqual(["2", "4"]);
   });
 });

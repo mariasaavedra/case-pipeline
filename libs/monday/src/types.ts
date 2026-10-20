@@ -39,6 +39,12 @@ export interface MondayItem {
    * scripts/phase0-updated-at.ts for the evidence.
    */
   updated_at?: string;
+  /**
+   * "active", "archived" or "deleted". `items(ids:)` still returns an item
+   * deleted or archived in Monday (state says which), so a re-read by id must
+   * check it before treating the item as live.
+   */
+  state?: "active" | "archived" | "deleted" | "all";
   board?: {
     id: string;
     name: string;
