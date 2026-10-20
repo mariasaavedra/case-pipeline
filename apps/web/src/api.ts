@@ -7,7 +7,7 @@ import type { RelationshipWithDetails } from "@case-pipeline/query/relationships
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
-import type { ActiveCasesResult, ActiveCase, MyCasesData, PreschedulingResult, PendingContractsResult, ContractStep, CourtCasesResult, CalendarResult, CalendarCategory, CallLogEntry, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
+import type { ActiveCasesResult, ActiveCase, MyCasesData, PreschedulingResult, PendingContractsResult, ContractStep, CourtCasesResult, CalendarResult, CalendarCategory, CallLogEntry, CallLogIntakeMatch, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
 
 export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
@@ -26,7 +26,7 @@ export type { AddressChangesResult, AddressChange, AddressChangePhase, AddressCh
 export type { FoiasResult, Foia, FoiaPhase, FoiaFlag } from "@case-pipeline/query";
 export type { WorkloadResult, WorkloadPerson, WorkloadItem, WorkloadAssignment, WorkloadSource, WorkloadColumn, WorkloadLevel } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
-export type { CallLogEntry, CallLogListResult } from "@case-pipeline/query";
+export type { CallLogEntry, CallLogIntakeMatch, CallLogListResult } from "@case-pipeline/query";
 export type { MailScanResult, MailScanDocument, NoticeMatch, MatchStatus, MatchedOpenForm, MatchedProfile, MailDocumentDetail, MailWriteBackPlan, StepOutcome, WriteBackState, NoticeFields, FieldEdits } from "@case-pipeline/query";
 
 /** A saved notice as the API returns it: the server keeps the file path to itself. */
@@ -511,6 +511,8 @@ export interface CreateCallLogInput {
   status?: string;
   language?: string;
   profileLocalId?: string | null;
+  /** Linked instead of a profile when the caller has none (a detainee's family). */
+  jailIntakeLocalId?: string | null;
   takenByUserId?: string | null;
   highlightedForUserId?: string | null;
   /** Monday user ids @mentioned in `note` — notified on the posted comment. */
@@ -534,10 +536,17 @@ export async function createCallLogEntry(input: CreateCallLogInput): Promise<Cre
   });
 }
 
+/** Jail intakes whose POC phone matches the caller's number — asked only when no profile matched. */
+export async function searchCallLogIntakes(query: string, signal?: AbortSignal): Promise<CallLogIntakeMatch[]> {
+  return apiFetch(`/api/call-log/intake-matches?q=${encodeURIComponent(query)}`, signal ? { signal } : undefined);
+}
+
 export interface UpdateCallLogInput {
   name?: string;
   phone?: string;
   profileLocalId?: string | null;
+  /** Sent with profileLocalId: the two share one Monday column, a profile wins. */
+  jailIntakeLocalId?: string | null;
   highlightedForUserId?: string | null;
   takenByUserId?: string | null;
   /** Empty string clears the label. */

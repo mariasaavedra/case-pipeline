@@ -14,7 +14,7 @@ const FTS5_RESERVED = new Set(["AND", "OR", "NOT", "NEAR"]);
 /**
  * Detect if the input looks like a phone number (mostly digits, ≥4 digits).
  */
-function isPhoneLike(input: string): boolean {
+export function isPhoneLike(input: string): boolean {
   const digitsOnly = input.replace(/\D/g, "");
   if (digitsOnly.length < 4) return false;
   const nonSpace = input.replace(/\s/g, "");
@@ -29,7 +29,7 @@ function isPhoneLike(input: string): boolean {
  * this board routinely carry a name ("Mac (817) 470-7700"). Leaving them alone
  * is harmless: the digits stay contiguous, so a digits-only LIKE still hits.
  */
-function normalizedPhoneSql(expr: string): string {
+export function normalizedPhoneSql(expr: string): string {
   return `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${expr}, '-', ''), ' ', ''), '(', ''), ')', ''), '+', ''), '.', '')`;
 }
 

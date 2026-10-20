@@ -401,6 +401,11 @@ export function CallLogPage() {
                         >
                           {e.profileName ?? "View client"}
                         </button>
+                      ) : e.jailIntakeLocalId ? (
+                        // No profile yet: the call is about a detainee's jail intake.
+                        <span title="Linked to a jail intake — no profile yet" style={{ fontSize: 12, color: "var(--color-ink-muted)" }}>
+                          Jail intake: {e.jailIntakeName ?? "—"}
+                        </span>
                       ) : (
                         <span style={{ fontSize: 12, color: "var(--color-ink-faint)" }}>— unlinked —</span>
                       )}

@@ -25,6 +25,11 @@ export interface ParsedCallLogBody {
   language: string;
   requestedStatus: string;
   profileLocalId: string | null;
+  /**
+   * A jail intake to link instead, for a caller with no profile (a detainee's
+   * family). Always null when a profile is given: a profile wins.
+   */
+  jailIntakeLocalId: string | null;
   takenByUserId: number | null;
   highlightedForUserId: number | null;
   noteMentions: UpdateMention[];
@@ -63,6 +68,7 @@ export function parseCallLogBody(raw: unknown): ParsedCallLogBody {
     language: str(body.language),
     requestedStatus: str(body.status),
     profileLocalId: body.profileLocalId ? String(body.profileLocalId) : null,
+    jailIntakeLocalId: !body.profileLocalId && body.jailIntakeLocalId ? String(body.jailIntakeLocalId) : null,
     takenByUserId: toId(body.takenByUserId),
     highlightedForUserId: toId(body.highlightedForUserId),
     noteMentions: parseMentions(body.mentionedUserIds),
@@ -188,9 +194,13 @@ export function buildCallLogColumnValues(args: {
   parsed: ParsedCallLogBody;
   status: string | null;
   today: string;
-  profileMondayItemId: string | null;
+  /**
+   * The Monday item the call links to: the profile, or — with no profile — a
+   * jail intake. "link to Profiles" accepts items from both boards.
+   */
+  linkMondayItemId: string | null;
 }): Record<string, unknown> {
-  const { schema, parsed, status, today, profileMondayItemId } = args;
+  const { schema, parsed, status, today, linkMondayItemId } = args;
   const col = (t: string) => columnByTitle(schema, t);
   const out: Record<string, unknown> = {};
 
@@ -212,8 +222,8 @@ export function buildCallLogColumnValues(args: {
   if (highlightedForCol && parsed.highlightedForUserId) {
     out[highlightedForCol.columnId] = { personsAndTeams: [{ id: parsed.highlightedForUserId, kind: "person" }] };
   }
-  if (profileCol && profileMondayItemId) {
-    out[profileCol.columnId] = { item_ids: [Number(profileMondayItemId)] };
+  if (profileCol && linkMondayItemId) {
+    out[profileCol.columnId] = { item_ids: [Number(linkMondayItemId)] };
   }
   return out;
 }
@@ -234,8 +244,10 @@ export function buildMirroredColumnValues(args: {
   lastUpdated: string;
   takenByName: string | null;
   highlightedForName: string | null;
+  /** What "link to Profiles" points at — kept so a jail-intake link shows before the next sync. */
+  link?: LinkedItem | null;
 }): Record<string, unknown> {
-  const { parsed, status, today, nowTime, lastUpdated, takenByName, highlightedForName } = args;
+  const { parsed, status, today, nowTime, lastUpdated, takenByName, highlightedForName, link } = args;
   return {
     ...(parsed.phone ? { phone: parsed.phone } : {}),
     ...(status ? { status: { label: status } } : {}),
@@ -244,6 +256,22 @@ export function buildMirroredColumnValues(args: {
     ...(parsed.language ? { language: { label: parsed.language } } : {}),
     ...(takenByName ? { taken_by: { label: takenByName } } : {}),
     ...(highlightedForName ? { highlighted_for: { label: highlightedForName } } : {}),
+    ...(link ? { profile: mirroredLinkValue(link) } : {}),
     last_updated: lastUpdated,
   };
+}
+
+/** A Monday item a call's "link to Profiles" column points at. */
+export interface LinkedItem {
+  mondayItemId: string;
+  name: string;
+}
+
+/**
+ * The mirrored "link to Profiles" value, in the sync's board_relation shape.
+ * The sync resolves only profiles into profile_local_id; a jail-intake link
+ * lives here alone, and libs/query's call log reads it back from here.
+ */
+export function mirroredLinkValue(link: LinkedItem): { linked_item_ids: string[]; display_value: string } {
+  return { linked_item_ids: [link.mondayItemId], display_value: link.name };
 }

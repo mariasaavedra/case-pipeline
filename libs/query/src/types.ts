@@ -615,7 +615,26 @@ export interface CallLogEntry {
   time: string | null;
   profileLocalId: string | null;
   profileName: string | null;
+  /**
+   * The jail intake the call is linked to, when it has no profile. Call Log's
+   * "link to Profiles" column accepts Jail Intakes items too, so a family
+   * member calling about a detainee who has no profile yet links there.
+   */
+  jailIntakeLocalId: string | null;
+  jailIntakeName: string | null;
   lastUpdatedAtSource: string | null;
+}
+
+/** A jail intake whose POC phone matched a caller's number (Call Log search). */
+export interface CallLogIntakeMatch {
+  localId: string;
+  mondayItemId: string | null;
+  /** The detainee — the intake's item name. */
+  name: string;
+  pocName: string | null;
+  pocPhone: string | null;
+  status: string | null;
+  intakeCreatedOn: string | null;
 }
 
 export interface CallLogFilters {
