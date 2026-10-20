@@ -40,6 +40,7 @@
     "esign:efile": "tsx --env-file-if-exists=.env scripts/esign-efile.ts",
     "feek:autofill": "tsx --env-file-if-exists=.env scripts/fee-k-autofill.ts",
     "history:backfill": "tsx --env-file-if-exists=.env scripts/history-backfill.ts",
+    "staff:import": "tsx --env-file-if-exists=.env scripts/staff-import.ts",
     "sms:check": "tsx --env-file-if-exists=.env scripts/ringcentral-check.ts"
   },
   "devDependencies": {

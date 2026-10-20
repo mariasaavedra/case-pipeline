@@ -20,7 +20,7 @@ someone left, their open work stayed on a name nobody watched.
 
 ## Roster (users.db v15)
 
-- `staff` — one row per person: name, email, `monday_user_id`, ext., attorney
+- `staff` — one row per person: name, email, `monday_user_id`, ext., `slack_user_id` (v17), attorney
   board, active, start/end date, `source` (`monday` / `board_name` / `manual`),
   `monday_seen_at`, `roles_reviewed`.
 - `staff_roles` — fixed list: attorney, paralegal, court paralegal, reception,
@@ -45,6 +45,19 @@ empty):
 
 Active Monday people the workspace no longer lists are reported, not
 deactivated: leaving is the Offboarding flow's decision.
+
+**Staff table import** (users.db v17 adds `staff.slack_user_id`): the firm's
+staff table as CSV (`name, email, monday_user_id, monday_status, slack_user_id,
+initials, class, rc_number, rc_ext`) → `npm run staff:import -- staff.csv`
+(dry run) / `--apply`. Rules in `apps/api/src/staff/import.ts`: match by Monday
+id → email → name; email, ext. and Slack id set from the table; a Monday id
+only filled in, never replaced; `disabled` in Monday → inactive (open work
+stays with Offboarding); roles from Class (Attorney, Paralegal, Court
+Paralegal, Receptionist) only where an admin hasn't reviewed them — Assistant /
+Volunteer leave roles alone; the table's spelling becomes an alias. Initials and
+the RingCentral number aren't stored. Slack ids must be member ids (`U…`, from
+Slack profile → ⋮ → Copy member ID), not `D…` DM-channel ids. Also editable in
+Settings → Staff. First run 2026-10-20: 22 people (19 active, 3 retired).
 
 **Readers switched:** My Cases picks the caller's lanes by their staff record
 (all aliases), My Day opens on the staff record's attorney board first,
