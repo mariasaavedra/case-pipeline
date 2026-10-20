@@ -39,7 +39,7 @@ import { currentUser } from "../db/user-context.js";
 import { usersDb } from "../db/users-db.js";
 import { normName, staffForUser } from "../staff/roster.js";
 import { getAppointments, getBoardColumnsFor } from "@case-pipeline/query";
-import { MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
+import { caseTypeColumn, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
 import type { ClientCaseSummary, ClientUpdate, ProfileSummary } from "@case-pipeline/query";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { FIRM_TIMEZONE } from "../firm.js";
@@ -374,8 +374,8 @@ export function registerMyDayRoutes(app: Express, deps: MyDayDeps): void {
     // the auto-fill writes it to the Fee K.
     const fees = parsed.fees;
     if (fees) {
-      const col = getBoardColumnsFor(db, "fee_ks")?.columns
-        .find((c) => c.type === "dropdown" && c.title.trim().toLowerCase().startsWith("contract for"));
+      const feeKs = getBoardColumnsFor(db, "fee_ks");
+      const col = feeKs ? caseTypeColumn(feeKs) : undefined;
       const existing = col?.options.find((o) => o.label.toLowerCase() === fees.caseType.toLowerCase());
       if (existing) {
         fees.caseType = existing.label;

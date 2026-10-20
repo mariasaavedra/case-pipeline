@@ -30,7 +30,7 @@ import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
 import { parseNoteBody } from "./note-write.js";
 import { planReply } from "./note-replies.js";
-import { addLocalDropdownLabel, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
+import { addLocalDropdownLabel, caseTypeColumn, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
 import { usersDb } from "../db/users-db.js";
 import {
   FEE_K_ATTORNEY, applyProfileContactLocally, cleanContact, makeMondayUserResolver,
@@ -379,7 +379,8 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
     }
     const byTitle = (pred: (t: string) => boolean, type?: string) =>
       schema.columns.find((c) => pred(c.title.trim().toLowerCase()) && (!type || c.type === type));
-    const caseTypeCol = byTitle((t) => t.startsWith("contract for"), "dropdown");
+    // "Fee K Type": Monday refuses a new Fee K without it (since 2026-10).
+    const caseTypeCol = caseTypeColumn(schema);
     const afCol = byTitle((t) => t === "af", "numbers");
     const ffCol = byTitle((t) => t === "ff", "numbers");
     const pfCol = byTitle((t) => t === "pf", "numbers");
@@ -387,7 +388,7 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
     const openFormsCol = byTitle((t) => t.includes("open forms"), "board_relation");
 
     if (!caseTypeCol) {
-      res.status(409).json({ error: "Could not resolve the 'Contract for...' column on Fee Ks" });
+      res.status(409).json({ error: "Could not resolve the 'Fee K Type' column on Fee Ks — run a sync first" });
       return;
     }
     // A "new" one that only differs in case is the existing label.

@@ -13,6 +13,7 @@ type Database = BetterSqlite3.Database;
 import type { WaitLevel } from "./prescheduling";
 import { readTextingContact, type TextingContact } from "./client";
 import { makeStaffNames, type StaffResolver } from "./staff-names";
+import { feeKCaseTypeSql } from "./fee-k-case-type";
 
 // =============================================================================
 // Types
@@ -68,12 +69,12 @@ export interface PendingContract {
 }
 
 /**
- * The Fee K fields a contract can't go out without. Contract for / AF /
+ * The Fee K fields a contract can't go out without. Fee K Type (else the older Contract for) / AF /
  * Attorney are typed by a person; E-mail / Address are mirrors of the Profile,
  * so empty there means the Profile is missing them (or the Fee K isn't linked).
  * Not FF (court cases have none) and not Payment Method (known only at payment).
  */
-export const MISSING_FIELDS = ["Contract for", "AF", "Attorney", "E-mail", "Address"] as const;
+export const MISSING_FIELDS = ["Fee K Type", "AF", "Attorney", "E-mail", "Address"] as const;
 export type MissingField = (typeof MISSING_FIELDS)[number];
 
 export interface PendingContractsResult {
@@ -250,7 +251,7 @@ export function missingFeeKFields(f: {
   contractFor: string[]; attorneyFee: number | null; attorneys: string[]; email: string | null; address: string | null;
 }): MissingField[] {
   const empty: Record<MissingField, boolean> = {
-    "Contract for": f.contractFor.length === 0,
+    "Fee K Type": f.contractFor.length === 0,
     AF: f.attorneyFee == null,
     Attorney: f.attorneys.length === 0,
     "E-mail": !f.email?.trim(),
@@ -275,7 +276,7 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       p.local_id AS clientLocalId,
       p.name     AS clientName,
       json_extract(c.raw_column_values, '$.contract_stage.label')       AS contractStage,
-      json_extract(c.raw_column_values, '$.contract_for.labels')        AS contractFor,
+      ${feeKCaseTypeSql()}        AS contractFor,
       json_extract(c.raw_column_values, '$.attorney.label')             AS attorney,
       json_extract(c.raw_column_values, '$.assistant.label')            AS assistant,
       json_extract(c.raw_column_values, '$.contract_added_on.date')     AS addedOn,

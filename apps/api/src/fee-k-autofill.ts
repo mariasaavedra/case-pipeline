@@ -12,15 +12,17 @@
 //       attorney board) → its linked Jail Intake. Unparseable → left blank.
 //   AF / FF Surcharge Fee     ← 3% of AF / FF, only when Payment Method is
 //       "CREDIT Card - Surcharge Applies" (debit, cash, split: no surcharge).
-//   Contract for / AF / FF / PF ← the quote the attorney saved with the P4
+//   Fee K Type / AF / FF / PF ← the quote the attorney saved with the P4
 //       consult note (consult_fee_quotes, matchQuotes): the client's Fee K
 //       added from 3 days before to 30 days after the note, whose case type is
 //       empty or the quoted one. Used once, then stamped with the Fee K.
+//   It will go to…            ← the board for its Fee K Type in the Fee K
+//       Types table (Settings → Firm, fee-k-types.ts). One Fee K Type only.
 //
 // Everything else in that section already fills itself: Full Name / E-mail /
 // E-mail 2 / Address are mirrors of the linked Profile, the AF/FF deadline date
 // and Attorney are set by Monday automations. P14 flags a Fee K still missing
-// Contract for / AF / Attorney / E-mail / Address.
+// Fee K Type / AF / Attorney / E-mail / Address.
 //
 // Safety: candidates come from live.db, but each one is re-read from Monday and
 // re-planned on the fresh values right before the write, so a column someone
@@ -29,12 +31,13 @@
 // (`npm run feek:autofill`) prints the plan and writes nothing.
 // =============================================================================
 
+import { caseTypeColumn, getBoardColumnsFor } from "@case-pipeline/query";
 import type BetterSqlite3 from "better-sqlite3";
 type DatabaseInstance = BetterSqlite3.Database;
 
 /** Fee Ks column ids (config/boards.yaml, by_id). */
 export const FEE_K_COLUMNS = {
-  contractFor: "dropdown_mkv1db6z",
+  feeKType: "dropdown_mm89vqtc",
   af: "deal_value",
   ff: "numbers__1",
   pf: "numbers5__1",
@@ -42,7 +45,11 @@ export const FEE_K_COLUMNS = {
   ffSurcharge: "numeric_mm0gc5x9",
   paymentMethod: "dropdown_mm7v5eeb",
   pocFullName: "text_mm7xyv8e",
+  itWillGoTo: "status__1",
 } as const;
+
+/** Fee K Type → the "It will go to…" board (the Fee K Types table); null = none set. */
+export type BoardFor = (feeKType: string) => string | null;
 
 /** The card surcharge, same rate as the contract templates (contract-fill.ts). */
 export const SURCHARGE_RATE = 0.03;
@@ -127,7 +134,7 @@ function nameIn(text: string): string | null {
 
 /** What a Fee K has now — from live.db for candidates, from Monday right before a write. */
 export interface FeeKState {
-  contractFor: string[];
+  feeKType: string[];
   af: number | null;
   ff: number | null;
   pf: number | null;
@@ -135,6 +142,8 @@ export interface FeeKState {
   ffSurcharge: number | null;
   paymentMethod: string[];
   pocFullName: string;
+  /** "It will go to…" label; "" = empty. */
+  itWillGoTo: string;
 }
 
 /** The case type + fees an attorney quoted with the P4 consult note (consult_fee_quotes). */
@@ -142,6 +151,9 @@ export interface FeeQuote {
   id: number;
   caseType: string;
   newCaseType: boolean;
+  /** Quoted from the older "Contract for…" list (before 2026-10): not a Fee K
+   *  Type label, so never written and not compared — the fees still apply. */
+  oldType?: boolean;
   af: number | null;
   ff: number | null;
   pf: number | null;
@@ -167,7 +179,12 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 const sameType = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /** The empty columns this Fee K can have filled. Null when there is nothing to do. */
-export function planFeeKFill(state: FeeKState, jailIntakePoc: string | null, quote: FeeQuote | null = null): FeeKFill | null {
+export function planFeeKFill(
+  state: FeeKState,
+  jailIntakePoc: string | null,
+  quote: FeeQuote | null = null,
+  boardFor: BoardFor | null = null,
+): FeeKFill | null {
   const values: Record<string, unknown> = {};
   const local: Record<string, unknown> = {};
   const changes: string[] = [];
@@ -175,12 +192,14 @@ export function planFeeKFill(state: FeeKState, jailIntakePoc: string | null, quo
 
   // The quote first: its AF / FF feed the surcharges below.
   const fees = { af: state.af, ff: state.ff };
+  let feeKType = state.feeKType;
   if (quote) {
-    if (state.contractFor.length === 0) {
-      values[FEE_K_COLUMNS.contractFor] = { labels: [quote.caseType] };
-      local.contract_for = { labels: [quote.caseType] };
-      changes.push(`Contract for = "${quote.caseType}"`);
+    if (state.feeKType.length === 0 && !quote.oldType) {
+      values[FEE_K_COLUMNS.feeKType] = { labels: [quote.caseType] };
+      local.fee_k_type = { labels: [quote.caseType] };
+      changes.push(`Fee K Type = "${quote.caseType}"`);
       createLabels = quote.newCaseType;
+      feeKType = [quote.caseType];
     }
     for (const [k, col, label] of [["af", FEE_K_COLUMNS.af, "AF"], ["ff", FEE_K_COLUMNS.ff, "FF"], ["pf", FEE_K_COLUMNS.pf, "PF"]] as const) {
       const q = quote[k];
@@ -213,6 +232,13 @@ export function planFeeKFill(state: FeeKState, jailIntakePoc: string | null, quo
       changes.push(`${label} Surcharge = ${money(v)} (3% of ${money(fee)})`);
     }
   }
+  // Where the case goes once paid, from the Fee K Types table.
+  const board = !state.itWillGoTo.trim() && feeKType.length === 1 && boardFor ? boardFor(feeKType[0]!) : null;
+  if (board) {
+    values[FEE_K_COLUMNS.itWillGoTo] = { label: board };
+    local.it_will_go_to = { label: board };
+    changes.push(`It will go to = "${board}"`);
+  }
   if (!changes.length && !quote) return null;
   return { values, local, changes, ...(quote ? { quoteId: quote.id } : {}), ...(createLabels ? { createLabels } : {}) };
 }
@@ -236,6 +262,12 @@ function labels(raw: unknown): string[] {
   return Array.isArray(v) ? v.filter((l): l is string => typeof l === "string" && l.trim() !== "") : [];
 }
 
+/** A status column's label as stored ({ label }), "" when empty. */
+function statusLabel(raw: unknown): string {
+  const l = raw && typeof raw === "object" ? (raw as { label?: unknown }).label : undefined;
+  return typeof l === "string" ? l : "";
+}
+
 export interface FeeKCandidate {
   localId: string;
   mondayItemId: string;
@@ -253,13 +285,17 @@ const dayNum = (ymd: string) => Date.parse(`${ymd.slice(0, 10)}T00:00:00Z`) / 86
 
 /**
  * Which of a client's Fee Ks each of their unused quotes belongs to. A Fee K
- * fits when it was added in QUOTE_WINDOW and its "Contract for…" is empty or
- * the quoted case type. One fit → that one; several → the single one already
- * showing the case type, else none (a person decides). Newest quote first; a
- * Fee K takes at most one quote.
+ * fits when it was added in QUOTE_WINDOW and its "Fee K Type" is empty or
+ * the quoted case type (any, for an `oldType` quote). One fit → that one;
+ * several → the single one already showing the case type, else none (a person
+ * decides). Newest quote first; a Fee K takes at most one quote.
  */
+export function quoteFitsType(q: FeeQuote, feeKType: string[]): boolean {
+  return !!q.oldType || feeKType.length === 0 || feeKType.some((t) => sameType(t, q.caseType));
+}
+
 export function matchQuotes(
-  feeKs: { mondayItemId: string; addedOn: string; contractFor: string[] }[],
+  feeKs: { mondayItemId: string; addedOn: string; feeKType: string[] }[],
   quotes: FeeQuote[],
 ): Map<string, FeeQuote> {
   const out = new Map<string, FeeQuote>();
@@ -269,9 +305,9 @@ export function matchQuotes(
       if (out.has(f.mondayItemId)) return false;
       const d = dayNum(f.addedOn) - qd;
       return d >= -QUOTE_WINDOW.daysBefore && d <= QUOTE_WINDOW.daysAfter
-        && (f.contractFor.length === 0 || f.contractFor.some((t) => sameType(t, q.caseType)));
+        && quoteFitsType(q, f.feeKType);
     });
-    const typed = fits.filter((f) => f.contractFor.some((t) => sameType(t, q.caseType)));
+    const typed = fits.filter((f) => f.feeKType.some((t) => sameType(t, q.caseType)));
     const pick = fits.length === 1 ? fits[0] : typed.length === 1 ? typed[0] : undefined;
     if (pick) out.set(pick.mondayItemId, q);
   }
@@ -290,8 +326,16 @@ function unusedQuotes(db: DatabaseInstance): Map<string, FeeQuote[]> {
   } catch {
     return byProfile; // a database from before schema v32
   }
+  // Fee K Type labels; a quote's case type that isn't one came from the old list.
+  const feeKs = getBoardColumnsFor(db, "fee_ks");
+  const typeLabels = ((feeKs && caseTypeColumn(feeKs))?.options ?? []).map((o) => o.label);
   for (const r of rows) {
-    const q: FeeQuote = { id: r.id, caseType: r.caseType, newCaseType: r.newCaseType === 1, af: r.af, ff: r.ff, pf: r.pf, author: r.author, createdAt: r.createdAt };
+    const newCaseType = r.newCaseType === 1;
+    const oldType = typeLabels.length > 0 && !newCaseType && !typeLabels.some((l) => sameType(l, r.caseType));
+    const q: FeeQuote = {
+      id: r.id, caseType: r.caseType, newCaseType, ...(oldType ? { oldType } : {}),
+      af: r.af, ff: r.ff, pf: r.pf, author: r.author, createdAt: r.createdAt,
+    };
     byProfile.set(r.profile, [...(byProfile.get(r.profile) ?? []), q]);
   }
   return byProfile;
@@ -302,7 +346,7 @@ function unusedQuotes(db: DatabaseInstance): Map<string, FeeQuote[]> {
  * Intake POC is the newest one linked from any of the client's appointments;
  * the quote is the client's P4 consult-note quote (matchQuotes).
  */
-export function findFeeKCandidates(db: DatabaseInstance, since: string): FeeKCandidate[] {
+export function findFeeKCandidates(db: DatabaseInstance, since: string, boardFor: BoardFor | null = null): FeeKCandidate[] {
   const rows = db.prepare(`
     SELECT c.local_id, c.monday_item_id, c.name, c.profile_local_id, c.raw_column_values AS raw,
            COALESCE(c.profile_monday_id, json_extract(c.raw_column_values, '$.profile.linked_item_ids[0]')) AS profileMondayId,
@@ -326,11 +370,12 @@ export function findFeeKCandidates(db: DatabaseInstance, since: string): FeeKCan
     let raw: Record<string, unknown> = {};
     try { raw = JSON.parse(r.raw ?? "{}") as Record<string, unknown>; } catch { /* empty */ }
     const state: FeeKState = {
-      contractFor: labels(raw.contract_for),
+      feeKType: labels(raw.fee_k_type),
       af: num(raw.af), ff: num(raw.ff), pf: num(raw.pf),
       afSurcharge: num(raw.af_surcharge_fee), ffSurcharge: num(raw.ff_surcharge_fee),
       paymentMethod: labels(raw.payment_method),
       pocFullName: typeof raw.poc_full_name_for_fee_ks === "string" ? raw.poc_full_name_for_fee_ks : "",
+      itWillGoTo: statusLabel(raw.it_will_go_to),
     };
     return { r, state };
   });
@@ -343,7 +388,7 @@ export function findFeeKCandidates(db: DatabaseInstance, since: string): FeeKCan
     if (p.r.profileMondayId) byProfile.set(p.r.profileMondayId, [...(byProfile.get(p.r.profileMondayId) ?? []), p]);
   }
   for (const [profile, qs] of quotes) {
-    const feeKs = (byProfile.get(profile) ?? []).map((p) => ({ mondayItemId: p.r.monday_item_id, addedOn: p.r.addedOn, contractFor: p.state.contractFor }));
+    const feeKs = (byProfile.get(profile) ?? []).map((p) => ({ mondayItemId: p.r.monday_item_id, addedOn: p.r.addedOn, feeKType: p.state.feeKType }));
     for (const [id, q] of matchQuotes(feeKs, qs)) quoteFor.set(id, q);
   }
 
@@ -357,7 +402,7 @@ export function findFeeKCandidates(db: DatabaseInstance, since: string): FeeKCan
       }
     }
     const quote = quoteFor.get(r.monday_item_id) ?? null;
-    const fill = planFeeKFill(state, jailIntakePoc, quote);
+    const fill = planFeeKFill(state, jailIntakePoc, quote, boardFor);
     if (fill) out.push({ localId: r.local_id, mondayItemId: r.monday_item_id, name: r.name, state, jailIntakePoc, quote, fill });
   }
   return out;
@@ -376,11 +421,12 @@ export function stateFromMonday(text: Record<string, string>): FeeKState {
   const t = (id: string) => (text[id] ?? "").trim();
   const list = (id: string) => (t(id) ? t(id).split(/\s*,\s*/).filter(Boolean) : []);
   return {
-    contractFor: list(FEE_K_COLUMNS.contractFor),
+    feeKType: list(FEE_K_COLUMNS.feeKType),
     af: num(t(FEE_K_COLUMNS.af)), ff: num(t(FEE_K_COLUMNS.ff)), pf: num(t(FEE_K_COLUMNS.pf)),
     afSurcharge: num(t(FEE_K_COLUMNS.afSurcharge)), ffSurcharge: num(t(FEE_K_COLUMNS.ffSurcharge)),
     paymentMethod: list(FEE_K_COLUMNS.paymentMethod),
     pocFullName: t(FEE_K_COLUMNS.pocFullName),
+    itWillGoTo: t(FEE_K_COLUMNS.itWillGoTo),
   };
 }
 
@@ -400,11 +446,14 @@ export async function runFeeKAutofill(opts: {
   apply: boolean;
   read: ReadFeeK;
   write: WriteFeeK;
+  /** The Fee K Types table's board per Fee K Type (fills an empty "It will go to…"). */
+  boardFor?: BoardFor | null;
   log?: (line: string) => void;
 }): Promise<FeeKRunResult> {
   const { db, since, apply, read, write } = opts;
   const log = opts.log ?? (() => {});
-  const candidates = findFeeKCandidates(db, since);
+  const boardFor = opts.boardFor ?? null;
+  const candidates = findFeeKCandidates(db, since, boardFor);
   const result: FeeKRunResult = { candidates: candidates.length, written: [], skipped: [], failed: [] };
   // Prepared on first use: a dry run may hold a read-only connection.
   const setLocal = (key: string, value: unknown, localId: string) => {
@@ -436,17 +485,18 @@ export async function runFeeKAutofill(opts: {
       }
       const state = stateFromMonday(fresh.text);
       // The quote still applies only if Monday's case type hasn't moved to another one.
-      const quote = c.quote && (state.contractFor.length === 0 || state.contractFor.some((t) => sameType(t, c.quote!.caseType))) ? c.quote : null;
+      const quote = c.quote && quoteFitsType(c.quote, state.feeKType) ? c.quote : null;
       if (c.quote && !quote) {
-        markQuote(c.quote.id, c.mondayItemId, `not used: Fee K is for ${state.contractFor.join(", ")}`);
+        markQuote(c.quote.id, c.mondayItemId, `not used: Fee K is for ${state.feeKType.join(", ")}`);
       }
-      const fill = planFeeKFill(state, c.jailIntakePoc, quote);
+      const fill = planFeeKFill(state, c.jailIntakePoc, quote, boardFor);
       if (!fill || fill.changes.length === 0) {
         if (fill?.quoteId) markQuote(fill.quoteId, c.mondayItemId, "already filled on Monday");
         // Filled on Monday since the last sync: take Monday's values locally so it stops being a candidate.
-        if (state.contractFor.length) setLocal("contract_for", { labels: state.contractFor }, c.localId);
+        if (state.feeKType.length) setLocal("fee_k_type", { labels: state.feeKType }, c.localId);
         for (const k of ["af", "ff", "pf"] as const) if (state[k] != null) setLocal(k, String(state[k]), c.localId);
         if (state.pocFullName) setLocal("poc_full_name_for_fee_ks", state.pocFullName, c.localId);
+        if (state.itWillGoTo) setLocal("it_will_go_to", { label: state.itWillGoTo }, c.localId);
         if (state.afSurcharge != null) setLocal("af_surcharge_fee", String(state.afSurcharge), c.localId);
         if (state.ffSurcharge != null) setLocal("ff_surcharge_fee", String(state.ffSurcharge), c.localId);
         result.skipped.push({ mondayItemId: c.mondayItemId, name: c.name, reason: "already filled on Monday" });

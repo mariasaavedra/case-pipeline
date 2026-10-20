@@ -72,7 +72,7 @@ beforeEach(() => {
   const col = db.prepare(
     "INSERT INTO board_columns (board_key, monday_board_id, column_id, title, type, options, position) VALUES (?, ?, ?, ?, ?, ?, ?)",
   );
-  col.run("fee_ks", "B-FK", "dropdown_ct", "Contract for…", "dropdown", JSON.stringify([{ label: "Bond" }, { label: "I-130" }]), 0);
+  col.run("fee_ks", "B-FK", "dropdown_ct", "Fee K Type", "dropdown", JSON.stringify([{ label: "Bond" }, { label: "I-130" }]), 0);
   col.run("fee_ks", "B-FK", "deal_value", "AF", "numbers", null, 1);
   col.run("fee_ks", "B-FK", "numbers__1", "FF", "numbers", null, 2);
   col.run("fee_ks", "B-FK", "numbers5__1", "PF", "numbers", null, 3);

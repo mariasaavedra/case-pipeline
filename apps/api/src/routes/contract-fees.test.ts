@@ -17,7 +17,7 @@ const SCHEMA: BoardColumns = {
     { columnId: "deal_value", title: "AF", type: "numbers", options: [], position: 0 },
     { columnId: "numbers__1", title: "FF", type: "numbers", options: [], position: 1 },
     { columnId: "numbers5__1", title: "PF", type: "numbers", options: [], position: 2 },
-    { columnId: "dropdown_mkv1db6z", title: "Contract for...", type: "dropdown", options: [{ label: "I-130" }, { label: "U Visa" }], position: 3 },
+    { columnId: "dropdown_mm89vqtc", title: "Fee K Type", type: "dropdown", options: [{ label: "I-130" }, { label: "U Visa" }], position: 3 },
   ] as BoardColumns["columns"],
 };
 
@@ -76,8 +76,8 @@ describe("planContractFees", () => {
       plan: {
         mondayItemId: "item-1", mondayBoardId: "4880153390",
         from: { af: 5500, caseType: ["I-130"] }, to: { af: 6000, caseType: "U Visa" },
-        values: { deal_value: "6000", dropdown_mkv1db6z: { labels: ["U Visa"] } },
-        local: { af: "6000", contract_for: { labels: ["U Visa"] } },
+        values: { deal_value: "6000", dropdown_mm89vqtc: { labels: ["U Visa"] } },
+        local: { af: "6000", fee_k_type: { labels: ["U Visa"] } },
       },
     });
     // Two labels → one is a change too.
@@ -100,14 +100,14 @@ describe("planContractFees", () => {
   it("a new case type needs newCaseType, then Monday adds the label", () => {
     expect(plan({ caseType: "T Visa" })).toMatchObject({ rejection: { status: 400 } });
     const r = plan({ caseType: "  T   Visa ", newCaseType: true });
-    expect("plan" in r && r.plan.values).toEqual({ dropdown_mkv1db6z: { labels: ["T Visa"] } });
-    expect("plan" in r && r.plan.newLabel).toEqual({ columnId: "dropdown_mkv1db6z", label: "T Visa" });
+    expect("plan" in r && r.plan.values).toEqual({ dropdown_mm89vqtc: { labels: ["T Visa"] } });
+    expect("plan" in r && r.plan.newLabel).toEqual({ columnId: "dropdown_mm89vqtc", label: "T Visa" });
     expect(plan({ caseType: "x".repeat(61), newCaseType: true })).toMatchObject({ rejection: { status: 400 } });
   });
 
   it("a \"new\" case type that only differs in case is the existing one", () => {
     const r = plan({ caseType: "u visa", newCaseType: true });
-    expect("plan" in r && r.plan.values).toEqual({ dropdown_mkv1db6z: { labels: ["U Visa"] } });
+    expect("plan" in r && r.plan.values).toEqual({ dropdown_mm89vqtc: { labels: ["U Visa"] } });
     expect("plan" in r && r.plan.newLabel).toBeUndefined();
   });
 });

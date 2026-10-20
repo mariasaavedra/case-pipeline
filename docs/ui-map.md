@@ -235,6 +235,7 @@ Four tabs, each with its own URL (`/settings/<tab>`); `/settings` opens My accou
 | P11.3.3 | Urgency | |
 | P11.3.4 | Documents | Firm address/phone/fax, attorneys (email, USCIS account, bars — first is used), detention facility addresses by Det. Facility label — what M23 fills that Monday doesn't hold |
 | P11.3.5 | Text templates | The texts M28 can send: name + English + Spanish text, placeholders listed, segment count per language, SMS mode (off / test / live). `data/sms-templates.json`, audited |
+| P11.3.6 | Fee K Types | The case lookup table: one row per Fee K Type on Monday — Spanish name, board once paid ("It will go to…" labels), fee sheet job (its AF / FF shown). Filter; rows for a label Monday dropped are marked. Feeds the Fee K auto-fill ("It will go to…") and the contract forms' AF / FF pre-fill. `data/fee-k-types.json`, audited |
 | P11.4 | **Admin** tab *(admin)* | `/settings/admin` |
 | P11.4.1 | Users | Per user: **staff record** (which roster person this login is — sets their My Cases lane and My Day board), role, disable |
 | P11.4.2 | Sync health | |

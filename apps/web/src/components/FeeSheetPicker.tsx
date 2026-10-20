@@ -15,11 +15,11 @@ import { loadFeeSheet } from "../sharepoint/graph";
 import { parseFeeSheet, type FeeSheetRow } from "../lib/fee-sheet";
 import { money } from "../lib/contract-fill";
 
-interface Sheet { name: string; webUrl: string; rows: FeeSheetRow[] }
+export interface FeeSheet { name: string; webUrl: string; rows: FeeSheetRow[] }
 
 // One read per page load; the sheet changes rarely and every picker shares it.
-let cached: Promise<Sheet> | null = null;
-function sheetOnce(): Promise<Sheet> {
+let cached: Promise<FeeSheet> | null = null;
+export function feeSheetOnce(): Promise<FeeSheet> {
   cached ??= loadFeeSheet()
     .then((s) => ({ name: s.name, webUrl: s.webUrl, rows: parseFeeSheet(s.values) }))
     .catch((e: unknown) => { cached = null; throw e; });
@@ -35,14 +35,14 @@ const inputStyle = { borderColor: "var(--color-border)", background: "var(--colo
 
 export function FeeSheetPicker({ onPick }: Props) {
   const id = useId();
-  const [sheet, setSheet] = useState<Sheet | null>(null);
+  const [sheet, setSheet] = useState<FeeSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [picked, setPicked] = useState<FeeSheetRow | null>(null);
 
   const load = () => {
     if (sheet || error) return;
-    sheetOnce().then(setSheet).catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not read the fee sheet"));
+    feeSheetOnce().then(setSheet).catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not read the fee sheet"));
   };
   useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
 

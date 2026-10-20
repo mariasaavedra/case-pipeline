@@ -79,6 +79,8 @@ import { registerDocumentRoutes } from "./routes/documents.js";
 import { initDocumentSettings } from "./documents/document-settings.js";
 import { registerSmsRoutes } from "./routes/sms.js";
 import { initSmsTemplates } from "./sms/templates.js";
+import { feeKTypeLookup, initFeeKTypes, loadFeeKTypes } from "./fee-k-types.js";
+import { registerFeeKTypeRoutes } from "./routes/fee-k-types.js";
 import { initNotifySettings } from "./notify/settings.js";
 import { registerIntegrationRoutes } from "./routes/integrations.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
@@ -226,6 +228,7 @@ initStatusOverrides(DATA_DIR);
 initUrgencySettings(DATA_DIR);
 initDocumentSettings(DATA_DIR);
 initSmsTemplates(DATA_DIR);
+initFeeKTypes(DATA_DIR);
 initNotifySettings(DATA_DIR);
 
 /** Build the status → urgency map the Active Cases query consumes. */
@@ -597,6 +600,8 @@ registerCallLogRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOpt
 registerSmsRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions, forceDryRun: DB_SOURCE === "seed" });
 // Settings → Integrations (Slack + texting) — see routes/integrations.ts
 registerIntegrationRoutes(app);
+// Settings → Firm: Fee K Types lookup table (P11.3.6) — see routes/fee-k-types.ts
+registerFeeKTypeRoutes(app, { db });
 
 // =============================================================================
 // Mail intake (prototype, read-only) — see routes/mail.ts
@@ -1080,7 +1085,8 @@ function scheduleFeeKAutofill() {
       feeKInFlight = true;
       withMondayJob("fee-k-autofill", async () => {
         const io = await mondayFeeKIo();
-        const r = await runFeeKAutofill({ db, since, apply: true, ...io, log: (l) => console.log(l) });
+        const routing = feeKTypeLookup(loadFeeKTypes());
+        const r = await runFeeKAutofill({ db, since, apply: true, ...io, boardFor: (t) => routing(t)?.board || null, log: (l) => console.log(l) });
         for (const w of r.written) {
           recordAudit({
             actor: { userId: null, email: "system:fee-k-autofill" },
