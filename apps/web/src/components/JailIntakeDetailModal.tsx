@@ -34,6 +34,7 @@ import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { StatusEditor } from "./StatusEditor";
 import { ClientLink } from "./ClientPeek";
+import { DateInput } from "./ui/date-input";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -167,7 +168,7 @@ function BookConsultSection({ intake, onSaved }: { intake: JailIntake; onSaved?:
             </div>
             <label className="flex-[1.4] min-w-[140px]">
               <FieldLabel>Consult date</FieldLabel>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              <DateInput value={date} onChange={(e) => setDate(e.target.value)}
                 className="w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
             </label>
             <label className="flex-1 min-w-[110px]">

@@ -142,4 +142,63 @@ describe("M22 preview", () => {
     await flush();
     expect(button("Notes · Timeline · Documents")).toBeUndefined();
   });
+
+  it("keeps the draft when closed, resumes it, and Start over goes back to Monday's pre-fill", async () => {
+    localStorage.clear();
+    const draftContract = { ...contract, localId: "c-draft" } as PendingContract;
+    const open = async () => {
+      document.body.innerHTML = "";
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      const root = createRoot(host);
+      await act(async () => { root.render(<GenerateContractModal contract={draftContract} onClose={() => {}} />); });
+      await flush();
+      return root;
+    };
+    const nameField = () => document.getElementById("m22-clientName") as HTMLInputElement;
+    const typeInto = (el: HTMLInputElement, v: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, v);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    // Opening and closing without a change leaves nothing.
+    let root = await open();
+    expect(document.body.textContent).not.toContain("Picked up where you left off");
+    await act(async () => { root.unmount(); });
+    expect(localStorage.getItem("m22-draft:c-draft")).toBeNull();
+
+    root = await open();
+    await act(async () => { typeInto(nameField(), "Ana María Lopez"); });
+    await act(async () => { root.unmount(); });
+
+    root = await open();
+    expect(nameField().value).toBe("Ana María Lopez");
+    expect(document.body.textContent).toContain("Picked up where you left off");
+
+    await act(async () => { button("Start over")!.click(); });
+    await flush();
+    expect(nameField().value).toBe("Ana Lopez");
+    expect(document.body.textContent).not.toContain("Picked up where you left off");
+    expect(localStorage.getItem("m22-draft:c-draft")).toBeNull();
+    await act(async () => { root.unmount(); });
+  });
+
+  it("sending clears the draft", async () => {
+    localStorage.clear();
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
+    await flush();
+    const field = document.getElementById("m22-clientName") as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Ana L.");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(localStorage.getItem("m22-draft:c1")).not.toBeNull();
+    await act(async () => { button("Preview PDF")!.click(); });
+    await flush();
+    await act(async () => { button("Send for signature")!.click(); });
+    await flush();
+    expect(localStorage.getItem("m22-draft:c1")).toBeNull();
+  });
 });

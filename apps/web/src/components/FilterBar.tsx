@@ -8,6 +8,7 @@ import type { FilterOptions } from "../api";
 import { boardDisplayName } from "@case-pipeline/query/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
+import { DateInput } from "./ui/date-input";
 
 interface FilterValues {
   status: string;
@@ -179,15 +180,13 @@ export function FilterBar({ filters, onFilterChange, onClear, hasActiveFilters, 
         >
           Dates
         </span>
-        <input
-          type="date"
+        <DateInput
           value={filters.date_from}
           onChange={(e) => onFilterChange("date_from", e.target.value)}
           style={filters.date_from ? { ...dateStyle, borderColor: "var(--color-amber)" } : dateStyle}
         />
         <span style={{ color: "var(--color-ink-faint)", fontSize: 12 }}>to</span>
-        <input
-          type="date"
+        <DateInput
           value={filters.date_to}
           onChange={(e) => onFilterChange("date_to", e.target.value)}
           style={filters.date_to ? { ...dateStyle, borderColor: "var(--color-amber)" } : dateStyle}

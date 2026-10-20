@@ -21,6 +21,7 @@ import { createAppointment, fetchBookableBoards, searchClients, type BookableBoa
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
+import { DateInput } from "./ui/date-input";
 
 const labelStyle = {
   display: "block",
@@ -224,7 +225,7 @@ export function NewAppointmentModal({ profileLocalId, clientName, onClose, onBoo
               <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
                 <label style={{ flex: 2 }}>
                   <span style={labelStyle}>Date</span>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                  <DateInput value={date} onChange={(e) => setDate(e.target.value)}
                     className="w-full rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
                 </label>
                 <label style={{ flex: 1 }}>

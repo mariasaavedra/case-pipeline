@@ -13,6 +13,7 @@ import { SectionCode } from "./ScreenCode";
 import { settingsSectionTitle } from "./settingsStyles";
 import { AUDIT_FAMILIES, describeAudit, localDayKey, ymd } from "../utils/audit-labels";
 import { ClientLink } from "./ClientPeek";
+import { DateInput } from "./ui/date-input";
 
 const PAGE = 50;
 
@@ -127,11 +128,11 @@ export function AuditLogSection() {
         </label>
         <label style={s.filterLabel}>
           From
-          <input type="date" value={filters.from ?? ""} onChange={(e) => set({ from: e.target.value || undefined })} style={s.select} />
+          <DateInput value={filters.from ?? ""} onChange={(e) => set({ from: e.target.value || undefined })} style={s.select} />
         </label>
         <label style={s.filterLabel}>
           To
-          <input type="date" value={filters.to ?? ""} onChange={(e) => set({ to: e.target.value || undefined })} style={s.select} />
+          <DateInput value={filters.to ?? ""} onChange={(e) => set({ to: e.target.value || undefined })} style={s.select} />
         </label>
         {filtered && (
           <button onClick={() => setFilters({})} style={s.clear}>Clear filters</button>

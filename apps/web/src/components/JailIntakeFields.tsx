@@ -23,6 +23,7 @@ import {
   type JailIntakeFieldValues,
   type JailIntakeFieldName,
 } from "./jail-intake-fields";
+import { DateInput } from "./ui/date-input";
 
 export {
   INTAKE_CREATE_STATUSES,
@@ -103,8 +104,7 @@ export function JailIntakeFields({ value, onChange, omit = [] }: Props) {
   const date = (k: JailIntakeFieldName, label: string) => (
     <label style={{ display: "block", marginBottom: 12, flex: 1 }}>
       <span style={labelStyle}>{label}</span>
-      <input
-        type="date"
+      <DateInput
         value={value[k]}
         onChange={(e) => set(k)(e.target.value)}
         className="w-full rounded-md px-2 py-1.5 text-sm"

@@ -29,6 +29,7 @@ import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { useBoardStatusOptions } from "../StatusOptionsProvider";
 import { SectionCode } from "./ScreenCode";
+import { DateInput } from "./ui/date-input";
 
 const PAGE_SIZE = 50;
 const WIDTHS_STORAGE_KEY = "call-log-column-widths";
@@ -267,8 +268,7 @@ export function CallLogPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
           {dayFilter !== null && (
             <>
-              <input
-                type="date"
+              <DateInput
                 value={dayFilter}
                 onChange={(e) => setDayFilter(e.target.value || todayIso())}
                 className="rounded-md px-2 py-1 text-sm"

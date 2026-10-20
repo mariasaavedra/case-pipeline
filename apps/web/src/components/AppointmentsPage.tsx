@@ -42,6 +42,7 @@ import {
   formatTime, formatLongDate, addDays, rowStates, nowLineIndex, defaultSelection, outcomeLabels,
   fileKind, prepStamp, isHttpUrl, detaineeReason, summaryLine, layoutFor, firstName, type RowState, type Layout,
 } from "../lib/my-day";
+import { DateInput } from "./ui/date-input";
 
 // =============================================================================
 // URL + remembered board
@@ -873,7 +874,7 @@ export function AppointmentsPage() {
               <button type="button" aria-label="Next day" style={navBtn} onClick={() => setDate(addDays(day, 1))}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M6 3l5 5-5 5" /></svg>
               </button>
-              <input type="date" aria-label="Pick a date" value={day} onChange={(e) => e.target.value && setDate(e.target.value)}
+              <DateInput aria-label="Pick a date" value={day} onChange={(e) => e.target.value && setDate(e.target.value)}
                 style={{ height: 40, border: "none", background: "transparent", color: "var(--color-ink-muted)", fontSize: 13, padding: "0 6px", fontFamily: "var(--font-body)" }} />
             </div>
             {data && data.boards.length > 1 && (
