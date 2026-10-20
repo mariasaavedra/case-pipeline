@@ -1442,6 +1442,8 @@ export interface StaffMember {
   email: string | null;
   mondayUserId: string | null;
   phoneExt: string | null;
+  /** Slack member id (U…), for DMs. */
+  slackUserId: string | null;
   attorneyBoard: string | null;
   active: boolean;
   startDate: string | null;
@@ -1469,6 +1471,7 @@ export type StaffPatch = Partial<{
   name: string;
   email: string | null;
   phoneExt: string | null;
+  slackUserId: string | null;
   attorneyBoard: string | null;
   active: boolean;
   startDate: string | null;

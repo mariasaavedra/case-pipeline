@@ -11,6 +11,9 @@ export function isStaffRole(v: unknown): v is StaffRole {
   return typeof v === "string" && (STAFF_ROLES as readonly string[]).includes(v);
 }
 
+/** A Slack member id: U… (or W… on Enterprise Grid). Not a D… DM-channel id. */
+export const SLACK_USER_ID_RE = /^[UW][A-Z0-9]{6,}$/;
+
 /**
  * Where a row came from: a Monday workspace user, a name found only on the
  * boards (someone no longer in Monday — former staff, as a rule), or added by
@@ -25,6 +28,8 @@ export const createStaffTablesSql = `
     email           TEXT,
     monday_user_id  TEXT UNIQUE,
     phone_ext       TEXT,
+    -- v17: their Slack member id (U…), for DMs. From Slack's "Copy member ID".
+    slack_user_id   TEXT,
     attorney_board  TEXT,
     active          INTEGER NOT NULL DEFAULT 1,
     start_date      TEXT,

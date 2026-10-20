@@ -427,6 +427,14 @@ const MIGRATIONS: Migration[] = [
       usersDb.exec(createOffboardingTableSql);
     },
   },
+  {
+    // A person's Slack member id (U…), so the app can DM them. Filled by
+    // scripts/staff-import.ts from the staff table, or in Settings → Staff.
+    version: 17,
+    up: () => {
+      if (!columnExists("staff", "slack_user_id")) usersDb.exec(`ALTER TABLE staff ADD COLUMN slack_user_id TEXT`);
+    },
+  },
 ];
 
 const TARGET_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

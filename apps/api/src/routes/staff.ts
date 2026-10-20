@@ -4,7 +4,7 @@
 // GET    /api/staff                 roster + role list
 // GET    /api/staff/unmatched       board names that resolve to no one
 // POST   /api/staff                 add a person by hand
-// PATCH  /api/staff/:id             edit fields (name, email, ext., board, active, dates)
+// PATCH  /api/staff/:id             edit fields (name, email, ext., Slack ID, board, active, dates)
 // PUT    /api/staff/:id/roles       replace roles (marks them reviewed)
 // POST   /api/staff/:id/aliases     {alias, move?} — 409 when another person holds it
 // DELETE /api/staff/:id/aliases?alias=
@@ -17,7 +17,7 @@ import type BetterSqlite3 from "better-sqlite3";
 import { requireAdmin } from "../auth/middleware.js";
 import { auditFromReq } from "../audit/log.js";
 import { usersDb } from "../db/users-db.js";
-import { STAFF_ROLES, isStaffRole } from "../staff/schema.js";
+import { STAFF_ROLES, SLACK_USER_ID_RE, isStaffRole } from "../staff/schema.js";
 import {
   listStaff,
   getStaff,
@@ -44,16 +44,22 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** Whitelist a PATCH body. Returns an error string for a bad value. */
 export function parseStaffPatch(body: Record<string, unknown>): StaffPatch | string {
   const out: StaffPatch = {};
-  const text = (key: "name" | "email" | "phoneExt" | "attorneyBoard") => {
+  const text = (key: "name" | "email" | "phoneExt" | "slackUserId" | "attorneyBoard") => {
     if (!(key in body)) return null;
     const v = body[key];
     if (v !== null && typeof v !== "string") return `${key} must be text`;
     (out as Record<string, unknown>)[key] = v === null ? null : v.trim() || null;
     return null;
   };
-  for (const k of ["name", "email", "phoneExt", "attorneyBoard"] as const) {
+  for (const k of ["name", "email", "phoneExt", "slackUserId", "attorneyBoard"] as const) {
     const err = text(k);
     if (err) return err;
+  }
+  if (out.slackUserId) {
+    out.slackUserId = out.slackUserId.toUpperCase();
+    if (!SLACK_USER_ID_RE.test(out.slackUserId)) {
+      return "Slack ID must be a member id starting with U (Slack profile → ⋮ → Copy member ID)";
+    }
   }
   if ("name" in out && !out.name) return "name can't be empty";
   if ("active" in body) {

@@ -80,7 +80,7 @@ One Slack app with a **bot token** (`chat:write`, `im:write`, `users:read`,
 | Notification | Where | When |
 |---|---|---|
 | **Daily alerts digest** | `SLACK_ALERTS_CHANNEL` | Weekdays 8:00 (firm TZ): critical + warning counts per group, top items, link to /alerts |
-| **Per-person DMs** | DM | Weekdays 8:00: each user's own cases (My Cases lanes: overdue, due ≤7 days, hearings this week). App user ↔ Slack user matched by **email** (`users.lookupByEmail`) — no mapping table. Opt-out in Preferences |
+| **Per-person DMs** | DM | Weekdays 8:00: each user's own cases (My Cases lanes: overdue, due ≤7 days, hearings this week). Sent to the staff roster's `slack_user_id` (v17, from the staff table import — `docs/features/staff-roster.md`), so no `users.lookupByEmail` and no `users:read.email` scope. Opt-out in Preferences |
 | **Workflow events** | `SLACK_EVENTS_CHANNEL` | Contract client-signed / payment link sent, consult prepped, mail scan with notices to review, SMS sent |
 | **Ops failures** | `SLACK_OPS_CHANNEL` | Sync run failed, write-queue item permanently failed, scheduled job exited non-zero. Throttled: one post per kind per hour |
 

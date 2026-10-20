@@ -25,6 +25,8 @@ export interface StaffMember {
   email: string | null;
   mondayUserId: string | null;
   phoneExt: string | null;
+  /** Slack member id (U…), for DMs. */
+  slackUserId: string | null;
   attorneyBoard: string | null;
   active: boolean;
   startDate: string | null;
@@ -44,6 +46,7 @@ interface StaffRow {
   email: string | null;
   monday_user_id: string | null;
   phone_ext: string | null;
+  slack_user_id: string | null;
   attorney_board: string | null;
   active: number;
   start_date: string | null;
@@ -185,6 +188,7 @@ export interface StaffInput {
   email?: string | null;
   mondayUserId?: string | null;
   phoneExt?: string | null;
+  slackUserId?: string | null;
   attorneyBoard?: string | null;
   active?: boolean;
   startDate?: string | null;
@@ -195,14 +199,15 @@ export interface StaffInput {
 export function createStaff(db: Database, input: StaffInput): number {
   const res = db
     .prepare(
-      `INSERT INTO staff (name, email, monday_user_id, phone_ext, attorney_board, active, start_date, end_date, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO staff (name, email, monday_user_id, phone_ext, slack_user_id, attorney_board, active, start_date, end_date, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name.trim(),
       input.email?.trim() || null,
       input.mondayUserId ?? null,
       input.phoneExt?.trim() || null,
+      input.slackUserId?.trim() || null,
       input.attorneyBoard?.trim() || null,
       input.active === false ? 0 : 1,
       input.startDate ?? null,
@@ -220,6 +225,7 @@ const PATCH_COLUMNS: Record<keyof StaffPatch, string> = {
   name: "name",
   email: "email",
   phoneExt: "phone_ext",
+  slackUserId: "slack_user_id",
   attorneyBoard: "attorney_board",
   active: "active",
   startDate: "start_date",
@@ -521,6 +527,7 @@ function toMember(r: StaffRow): Omit<StaffMember, "roles" | "aliases" | "login">
     email: r.email,
     mondayUserId: r.monday_user_id,
     phoneExt: r.phone_ext,
+    slackUserId: r.slack_user_id,
     attorneyBoard: r.attorney_board,
     active: r.active === 1,
     startDate: r.start_date,

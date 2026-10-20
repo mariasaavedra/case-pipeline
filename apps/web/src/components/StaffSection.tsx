@@ -271,7 +271,7 @@ function StaffRow(props: {
             {s.source === "monday" && <span style={styles.tag} title={`Monday user #${s.mondayUserId}`}>Monday</span>}
           </div>
           <div style={styles.sub}>
-            {[s.email, s.phoneExt && `ext. ${s.phoneExt}`, s.login ? `app login${s.login.active ? "" : " (disabled)"}` : null]
+            {[s.email, s.phoneExt && `ext. ${s.phoneExt}`, s.slackUserId && "Slack", s.login ? `app login${s.login.active ? "" : " (disabled)"}` : null]
               .filter(Boolean)
               .join(" · ") || "—"}
           </div>
@@ -334,11 +334,14 @@ function StaffEditor({
     name: s.name,
     email: s.email ?? "",
     phoneExt: s.phoneExt ?? "",
+    slackUserId: s.slackUserId ?? "",
     startDate: s.startDate ?? "",
   });
   const [alias, setAlias] = useState("");
   const dirty =
-    form.name !== s.name || form.email !== (s.email ?? "") || form.phoneExt !== (s.phoneExt ?? "") || form.startDate !== (s.startDate ?? "");
+    form.name !== s.name || form.email !== (s.email ?? "") || form.phoneExt !== (s.phoneExt ?? "") ||
+    form.slackUserId !== (s.slackUserId ?? "") ||
+    form.startDate !== (s.startDate ?? "");
 
   return (
     <div style={styles.editor}>
@@ -351,6 +354,14 @@ function StaffEditor({
         </Field>
         <Field label="Phone ext.">
           <input style={styles.input} value={form.phoneExt} onChange={(e) => setForm({ ...form, phoneExt: e.target.value })} />
+        </Field>
+        <Field label="Slack ID (profile → ⋮ → Copy member ID)">
+          <input
+            style={styles.input}
+            value={form.slackUserId}
+            placeholder="U…"
+            onChange={(e) => setForm({ ...form, slackUserId: e.target.value.trim() })}
+          />
         </Field>
         <Field label="Start date">
           <DateInput style={styles.input} value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
@@ -395,7 +406,13 @@ function StaffEditor({
           style={styles.primaryBtn}
           disabled={!dirty || busy || !form.name.trim()}
           onClick={() =>
-            onPatch({ name: form.name, email: form.email || null, phoneExt: form.phoneExt || null, startDate: form.startDate || null })
+            onPatch({
+              name: form.name,
+              email: form.email || null,
+              phoneExt: form.phoneExt || null,
+              slackUserId: form.slackUserId || null,
+              startDate: form.startDate || null,
+            })
           }
         >
           Save
