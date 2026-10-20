@@ -113,7 +113,7 @@ function seed() {
   prep.run("1st time", "Phone", JSON.stringify(body), "Karla");
   db.prepare(
     `INSERT INTO board_columns (board_key, monday_board_id, column_id, title, type, options, position)
-     VALUES ('fee_ks', '8025467270', 'dropdown_mkv1db6z', 'Contract for...', 'dropdown', ?, 6)`,
+     VALUES ('fee_ks', '8025467270', 'dropdown_mm89vqtc', 'Fee K Type', 'dropdown', ?, 6)`,
   ).run(JSON.stringify([{ index: 1, label: "Bond" }, { index: 2, label: "I-130" }]));
 }
 

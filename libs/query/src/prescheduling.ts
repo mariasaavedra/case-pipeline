@@ -9,6 +9,7 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 import { makeStaffNames, type StaffResolver } from "./staff-names";
+import { feeKCaseTypeSql } from "./fee-k-case-type";
 type Database = BetterSqlite3.Database;
 
 // =============================================================================
@@ -23,7 +24,7 @@ export interface PreschedulingCase {
   mondayItemId: string | null;
   clientName: string;
   clientLocalId: string | null;
-  /** "Contract for…" labels (I-130, Full Packet…). */
+  /** Case type labels: Fee K Type, else the older "Contract for…" (feeKCaseTypeSql). */
   contractFor: string[];
   /** PS Stage (status6__1). Null when not set. */
   psStage: string | null;
@@ -172,7 +173,7 @@ export function getPrescheduling(db: Database, options: PreschedulingOptions = {
       json_extract(c.raw_column_values, '$.ps_stage.label')                 AS psStage,
       json_extract(c.raw_column_values, '$.contract_stage.label')           AS contractStage,
       json_extract(c.raw_column_values, '$.it_will_go_to.label')            AS itWillGoTo,
-      json_extract(c.raw_column_values, '$.contract_for.labels')            AS contractFor,
+      ${feeKCaseTypeSql()}            AS contractFor,
       json_extract(c.raw_column_values, '$.hire_date.date')                 AS hireDate,
       json_extract(c.raw_column_values, '$.reminder_sent_checked_on.date')  AS reminderSentOn,
       json_extract(c.raw_column_values, '$.evidence_received_date.date')    AS evidenceReceivedOn,

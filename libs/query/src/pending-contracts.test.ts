@@ -34,6 +34,7 @@ interface FeeKOpts {
   af?: number | string;
   ff?: number | string;
   contractFor?: string[];
+  feeKType?: string[];
   email?: string;
   address?: string;
   deleted?: boolean;
@@ -49,6 +50,7 @@ function insertFeeK(db: DatabaseInstance, o: FeeKOpts) {
     ...(o.af !== undefined ? { af: o.af } : {}),
     ...(o.ff !== undefined ? { ff: o.ff } : {}),
     ...(o.contractFor ? { contract_for: { labels: o.contractFor } } : {}),
+    ...(o.feeKType ? { fee_k_type: { labels: o.feeKType } } : {}),
     ...(o.email !== undefined ? { e_mail: o.email } : {}),
     ...(o.address !== undefined ? { address: o.address } : {}),
   };
@@ -66,6 +68,20 @@ const byId = (db: DatabaseInstance) => Object.fromEntries(get(db).contracts.map(
 // =============================================================================
 
 describe("getPendingContracts", () => {
+  test("case type = Fee K Type, else the older Contract for", () => {
+    const db = freshDb();
+    insertFeeK(db, { localId: "new", feeKType: ["Master (c)"], contractFor: ["Immigration Court"] });
+    insertFeeK(db, { localId: "old", contractFor: ["Bond"] });
+    insertFeeK(db, { localId: "emptyNew", feeKType: [], contractFor: ["I-130"] });
+    insertFeeK(db, { localId: "none" });
+    const c = byId(db);
+    expect(c.new!.contractFor).toEqual(["Master (c)"]);
+    expect(c.old!.contractFor).toEqual(["Bond"]);
+    expect(c.emptyNew!.contractFor).toEqual(["I-130"]);
+    expect(c.none!.contractFor).toEqual([]);
+    db.close();
+  });
+
   test("only live Pending Fee Ks are returned", () => {
     const db = freshDb();
     insertFeeK(db, { localId: "pending" });
@@ -143,8 +159,8 @@ describe("getPendingContracts", () => {
     insertFeeK(db, { localId: "zeroAf", attorney: "William Hanna", af: 0, contractFor: ["Bond"], email: "a@b.co", address: "Detained in Chase" });
     const c = byId(db);
     expect(c.full!.missing).toEqual([]);
-    expect(c.bare!.missing).toEqual(["Contract for", "AF", "Attorney", "E-mail", "Address"]);
-    expect(c.blank!.missing).toEqual(["Contract for", "AF", "Attorney", "E-mail", "Address"]);
+    expect(c.bare!.missing).toEqual(["Fee K Type", "AF", "Attorney", "E-mail", "Address"]);
+    expect(c.blank!.missing).toEqual(["Fee K Type", "AF", "Attorney", "E-mail", "Address"]);
     // AF 0 is a decision (no attorney fee), not a gap.
     expect(c.zeroAf!.missing).toEqual([]);
     db.close();

@@ -26,7 +26,7 @@ import { dataSource } from "../data-source/index.js";
 import { withTokenFallback } from "../write-auth.js";
 import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
-import { getBoardColumnsFor } from "@case-pipeline/query";
+import { feeKCaseTypeSql, getBoardColumnsFor } from "@case-pipeline/query";
 import { usersDb } from "../db/users-db.js";
 import { FEE_K_ASSISTANT, makeMondayUserByLogin, peopleValue } from "../contract-info.js";
 import { hearingKindOf } from "@case-pipeline/query";
@@ -168,7 +168,7 @@ export function registerContractDocumentRoutes(
       SELECT c.monday_item_id, c.name AS itemName, p.local_id AS profileLocalId,
              p.name AS clientName, p.email, p.address,
              json_extract(c.raw_column_values, '$.attorney.label')      AS attorney,
-             json_extract(c.raw_column_values, '$.contract_for.labels') AS contractFor,
+             ${feeKCaseTypeSql()} AS contractFor,
              json_extract(c.raw_column_values, '$.af')                  AS af,
              json_extract(c.raw_column_values, '$.ff')                  AS ff,
              json_extract(c.raw_column_values, '$.pf')                  AS pf,

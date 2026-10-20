@@ -43,7 +43,7 @@ import { usersDb } from "../db/users-db.js";
 import { currentUserId } from "../db/user-context.js";
 import { dataSource } from "../data-source/index.js";
 import { enqueueWrite } from "../write-queue/processor.js";
-import { getBoardColumnsFor } from "@case-pipeline/query";
+import { feeKCaseTypeSql, getBoardColumnsFor } from "@case-pipeline/query";
 import { createNotification, fetchBoardStructure } from "@case-pipeline/monday";
 import { notifyEvent, slackEscape, withLink } from "../notify/slack.js";
 import { makeMondayUserByLogin } from "../contract-info.js";
@@ -84,7 +84,7 @@ function feeK(db: DatabaseInstance, where: string, arg: string): FeeKRow | undef
   return db.prepare(`
     SELECT c.local_id AS localId, c.monday_item_id AS mondayId, COALESCE(p.name, c.name) AS clientName,
            json_extract(c.raw_column_values, '$.contract_stage.label') AS stage, c.group_title AS "group",
-           json_extract(c.raw_column_values, '$.contract_for.labels') AS contractFor,
+           ${feeKCaseTypeSql()} AS contractFor,
            json_extract(c.raw_column_values, '$.af') AS af, json_extract(c.raw_column_values, '$.ff') AS ff,
            json_extract(c.raw_column_values, '$.pf') AS pf
       FROM contracts c LEFT JOIN profiles p ON p.local_id = c.profile_local_id

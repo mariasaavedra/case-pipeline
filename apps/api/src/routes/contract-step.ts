@@ -27,7 +27,7 @@ import type { TokenFallbackOptions } from "../write-auth.js";
 import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
-import { getBoardColumnsFor, CONTRACT_STEPS, FEE_K_COLUMN_IDS } from "@case-pipeline/query";
+import { feeKCaseTypeSql, getBoardColumnsFor, CONTRACT_STEPS, FEE_K_COLUMN_IDS } from "@case-pipeline/query";
 import type { BoardColumns, ContractStep } from "@case-pipeline/query";
 import { notifyEvent, inBackground, mondayItemUrl } from "../notify/slack.js";
 import { contractStepEvent } from "../notify/events.js";
@@ -200,7 +200,7 @@ export function registerContractStepRoutes(app: Express, deps: ContractStepDeps)
       const c = db
         .prepare(
           `SELECT c.monday_item_id AS mondayItemId, COALESCE(p.name, c.name) AS clientName,
-                  json_extract(c.raw_column_values, '$.contract_for.labels') AS contractFor
+                  ${feeKCaseTypeSql()} AS contractFor
              FROM contracts c LEFT JOIN profiles p ON p.local_id = c.profile_local_id
             WHERE c.local_id = ?`,
         )

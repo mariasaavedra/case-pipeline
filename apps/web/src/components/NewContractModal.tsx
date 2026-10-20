@@ -1,7 +1,7 @@
 // =============================================================================
 // NewContractModal — create a Fee K (contract) for a client
 // =============================================================================
-// Case type (the Fee Ks "Contract for..." dropdown, real options) + AF/FF/PF
+// Case type (the Fee Ks "Fee K Type" dropdown, real options) + AF/FF/PF
 // amounts + attorney + the client's e-mail and address (pre-filled from the
 // profile, editable, saved there). All five things a contract is generated
 // from are required (contractFieldProblems), so P14 never gets an incomplete one. Creates the item on Monday via createContract, named "<client> —

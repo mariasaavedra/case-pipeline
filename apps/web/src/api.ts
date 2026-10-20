@@ -833,6 +833,36 @@ export function updateSmsTemplates(templates: SmsTemplate[]): Promise<SmsTemplat
   });
 }
 
+// Settings → Firm → Fee K Types (P11.3.6) — routes/fee-k-types.ts
+/** One Fee K Type: its Spanish name, the board once paid, the fee sheet job that prices it. */
+export interface FeeKTypeRow {
+  feeKType: string;
+  spanish: string;
+  /** An "It will go to…" label; "" = not set. */
+  board: string;
+  /** A fee sheet Job; "" = not set. */
+  feeSheetJob: string;
+}
+export interface FeeKTypesTable {
+  rows: FeeKTypeRow[];
+  /** Monday's Fee K Type labels (synced). */
+  feeKTypes: string[];
+  /** Monday's "It will go to…" labels (synced). */
+  boards: string[];
+  /** No admin has saved yet: rows are the starting draft, used for nothing until saved. */
+  draft: boolean;
+}
+export function fetchFeeKTypes(): Promise<FeeKTypesTable> {
+  return apiFetch<FeeKTypesTable>("/api/settings/fee-k-types");
+}
+export function updateFeeKTypes(rows: FeeKTypeRow[]): Promise<FeeKTypesTable> {
+  return apiFetch<FeeKTypesTable>("/api/settings/fee-k-types", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rows }),
+  });
+}
+
 // Settings → Integrations (P11.5) — routes/integrations.ts
 export type SlackChannelKind = "events" | "ops" | "alerts";
 export interface NotifyEventDef { key: string; kind: SlackChannelKind; label: string; description: string }
@@ -899,7 +929,7 @@ export async function recordContractStep(
 
 export type ContractFees = { af: number | null; ff: number | null; pf: number | null };
 
-/** Change a Fee K's AF / FF / PF and/or its case type ("Contract for…"; one
+/** Change a Fee K's AF / FF / PF and/or its case type ("Fee K Type"; one
  * label, replacing what was there; `newCaseType` = add it to the dropdown).
  * Only what changed is written; a null fee clears. `from` is what the user
  * saw — 409 if Monday changed since. */

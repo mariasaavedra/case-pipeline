@@ -11,7 +11,7 @@
 // =============================================================================
 
 export interface ContractFieldValues {
-  /** A label from the Fee Ks "Contract for…" dropdown — or a new one (below). */
+  /** A label from the Fee Ks "Fee K Type" dropdown — or a new one (below). */
   caseType: string;
   /** `caseType` is not on the dropdown yet: Monday adds it on create. */
   newCaseType?: boolean;

@@ -58,7 +58,7 @@ describe("parsePocName", () => {
   });
 });
 
-const empty: FeeKState = { contractFor: [], af: null, ff: null, pf: null, afSurcharge: null, ffSurcharge: null, paymentMethod: [], pocFullName: "" };
+const empty: FeeKState = { feeKType: [], af: null, ff: null, pf: null, afSurcharge: null, ffSurcharge: null, paymentMethod: [], pocFullName: "", itWillGoTo: "" };
 const CREDIT = "CREDIT Card - Surcharge Applies";
 
 describe("planFeeKFill", () => {
@@ -92,11 +92,33 @@ describe("planFeeKFill", () => {
   });
 });
 
+describe("planFeeKFill — It will go to… from the Fee K Types table", () => {
+  const boardFor = (t: string) => (t === "Motion (c)" ? "Motions" : null);
+
+  it("fills an empty It will go to… from the Fee K Type's board", () => {
+    const fill = planFeeKFill({ ...empty, feeKType: ["Motion (c)"] }, null, null, boardFor);
+    expect(fill?.values).toEqual({ [FEE_K_COLUMNS.itWillGoTo]: { label: "Motions" } });
+    expect(fill?.local).toEqual({ it_will_go_to: { label: "Motions" } });
+  });
+
+  it("never overwrites a board someone set; nothing for an unmapped type, no type, or two types", () => {
+    expect(planFeeKFill({ ...empty, feeKType: ["Motion (c)"], itWillGoTo: "Court Cases" }, null, null, boardFor)).toBeNull();
+    expect(planFeeKFill({ ...empty, feeKType: ["Master (c)"] }, null, null, boardFor)).toBeNull();
+    expect(planFeeKFill(empty, null, null, boardFor)).toBeNull();
+    expect(planFeeKFill({ ...empty, feeKType: ["Motion (c)", "Master (c)"] }, null, null, boardFor)).toBeNull();
+  });
+
+  it("uses the case type a quote is filling in the same write", () => {
+    const fill = planFeeKFill(empty, null, { id: 9, caseType: "Motion (c)", newCaseType: false, af: null, ff: null, pf: null, author: null, createdAt: "2026-10-20 12:00:00" }, boardFor);
+    expect(fill?.values[FEE_K_COLUMNS.itWillGoTo]).toEqual({ label: "Motions" });
+  });
+});
+
 describe("stateFromMonday", () => {
   it("reads Monday's column texts", () => {
     expect(stateFromMonday({
       deal_value: "4000", numbers__1: "", numeric_mm0gfccq: "120", dropdown_mm7v5eeb: CREDIT, text_mm7xyv8e: " Ana ",
-    })).toEqual({ contractFor: [], af: 4000, ff: null, pf: null, afSurcharge: 120, ffSurcharge: null, paymentMethod: [CREDIT], pocFullName: "Ana" });
+    })).toEqual({ feeKType: [], af: 4000, ff: null, pf: null, afSurcharge: 120, ffSurcharge: null, paymentMethod: [CREDIT], pocFullName: "Ana", itWillGoTo: "" });
   });
 });
 
@@ -213,7 +235,7 @@ describe("planFeeKFill with a quote", () => {
   it("fills the empty case type and fees, and the card surcharge from the quoted AF", () => {
     const fill = planFeeKFill({ ...empty, paymentMethod: [CREDIT] }, null, quote());
     expect(fill?.values).toEqual({
-      [FEE_K_COLUMNS.contractFor]: { labels: ["Bond"] },
+      [FEE_K_COLUMNS.feeKType]: { labels: ["Bond"] },
       [FEE_K_COLUMNS.af]: "3500",
       [FEE_K_COLUMNS.pf]: "25",
       [FEE_K_COLUMNS.afSurcharge]: "105",
@@ -223,17 +245,22 @@ describe("planFeeKFill with a quote", () => {
   });
 
   it("never overwrites what staff typed; a quote with nothing left still comes back to be marked used", () => {
-    const fill = planFeeKFill({ ...empty, contractFor: ["Bond"], af: 4000, pf: 0 }, null, quote());
+    const fill = planFeeKFill({ ...empty, feeKType: ["Bond"], af: 4000, pf: 0 }, null, quote());
     expect(fill).toEqual({ values: {}, local: {}, changes: [], quoteId: 1 });
   });
 
   it("asks Monday to add a new case type label", () => {
     expect(planFeeKFill(empty, null, quote({ caseType: "Habeas Corpus", newCaseType: true }))?.createLabels).toBe(true);
   });
+
+  it("an old \"Contract for…\" case type is never written to Fee K Type; the fees still are", () => {
+    const fill = planFeeKFill(empty, null, quote({ oldType: true }));
+    expect(fill?.values).toEqual({ [FEE_K_COLUMNS.af]: "3500", [FEE_K_COLUMNS.pf]: "25" });
+  });
 });
 
 describe("matchQuotes", () => {
-  const fk = (id: string, addedOn: string, contractFor: string[] = []) => ({ mondayItemId: id, addedOn, contractFor });
+  const fk = (id: string, addedOn: string, feeKType: string[] = []) => ({ mondayItemId: id, addedOn, feeKType });
 
   it("matches the one Fee K added around the consult", () => {
     expect([...matchQuotes([fk("A", "2026-10-14")], [quote()]).keys()]).toEqual(["A"]);
@@ -255,6 +282,10 @@ describe("matchQuotes", () => {
   it("a Fee K takes one quote — the newest", () => {
     const m = matchQuotes([fk("A", "2026-10-14")], [quote({ id: 1, createdAt: "2026-10-13 10:00:00" }), quote({ id: 2, createdAt: "2026-10-13 18:00:00" })]);
     expect(m.get("A")?.id).toBe(2);
+  });
+
+  it("an old-list quote matches on the window alone — its case type can't be compared", () => {
+    expect([...matchQuotes([fk("A", "2026-10-14", ["Bond MTN  (c)"])], [quote({ oldType: true })]).keys()]).toEqual(["A"]);
   });
 });
 
@@ -279,10 +310,10 @@ describe("runFeeKAutofill with quotes", () => {
       write: async (b, i, v, l) => { writes.push([b, i, v, l]); },
     });
     expect(writes).toEqual([["8025467270", "900", {
-      dropdown_mkv1db6z: { labels: ["Bond"] }, deal_value: "3500", numbers5__1: "25", text_mm7xyv8e: "Ana Torres",
+      dropdown_mm89vqtc: { labels: ["Bond"] }, deal_value: "3500", numbers5__1: "25", text_mm7xyv8e: "Ana Torres",
     }, undefined]]);
     expect(quoteRow(db).f).toBe("900");
-    expect(local(db, "c1")).toMatchObject({ contract_for: { labels: ["Bond"] }, af: "3500", pf: "25" });
+    expect(local(db, "c1")).toMatchObject({ fee_k_type: { labels: ["Bond"] }, af: "3500", pf: "25" });
     expect(findFeeKCandidates(db, "2026-10-01")).toEqual([]);
   });
 
@@ -291,7 +322,7 @@ describe("runFeeKAutofill with quotes", () => {
     const writes: Record<string, unknown>[] = [];
     await runFeeKAutofill({
       db, since: "2026-10-01", apply: true,
-      read: async () => ({ boardId: "8025467270", text: { dropdown_mkv1db6z: "I-130", text_mm7xyv8e: "Ana Torres" } }),
+      read: async () => ({ boardId: "8025467270", text: { dropdown_mm89vqtc: "I-130", text_mm7xyv8e: "Ana Torres" } }),
       write: async (_b, _i, v) => { writes.push(v); },
     });
     expect(writes).toEqual([]);

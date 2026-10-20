@@ -9,6 +9,7 @@ import { StatusTagsSection } from "../components/StatusTagsSection";
 import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { DocumentSettingsSection } from "../components/DocumentSettingsSection";
 import { SmsTemplatesSection } from "../components/SmsTemplatesSection";
+import { FeeKTypesSection } from "../components/FeeKTypesSection";
 import { IntegrationsSection } from "../components/IntegrationsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
 import { MondayUsageSection } from "../components/MondayUsageSection";
@@ -958,6 +959,7 @@ export function SettingsPage({ tab }: { tab: string }) {
               <UrgencySettingsSection />
               <DocumentSettingsSection />
               <SmsTemplatesSection />
+              <FeeKTypesSection />
             </>
           )}
 

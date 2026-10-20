@@ -2231,6 +2231,11 @@ boards:
       contract_for:
         resolve: by_id
         id: dropdown_mkv1db6z
+      # The case type since 2026-10: one curated label, required by Monday.
+      # The app writes this one; "Contract for..." stays for older Fee Ks.
+      fee_k_type:
+        resolve: by_id
+        id: dropdown_mm89vqtc
       north_pole_until:
         resolve: by_id
         id: date_mkpcgk6n

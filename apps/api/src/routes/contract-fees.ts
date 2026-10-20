@@ -1,8 +1,8 @@
 // =============================================================================
 // Contract fees + case type (P14 Contracts → M25 Edit contract)
 // =============================================================================
-// Staff correct a Fee K's AF / FF / PF and its case type (the "Contract for…"
-// dropdown) from the Contracts page. Only what changed is written, in ONE
+// Staff correct a Fee K's AF / FF / PF and its case type (the "Fee K Type"
+// dropdown; older Fee Ks show "Contract for…" until one is picked) from the Contracts page. Only what changed is written, in ONE
 // Monday write (change_multiple_column_values). An empty fee clears the Monday
 // number; a case type replaces every label the dropdown had. A case type the
 // dropdown doesn't have is refused unless the client marks it new
@@ -31,7 +31,7 @@ import { withTokenFallback } from "../write-auth.js";
 import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
-import { getBoardColumnsFor } from "@case-pipeline/query";
+import { caseTypeColumn, feeKCaseTypeSql, getBoardColumnsFor } from "@case-pipeline/query";
 import { usersDb } from "../db/users-db.js";
 import {
   FEE_K_ATTORNEY, applyProfileContactLocally, cleanContact, contractAttorneys, makeMondayUserResolver,
@@ -61,7 +61,7 @@ export interface ContractFeesRow {
   af: unknown;
   ff: unknown;
   pf: unknown;
-  /** The "Contract for…" labels as stored: a JSON array (text) or null. */
+  /** The case type labels as stored (Fee K Type, else Contract for — feeKCaseTypeSql): a JSON array (text) or null. */
   contract_for?: unknown;
 }
 
@@ -75,7 +75,7 @@ export interface ContractFeesPlan {
   /** Monday column id → change_multiple_column_values value ("" clears a fee). */
   values: Record<string, string | { labels: string[] }>;
   /** raw_column_values key → the same value, for the optimistic local update. */
-  local: Partial<Record<FeeKey | "contract_for", string | { labels: string[] }>>;
+  local: Partial<Record<FeeKey | "fee_k_type", string | { labels: string[] }>>;
   /** A brand-new case type: Monday must add the label; its column id here. */
   newLabel?: { columnId: string; label: string };
 }
@@ -108,10 +108,10 @@ function toLabels(raw: unknown): string[] {
 
 const sameLabels = (a: string[], b: string[]) => a.length === b.length && a.every((l, i) => l === b[i]);
 
-/** The Fee Ks "Contract for…" dropdown — by title, like the New contract write. */
-function caseTypeColumn(schema: BoardColumns) {
-  return schema.columns.find((c) => c.type === "dropdown" && c.title.trim().toLowerCase().startsWith("contract for"));
-}
+// The case-type dropdown the app writes is "Fee K Type" (curated, one label,
+// required by Monday since 2026-10). Older Fee Ks may only have "Contract
+// for…", which readers fall back to (feeKCaseTypeSql).
+export { caseTypeColumn };
 
 export function planContractFees(
   body: { fees?: unknown; caseType?: unknown; newCaseType?: unknown; from?: unknown },
@@ -179,7 +179,7 @@ export function planContractFees(
   let newLabel: ContractFeesPlan["newLabel"];
   if (typeChanged && caseType) {
     const col = typeCol;
-    if (!col) return { rejection: { status: 409, error: "The \"Contract for…\" column is no longer on the Fee Ks board" } };
+    if (!col) return { rejection: { status: 409, error: "The \"Fee K Type\" column is no longer on the Fee Ks board" } };
     if (!existing) {
       if (body.newCaseType !== true) {
         return { rejection: { status: 400, error: `"${caseType}" is not a case type on Monday`, allowed: col.options.map((o) => o.label) } };
@@ -190,7 +190,7 @@ export function planContractFees(
       newLabel = { columnId: col.columnId, label: caseType };
     }
     values[col.columnId] = { labels: [caseType] };
-    local.contract_for = { labels: [caseType] };
+    local.fee_k_type = { labels: [caseType] };
     to.caseType = caseType;
     from.caseType = currentType;
   }
@@ -252,7 +252,7 @@ export function registerContractFeesRoutes(app: Express, deps: ContractFeesDeps)
                 json_extract(c.raw_column_values, '$.af') AS af,
                 json_extract(c.raw_column_values, '$.ff') AS ff,
                 json_extract(c.raw_column_values, '$.pf') AS pf,
-                json_extract(c.raw_column_values, '$.contract_for.labels') AS contract_for,
+                ${feeKCaseTypeSql()} AS contract_for,
                 json_extract(c.raw_column_values, '$.attorney.label') AS attorney,
                 p.local_id AS profile_local_id, p.monday_item_id AS profile_monday_id, p.email, p.address
            FROM contracts c LEFT JOIN profiles p ON p.local_id = c.profile_local_id

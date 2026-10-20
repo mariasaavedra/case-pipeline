@@ -12,6 +12,7 @@
 import Database from "better-sqlite3";
 import { setApiToken } from "@case-pipeline/monday";
 import { mondayFeeKIo, runFeeKAutofill } from "../apps/api/src/fee-k-autofill.js";
+import { feeKTypeLookup, initFeeKTypes, loadFeeKTypes } from "../apps/api/src/fee-k-types.js";
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
 const apply = process.argv.includes("--apply");
@@ -34,7 +35,10 @@ if (apply) {
   io = await mondayFeeKIo();
 }
 
-const r = await runFeeKAutofill({ db, since, apply, ...io, log: (l) => console.log(l) });
+// The Fee K Types table the API saved (Settings → Firm): fills "It will go to…".
+initFeeKTypes("data");
+const routing = feeKTypeLookup(loadFeeKTypes());
+const r = await runFeeKAutofill({ db, since, apply, ...io, boardFor: (t) => routing(t)?.board || null, log: (l) => console.log(l) });
 console.log(
   `\n${apply ? "" : "DRY RUN — "}${r.candidates} Fee K(s) since ${since} with something to fill; ` +
     `${apply ? "filled" : "would fill"} ${r.written.length}, skipped ${r.skipped.length}, failed ${r.failed.length}.`,
