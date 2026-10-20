@@ -12,6 +12,7 @@ import { useState } from "react";
 import { releaseClient } from "../api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { DateInput } from "./ui/date-input";
 
 interface Props {
   profileLocalId: string;
@@ -76,7 +77,7 @@ export function ReleaseDetentionModal({ profileLocalId, clientName, facility, on
             <>
               <label style={{ display: "block", marginBottom: 12 }}>
                 <span style={labelStyle}>Release date <span style={{ fontWeight: 400, color: "var(--color-ink-faint)" }}>(optional)</span></span>
-                <input type="date" value={releasedOn} max={todayLocal()} onChange={(e) => setReleasedOn(e.target.value)}
+                <DateInput value={releasedOn} max={todayLocal()} onChange={(e) => setReleasedOn(e.target.value)}
                   className="rounded-md px-2 py-1.5 text-sm" style={fieldStyle} />
               </label>
 

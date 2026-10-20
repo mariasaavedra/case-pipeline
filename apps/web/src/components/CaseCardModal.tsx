@@ -38,6 +38,7 @@ import type { TimelineFilter } from "./TimelineFilters";
 import { FormChip, Tag, formatDue, waitFg } from "./caseBoardParts";
 import { openClientPeek } from "../router";
 import { MONDAY_FEE_KS_BOARD_ID, MONDAY_OPEN_FORMS_BOARD_ID, mondayItemUrl } from "../config";
+import { DateInput } from "./ui/date-input";
 
 export type CaseCard =
   | { kind: "fee_k"; c: MyPreschedulingCase }
@@ -129,7 +130,7 @@ function DateRow({ f, busy, onSave }: { f: DateField; busy: boolean; onSave: (va
       <span className="text-sm w-40 shrink-0" style={{ color: "var(--color-ink-muted)" }}>{f.label}</span>
       {editing ? (
         <form className="flex items-center gap-1.5 flex-wrap" onSubmit={(e) => { e.preventDefault(); void save(draft); }}>
-          <input type="date" value={draft} max={f.past ? today : undefined} autoFocus aria-label={f.label}
+          <DateInput value={draft} max={f.past ? today : undefined} autoFocus aria-label={f.label}
             onChange={(e) => setDraft(e.target.value)} className="rounded-md px-2 py-0.5 text-sm" style={inputStyle} />
           <Button type="submit" size="xs" disabled={busy || draft === (f.value ?? "")}>{busy ? "Saving…" : "Save"}</Button>
           {f.value && (

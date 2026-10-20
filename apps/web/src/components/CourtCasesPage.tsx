@@ -8,6 +8,7 @@ import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { formatDue, PersonChip, Tag, CountTable, ListSection } from "./caseBoardParts";
 import { staffLabel } from "../lib/staff-label";
+import { DateInput } from "./ui/date-input";
 
 // =============================================================================
 // P15 Court Cases
@@ -573,8 +574,7 @@ function MotionStatusPicker({ m, options, onChanged }: { m: CourtMotion; options
         {dated && (
           <label className="flex items-center gap-1.5" style={{ color: "var(--color-ink-muted)" }}>
             {dated.label}
-            <input
-              type="date"
+            <DateInput
               value={date}
               max={localToday()}
               onChange={(e) => setDate(e.target.value)}

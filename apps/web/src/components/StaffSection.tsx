@@ -28,6 +28,7 @@ import {
 import { SectionCode } from "./ScreenCode";
 import { settingsSectionTitle } from "./settingsStyles";
 import { OffboardingPanel } from "./OffboardingPanel";
+import { DateInput } from "./ui/date-input";
 
 const ALL_ROLES = Object.keys(STAFF_ROLE_LABEL) as StaffRole[];
 
@@ -352,7 +353,7 @@ function StaffEditor({
           <input style={styles.input} value={form.phoneExt} onChange={(e) => setForm({ ...form, phoneExt: e.target.value })} />
         </Field>
         <Field label="Start date">
-          <input style={styles.input} type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+          <DateInput style={styles.input} value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
         </Field>
         <Field label="Attorney board (My Day opens on it)">
           <select

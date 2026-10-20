@@ -48,6 +48,12 @@ interface Props {
    * looking at rows and going to the full view is a fair thing to want.
    */
   allowOpenFullView?: boolean;
+  /**
+   * What sits underneath when the full view isn't offered — the close button
+   * says "Back to <this>". Defaults to the call being logged; M22 passes
+   * "the contract".
+   */
+  behind?: string;
 }
 
 type Panel = "notes" | "timeline" | "documents" | "contracts";
@@ -57,6 +63,7 @@ export function ClientCaseModal({
   profileName,
   onClose,
   allowOpenFullView = false,
+  behind = "the call",
 }: Props) {
   const [data, setData] = useState<ClientCaseSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +129,7 @@ export function ClientCaseModal({
         <DialogDescription className="sr-only">
           {allowOpenFullView
             ? "Notes, timeline, documents and contracts for this client"
-            : "Notes, timeline, documents and contracts — the call you are logging stays open behind this"}
+            : `Notes, timeline, documents and contracts — ${behind} stays open behind this`}
         </DialogDescription>
 
         {error ? (
@@ -270,7 +277,7 @@ export function ClientCaseModal({
             <span />
           )}
           <Button type="button" variant="outline" onClick={onClose}>
-            {allowOpenFullView ? "Close" : "Back to the call"}
+            {allowOpenFullView ? "Close" : `Back to ${behind}`}
           </Button>
         </div>
       </DialogContent>

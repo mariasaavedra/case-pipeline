@@ -20,6 +20,7 @@ import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Button } from "./ui/button";
 import { rangeLabel, type DateRange, type TimelinePeriod } from "../utils/timeline-range";
+import { DateInput } from "./ui/date-input";
 
 export type { DateRange, TimelinePeriod };
 export { resolveRange } from "../utils/timeline-range";
@@ -134,8 +135,7 @@ export function TimelineFilters({
           <PopoverContent code="D5" align="end" className="w-60 p-3">
             <label style={labelStyle}>
               From
-              <input
-                type="date"
+              <DateInput
                 value={draft.from ?? ""}
                 max={draft.to || undefined}
                 onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value || undefined }))}
@@ -144,8 +144,7 @@ export function TimelineFilters({
             </label>
             <label style={{ ...labelStyle, marginTop: 8 }}>
               To
-              <input
-                type="date"
+              <DateInput
                 value={draft.to ?? ""}
                 min={draft.from || undefined}
                 onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value || undefined }))}

@@ -19,6 +19,13 @@
 // (template + fees). Send hands the PDF to Adobe Sign — attorney first, then
 // the client — and the API moves the stage, leaves a note and follows the
 // signatures (routes/esign.ts).
+// "Notes · Timeline · Documents" opens the client's case (M3, ClientCaseModal)
+// stacked over this form, so checking what was quoted or what is on file never
+// throws away a half-filled contract.
+// Closing keeps the work: what was typed (fields, template, attorney e-mail) is
+// saved in this browser per Fee K and comes back on the next open, with
+// "Start over" to go back to the Monday pre-fill. Sending clears it; drafts
+// older than 14 days are dropped.
 // =============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +42,8 @@ import {
 } from "../lib/contract-fill";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { FeeSheetPicker } from "./FeeSheetPicker";
+import { ClientCaseModal } from "./ClientCaseModal";
+import { DateInput } from "./ui/date-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 
@@ -53,6 +62,34 @@ const today = () => new Date().toISOString().slice(0, 10);
 const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).map((w) => w[0]!.toUpperCase()).join("").slice(0, 3);
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[$,\s]/g, "")));
 const baseName = (file: string) => file.replace(/\.docx$/i, "");
+
+// ── Draft kept per Fee K, in this browser only ───────────────────────────────
+interface Draft { input: ContractInput; templateId: string | null; attorneyEmail: string; savedAt: string }
+const DRAFT_DAYS = 14;
+const draftKey = (feeK: string) => `m22-draft:${feeK}`;
+
+export function loadDraft(feeK: string): Draft | null {
+  try {
+    const raw = localStorage.getItem(draftKey(feeK));
+    if (!raw) return null;
+    const d = JSON.parse(raw) as Draft;
+    if (!d?.input || Date.now() - Date.parse(d.savedAt) > DRAFT_DAYS * 86_400_000) {
+      localStorage.removeItem(draftKey(feeK));
+      return null;
+    }
+    return d;
+  } catch {
+    return null;
+  }
+}
+function storeDraft(feeK: string, d: Draft) {
+  try { localStorage.setItem(draftKey(feeK), JSON.stringify(d)); } catch { /* storage off: nothing kept */ }
+}
+function clearDraft(feeK: string) {
+  try { localStorage.removeItem(draftKey(feeK)); } catch { /* ignore */ }
+}
+const savedAtLabel = (iso: string) =>
+  new Date(iso).toLocaleString("en-US", { month: "2-digit", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit" });
 
 function save(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -110,13 +147,23 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [needsConsent, setNeedsConsent] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [showCase, setShowCase] = useState(false);
+  // The Monday pre-fill, for "Start over".
+  const prefill = useRef<{ input: ContractInput; attorneyEmail: string } | null>(null);
+  // Saved only once someone changes something, so opening and closing leaves no draft.
+  const dirty = useRef(false);
+  const draftTemplate = useRef<string | null>(null);
+  const [resumedAt, setResumedAt] = useState<string | null>(null);
 
   const loadTemplates = useCallback(async () => {
     try {
       const list = await listContractTemplates();
       setTemplates(list);
       // Only one contract in the folder: nothing to choose.
-      if (list.items.length === 1) setPicked((p) => p ?? list.items[0]!);
+      // A resumed draft's template, when it is still in the folder.
+      const fromDraft = list.items.find((i) => i.id === draftTemplate.current);
+      if (fromDraft) setPicked((p) => p ?? fromDraft);
+      else if (list.items.length === 1) setPicked((p) => p ?? list.items[0]!);
       setNeedsConsent(false);
     } catch (e) {
       if (e instanceof GraphConsentRequiredError) setNeedsConsent(true);
@@ -125,15 +172,18 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   }, []);
 
   useEffect(() => {
+    const draft = loadDraft(c.localId);
+    draftTemplate.current = draft?.templateId ?? null;
     void loadTemplates();
     fetchEsignStatus().then((s) => setEsign(s.enabled)).catch(() => setEsign(false));
     fetchContractPrefill(c.localId)
       .then((p) => {
-        setAttorneyEmail(p.attorneyEmail ?? "");
+        setAttorneyEmail(draft?.attorneyEmail ?? p.attorneyEmail ?? "");
         setAddr({ full: p.address, street: p.street ?? p.address, cityStateZip: p.cityStateZip ?? "" });
         return p;
       })
-      .then((p) => setInput({
+      .then((p) => {
+        const fresh: ContractInput = {
         date: today(), clientName: p.clientName, salutation: p.clientName, email: p.email,
         // Monday keeps one line; split below when the picked template has a City, State zip line.
         address: p.address, cityStateZip: "",
@@ -142,7 +192,18 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         attorneyFee: p.attorneyFee, filingFee: p.filingFee, postageFee: p.processingFee, surcharge: null, interviewFee: null,
         bioFee: null, motionFee: null, hearingFee: null,
         dueDate: "", signByDate: "", attorneyName: p.attorneyName, creatorInitials: initialsOf(user?.name ?? ""),
-      }))
+        };
+        prefill.current = { input: fresh, attorneyEmail: p.attorneyEmail ?? "" };
+        if (draft) {
+          // A letter date left at the day it was saved means "today", so it moves on.
+          const date = draft.input.date === draft.savedAt.slice(0, 10) ? today() : draft.input.date;
+          setInput({ ...fresh, ...draft.input, date });
+          setResumedAt(draft.savedAt);
+          dirty.current = true;
+        } else {
+          setInput(fresh);
+        }
+      })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not load the contract"));
   }, [c.localId, loadTemplates, user?.name]);
 
@@ -185,13 +246,43 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   const problems = file && input ? contractProblems(file.check, input) : [];
   const templateBroken = !!file && (file.check.errors.length > 0 || file.check.unknown.length > 0);
 
-  const set = <K extends keyof ContractInput>(k: K, v: ContractInput[K]) => setInput((f) => (f ? { ...f, [k]: v } : f));
+  const set = <K extends keyof ContractInput>(k: K, v: ContractInput[K]) => {
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, [k]: v } : f));
+  };
+
+  // Keep the draft as it is typed.
+  useEffect(() => {
+    if (!input || !dirty.current) return;
+    storeDraft(c.localId, { input, templateId: picked?.id ?? null, attorneyEmail, savedAt: new Date().toISOString() });
+  }, [c.localId, input, picked, attorneyEmail]);
+
+  const startOver = () => {
+    clearDraft(c.localId);
+    dirty.current = false;
+    draftTemplate.current = null;
+    setResumedAt(null);
+    showPreview(null);
+    setDone(null);
+    setError(null);
+    if (prefill.current) {
+      setInput(prefill.current.input);
+      setAttorneyEmail(prefill.current.attorneyEmail);
+    }
+    const items = templates?.items ?? [];
+    setPicked(items.length === 1 ? items[0]! : null);
+  };
 
   const text = (k: keyof ContractInput, label: string, extra?: { type?: string; placeholder?: string; hint?: string }) =>
     shown.has(k) && input ? (
       <Field id={`m22-${k}`} label={label} hint={extra?.hint}>
-        <input id={`m22-${k}`} type={extra?.type ?? "text"} placeholder={extra?.placeholder} className={inputClass} style={inputStyle}
-          value={(input[k] as string | null) ?? ""} onChange={(e) => set(k, e.target.value as never)} />
+        {extra?.type === "date" ? (
+          <DateInput id={`m22-${k}`} className={inputClass} style={inputStyle}
+            value={(input[k] as string | null) ?? ""} onChange={(e) => set(k, e.target.value as never)} />
+        ) : (
+          <input id={`m22-${k}`} type={extra?.type ?? "text"} placeholder={extra?.placeholder} className={inputClass} style={inputStyle}
+            value={(input[k] as string | null) ?? ""} onChange={(e) => set(k, e.target.value as never)} />
+        )}
       </Field>
     ) : null;
   const amount = (k: keyof ContractInput, label: string, hint?: string, placeholder?: string) =>
@@ -217,6 +308,9 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         attorneyEmail: attorneyEmail.trim(), clientEmail: input.email.trim(), documentName: preview.name,
       });
       void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+      // Sent: nothing left to resume.
+      dirty.current = false;
+      clearDraft(c.localId);
       const msg = `${c.clientName}: sent to Adobe Sign (attorney first, then the client)${res.stage ? ` · stage → ${res.stage}` : ""}`;
       if (res.warning) setDone(`Sent to Adobe Sign. ${res.warning}`);
       else { onSent?.(msg); onClose(); }
@@ -278,6 +372,13 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Generate contract</DialogTitle>
           <DialogDescription>{c.clientName}{c.contractFor.length > 0 ? ` · ${c.contractFor.join(", ")}` : ""}</DialogDescription>
+          {c.clientLocalId && (
+            <button type="button" onClick={() => setShowCase(true)}
+              className="self-start text-xs underline mt-1" style={{ color: "var(--color-amber)", fontFamily: "var(--font-body)" }}
+              title="The client's notes, timeline and documents, over this form — nothing here is lost">
+              Notes · Timeline · Documents
+            </button>
+          )}
         </DialogHeader>
 
         {preview && input ? (
@@ -315,6 +416,15 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
           </div>
         ) : (
         <div className="px-5 py-4 space-y-4">
+          {resumedAt && (
+            <div className="text-sm rounded p-3 flex items-center gap-2" style={{ background: "var(--color-surface-warm)", border: "1px solid var(--color-border-light)", color: "var(--color-ink)" }}>
+              Picked up where you left off — saved {savedAtLabel(resumedAt)}.
+              <Button type="button" size="sm" variant="outline" className="ml-auto" onClick={startOver}
+                title="Drop this draft and start again from what Monday has">
+                Start over
+              </Button>
+            </div>
+          )}
           {needsConsent && (
             <div className="text-sm rounded p-3 flex items-center gap-2" style={{ background: "var(--color-amber-light)", color: "var(--color-ink)" }}>
               The templates and the PDF use your Microsoft 365 account, which needs your OK once.
@@ -325,7 +435,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
           <Field id="m22-template" label="Contract template"
             hint={templates && items.length === 0 ? "No Word templates in the folder yet." : undefined}>
             <div className="flex items-center gap-2">
-              <Select items={selectItems} value={picked?.id ?? ""} onValueChange={(v) => { setDone(null); setError(null); setPicked(items.find((i) => i.id === v) ?? null); }}>
+              <Select items={selectItems} value={picked?.id ?? ""} onValueChange={(v) => { dirty.current = true; setDone(null); setError(null); setPicked(items.find((i) => i.id === v) ?? null); }}>
                 <SelectTrigger id="m22-template" aria-label="Contract template" size="sm" className="w-full border-border-light bg-surface">
                   <SelectValue placeholder={templates ? "Pick a contract…" : "Loading templates…"} />
                 </SelectTrigger>
@@ -373,7 +483,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {text("dueDate", "Payment deadline", { type: "date" })}
               </div>
               {(shown.has("attorneyFee") || shown.has("filingFee")) && (
-                <FeeSheetPicker onPick={(fees) => setInput((f) => (f ? { ...f, ...fees } : f))} />
+                <FeeSheetPicker onPick={(fees) => { dirty.current = true; setInput((f) => (f ? { ...f, ...fees } : f)); }} />
               )}
               <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
                 {amount("attorneyFee", "Attorney fee $", file.check.tags.includes("attorney_fee_half") ? `Printed as two halves of ${money(halfOf(input.attorneyFee))}` : undefined)}
@@ -402,7 +512,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field id="m22-atty-email" label="1. Attorney signs first" hint={attorneyEmail ? undefined : "Not in Settings → Documents — type it."}>
                   <input id="m22-atty-email" type="email" className={inputClass} style={inputStyle}
-                    value={attorneyEmail} onChange={(e) => setAttorneyEmail(e.target.value)} />
+                    value={attorneyEmail} onChange={(e) => { dirty.current = true; setAttorneyEmail(e.target.value); }} />
                 </Field>
                 <Field id="m22-client-email" label="2. Then the client">
                   <input id="m22-client-email" type="email" className={inputClass} style={inputStyle}
@@ -439,6 +549,14 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
             </div>
           </div>
         </div>
+        )}
+        {showCase && c.clientLocalId && (
+          <ClientCaseModal
+            profileLocalId={c.clientLocalId}
+            profileName={c.clientName}
+            onClose={() => setShowCase(false)}
+            behind="the contract"
+          />
         )}
       </DialogContent>
     </Dialog>
