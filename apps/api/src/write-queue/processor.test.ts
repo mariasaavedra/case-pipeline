@@ -133,6 +133,62 @@ describe("write-queue processor", () => {
     db.close();
   });
 
+  // Monday's answer to a write on a deleted/archived item (prod, 2026-10-20:
+  // a Fee K deleted 6 s after it was created, then sent for signature).
+  const inactiveItemsError = () =>
+    new MondayApiError(
+      'Monday API errors: [{"message":"Cannot change column value for inactive items","extensions":' +
+        '{"code":"ColumnValueException","error_data":{"column_validation_error_code":"inactiveItems"}}}]',
+    );
+
+  it("dead-letters at once and archives the local row when Monday says the item is inactive", async () => {
+    const db = freshDb();
+    db.prepare("INSERT INTO seed_batches (batch_name, status) VALUES ('test', 'synced')").run();
+    db.prepare(
+      "INSERT INTO contracts (batch_id, local_id, monday_item_id, profile_local_id, name) VALUES (1, 'k-1', '13340802680', '', 'Fee K')",
+    ).run();
+    changeSimpleColumnValueMock.mockRejectedValue(inactiveItemsError());
+
+    enqueueWrite(db, {
+      opType: "change_column",
+      mondayItemId: "13340802680",
+      payload: { boardId: "b1", columnId: "status", value: "Atty Reviewing" },
+    });
+    await drainWriteQueue(db, { token: "tok" });
+
+    const row = queueRow(db);
+    expect(row.status).toBe("failed"); // not 1 of 5 retries
+    expect(row.attempts).toBe(1);
+    expect(row.last_error).toContain("inactiveItems");
+    expect(db.prepare("SELECT COUNT(*) AS n FROM contracts").get()).toEqual({ n: 0 });
+    expect(
+      db.prepare("SELECT source_table, local_id FROM archived_rows WHERE monday_item_id = '13340802680'").get(),
+    ).toEqual({ source_table: "contracts", local_id: "k-1" });
+    db.close();
+  });
+
+  it("dead-letters an inactive-item refusal even when nothing is mirrored locally", async () => {
+    const db = freshDb();
+    createUpdateMock.mockRejectedValue(inactiveItemsError());
+
+    enqueueWrite(db, { opType: "create_update", mondayItemId: "999", payload: { body: "hi" } });
+    await drainWriteQueue(db, { token: "tok" });
+
+    expect(queueRow(db).status).toBe("failed");
+    db.close();
+  });
+
+  it("still retries an ordinary Monday error", async () => {
+    const db = freshDb();
+    changeSimpleColumnValueMock.mockRejectedValue(new MondayApiError("Server error: 502 Bad Gateway", 502, true));
+
+    enqueueWrite(db, { opType: "change_column", mondayItemId: "123", payload: { boardId: "b1", columnId: "status", value: "x" } });
+    await drainWriteQueue(db, { token: "tok" });
+
+    expect(queueRow(db).status).toBe("pending");
+    db.close();
+  });
+
   it("skips items whose next_attempt_at is still in the future", async () => {
     const db = freshDb();
     createUpdateMock.mockResolvedValue("x");

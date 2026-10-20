@@ -53,6 +53,15 @@ Design choices, and why:
   only `pulseId`, so deletions were stored without an item id, ran as a board
   refresh that removes nothing, and waited for the nightly full sync. The
   processor also falls back to the payload for any event stored that way.
+- **Created and deleted within one drain.** Deletions run before the targeted
+  sync, so a delete can find nothing to remove yet while the create's sync then
+  re-reads the item by id. `items(ids:)` still returns a deleted item (with
+  `state: "deleted"`), so the sync reads `state` and archives any item that is
+  deleted or archived in Monday instead of upserting it (2026-10-20: a Fee K
+  deleted 6 s after creation stayed in P14 and was sent for signature). If a
+  ghost row still slips through, the first write to it fails with Monday's
+  `inactiveItems` error; the write queue dead-letters that at once (no retries)
+  and archives the local row.
 - **Direct writes take the sync advisory lock** (same discipline as the
   write-queue) so they never interleave with a full sync mid-run. The spawned
   targeted sync acquires the lock itself, and rides the API's `runSync` guard,

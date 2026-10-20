@@ -66,12 +66,14 @@ import { addMondayCallCounts } from "@case-pipeline/query";
 import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
 import { backupDatabase } from "../backup-db.js";
 import { backupEncryptionKey, encryptFile } from "../../apps/api/src/backup/crypto.js";
+import { archiveItemByMondayId } from "../../apps/api/src/webhooks/processor.js";
 import { acquireSyncLock, releaseSyncLock, refreshSyncLock, recordSyncResult } from "@case-pipeline/seed/db/sync-lock";
 import { normalizeANumber } from "@case-pipeline/core";
 import {
   buildColumnValues,
   extractBoardItemFields,
   firstLinkedId,
+  splitByState,
   type ResolvedColumnMeta,
 } from "./mapper";
 
@@ -572,9 +574,20 @@ async function main() {
       const extra = (await extraItemsFor(config.id)).filter((i) => !seen.has(i.id));
       if (extra.length > 0) items.push(...extra);
     }
-    process.stdout.write(`\r  ${key}: ${items.length} ${since ? "changed" : "items"} ✓\n`);
-    fetchedCounts[key] = items.length;
-    return { config, resolved, items };
+    // Deleted / archived in Monday: archived here too, never upserted as live.
+    // The delete webhook may already have run (it is processed before the
+    // targeted sync in the same drain) and found nothing to remove yet.
+    const { live, inactive } = splitByState(items);
+    if (inactive.length > 0) {
+      const archived = db.transaction(() => inactive.filter((i) => archiveItemByMondayId(db, i.id, runId)))();
+      console.log(
+        `\n  ${key}: ${inactive.length} item(s) ${inactive.map((i) => `${i.id} (${i.state})`).join(", ")} inactive in Monday — ` +
+          `${archived.length} archived locally, none upserted`,
+      );
+    }
+    process.stdout.write(`\r  ${key}: ${live.length} ${since ? "changed" : "items"} ✓\n`);
+    fetchedCounts[key] = live.length;
+    return { config, resolved, items: live };
   }
 
   /**
