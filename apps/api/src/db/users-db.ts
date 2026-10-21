@@ -6,6 +6,7 @@ import { backupEncryptionKey, encryptFileSync } from "../backup/crypto.js";
 import { protect, isEncrypted } from "../crypto/secrets.js";
 import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP } from "../backup/prune.js";
 import { createStaffTablesSql, createOffboardingTableSql } from "../staff/schema.js";
+import { createSlackQueueTableSql } from "../notify/slack-queue.js";
 
 const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -433,6 +434,14 @@ const MIGRATIONS: Migration[] = [
     version: 17,
     up: () => {
       if (!columnExists("staff", "slack_user_id")) usersDb.exec(`ALTER TABLE staff ADD COLUMN slack_user_id TEXT`);
+    },
+  },
+  {
+    // Slack messages that post at a set time (notify/slack-queue.ts): the
+    // attorney's "LB's 1:00 PM Ready", queued from M18, edited on P17.
+    version: 18,
+    up: () => {
+      usersDb.exec(createSlackQueueTableSql);
     },
   },
 ];

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchAppointments, fetchReceptionConsults } from "../api";
+import { fetchAppointments, fetchReceptionConsults, fetchSlackQueue } from "../api";
 import type { AppointmentEntry, ReceptionConsult, ReceptionConsultsResult } from "../api";
+import { SlackQueueTab } from "./SlackQueueTab";
 import { AppointmentModal } from "./AppointmentModal";
 import { ClientLink } from "./ClientPeek";
 import { SectionCode } from "./ScreenCode";
@@ -22,7 +23,9 @@ import { Button } from "./ui/button";
 // "+ Book Appt" opens M10 with a client search, for a consult that is not on a
 // board yet. "Focus" opens the same focus view as P4 (M5: notes, documents,
 // note composer) over the page — also from inside M18, so the notes can be read
-// while prepping. Visible to everyone. See routes/reception.ts.
+// while prepping. The Slack Queue tab (P17.3) lists the attorneys' "Ready"
+// messages queued from M18 step 2 — edit, send now or delete them. Visible to
+// everyone. See routes/reception.ts and routes/slack-queue.ts.
 // =============================================================================
 
 type Range = "today" | "tomorrow" | "week";
@@ -186,7 +189,27 @@ function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit, on
 // ReceptionPage
 // =============================================================================
 
+type Tab = "consults" | "slack";
+
 export function ReceptionPage() {
+  const [tab, setTab] = useState<Tab>("consults");
+  const [queue, setQueue] = useState<Awaited<ReturnType<typeof fetchSlackQueue>> | null>(null);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const loadQueue = useCallback(() => {
+    fetchSlackQueue()
+      .then((q) => { setQueue(q); setQueueError(null); })
+      .catch((e: unknown) => setQueueError(e instanceof Error ? e.message : "Failed to load the Slack queue"));
+  }, []);
+  // The job posts every minute: keep the tab's statuses current while it's open.
+  useEffect(() => {
+    loadQueue();
+    if (tab !== "slack") return;
+    const t = setInterval(loadQueue, 30_000);
+    return () => clearInterval(t);
+  }, [loadQueue, tab]);
+  const waitingCount = queue?.messages.filter((m) => m.status !== "sent").length ?? 0;
+  const failedCount = queue?.messages.filter((m) => m.status === "failed").length ?? 0;
+
   const [range, setRange] = useState<Range>("today");
   const [data, setData] = useState<ReceptionConsultsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -260,10 +283,24 @@ export function ReceptionPage() {
         </div>
         <Button type="button" onClick={() => setBooking(true)}>+ Book Appt</Button>
       </div>
+      <div className="flex gap-1 mb-3" role="tablist" style={{ borderBottom: "1px solid var(--color-border)" }}>
+        <button type="button" role="tab" className="tab-button" aria-selected={tab === "consults"} onClick={() => setTab("consults")}>
+          Consults
+        </button>
+        <button type="button" role="tab" className="tab-button" aria-selected={tab === "slack"} onClick={() => setTab("slack")}>
+          Slack Queue{waitingCount > 0 ? ` (${waitingCount})` : ""}
+          {failedCount > 0 && <span style={{ color: "var(--urgency-overdue)" }}> · {failedCount} not sent</span>}
+        </button>
+      </div>
       <p className="text-sm mb-4" style={{ color: "var(--color-ink-faint)" }}>
-        Consults on the attorneys' boards. Prep each one before the attorney sees the client — the note goes on the client's profile and the appointment.
+        {tab === "consults"
+          ? "Consults on the attorneys' boards. Prep each one before the attorney sees the client — the note goes on the client's profile and the appointment."
+          : "The \"Ready\" messages to the attorneys, queued from the prep. Each posts in Slack on its own at its time."}
       </p>
 
+      {tab === "slack" && <SlackQueueTab data={queue} error={queueError} onChanged={loadQueue} />}
+
+      {tab === "consults" && <>
       {/* Filter bar */}
       <div className="flex items-center gap-2 flex-wrap mb-3">
         {RANGES.map((r) => (
@@ -340,6 +377,8 @@ export function ReceptionPage() {
         </>
       )}
 
+      </>}
+
       {focusError && (
         <div role="alert" className="text-sm rounded p-3 mt-3" style={{ color: "var(--urgency-overdue)", background: "var(--urgency-overdue-bg)" }}>
           {focusError}
@@ -353,6 +392,7 @@ export function ReceptionPage() {
           onFocus={prepping.date ? () => openFocus(prepping) : undefined}
           onClose={() => setPrepping(null)}
           onSaved={load}
+          onQueued={loadQueue}
         />
       )}
       {/* After M18 so it stacks on top when opened from inside the prep popup. */}
