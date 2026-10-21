@@ -111,7 +111,9 @@ import { makeWriteTokenOptions } from "./write-token.js";
 import { checkEnvironment, reportEnvironment } from "./config/env-check.js";
 import { registerMondayWebhook, webhookSecret } from "./webhooks/receiver.js";
 import { startWebhookProcessor, createBoardKeyResolver } from "./webhooks/processor.js";
-import { notifyOps, inBackground } from "./notify/slack.js";
+import { notifyOps, inBackground, postEvent } from "./notify/slack.js";
+import { runSlackQueue, recoverInterrupted } from "./notify/slack-queue.js";
+import { registerSlackQueueRoutes } from "./routes/slack-queue.js";
 
 // =============================================================================
 // Database
@@ -571,6 +573,7 @@ registerAppointmentWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writ
 registerJailIntakeWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerDetentionWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerReceptionRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerSlackQueueRoutes(app, { db, usersDb });
 registerMyDayRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerConsultScheduleRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerConsultLinkRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
@@ -683,6 +686,8 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`Server running at http://${HOST}:${PORT}`);
   // An empty roster (first boot after users.db v14) is filled from Monday + the boards.
   seedStaffIfEmpty(db, MONDAY_API_TOKEN);
+  // Seed too: it only posts what reception queued, and SLACK_MODE still decides.
+  scheduleSlackQueue();
 
   if (DB_SOURCE === "live") {
     scheduleNightlySync();
@@ -1108,6 +1113,31 @@ function scheduleFeeKAutofill() {
     { timezone: FIRM_TIMEZONE },
   );
   console.log(`[feek] Auto-fill scheduled — cron "${feeKCron}" (${FIRM_TIMEZONE}), Fee Ks added since ${since}.`);
+}
+
+/**
+ * The Slack queue (P17 Slack Queue tab): every minute, post the messages
+ * reception queued for now — the attorney's "LB's 1:00 PM Ready". Rules =
+ * notify/slack-queue.ts.
+ */
+let slackQueueInFlight = false;
+
+function scheduleSlackQueue() {
+  const stuck = recoverInterrupted(usersDb);
+  if (stuck) console.warn(`[slack-queue] ${stuck} message(s) were interrupted mid-send — marked failed.`);
+  cron.schedule("* * * * *", () => {
+    if (slackQueueInFlight) return;
+    slackQueueInFlight = true;
+    runSlackQueue(usersDb, { post: (text) => postEvent("consult_ready", text) })
+      .then((r) => {
+        if (r.sent.length || r.failed.length) {
+          console.log(`[slack-queue] ${r.sent.length} sent, ${r.failed.length} failed${r.failed.length ? `: ${r.failed.map((f) => f.error).join("; ")}` : ""}`);
+        }
+      })
+      .catch((err) => console.error("[slack-queue] Error:", err))
+      .finally(() => { slackQueueInFlight = false; });
+  });
+  console.log("[slack-queue] Scheduled — every minute.");
 }
 
 /** Monday calls made in this process since the last flush → monday_api_calls. */

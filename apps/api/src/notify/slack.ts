@@ -4,7 +4,7 @@
 // A Slack bot token (chat.postMessage) and a channel per kind, from .env:
 //
 //   events  SLACK_EVENTS_CHANNEL  contract signed / payment link sent, consult
-//                                 prepped, mail to review, text sent, Adobe Sign
+//                                 prepped / ready (queued, slack-queue.ts), mail to review, text sent, Adobe Sign
 //   ops     SLACK_OPS_CHANNEL     a sync, scheduled job or Monday write failed
 //   alerts  SLACK_ALERTS_CHANNEL  the morning digest (next PR)
 //
@@ -149,6 +149,19 @@ export function createSlackNotifier(deps: SlackDeps = {}) {
     return r ? (await send(r.channel, r.kind, text)).ok : false;
   }
 
+  /** Like notifyEvent, but says why it didn't post (the Slack queue records it). */
+  async function postEvent(key: NotifyEventKey, text: string): Promise<SlackPostResult> {
+    const r = route(key);
+    if (!r) return { ok: false, error: "turned off in Settings → Integrations" };
+    return send(r.channel, r.kind, text);
+  }
+
+  /** Whether an event would post right now, and where — for screens that warn before queueing. */
+  function eventStatus(key: NotifyEventKey): { mode: SlackMode; enabled: boolean; channel: string | null } {
+    const r = route(key);
+    return { mode: slackMode(env()), enabled: !!r, channel: r?.channel ?? null };
+  }
+
   /**
    * Something broke that nobody is watching for. The same `throttleKey`
    * (default: the event key; "sync:full" vs "sync:webhook" are separate) posts
@@ -171,13 +184,15 @@ export function createSlackNotifier(deps: SlackDeps = {}) {
     return send(channel, "events", text, true);
   }
 
-  return { postSlack, notifyOps, notifyEvent, sendTest };
+  return { postSlack, notifyOps, notifyEvent, postEvent, eventStatus, sendTest };
 }
 
 const shared = createSlackNotifier();
 export const postSlack = shared.postSlack;
 export const notifyOps = shared.notifyOps;
 export const notifyEvent = shared.notifyEvent;
+export const postEvent = shared.postEvent;
+export const slackEventStatus = shared.eventStatus;
 export const sendSlackTest = shared.sendTest;
 
 /**
