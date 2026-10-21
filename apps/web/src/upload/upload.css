@@ -1,0 +1,37 @@
+/* Client upload page. Its own small stylesheet: Tailwind scans only this
+   folder, and only the palette + fonts the page uses come along. Colors are the
+   dashboard's (src/styles.css @theme). */
+@import "tailwindcss" source(none);
+@source "./";
+@import "../fonts.css";
+
+@theme {
+  --color-surface: #faf9f6;
+  --color-surface-warm: #f5f3ee;
+  --color-card: #ffffff;
+  --color-ink: #1a1a2e;
+  --color-ink-muted: #5c5c6f;
+  --color-ink-faint: #8a8998;
+  --color-border: #e6e3dc;
+  --color-border-light: #f0ede7;
+  --color-amber: #b45309;
+  --color-amber-light: #fef3c7;
+  --color-amber-dark: #92400e;
+  --color-navy: #0c1222;
+  --color-navy-light: #1e293b;
+  --color-status-green: #065f46;
+  --color-status-green-bg: #ecfdf5;
+  --color-status-red: #991b1b;
+
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-body: "Outfit", system-ui, sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+}

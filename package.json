@@ -38,6 +38,7 @@
     "lawpay:slack": "tsx --env-file-if-exists=.env scripts/lawpay-slack.ts",
     "lawpay:mail": "tsx --env-file-if-exists=.env scripts/lawpay-mail.ts",
     "esign:efile": "tsx --env-file-if-exists=.env scripts/esign-efile.ts",
+    "uploads:file": "tsx --env-file-if-exists=.env scripts/client-uploads.ts",
     "feek:autofill": "tsx --env-file-if-exists=.env scripts/fee-k-autofill.ts",
     "history:backfill": "tsx --env-file-if-exists=.env scripts/history-backfill.ts",
     "staff:import": "tsx --env-file-if-exists=.env scripts/staff-import.ts",

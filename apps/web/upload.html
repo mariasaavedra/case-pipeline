@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- The token is in the URL: never send it to another site as a Referer, and keep the page out of search engines. -->
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0c1222">
+  <title>Enviar documentos · Send documents</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230c1222'/><path d='M11.2 21.4V10.6h3.9c2.6 0 4.2 1.4 4.2 3.7s-1.6 3.7-4.2 3.7h-1.7v3.4z' fill='%23b45309'/></svg>">
+</head>
+<body>
+  <div id="root"></div>
+  <!-- Absolute: the page is served at /u/<token>, where ./src would resolve under /u/. -->
+  <script type="module" src="/src/upload/main.tsx"></script>
+</body>
+</html>

@@ -1,6 +1,25 @@
 import { describe, it, expect } from "vitest";
 import { parseSmsSendBody, smsActivity, SMS_BODY_MAX } from "./send-plan.js";
-import { sanitizeSmsTemplates, DEFAULT_SMS_TEMPLATES } from "./templates.js";
+import { sanitizeSmsTemplates, withRequiredTemplates, DEFAULT_SMS_TEMPLATES } from "./templates.js";
+
+describe("withRequiredTemplates", () => {
+  it("a saved list without the Upload link template gets it back; a reworded one is kept", () => {
+    const saved = [{ key: "consult_link", label: "Consult", en: "Book: {{link}}", es: "" }];
+    expect(withRequiredTemplates(saved).map((t) => t.key)).toEqual(["consult_link", "upload_link"]);
+    const reworded = [{ key: "upload_link", label: "Docs", en: "Send: {{uploadLink}}", es: "" }];
+    expect(withRequiredTemplates(reworded)).toEqual(reworded);
+  });
+  it("the upload link texts carry the link and opt-out words", () => {
+    const t = DEFAULT_SMS_TEMPLATES.find((x) => x.key === "upload_link")!;
+    for (const text of [t.en, t.es]) {
+      expect(text).toContain("{{uploadLink}}");
+      expect(text).toMatch(/STOP/);
+    }
+  });
+  it("upload_link is a send context", () => {
+    expect(parseSmsSendBody({ ...ok, context: "upload_link" }).ok).toBe(true);
+  });
+});
 
 const ok = { to: "(816) 555-1234", body: "Hi Maria", context: "call_log" };
 

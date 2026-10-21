@@ -7,6 +7,8 @@
 //
 // `{{link}}` is filled by staff in the send popup (a Calendly booking link,
 // say) unless an admin writes the link into the template itself.
+// `{{uploadLink}}` is filled by the Upload link popup (M30) with the link it
+// just made; that template is REQUIRED_SMS_TEMPLATES, so it is always there.
 //
 // Every default ends with opt-out wording: 10DLC campaigns are approved on the
 // sample messages, and carriers expect STOP language in them.
@@ -36,7 +38,28 @@ export const DEFAULT_SMS_TEMPLATES: SmsTemplate[] = [
     en: "Hi {{firstName}}, here are your payment links from {{firmName}}:\n{{links}}\nQuestions? Call {{firmPhone}}. Reply STOP to opt out.",
     es: "Hola {{firstName}}, estos son sus enlaces de pago de {{firmName}}:\n{{links}}\n¿Preguntas? Llame al {{firmPhone}}. Responda STOP para no recibir mensajes.",
   },
+  {
+    key: "upload_link",
+    label: "Upload link",
+    en: "Hi {{firstName}}, this is {{firmName}}. Send us your documents here (photos, PDF or Word): {{uploadLink}}\nQuestions? Call {{firmPhone}}. Reply STOP to opt out.",
+    es: "Hola {{firstName}}, le escribe {{firmName}}. Envíenos sus documentos aquí (fotos, PDF o Word): {{uploadLink}}\n¿Preguntas? Llame al {{firmPhone}}. Responda STOP para no recibir mensajes.",
+  },
 ];
+
+/**
+ * Templates a feature opens by key (the Upload link popup → upload_link). One
+ * missing from the saved list is added back from the defaults, so a list an
+ * admin saved before it existed — or a deleted one — never breaks that button.
+ * An admin can still reword it.
+ */
+export const REQUIRED_SMS_TEMPLATES = ["upload_link"] as const;
+
+export function withRequiredTemplates(list: SmsTemplate[]): SmsTemplate[] {
+  const missing = DEFAULT_SMS_TEMPLATES.filter(
+    (d) => (REQUIRED_SMS_TEMPLATES as readonly string[]).includes(d.key) && !list.some((t) => t.key === d.key),
+  );
+  return [...list, ...structuredClone(missing)];
+}
 
 /** Longest template text accepted (≈ 6 Unicode segments). */
 export const SMS_TEMPLATE_MAX = 400;
@@ -50,7 +73,7 @@ export function initSmsTemplates(dataDir: string): void {
 export function loadSmsTemplates(): SmsTemplate[] {
   if (!configPath) return structuredClone(DEFAULT_SMS_TEMPLATES);
   try {
-    return sanitizeSmsTemplates(JSON.parse(fs.readFileSync(configPath, "utf-8")));
+    return withRequiredTemplates(sanitizeSmsTemplates(JSON.parse(fs.readFileSync(configPath, "utf-8"))));
   } catch {
     return structuredClone(DEFAULT_SMS_TEMPLATES);
   }
@@ -58,7 +81,7 @@ export function loadSmsTemplates(): SmsTemplate[] {
 
 export function saveSmsTemplates(input: unknown): SmsTemplate[] {
   if (!configPath) throw new Error("sms-templates path not initialized");
-  const clean = sanitizeSmsTemplates(input);
+  const clean = withRequiredTemplates(sanitizeSmsTemplates(input));
   fs.writeFileSync(configPath, JSON.stringify(clean, null, 2));
   return clean;
 }

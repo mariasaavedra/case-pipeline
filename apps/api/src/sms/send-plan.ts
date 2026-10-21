@@ -9,7 +9,7 @@ import { toUsE164, formatUsPhone, unfilledPlaceholders, smsSegments } from "@cas
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 
 /** Where in the app a text was sent from — kept on the log row and the audit entry. */
-export const SMS_CONTEXTS = ["call_log", "payment_links", "client"] as const;
+export const SMS_CONTEXTS = ["call_log", "payment_links", "client", "upload_link"] as const;
 export type SmsContext = (typeof SMS_CONTEXTS)[number];
 
 /** Longest body accepted: 6 GSM segments. Longer texts arrive split and out of order on some phones. */

@@ -7,6 +7,7 @@ import { SectionCode } from "./ScreenCode";
 import { ReleaseDetentionModal } from "./ReleaseDetentionModal";
 import { formatANumber, toUsE164 } from "@case-pipeline/core";
 import { SendSmsModal } from "./SendSmsModal";
+import { UploadLinkModal } from "./UploadLinkModal";
 
 const PRIORITY_STYLES: Record<string, { dot: string; label: string; bg: string; text: string }> = {
   Urgent: { dot: "priority-dot-urgent", label: "Urgent", bg: "#fef2f2", text: "#991b1b" },
@@ -50,6 +51,8 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
   // M28 — free text to the client; Phone, else Phone 2.
   const [smsOpen, setSmsOpen] = useState(false);
   const textPhone = [profile.phone, profile.phone2].find((p) => p && toUsE164(p)) ?? null;
+  // M30 — a private link for the client to send us documents (page header only).
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   return (
     <div className={isPopup ? "flex-shrink-0 border-b border-border" : "client-header-sticky"}>
@@ -189,6 +192,28 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
                   language={profile.preferredLanguage ?? undefined}
                   profileLocalId={profile.localId}
                   onClose={() => setSmsOpen(false)}
+                />
+              )}
+              {!isPopup && (
+                <button
+                  type="button"
+                  onClick={() => setUploadOpen(true)}
+                  className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={{ border: "1px solid var(--color-border-light)", color: "var(--color-ink-muted)", background: "var(--color-surface)", cursor: "pointer" }}
+                  title="A private link for this client to send us documents (to the E-File → CAF)"
+                >
+                  Upload link
+                </button>
+              )}
+              {uploadOpen && (
+                <UploadLinkModal
+                  profileLocalId={profile.localId}
+                  name={displayName}
+                  firstName={profile.firstName}
+                  phone={textPhone}
+                  altPhones={[profile.phone, profile.phone2]}
+                  language={profile.preferredLanguage}
+                  onClose={() => setUploadOpen(false)}
                 />
               )}
               {profile.address && (
