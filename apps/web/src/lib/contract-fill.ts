@@ -44,6 +44,9 @@ export interface ContractInput {
   interviewFee: number | null;
   /** COURT APPLICATION: DHS biometrics fee. Null prints "N/A". */
   bioFee: number | null;
+  /** MASTER HEARING + MOTION: which motion, in English and Spanish (MOTIONS fills both). */
+  motionName: string;
+  motionNameEs: string;
   /** BOND MOTION + MASTER HEARING: the motion's and the hearing's attorney fees. */
   motionFee: number | null;
   hearingFee: number | null;
@@ -120,6 +123,8 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "attorney_fee_half_surcharge", label: "Surcharge on half the attorney fee (3%)", example: "$75.00", value: (f) => money(surchargeFor(halfOf(f.attorneyFee))), required: (f) => !positive(f.attorneyFee) },
   { tag: "bio_fee", label: "DHS biometrics fee (N/A when empty)", example: "$30.00", value: (f) => moneyOrNA(f.bioFee) },
   { tag: "bio_fee_surcharge", label: "Surcharge on the biometrics fee (3%)", example: "$0.90", value: (f) => (f.bioFee === null ? "N/A" : money(surchargeFor(f.bioFee))) },
+  { tag: "motion_name", label: "Motion (which one)", example: "Motion to Recalendar", value: (f) => f.motionName.trim(), required: (f) => !has(f.motionName) },
+  { tag: "motion_name_es", label: "Motion, Spanish", example: "Moción para Recalendarizar", value: (f) => f.motionNameEs.trim(), required: (f) => !has(f.motionNameEs) },
   { tag: "motion_fee", label: "Attorney fee for the motion", example: "$1,500.00", value: (f) => money(f.motionFee), required: (f) => !positive(f.motionFee) },
   { tag: "motion_fee_surcharge", label: "Surcharge on the motion fee (3%)", example: "$45.00", value: (f) => money(surchargeFor(f.motionFee)), required: (f) => !positive(f.motionFee) },
   { tag: "hearing_fee", label: "Attorney fee for the hearing", example: "$1,000.00", value: (f) => money(f.hearingFee), required: (f) => !positive(f.hearingFee) },
@@ -134,18 +139,38 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "creator_initials", label: "Initials of who made the Fee K", example: "RC", value: (f) => f.creatorInitials.trim(), required: (f) => !has(f.creatorInitials) },
 ];
 
+/**
+ * Motions that ride along with a Master Hearing (MASTER HEARING + MOTION Fee K).
+ * Picking one in M22 fills both languages; anything else is typed by hand.
+ */
+export const MOTIONS: { en: string; es: string }[] = [
+  { en: "Motion to Administratively Close", es: "Moción de Cierre Administrativo" },
+  { en: "Motion to Recalendar", es: "Moción para Recalendarizar" },
+  { en: "Motion to Reopen", es: "Moción para Reabrir" },
+  { en: "Motion to Reconsider", es: "Moción de Reconsideración" },
+  { en: "Motion to Change Venue", es: "Moción de Cambio de Sede" },
+  { en: "Motion to Continue", es: "Moción de Aplazamiento" },
+  { en: "Motion to Terminate", es: "Moción para Terminar el Procedimiento" },
+  { en: "Motion to Dismiss", es: "Moción de Desestimación" },
+  { en: "Motion to Advance", es: "Moción para Adelantar la Audiencia" },
+];
+/** The Spanish name for a listed motion ("" when it isn't one). */
+export const motionEs = (en: string) => MOTIONS.find((m) => m.en.toLowerCase() === en.trim().toLowerCase())?.es ?? "";
+
 const BY_TAG = new Map(CONTRACT_FIELDS.map((f) => [f.tag, f]));
 
 /**
  * The contract's file name, the same everywhere (download, Adobe, the signed
  * copy in the E-File): "Client name - Form(s)/Matter - MM-DD-YYYY". Decided
- * 2026-10-15. A bilingual title typed into Form(s)/matter keeps its English
+ * 2026-10-15. A contract with a motion (motion_name) is named after it. A bilingual title typed into Form(s)/matter keeps its English
  * half ("… / I-212 Aplicación…" is dropped) and is capped at a word, so the
  * name stays readable in a folder.
  */
-export function contractDocumentName(f: ContractInput): string {
+export function contractDocumentName(f: ContractInput, tags: string[] = []): string {
   const clean = (s: string) => s.replace(/[\\/:*?"<>|#%{}~&]+/g, " ").replace(/\s+/g, " ").trim();
-  let matter = clean((f.formName.trim() || f.hearingType.trim() || "Fee K").split(" / ")[0]!);
+  // MASTER HEARING + MOTION: the motion names the matter ("Master Hearing + Motion to Recalendar").
+  const motion = tags.includes("motion_name") && has(f.motionName) ? `Master Hearing + ${f.motionName.trim()}` : "";
+  let matter = clean((motion || f.formName.trim() || f.hearingType.trim() || "Fee K").split(" / ")[0]!);
   if (matter.length > 80) matter = `${matter.slice(0, 80).replace(/\s+\S*$/, "")}…`;
   const p = ymd(f.date);
   const date = p ? `${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}-${p.y}` : "";

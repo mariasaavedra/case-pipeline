@@ -74,7 +74,10 @@ add a contract.
   `{{filing_fee_surcharge}}`, `{{postage_fee_surcharge}}`, `{{bio_fee_surcharge}}`…;
   N/A when that fee is empty). A typed surcharge only changes `{{surcharge}}`.
   Trial and BIA appeal fees are paid in two equal halves (`{{attorney_fee_half}}`);
-  Bond + Master Hearing has its own `{{motion_fee}}` / `{{hearing_fee}}`; Court
+  Bond + Master Hearing has its own `{{motion_fee}}` / `{{hearing_fee}}`;
+  Master Hearing + Motion (2026-10-21) adds which motion, `{{motion_name}}` /
+  `{{motion_name_es}}` (a pick list in M22 fills both: `MOTIONS`), and the
+  motion's FF is `{{filing_fee}}`; that contract's file is named after the motion; Court
   Application adds the DHS `{{bio_fee}}`; Trial's "signed contract by" date is
   `{{sign_by_date}}` (payment = `{{due_date}}`).
 - **Generate contract…** lists the folder, downloads the picked template and

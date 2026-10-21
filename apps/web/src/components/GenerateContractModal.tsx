@@ -37,7 +37,7 @@ import {
   CONTRACT_TEMPLATES_FOLDER, GraphConsentRequiredError, type DriveItem,
 } from "../sharepoint/graph";
 import {
-  contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf, contractDocumentName,
+  contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf, contractDocumentName, MOTIONS, motionEs,
   type ContractInput, type TemplateCheck,
 } from "../lib/contract-fill";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -113,6 +113,7 @@ const INPUTS_FOR: Record<string, (keyof ContractInput)[]> = {
   attorney_fee_surcharge: ["attorneyFee"], filing_fee_surcharge: ["filingFee"], postage_fee_surcharge: ["postageFee"],
   attorney_fee_half: ["attorneyFee"], attorney_fee_half_surcharge: ["attorneyFee"],
   bio_fee: ["bioFee"], bio_fee_surcharge: ["bioFee"],
+  motion_name: ["motionName"], motion_name_es: ["motionNameEs"],
   motion_fee: ["motionFee"], motion_fee_surcharge: ["motionFee"], hearing_fee: ["hearingFee"], hearing_fee_surcharge: ["hearingFee"],
   sign_by_date: ["signByDate"], sign_by_date_es: ["signByDate"],
   due_date: ["dueDate"], due_date_es: ["dueDate"], due_date_short: ["dueDate"],
@@ -190,7 +191,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         hearingType: p.hearingType, hearingDate: p.hearingDate, formName: p.contractFor.join(", "),
         // The Fee K's PF is the postage.
         attorneyFee: p.attorneyFee, filingFee: p.filingFee, postageFee: p.processingFee, surcharge: null, interviewFee: null,
-        bioFee: null, motionFee: null, hearingFee: null,
+        bioFee: null, motionName: "", motionNameEs: "", motionFee: null, hearingFee: null,
         dueDate: "", signByDate: "", attorneyName: p.attorneyName, creatorInitials: initialsOf(user?.name ?? ""),
         };
         prefill.current = { input: fresh, attorneyEmail: p.attorneyEmail ?? "" };
@@ -329,7 +330,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     setDone(null);
     try {
       const docx = fillContractTemplate(file.data, input);
-      const name = contractDocumentName(input);
+      const name = contractDocumentName(input, file.check.tags);
       if (format === "docx") {
         save(docx, `${name}.docx`);
         setDone(`Downloaded ${name}.docx`);
@@ -476,6 +477,21 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {text("hearingType", "Hearing type", { placeholder: "Master Hearing / Individual Hearing" })}
                 {text("hearingDate", "Hearing date", { type: "date" })}
                 {text("formName", "Form(s) / matter", { placeholder: "I-130" })}
+                {shown.has("motionName") && (
+                  <Field id="m22-motionName" label="Motion" hint="Pick one, or type another.">
+                    <input id="m22-motionName" list="m22-motions" placeholder="Motion to Recalendar" className={inputClass} style={inputStyle}
+                      value={input.motionName}
+                      onChange={(e) => {
+                        const en = e.target.value;
+                        // A listed motion brings its Spanish name; a typed one leaves Spanish to the user.
+                        const es = motionEs(en);
+                        dirty.current = true;
+                        setInput((f) => (f ? { ...f, motionName: en, motionNameEs: es || (motionEs(f.motionName) ? "" : f.motionNameEs) } : f));
+                      }} />
+                    <datalist id="m22-motions">{MOTIONS.map((m) => <option key={m.en} value={m.en} />)}</datalist>
+                  </Field>
+                )}
+                {text("motionNameEs", "Motion, Spanish", { placeholder: "Moción para Recalendarizar" })}
                 {text("attorneyName", "Attorney (signs the letter)")}
                 {text("creatorInitials", "Your initials")}
                 {text("date", "Letter date", { type: "date" })}

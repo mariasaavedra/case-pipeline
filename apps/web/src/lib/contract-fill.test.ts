@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import PizZip from "pizzip";
 import {
-  contractValues, contractProblems, contractDocumentName, inspectContractTemplate, fillContractTemplate, surchargeFor, unhighlightTags,
+  contractValues, contractProblems, contractDocumentName, motionEs, CONTRACT_FIELDS, inspectContractTemplate, fillContractTemplate, surchargeFor, unhighlightTags,
   type ContractInput,
 } from "./contract-fill";
 
@@ -18,7 +18,7 @@ const INPUT: ContractInput = {
   address: "123 Main St", cityStateZip: "Kansas City, MO 64105",
   hearingType: "Master Hearing", hearingDate: "2026-11-12", formName: "I-130",
   attorneyFee: 5000, filingFee: 675, postageFee: null, surcharge: null, interviewFee: null,
-  bioFee: null, motionFee: null, hearingFee: null,
+  bioFee: null, motionName: "", motionNameEs: "", motionFee: null, hearingFee: null,
   dueDate: "", signByDate: "", attorneyName: "Jane Attorney", creatorInitials: "RC",
 };
 
@@ -89,6 +89,24 @@ describe("contractDocumentName", () => {
   });
   it("falls back to the hearing type, and drops characters a file name can't hold", () => {
     expect(contractDocumentName({ ...INPUT, formName: "", clientName: "Ana / LOPEZ" })).toBe("Ana LOPEZ - Master Hearing - 10-05-2026");
+  });
+  it("names a Master Hearing + motion contract after the motion, only when the template has one", () => {
+    const f = { ...INPUT, motionName: "Motion to Recalendar" };
+    expect(contractDocumentName(f, ["motion_name", "hearing_date"])).toBe("Ana LOPEZ - Master Hearing + Motion to Recalendar - 10-05-2026");
+    expect(contractDocumentName(f, ["form_name"])).toBe("Ana LOPEZ - I-130 - 10-05-2026");
+  });
+});
+
+describe("motions", () => {
+  it("knows the Spanish name of a listed motion, any case", () => {
+    expect(motionEs("motion to administratively close")).toBe("Moción de Cierre Administrativo");
+    expect(motionEs("Motion to Suppress")).toBe("");
+  });
+  it("requires both names and prints them as typed", () => {
+    const fields = CONTRACT_FIELDS.filter((x) => x.tag.startsWith("motion_name"));
+    expect(fields.map((x) => x.required!(INPUT))).toEqual([true, true]);
+    const f = { ...INPUT, motionName: " Motion to Reopen ", motionNameEs: "Moción para Reabrir" };
+    expect(contractValues(f)).toMatchObject({ motion_name: "Motion to Reopen", motion_name_es: "Moción para Reabrir" });
   });
 });
 
