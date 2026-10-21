@@ -1,6 +1,6 @@
 # Client Uploads (upload link)
 
-**Status:** Steps 1–2 built (links, public upload, filing to E-File → CAF + Monday/Slack); steps 3–5 to do · **Last updated:** 2026-10-21
+**Status:** Steps 1–3 built (links, public upload, filing to E-File → CAF + Monday/Slack, client page); steps 4–5 to do · **Last updated:** 2026-10-21
 
 ---
 
@@ -89,7 +89,7 @@ Its own Vite entry (`apps/web/upload.html` + `src/upload/`), **not** a route ins
 - `<input type="file" accept="image/*,application/pdf,..." multiple>` plus a `capture` button for the camera.
 - Uploads 2 files at a time, shows each one's progress, retries a failed one.
 - All text in one `es` / `en` table. Spanish wording to be checked by staff.
-- The server needs a rule so `/u/*` serves `upload.html`. To check: the production proxy / static setup when building.
+- `/u/*` serves `upload.html`: nginx in production (`apps/web/nginx.conf`, also `/api/u/` with a 51 MB body limit, streamed, 10 min timeouts), a small Vite plugin in dev / preview. Built bundle: its own ~4.5 KB script + React + its own CSS (fonts), no MSAL or dashboard code.
 
 ### Staff UI
 

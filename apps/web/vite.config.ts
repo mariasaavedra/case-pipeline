@@ -1,7 +1,24 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, type Connect, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+
+/**
+ * /u/<token> is the client upload page (upload.html), a separate entry from the
+ * dashboard. nginx does this rewrite in production (apps/web/nginx.conf); this
+ * does it for `vite` and `vite preview`.
+ */
+function clientUploadPage(): Plugin {
+  const rewrite: Connect.NextHandleFunction = (req, _res, next) => {
+    if (req.url && /^\/u\/[^/?]+\/?(\?.*)?$/.test(req.url)) req.url = "/upload.html";
+    next();
+  };
+  return {
+    name: "client-upload-page",
+    configureServer: (server) => void server.middlewares.use(rewrite),
+    configurePreviewServer: (server) => void server.middlewares.use(rewrite),
+  };
+}
 
 export default defineConfig({
   // Build stamp — baked at image build time (Dockerfile.web passes BUILD_SHA /
@@ -11,7 +28,7 @@ export default defineConfig({
     __BUILD_SHA__: JSON.stringify(process.env.BUILD_SHA ?? "dev"),
     __BUILD_DATE__: JSON.stringify(process.env.BUILD_DATE ?? ""),
   },
-  plugins: [tailwindcss(), react()],
+  plugins: [tailwindcss(), react(), clientUploadPage()],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -32,6 +49,12 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     rollupOptions: {
+      // Two pages: the dashboard, and the client upload page (/u/<token>), which
+      // must never pull in the dashboard's code.
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        upload: fileURLToPath(new URL("./upload.html", import.meta.url)),
+      },
       output: {
         // Split the vendors out of the app chunk. Two reasons: the app shipped as
         // a single ~700 KB file, and every one-line change to our own code
