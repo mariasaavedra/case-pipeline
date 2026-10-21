@@ -13,6 +13,7 @@ import { ContractsTab } from "./ContractsTab";
 import { ActiveCasesTab } from "./ActiveCasesTab";
 import { CourtCasesTab } from "./CourtCasesTab";
 import { DocumentsTab } from "./DocumentsTab";
+import { ClientUploadsList } from "./ClientUploadsList";
 import { CaseTimelineTab } from "./CaseTimelineTab";
 import {
   TimelineFilters,
@@ -235,10 +236,13 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
           )}
 
           {activeTab === "documents" && (
-            <DocumentsTab
-              data={data}
-              eFile={{ profileLocalId: data.profile.localId, firstName: data.profile.firstName, lastName: data.profile.lastName }}
-            />
+            <div className="space-y-4">
+              <ClientUploadsList profileLocalId={data.profile.localId} />
+              <DocumentsTab
+                data={data}
+                eFile={{ profileLocalId: data.profile.localId, firstName: data.profile.firstName, lastName: data.profile.lastName }}
+              />
+            </div>
           )}
 
           {activeTab === "relations" && (

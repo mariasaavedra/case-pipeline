@@ -1,6 +1,6 @@
 # Client Uploads (upload link)
 
-**Status:** Steps 1–3 built (links, public upload, filing to E-File → CAF + Monday/Slack, client page); steps 4–5 to do · **Last updated:** 2026-10-21
+**Status:** Steps 1–4 built (links, public upload, filing to E-File → CAF + Monday/Slack, client page, staff popup M30 + Received from client); step 5 (trial) to do · **Last updated:** 2026-10-21
 
 ---
 
@@ -93,8 +93,9 @@ Its own Vite entry (`apps/web/upload.html` + `src/upload/`), **not** a route ins
 
 ### Staff UI
 
-- "Upload link" button on the client page header and the P6 case card → modal: language, Create, Copy, **Text it** (opens the existing SMS send with the template pre-filled).
-- Client page → Documents: "Received from client" list (date, kind, file → SharePoint), and the active links with Revoke / Extend.
+- **Built:** "Upload link" on the client page header (P3.0) → **M30** (`UploadLinkModal`): the active link (who made it, until when, files received) with **Extend 30 days** / **Turn off**; page language (from the profile's Language); **Make link** (a second one asks first); the link shown once with **Copy** and **Text it to the client** → M28 on the `upload_link` template (`{{uploadLink}}` filled, context `upload_link`). That template is in `REQUIRED_SMS_TEMPLATES`: added back if a saved template list lacks it.
+- **Built:** client page → Documents: "Received from client" (`ClientUploadsList`) above the SharePoint browser: date, file (→ its SharePoint copy once filed), kind, the client's note, and where it stands (filed / being filed / waiting: no E-File / not filed: error). Hidden when nothing came in.
+- **Not built:** the button on the P6 case card. Add it if staff ask for it after the trial.
 
 ### Config
 

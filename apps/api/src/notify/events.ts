@@ -52,6 +52,7 @@ const SMS_CONTEXT_TEXT: Record<string, string> = {
   call_log: "after a call",
   payment_links: "payment links",
   client: "from the client page",
+  upload_link: "upload link",
 };
 
 export function smsSentEvent(e: {

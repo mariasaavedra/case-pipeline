@@ -797,7 +797,7 @@ export interface SmsConfig {
   templates: SmsTemplate[];
   firm: { firmName: string; firmPhone: string };
 }
-export type SmsContext = "call_log" | "payment_links" | "client";
+export type SmsContext = "call_log" | "payment_links" | "client" | "upload_link";
 export interface SendSmsInput {
   to: string;
   body: string;
@@ -1396,6 +1396,63 @@ export function setProfileEFile(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, replaces: replaces ?? null }),
   });
+}
+
+// ---- Client upload links (M30, docs/features/client-uploads.md) ----
+
+export interface ClientUpload {
+  id: number;
+  received_at: string;
+  stored_name: string;
+  size: number;
+  content_type: string;
+  kind: "id" | "notice" | "evidence" | "other";
+  note: string | null;
+  sharepoint_url: string | null;
+  filed_where: string | null;
+  filed_at: string | null;
+  last_error: string | null;
+}
+
+export interface UploadLinkInfo {
+  id: number;
+  language: "es" | "en";
+  active: boolean;
+  createdAt: string;
+  createdBy: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  lastUsedAt: string | null;
+  uploads: ClientUpload[];
+}
+
+export function fetchUploadLinks(profileLocalId: string): Promise<{ enabled: boolean; links: UploadLinkInfo[] }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/upload-links`);
+}
+
+/** The only response that carries the link itself: it is never shown again. */
+export function createUploadLink(
+  profileLocalId: string,
+  input: { language: "es" | "en"; days?: number },
+): Promise<{ id: number; url: string; expiresAt: string; replaced: boolean }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/upload-links`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function extendUploadLink(id: number, days = 30): Promise<{ id: number; expiresAt: string }> {
+  return apiFetch(`/api/upload-links/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ days }),
+  });
+}
+
+export function revokeUploadLink(id: number): Promise<{ id: number; revoked: boolean }> {
+  return apiFetch(`/api/upload-links/${id}`, { method: "DELETE" });
 }
 
 // ---- Watchlist ----
