@@ -1945,6 +1945,89 @@ export function attachConsultFile(appointmentLocalId: string, file: Blob, name: 
   });
 }
 
+// -----------------------------------------------------------------------------
+// Slack queue — M18 step 2 + P17's Slack Queue tab (routes/slack-queue.ts)
+// -----------------------------------------------------------------------------
+
+/** Whether the "Consult ready" Slack event would post right now, and where. */
+export interface SlackEventStatus {
+  mode: "off" | "dry-run" | "on";
+  enabled: boolean;
+  channel: string | null;
+}
+
+export interface SlackQueued {
+  id: number;
+  kind: "consult_ready";
+  appointmentMondayId: string | null;
+  boardKey: string | null;
+  /** Slack mrkdwn: *bold*, <url|label>, <@U…>. */
+  text: string;
+  sendAt: string;
+  /** Firm time, for the edit fields. */
+  sendDate: string;
+  sendTime: string;
+  status: "queued" | "sending" | "sent" | "failed";
+  dryRun: boolean;
+  error: string | null;
+  sentAt: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+}
+
+export interface SlackDraft {
+  draft: { text: string; sendDate: string; sendTime: string };
+  /** The message already waiting for this consult (queueing again replaces it). */
+  existing: SlackQueued | null;
+  attorney: string | null;
+  attorneyHasSlack: boolean;
+  slack: SlackEventStatus;
+}
+
+export function fetchSlackDraft(appointmentLocalId: string): Promise<SlackDraft> {
+  return apiFetch<SlackDraft>(`/api/reception/consults/${encodeURIComponent(appointmentLocalId)}/slack-draft`);
+}
+
+export interface SlackQueueInput {
+  text: string;
+  sendDate: string;
+  sendTime: string;
+}
+
+export function queueConsultSlack(
+  appointmentLocalId: string,
+  input: SlackQueueInput,
+): Promise<{ queued: SlackQueued; replaced: boolean; slack: SlackEventStatus }> {
+  return apiFetch(`/api/reception/consults/${encodeURIComponent(appointmentLocalId)}/slack`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export interface SlackQueueMessage extends SlackQueued {
+  badge: string | null;
+  /** The consult as it is now — null when it was deleted in Monday. */
+  appointment: { localId: string; client: string; date: string | null; time: string | null; attorney: string | null } | null;
+}
+
+export function fetchSlackQueue(): Promise<{ today: string; slack: SlackEventStatus; messages: SlackQueueMessage[] }> {
+  return apiFetch("/api/reception/slack-queue");
+}
+
+/** Edit words / time. A failed message goes back in the queue (Retry). */
+export function editSlackQueued(id: number, patch: Partial<SlackQueueInput>): Promise<SlackQueued> {
+  return apiFetch(`/api/reception/slack-queue/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteSlackQueued(id: number): Promise<{ deleted: true }> {
+  return apiFetch(`/api/reception/slack-queue/${id}`, { method: "DELETE" });
+}
+
 /** An attorney M20 can move a consult to — one per active appointment board. */
 export interface ReceptionAttorney {
   boardKey: string;

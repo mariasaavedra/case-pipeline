@@ -118,6 +118,33 @@ The older Incoming Webhook (`SLACK_WEBHOOK_URL`, Adobe Sign alerts) keeps
 working: events fall back to it whenever `SLACK_EVENTS_CHANNEL` is empty,
 whatever `SLACK_MODE` says.
 
+### Slack queue — "LB's 1:00 PM Ready" (M18 step 2 → P17.3, 2026-10-21)
+
+Reception used to post the attorney's "consult ready" message by hand at the
+consult's time. Now, after **Save prep note**, M18 offers **Next: Slack
+message →**: a draft built from the prep, queued for the consult's time.
+
+```
+*LB's 1:00 PM Ready*          ← board badge + appointment time
+No Intr Needed                ← Spanish / Portuguese "Intr Needed"; other language "… Intr — client brings their own"
+<https://…zoom…|Zoom>         ← Zoom link; a phone consult says "Phone call" (no numbers in Slack)
+<@U057V5Y497A>                ← the attorney's Slack member id from the staff roster, else their name
+```
+
+- Words and time are editable in M18 and on **P17 → Slack Queue** (edit, Send
+  now, Delete; a failed one has Retry). One waiting message per consult —
+  prepping again replaces it.
+- Stored in users.db `slack_queue` (v18), keyed by the appointment's Monday id.
+  A job (`server.ts` `scheduleSlackQueue`, every minute, seed too) posts what
+  is due through the **Consult ready** event — pick the attorneys' channel in
+  Settings → Integrations. More than 60 min late (server down) = not posted,
+  marked failed. A crash mid-send = failed with "check Slack before retrying".
+- The tab flags a consult whose time moved after the message was queued; it
+  does not move the message on its own.
+- Rules = `notify/consult-ready.ts` (text, firm time ↔ UTC) +
+  `notify/slack-queue.ts` (store + job); routes = `routes/slack-queue.ts`.
+  Audited `slack_queue.created / edited / retried / deleted`.
+
 ### Settings → Integrations (P11.5)
 
 Admins turn each notification on or off, send it to another channel, and set

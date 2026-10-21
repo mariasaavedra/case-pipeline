@@ -28,6 +28,7 @@ export const NOTIFY_EVENTS = [
   { key: "contract_signed", kind: "events", label: "Contract signed", description: "Staff record the client's signature on a Fee K (P14)" },
   { key: "payment_link_sent", kind: "events", label: "Payment link sent", description: "A Fee K moves to Payment link sent (P14 or Text links to client)" },
   { key: "consult_prepped", kind: "events", label: "Consult prepped", description: "Reception saves a consult prep (M18)" },
+  { key: "consult_ready", kind: "events", label: "Consult ready (to the attorney)", description: "Reception's queued \"LB's 1:00 PM Ready\" message, posted at the consult's time (M18 → P17 Slack Queue). Set the attorneys' channel here" },
   { key: "mail_scanned", kind: "events", label: "Mail scanned", description: "A mail scan is uploaded — says how many notices need review" },
   { key: "sms_sent", kind: "events", label: "Text sent", description: "A real text goes to a client (never the number or the words)" },
   { key: "esign", kind: "events", label: "Adobe Sign updates", description: "Signed / rejected / expired / recalled contracts from Adobe Sign" },

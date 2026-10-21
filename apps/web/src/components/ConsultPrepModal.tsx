@@ -29,6 +29,12 @@
 // Det. Facility labels (D36), "Other" for one not on the list. "Has DMS?"
 // (the old CRM, cases until 2024) adds the client's DMS record to the note —
 // the profile's DMS URL, else one built from the Case No.
+//
+// Step 2, after the note is saved: the attorney's "LB's 1:00 PM Ready" Slack
+// message, drafted from the prep (interpreter, Zoom link) with the attorney
+// tagged, queued for the consult's time. Reception can edit the words and the
+// time, or skip it; P17's Slack Queue tab lists it afterwards.
+// See routes/slack-queue.ts.
 // =============================================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +44,11 @@ import {
   INTERPRETER_NEEDS,
   PREP_METHODS,
   attachConsultFile,
+  fetchSlackDraft,
   prepConsult,
+  queueConsultSlack,
+  type SlackDraft,
+  type SlackQueued,
   type ApptType,
   type InterpreterNeed,
   type PrepMethod,
@@ -51,6 +61,7 @@ import { DocumentsTab, type PickedFile } from "./DocumentsTab";
 import { MenuCode } from "./ScreenCode";
 import { downloadDriveFile, findOrCreateClientFolder, folderNameOf, getGraphToken, GraphConsentRequiredError, type ClientFolderKind } from "../sharepoint/graph";
 import { normalizeSharePointUrl } from "../sharepoint/parseLink";
+import { SlackMessageEditor, slackWarning, type SlackMessageValue } from "./SlackMessageEditor";
 
 const FOLDER_KINDS: ClientFolderKind[] = ["e_file", "consult_file"];
 const FOLDER_LABEL: Record<ClientFolderKind, string> = { e_file: "E-File folder", consult_file: "Consult folder" };
@@ -175,9 +186,86 @@ interface Props {
   onClose: () => void;
   /** Called after a successful save, so P17 can refresh its "Prepped" marks. */
   onSaved: () => void;
+  /** Called after the Slack message is queued (step 2), so P17's Slack Queue tab refreshes. */
+  onQueued?: () => void;
 }
 
-export function ConsultPrepModal({ consult, facilities, onFocus, onClose, onSaved }: Props) {
+/** "Tue, Oct 21 · 1:00 PM" for a queued message. */
+function sendLabel(q: { sendDate: string; sendTime: string }): string {
+  const day = new Date(`${q.sendDate}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  const [h, m] = q.sendTime.split(":").map(Number);
+  const hour = h ?? 0;
+  return `${day} · ${hour % 12 === 0 ? 12 : hour % 12}:${String(m ?? 0).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+/** M18 step 2: queue the attorney's "Ready" message. */
+function SlackStep({ consult, onSkip, onQueued }: {
+  consult: ReceptionConsult;
+  onSkip: () => void;
+  onQueued: (q: SlackQueued, replaced: boolean) => void;
+}) {
+  const [draft, setDraft] = useState<SlackDraft | null>(null);
+  const [value, setValue] = useState<SlackMessageValue | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetchSlackDraft(consult.localId)
+      .then((d) => {
+        setDraft(d);
+        // A message already waiting for this consult (an earlier prep) is replaced, so the
+        // draft is fresh from this prep — the old one is only mentioned.
+        setValue(d.draft);
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Couldn't draft the message"));
+  }, [consult.localId]);
+
+  const submit = async () => {
+    if (!value) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await queueConsultSlack(consult.localId, value);
+      onQueued(r.queued, r.replaced);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't queue the message");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const warning = draft ? slackWarning(draft.slack) : null;
+  return (
+    <div style={{ fontFamily: "var(--font-body)" }}>
+      <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-ink-faint)", marginBottom: 4 }}>Step 2 of 2 · Slack</p>
+      <p style={{ fontSize: 13, color: "var(--color-ink-muted)", marginBottom: 12 }}>
+        Tell the attorney the consult is ready. It posts on its own at the time below — change the words or the time if needed.
+      </p>
+      {!value && !error && <p style={{ fontSize: 13, color: "var(--color-ink-muted)" }}>Drafting…</p>}
+      {draft && !draft.attorneyHasSlack && (
+        <p style={{ fontSize: 12, color: "var(--urgency-soon)", marginBottom: 8 }}>
+          {draft.attorney ?? "The attorney"} has no Slack member id on the staff roster, so they are named, not tagged. An admin adds it in Settings → Staff.
+        </p>
+      )}
+      {draft?.existing && (
+        <p style={{ fontSize: 12, color: "var(--color-ink-muted)", background: "var(--color-surface-warm)", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>
+          A message is already queued for this consult ({sendLabel(draft.existing)}). Queueing replaces it.
+        </p>
+      )}
+      {warning && <p style={{ fontSize: 12, color: "var(--urgency-soon)", marginBottom: 8 }}>{warning}</p>}
+      {value && <SlackMessageEditor value={value} onChange={setValue} mention={draft?.attorney ?? "attorney"} disabled={saving} />}
+      {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginTop: 8 }}>{error}</p>}
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 12 }}>
+        <Button type="button" variant="outline" onClick={onSkip}>Skip</Button>
+        <Button type="button" onClick={submit} disabled={saving || !value}>
+          {saving ? "Queueing…" : "Queue message"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function ConsultPrepModal({ consult, facilities, onFocus, onClose, onSaved, onQueued }: Props) {
   const profile = consult.profile;
   const startPhone = profile?.phone ?? consult.phone ?? "";
   // A Calendly booking's Description is the client's own words: they stay, read
@@ -330,6 +418,9 @@ export function ConsultPrepModal({ consult, facilities, onFocus, onClose, onSave
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ pending: boolean; wroteBack: string[] } | null>(null);
+  // After the save: step 2 (the Slack message), then what was queued.
+  const [slackStep, setSlackStep] = useState(false);
+  const [queued, setQueued] = useState<{ q: SlackQueued; replaced: boolean } | null>(null);
 
   const pickedUrls = useMemo(() => new Set(picked.map((p) => p.url)), [picked]);
   const togglePicked = (f: PickedFile) =>
@@ -430,7 +521,24 @@ export function ConsultPrepModal({ consult, facilities, onFocus, onClose, onSave
         </DialogHeader>
 
         <div className="px-5 py-4">
-          {done ? (
+          {queued ? (
+            <div style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "var(--color-ink)" }}>
+              <p style={{ marginBottom: 8 }}>
+                ✓ Slack message {queued.replaced ? "re-queued" : "queued"} for {sendLabel(queued.q)}.
+              </p>
+              <p style={{ fontSize: 13, color: "var(--color-ink-muted)", marginBottom: 8 }}>
+                Edit or delete it on the Slack Queue tab until it goes out.
+              </p>
+              <button type="button" onClick={onClose} className="mt-1 rounded-md px-3 py-1.5 text-sm"
+                style={{ background: "var(--color-amber-light)", color: "var(--color-amber)", border: "none", cursor: "pointer" }}>Done</button>
+            </div>
+          ) : done && slackStep ? (
+            <SlackStep
+              consult={consult}
+              onSkip={onClose}
+              onQueued={(q, replaced) => { setQueued({ q, replaced }); onQueued?.(); }}
+            />
+          ) : done ? (
             <div style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "var(--color-ink)" }}>
               <p style={{ marginBottom: 8 }}>
                 ✓ Prep note {done.pending ? "saved — some of it is queued and will reach Monday shortly" : "posted in Monday"}.
@@ -458,8 +566,10 @@ export function ConsultPrepModal({ consult, facilities, onFocus, onClose, onSave
                   </ul>
                 </div>
               )}
-              <button type="button" onClick={onClose} className="mt-1 rounded-md px-3 py-1.5 text-sm"
-                style={{ background: "var(--color-amber-light)", color: "var(--color-amber)", border: "none", cursor: "pointer" }}>Done</button>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+                <Button type="button" variant="outline" onClick={onClose}>Done</Button>
+                <Button type="button" onClick={() => setSlackStep(true)}>Next: Slack message →</Button>
+              </div>
             </div>
           ) : (
             <>
