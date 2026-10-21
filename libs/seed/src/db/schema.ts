@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 36;
+export const SCHEMA_VERSION = 37;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -548,6 +548,48 @@ CREATE TABLE IF NOT EXISTS esign_agreements (
     updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_esign_agreements_contract ON esign_agreements(contract_monday_id);
+
+-- Client upload links (v37): a private link per client to send us documents,
+-- which the filing job puts in their E-File's CAF folder. Local-only — NOT
+-- rebuilt by sync. routes/client-uploads.ts, docs/features/client-uploads.md.
+CREATE TABLE IF NOT EXISTS upload_links (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_local_id       TEXT NOT NULL,
+    profile_monday_id      TEXT,                   -- stable across a re-sync
+    token_hash             TEXT NOT NULL UNIQUE,   -- SHA-256 of the link's token; the token itself is never stored
+    language               TEXT NOT NULL,          -- es | en: the page's default
+    created_by_oid         TEXT,
+    created_by_name        TEXT,
+    created_at             TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at             TEXT NOT NULL,          -- UTC, datetime('now') format
+    revoked_at             TEXT,
+    revoked_by_name        TEXT,
+    last_used_at           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_upload_links_profile ON upload_links(profile_local_id);
+CREATE INDEX IF NOT EXISTS idx_upload_links_profile_monday ON upload_links(profile_monday_id);
+CREATE TABLE IF NOT EXISTS client_uploads (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    link_id                INTEGER NOT NULL REFERENCES upload_links(id),
+    received_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    original_name          TEXT NOT NULL,
+    stored_name            TEXT NOT NULL,          -- the name it gets in SharePoint
+    local_file             TEXT,                   -- under data/uploads/; NULL once deleted after filing
+    size                   INTEGER NOT NULL,
+    content_type           TEXT NOT NULL,          -- from the file's first bytes, not the browser
+    sha256                 TEXT NOT NULL,
+    kind                   TEXT NOT NULL,          -- id | notice | evidence | other
+    note                   TEXT,
+    sharepoint_item_id     TEXT,
+    sharepoint_url         TEXT,
+    filed_where            TEXT,                   -- E-File | Consult File
+    filed_at               TEXT,
+    notified_at            TEXT,                   -- Monday update + Slack
+    attempts               INTEGER NOT NULL DEFAULT 0,
+    last_error             TEXT,
+    UNIQUE (link_id, sha256)
+);
+CREATE INDEX IF NOT EXISTS idx_client_uploads_unfiled ON client_uploads(filed_at);
 
 -- Monday API calls per UTC day per job (v34). Monday caps the account's calls
 -- per day; this says which of our jobs spent them. See libs/monday/src/usage.ts.
@@ -1649,6 +1691,50 @@ export function initializeSchema(db: Database): void {
           CREATE INDEX IF NOT EXISTS idx_item_events_board ON item_events(board_key, changed_at);
         `);
       })();
+    }
+
+    // Migration v36 → v37: client upload links. New tables only.
+    if (fromVersion < 37) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS upload_links (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_local_id       TEXT NOT NULL,
+            profile_monday_id      TEXT,                   -- stable across a re-sync
+            token_hash             TEXT NOT NULL UNIQUE,   -- SHA-256 of the link's token; the token itself is never stored
+            language               TEXT NOT NULL,          -- es | en: the page's default
+            created_by_oid         TEXT,
+            created_by_name        TEXT,
+            created_at             TEXT NOT NULL DEFAULT (datetime('now')),
+            expires_at             TEXT NOT NULL,          -- UTC, datetime('now') format
+            revoked_at             TEXT,
+            revoked_by_name        TEXT,
+            last_used_at           TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_upload_links_profile ON upload_links(profile_local_id);
+        CREATE INDEX IF NOT EXISTS idx_upload_links_profile_monday ON upload_links(profile_monday_id);
+        CREATE TABLE IF NOT EXISTS client_uploads (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            link_id                INTEGER NOT NULL REFERENCES upload_links(id),
+            received_at            TEXT NOT NULL DEFAULT (datetime('now')),
+            original_name          TEXT NOT NULL,
+            stored_name            TEXT NOT NULL,          -- the name it gets in SharePoint
+            local_file             TEXT,                   -- under data/uploads/; NULL once deleted after filing
+            size                   INTEGER NOT NULL,
+            content_type           TEXT NOT NULL,          -- from the file's first bytes, not the browser
+            sha256                 TEXT NOT NULL,
+            kind                   TEXT NOT NULL,          -- id | notice | evidence | other
+            note                   TEXT,
+            sharepoint_item_id     TEXT,
+            sharepoint_url         TEXT,
+            filed_where            TEXT,                   -- E-File | Consult File
+            filed_at               TEXT,
+            notified_at            TEXT,                   -- Monday update + Slack
+            attempts               INTEGER NOT NULL DEFAULT 0,
+            last_error             TEXT,
+            UNIQUE (link_id, sha256)
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_uploads_unfiled ON client_uploads(filed_at);
+      `);
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

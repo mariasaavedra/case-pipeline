@@ -72,6 +72,7 @@ import { registerContractFeesRoutes } from "./routes/contract-fees.js";
 import { registerCaseCardWriteRoutes } from "./routes/case-card-write.js";
 import { registerContractDocumentRoutes } from "./routes/contract-document.js";
 import { registerEsignPublicRoutes, registerEsignRoutes } from "./routes/esign.js";
+import { registerClientUploadPublicRoutes, registerClientUploadRoutes } from "./routes/client-uploads.js";
 import { registerLawPayRoutes } from "./routes/lawpay.js";
 import { runLawPayMailJob } from "./lawpay/mail-job.js";
 import { runLawPaySlackJob } from "./lawpay/slack-job.js";
@@ -282,6 +283,10 @@ registerMondayWebhook(app, db);
 // Adobe Sign via Zapier: the contract PDF link Zap 1 downloads and the event
 // receiver. Secret URL / random file token instead of an Azure AD login.
 registerEsignPublicRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+
+// Client upload links (CLIENT_UPLOADS=on): the client page's lookup + file
+// upload. The link's random token is the key, no login.
+registerClientUploadPublicRoutes(app, { db });
 
 // Admin — requireAdmin gates the role once here, so a future admin route can't
 // forget the check.
@@ -586,6 +591,7 @@ registerContractFeesRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTok
 registerCaseCardWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerContractDocumentRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerEsignRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
+registerClientUploadRoutes(app, { db });
 registerLawPayRoutes(app, { db });
 registerDocumentRoutes(app, { db });
 
