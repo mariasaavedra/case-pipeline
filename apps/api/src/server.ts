@@ -73,6 +73,8 @@ import { registerCaseCardWriteRoutes } from "./routes/case-card-write.js";
 import { registerContractDocumentRoutes } from "./routes/contract-document.js";
 import { registerEsignPublicRoutes, registerEsignRoutes } from "./routes/esign.js";
 import { registerClientUploadPublicRoutes, registerClientUploadRoutes } from "./routes/client-uploads.js";
+import { startClientUploadFiling } from "./uploads/job.js";
+import { clientUploadsConfig } from "./uploads/rules.js";
 import { registerLawPayRoutes } from "./routes/lawpay.js";
 import { runLawPayMailJob } from "./lawpay/mail-job.js";
 import { runLawPaySlackJob } from "./lawpay/slack-job.js";
@@ -689,6 +691,13 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`Server running at http://${HOST}:${PORT}`);
   // An empty roster (first boot after users.db v14) is filled from Monday + the boards.
   seedStaffIfEmpty(db, MONDAY_API_TOKEN);
+
+  // Client upload links → E-File → CAF. On seed data the script only plans.
+  if (clientUploadsConfig()) {
+    startClientUploadFiling({ db, mondayApiToken: MONDAY_API_TOKEN, seed: DB_SOURCE === "seed" });
+  } else {
+    console.log("[uploads] Client upload links DISABLED (set CLIENT_UPLOADS=on and API_URL to enable).");
+  }
 
   if (DB_SOURCE === "live") {
     scheduleNightlySync();

@@ -1,6 +1,6 @@
 # Client Uploads (upload link)
 
-**Status:** Step 1 built (links + public upload, files kept locally); steps 2–5 to do · **Last updated:** 2026-10-21
+**Status:** Steps 1–2 built (links, public upload, filing to E-File → CAF + Monday/Slack); steps 3–5 to do · **Last updated:** 2026-10-21
 
 ---
 

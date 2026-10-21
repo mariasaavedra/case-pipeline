@@ -61,3 +61,11 @@ export function smsSentEvent(e: {
   const text = `:speech_balloon: Text sent to *${slackEscape(e.clientName ?? "an unlinked caller")}* (${what})` + who(e.by);
   return withLink(text, e.clientName ? e.link : null, "Monday");
 }
+
+/** Never the file names or notes: clients name files after themselves and their case. */
+export function clientUploadEvent(e: { clientName: string | null; files: number; kinds: string; where: string; link: string | null }): string {
+  const text =
+    `:inbox_tray: *${slackEscape(e.clientName ?? "A client")}* sent ${e.files === 1 ? "1 document" : `${e.files} documents`}` +
+    ` (${slackEscape(e.kinds)}) — filed in their ${slackEscape(e.where)} → CAF`;
+  return withLink(text, e.link, "Monday");
+}

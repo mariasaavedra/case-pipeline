@@ -16,7 +16,7 @@
 //
 // Unknown, expired and revoked links all get the same 404, so nobody can tell
 // a dead link from a made-up one. Files are kept under data/uploads/ and the
-// filing job (step 2) moves them into the client's E-File → CAF.
+// filing job (uploads/job.ts) moves them into the client's E-File → CAF.
 // =============================================================================
 
 import express from "express";
@@ -35,6 +35,7 @@ import {
   clientUploadsConfig, firstNameOf, hashToken, linkDays, newToken, sniffFileType, sqliteUtc, storedName,
   type Kind, type Language,
 } from "../uploads/rules.js";
+import { fileSoon } from "../uploads/job.js";
 
 export const UPLOADS_DIR = "uploads";
 
@@ -193,6 +194,7 @@ export function registerClientUploadPublicRoutes(app: Express, deps: { db: Datab
         targetType: "profile", targetId: link.profile_local_id, targetMondayId: link.profile_monday_id,
         metadata: { link: link.id, upload: id, kind, size: body.length, type: type.ext },
       });
+      fileSoon();
       res.json({ data: { received: true, duplicate: false } });
     },
   );
