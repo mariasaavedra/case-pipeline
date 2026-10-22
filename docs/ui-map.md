@@ -96,15 +96,9 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Address | Notes |
 |---|---|---|---|
-| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17; **Watch** + a **⋯** menu → D37: Open in DMS / Monday.com / **Open e-file in SharePoint**, and **Generate document…** → M23; **Text** next to the phone → M28 on free text, Phone else Phone 2) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
-| P3.1 | Overview tab | `/clients/:id` | Timeline of notes + note composer; date range → D5 |
-| P3.2 | Appointments tab | `/clients/:id/appointments` | **+ Book a consult** → M10 |
-| P3.3 | Contracts tab | `/clients/:id/contracts` | **+ New contract** → M11 |
-| P3.4 | Active Cases tab | `/clients/:id/active_cases` | |
-| P3.5 | Court Cases tab | `/clients/:id/court_cases` | |
-| P3.6 | Documents tab | `/clients/:id/documents` | SharePoint files; click a file → M12. Inside a folder: **New folder**, **Upload files**. No e-file link → **Find or create e-file folder** (writes the profile's E-File) |
-| P3.7 | Relations tab | `/clients/:id/relations` | |
-| P3.8 | Debug tab | — | Admins only. Click an entry → M13 |
+| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17; **Watch** + a **⋯** menu → D37: Open in DMS / Monday.com / **Open e-file in SharePoint** / **Open consult folder in SharePoint**, and **Generate document…** → M23; **Text** next to the phone → M28 on free text, Phone else Phone 2) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
+| P3.1 | Overview tab | `/clients/:id` | Timeline of notes + note composer; date range → D5. P3 has three tabs: Overview, Timeline, Documents (Appointments / Contracts / Active Cases / Court Cases / Relations / Debug removed 2026-10-22; their old URLs open Overview) |
+| P3.6 | Documents tab | `/clients/:id/documents` | SharePoint files; click a file → M12. Inside a folder: **New folder**, **Upload files**; drag a file or folder onto a folder row or a folder in the path to **move** it; trash icon → **Delete** (files and empty folders, after a confirm; goes to the SharePoint recycle bin). No e-file link → **Find or create e-file folder** (writes the profile's E-File) |
 | P3.9 | Timeline tab | `/clients/:id/timeline` | Where it stands / Needs attention / Coming up; lane chart (court, USCIS, fees, meetings, notes per month) with 12 months / 18 months / 3 years / Everything; click a marker, a story row or a Coming up item → M29 (the marker also highlights its row; filter by track, newest/oldest first). Needs attention items carry **Record outcome** (hearing with no outcome), **Fix** (missed deadline) or **Record decision** (motion still Filed) → M29 on that Monday item. Reloads after an edit. Milestones per board = `config/timeline.yaml`; rules = `libs/query/src/case-timeline.ts`. History (item activity log): **status / group changes** as thin ticks along each lane + story rows ("Calendaring Status: Check dates → ATTENDED · by Mayra"), hidden with **Status changes**; **moved dates** (hearing / interview / consult) as crossed-out events at the old date ("moved to Nov 20 on Oct 2 by …"). Also mounted in M3 |
 
 ### Inside P4 Appointments
@@ -272,10 +266,9 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M7 | Day agenda | The date | P7 → click a day | `CalendarPage.tsx` (`DayModal`) |
 | M8 | New jail intake | "New jail intake" | P9 → **+ New intake**. Intake status (New Detainee / Payment link sent. Waiting on payment) + optional POC e-mail — the same fields as M2's "this call is a jail intake" | `NewJailIntakeModal.tsx` |
 | M9 | Jail intake detail | The detainee's name | P9 → click an intake. The status chip changes the status (D6). A paid intake ("Needs to be scheduled") shows **Book consult**: attorney + date + time → saved to Monday, then a link to press Create Appt there | `JailIntakeDetailModal.tsx` |
-| M10 | Book a consult | "Book a consult" | P3.2; P17.1 **+ Book Appt** (starts with a client search). 30-minute time slots; "Needs to pay?" shown disabled (under construction) | `NewAppointmentModal.tsx` |
-| M11 | New contract | "New contract (Fee K)" | P3.3; P4.6 **+ New contract**; P14.1 (starts with a client search). Case type: pick from the list, or **+ New** to type one Monday adds to the "Contract for…" list. **Required** (since 2026-10-14, same in M2's contract section): case type, AF, attorney, client e-mail and address — attorney / e-mail / address pre-filled from the profile, editable; e-mail / address saved on the profile | `NewContractModal.tsx` |
+| M10 | Book a consult | "Book a consult" | P17.1 **+ Book Appt** (starts with a client search). 30-minute time slots; "Needs to pay?" shown disabled (under construction) | `NewAppointmentModal.tsx` |
+| M11 | New contract | "New contract (Fee K)" | M3 Contracts; P4.6 **+ New contract**; P14.1 (starts with a client search). Case type: pick from the list, or **+ New** to type one Monday adds to the "Contract for…" list. **Required** (since 2026-10-14, same in M2's contract section): case type, AF, attorney, client e-mail and address — attorney / e-mail / address pre-filled from the profile, editable; e-mail / address saved on the profile | `NewContractModal.tsx` |
 | M12 | File preview | The file name | P3.6; P4.5 Documents; the documents section of M5 | `FilePreviewModal.tsx` |
-| M13 | Entry editor | The entry's name | P3.8 (admin) | `EntryEditorModal.tsx` |
 | M14 | What's new | Changelog | Version badge on P1 Home / P0 Sign in | `VersionBadge.tsx` |
 | M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
 | M16 | Connect Monday.com | "Connect your Monday.com account" / "Reconnect…" / "Monday.com connected" | Opens by itself after sign-in when Monday isn't connected (any page but P11); **Not now** hides it for 12 h | `MondayConnectPrompt.tsx` |
@@ -302,7 +295,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D3 | Relief card menu | P3.0 → Relief card | `ClientSnapshot.tsx` |
 | D4 | Next action card menu | P3.0 → Next action card | `ClientSnapshot.tsx` |
 | D5 | Timeline date range | P3.1 → date range filter | `TimelineFilters.tsx` |
-| D6 | Status picker | P10 row status; M13; M9 intake status; P4.6 appointment status | `StatusEditor.tsx` |
+| D6 | Status picker | P10 row status; M9 intake status; P4.6 appointment status | `StatusEditor.tsx` |
 | D7 | Highlighted For picker | P10 row | `HighlightedForEditor.tsx` |
 | D8 | Status filter | P2.3 | `FilterBar.tsx` |
 | D9 | Attorney filter | P2.3 | `FilterBar.tsx` |
@@ -335,6 +328,6 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D36 | Detention center | M18 → Type of appt **Detained appt**: the Court Cases board's Det. Facility labels (synced) + **Other** (free text). Pre-filled from the client's open court case | `ConsultPrepModal.tsx` |
 | D38 | Whose cases | P6.1: each paralegal on the Fee Ks / Open Forms boards ("(me)" = the user's linked name) + **Everyone** | `MyCasesPage.tsx` |
 | D39 | Case status picker | M27: the board's real PS Stage / Status labels in their Monday colours; picking one asks to confirm | `CaseCardModal.tsx` |
-| D37 | Client actions menu | P3.0 → **⋯** (also in the M3 header, links only): **Open in DMS** (only when the profile has a DMS link — Innovation Law Lab, cases up to end of 2024; opens one reusable window, DMS can't be embedded), **Open in Monday.com**, **Copy client summary**, **Generate document…** (→ M23), **Relations** | `ActionButtons.tsx` |
+| D37 | Client actions menu | P3.0 → **⋯** (also in the M3 header, links only): **Open in DMS** (only when the profile has a DMS link — Innovation Law Lab, cases up to end of 2024; opens one reusable window, DMS can't be embedded), **Open in Monday.com**, **Open e-file in SharePoint**, **Open consult folder in SharePoint** (only when there is a consult folder link), **Copy client summary**, **Generate document…** (→ M23) | `ActionButtons.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.

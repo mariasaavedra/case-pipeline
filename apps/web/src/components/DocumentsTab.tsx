@@ -10,7 +10,10 @@
 // gets an Attach toggle, and files uploaded here are reported back so the
 // caller can attach them too.
 //
-// Inside a folder, New folder makes a subfolder. `eFile` (P3.6 only) adds
+// Inside a folder, New folder makes a subfolder; a file or folder dragged onto
+// a folder row (or a folder in the path above) moves there, and Delete sends a
+// file or an empty folder to the SharePoint recycle bin. Not in pick mode.
+// `eFile` (P3.6 only) adds
 // "Find or create e-file folder" when the client has no e-file link: the same
 // lookup as M18 (E-Files, then Closed; created under E-Files/{initial}/ only
 // when neither has one), and the link is written to the profile's E-File.
@@ -25,6 +28,8 @@ import {
   listChildren,
   uploadFile,
   createFolder,
+  moveItem,
+  deleteItem,
   folderNameProblem,
   findOrCreateClientFolder,
   getGraphToken,
@@ -66,6 +71,11 @@ interface Crumb {
 }
 
 type Status = "roots" | "loading" | "ready" | "consent" | "error";
+
+/** dataTransfer type of a row being dragged — tells a move apart from a file dropped from the desktop. */
+const ROW_DRAG = "application/x-case-pipeline-drive-item";
+
+const isRowDrag = (e: React.DragEvent) => e.dataTransfer.types.includes(ROW_DRAG);
 
 const FolderIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-amber)" strokeWidth="1.6">
@@ -126,6 +136,11 @@ export function DocumentsTab({ data, pick, eFile }: Props) {
   const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState<{ driveId: string; item: DriveItem } | null>(null);
+  /** The row being dragged, and the folder (item id) it is hovering over. */
+  const [dragging, setDragging] = useState<DriveItem | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   /** Load a folder's children and set it as the deepest crumb. */
   const open = useCallback(async (item: ResolvedItem, trail: Crumb[]) => {
@@ -267,6 +282,74 @@ export function DocumentsTab({ data, pick, eFile }: Props) {
     }
   }, [crumbs, newFolder]);
 
+  /** Move a row of the folder being viewed into another folder of the same drive. */
+  const doMove = useCallback(
+    async (child: DriveItem, target: { itemId: string; label: string }) => {
+      const parent = crumbs[crumbs.length - 1];
+      if (!parent || target.itemId === child.id || target.itemId === parent.item.itemId) return;
+      setError(null);
+      setNotice(null);
+      setBusyId(child.id);
+      try {
+        await moveItem(parent.item.driveId, child.id, target.itemId);
+        setNotice(`Moved "${child.name}" to ${target.label}.`);
+        setChildren(await listChildren(parent.item.driveId, parent.item.itemId));
+      } catch (err) {
+        if (err instanceof GraphConsentRequiredError) {
+          setStatus("consent");
+          return;
+        }
+        setError(err instanceof GraphError && err.status === 409 ? `There is already a "${child.name}" in ${target.label}.` : describe(err));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [crumbs],
+  );
+
+  /** Delete a file or empty folder — it goes to the SharePoint recycle bin. */
+  const doDelete = useCallback(
+    async (child: DriveItem) => {
+      const parent = crumbs[crumbs.length - 1];
+      if (!parent) return;
+      setError(null);
+      setNotice(null);
+      setBusyId(child.id);
+      try {
+        await deleteItem(parent.item.driveId, child.id);
+        setConfirmDelete(null);
+        setNotice(`Deleted "${child.name}". It stays in the SharePoint recycle bin for 93 days if you need it back.`);
+        setChildren(await listChildren(parent.item.driveId, parent.item.itemId));
+      } catch (err) {
+        if (err instanceof GraphConsentRequiredError) {
+          setStatus("consent");
+          return;
+        }
+        setError(describe(err));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [crumbs],
+  );
+
+  /** Drop-target props for a folder: highlighted while a row hovers, moves it on drop. */
+  const dropProps = (target: { itemId: string; label: string }) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!isRowDrag(e) || !dragging || dragging.id === target.itemId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (dropTarget !== target.itemId) setDropTarget(target.itemId);
+    },
+    onDragLeave: () => setDropTarget((t) => (t === target.itemId ? null : t)),
+    onDrop: (e: React.DragEvent) => {
+      if (!isRowDrag(e) || !dragging) return;
+      e.preventDefault();
+      setDropTarget(null);
+      void doMove(dragging, target);
+    },
+  });
+
   /** Find the client's e-file folder (or make it) and link it on Monday. */
   const findOrCreateEFile = useCallback(async () => {
     if (!eFile) return;
@@ -356,7 +439,16 @@ export function DocumentsTab({ data, pick, eFile }: Props) {
               {i === crumbs.length - 1 ? (
                 <span style={{ color: "var(--color-ink)", fontWeight: 500 }}>{c.label}</span>
               ) : (
-                <button onClick={() => goTo(i)} className="kpi-item-client" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                <button
+                  onClick={() => goTo(i)}
+                  className="kpi-item-client"
+                  {...(pick ? {} : dropProps({ itemId: c.item.itemId, label: c.label }))}
+                  style={{
+                    background: dropTarget === c.item.itemId ? "var(--color-amber-light)" : "none",
+                    outline: dropTarget === c.item.itemId ? "1px dashed var(--color-amber)" : "none",
+                    border: "none", borderRadius: 4, cursor: "pointer", padding: 0,
+                  }}
+                >
                   {c.label}
                 </button>
               )}
@@ -440,11 +532,13 @@ export function DocumentsTab({ data, pick, eFile }: Props) {
       {status === "ready" && crumbs.length > 0 && (
         <div
           onDragOver={(e) => {
+            if (isRowDrag(e)) return;
             e.preventDefault();
             setDragOver(true);
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => {
+            if (isRowDrag(e)) return;
             e.preventDefault();
             setDragOver(false);
             if (e.dataTransfer.files.length) void doUpload(e.dataTransfer.files);
@@ -542,7 +636,24 @@ export function DocumentsTab({ data, pick, eFile }: Props) {
               key={c.id}
               className="result-row"
               onClick={() => openChild(c)}
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", borderTop: i === 0 ? "none" : "1px solid var(--color-border-light)" }}
+              draggable={!pick && busyId === null}
+              onDragStart={(e) => {
+                e.dataTransfer.setData(ROW_DRAG, c.id);
+                e.dataTransfer.effectAllowed = "move";
+                setDragging(c);
+                setConfirmDelete(null);
+              }}
+              onDragEnd={() => {
+                setDragging(null);
+                setDropTarget(null);
+              }}
+              {...(!pick && c.folder ? dropProps({ itemId: c.id, label: c.name }) : {})}
+              style={{
+                display: "flex", alignItems: "center", gap: 12, padding: "10px 16px",
+                borderTop: i === 0 ? "none" : "1px solid var(--color-border-light)",
+                opacity: dragging?.id === c.id || busyId === c.id ? 0.5 : 1,
+                ...(dropTarget === c.id ? { backgroundColor: "var(--color-amber-light)", outline: "1px dashed var(--color-amber)", outlineOffset: -1 } : {}),
+              }}
             >
               {c.folder ? <FolderIcon /> : <FileIcon />}
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -586,9 +697,52 @@ export function DocumentsTab({ data, pick, eFile }: Props) {
                   Download
                 </a>
               )}
+              {!pick && (!c.folder || (c.folder.childCount ?? 0) === 0) && (
+                confirmDelete === c.id ? (
+                  <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", gap: 6, flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      className="action-btn"
+                      disabled={busyId === c.id}
+                      onClick={() => void doDelete(c)}
+                      style={{ color: "var(--color-status-red)", borderColor: "var(--color-status-red)" }}
+                    >
+                      {busyId === c.id ? "Deleting…" : "Delete"}
+                    </button>
+                    <button type="button" className="action-btn" disabled={busyId === c.id} onClick={() => setConfirmDelete(null)}>
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="action-btn"
+                    title={`Delete ${c.name}`}
+                    aria-label={`Delete ${c.name}`}
+                    disabled={busyId !== null}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmDelete(c.id);
+                    }}
+                    style={{ flexShrink: 0, padding: "4px 7px" }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                    </svg>
+                  </button>
+                )
+              )}
             </div>
           ))}
         </div>
+      )}
+
+      {status === "ready" && crumbs.length > 0 && !pick && children.length > 0 && (
+        <p style={{ margin: 0, fontFamily: "var(--font-body)", fontSize: 12, color: "var(--color-ink-faint)" }}>
+          Drag a file onto a folder — or onto a folder in the path above — to move it.
+        </p>
       )}
 
       {preview && (
