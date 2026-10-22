@@ -156,7 +156,12 @@ For each Calendly consultation in the last `CONSULT_SWEEP_DAYS` days:
    (`consult-status.ts`). An upcoming consult gets its folder now, so there is
    somewhere to put material during the meeting; the summary waits.
 3. **Skip** if the name needs a human — a missing first name, a surname that is
-   really an A-number, a reversed entry.
+   really an A-number, a reversed entry. A profile with First Name **and** Last
+   Name both empty — what a jail intake's Create Appt makes — is named from its
+   title instead when it reads "Given SURNAME" ("DETAINED Fidencio MERCADO" →
+   `MERCADO, Fidencio`; `nameFromTitle` in `libs/core/src/consult-naming.ts`).
+   A title that doesn't ("Mogtabi Azrag", "MUHAMMAD YAKAWU", two people) is
+   still skipped.
 4. **Look** for the folder at three exact paths, most-advanced first: SCAL
    Closed, then E-Files, then Consults. A client who has hired or closed must
    never be given a fresh consult folder.
