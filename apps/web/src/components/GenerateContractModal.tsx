@@ -19,9 +19,10 @@
 // (template + fees). Send hands the PDF to Adobe Sign — attorney first, then
 // the client — and the API moves the stage, leaves a note and follows the
 // signatures (routes/esign.ts).
-// A template with a {{#people}} loop or {{people_names}} gets a People box:
-// the client, then "+ Add person" for everyone else on the same contract
-// (one fee, only the client signs). A Trial template asks for the prep and
+// A template with a {{#people}} loop or {{people_names}} gets a "Contract is
+// for more than one person" box: ticked, everyone the contract covers is
+// listed. The client signs and pays but is listed only when the contract is for
+// them too (a relative often signs for someone detained); one fee. A Trial template asks for the prep and
 // the trial fee separately, each with its own deadline.
 // "Notes · Timeline · Documents" opens the client's case (M3, ClientCaseModal)
 // stacked over this form, so checking what was quoted or what is on file never
@@ -124,7 +125,7 @@ const INPUTS_FOR: Record<string, (keyof ContractInput)[]> = {
   motion_fee: ["motionFee"], motion_fee_surcharge: ["motionFee"], hearing_fee: ["hearingFee"], hearing_fee_surcharge: ["hearingFee"],
   people_names: ["people"], people_names_es: ["people"], people_count: ["people"],
   people: ["people"], person_name: ["people"], person_number: ["people"],
-  person_a_number: ["people", "clientANumber"], person_dob: ["people", "clientDob"], person_dob_es: ["people", "clientDob"],
+  person_a_number: ["people"], person_dob: ["people"], person_dob_es: ["people"], has_people: ["people"],
   trial_prep_fee: ["trialPrepFee"], trial_prep_fee_surcharge: ["trialPrepFee"],
   trial_prep_due_date: ["trialPrepDueDate"], trial_prep_due_date_es: ["trialPrepDueDate"],
   trial_fee: ["trialFee"], trial_fee_surcharge: ["trialFee"],
@@ -208,7 +209,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         attorneyFee: p.attorneyFee, filingFee: p.filingFee, postageFee: p.processingFee, surcharge: null, interviewFee: null,
         bioFee: null, motionName: "", motionNameEs: "", motionFee: null, hearingFee: null,
         dueDate: "", signByDate: "", attorneyName: p.attorneyName, creatorInitials: initialsOf(user?.name ?? ""),
-        clientANumber: "", clientDob: "", people: [],
+        multiplePeople: false, people: [],
         trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
         };
         prefill.current = { input: fresh, attorneyEmail: p.attorneyEmail ?? "" };
@@ -315,9 +316,20 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     dirty.current = true;
     setInput((f) => (f ? { ...f, people: f.people.map((p, j) => (j === i ? { ...p, ...patch } : p)) } : f));
   };
-  const addPerson = () => {
+  const addPerson = (name = "") => {
     dirty.current = true;
-    setInput((f) => (f ? { ...f, people: [...f.people, NO_PERSON] } : f));
+    setInput((f) => {
+      if (!f) return f;
+      // Filling the first empty row beats adding one below it.
+      const empty = name ? f.people.findIndex((p) => !p.name.trim()) : -1;
+      const people = empty >= 0 ? f.people.map((p, j) => (j === empty ? { ...p, name } : p)) : [...f.people, { ...NO_PERSON, name }];
+      return { ...f, people };
+    });
+  };
+  /** Ticking starts two empty rows; unticking keeps what was typed, unused. */
+  const setMultiple = (on: boolean) => {
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, multiplePeople: on, people: on && f.people.length === 0 ? [NO_PERSON, NO_PERSON] : f.people } : f));
   };
   const removePerson = (i: number) => {
     dirty.current = true;
@@ -531,40 +543,50 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {text("trialDueDate", "Trial fee due", { type: "date" })}
               </div>
               {shown.has("people") && (() => {
-                const withANumber = shown.has("clientANumber");
-                const withDob = shown.has("clientDob");
-                const cols = `minmax(0,1fr)${withANumber ? " 9rem" : ""}${withDob ? " 9.5rem" : ""} 2rem`;
+                const withANumber = file.check.tags.includes("person_a_number");
+                const withDob = file.check.tags.includes("person_dob") || file.check.tags.includes("person_dob_es");
+                const cols = `1.5rem minmax(0,1fr)${withANumber ? " 9rem" : ""}${withDob ? " 9.5rem" : ""} 2rem`;
+                const signer = input.clientName.trim();
+                const signerListed = input.people.some((p) => p.name.trim().toLowerCase() === signer.toLowerCase());
                 return (
                   <div className="rounded-md p-3 space-y-2" style={{ border: "1px solid var(--color-border-light)" }}>
-                    <div className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>People on this contract</div>
-                    <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
-                      One fee for everyone; only the client signs. The client comes first.
-                    </p>
-                    <div className="grid gap-2 items-center text-xs" style={{ gridTemplateColumns: cols, color: "var(--color-ink-muted)" }}>
-                      <span>Name</span>{withANumber && <span>A#</span>}{withDob && <span>Date of birth</span>}<span />
-                    </div>
-                    <div className="grid gap-2 items-center" style={{ gridTemplateColumns: cols }}>
-                      <input aria-label="Client name" className={inputClass} style={inputStyle} value={input.clientName}
-                        onChange={(e) => set("clientName", e.target.value)} />
-                      {withANumber && <input aria-label="Client A#" className={inputClass} style={inputStyle} value={input.clientANumber}
-                        onChange={(e) => set("clientANumber", e.target.value)} />}
-                      {withDob && <DateInput aria-label="Client date of birth" className={inputClass} style={inputStyle} value={input.clientDob}
-                        onChange={(e) => set("clientDob", e.target.value)} />}
-                      <span className="text-xs text-center" style={{ color: "var(--color-ink-faint)" }} title="The client">1</span>
-                    </div>
-                    {input.people.map((p, i) => (
-                      <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: cols }}>
-                        <input aria-label={`Person ${i + 2} name`} placeholder="Name" className={inputClass} style={inputStyle} value={p.name}
-                          onChange={(e) => setPerson(i, { name: e.target.value })} />
-                        {withANumber && <input aria-label={`Person ${i + 2} A#`} className={inputClass} style={inputStyle} value={p.aNumber}
-                          onChange={(e) => setPerson(i, { aNumber: e.target.value })} />}
-                        {withDob && <DateInput aria-label={`Person ${i + 2} date of birth`} className={inputClass} style={inputStyle} value={p.dob}
-                          onChange={(e) => setPerson(i, { dob: e.target.value })} />}
-                        <button type="button" onClick={() => removePerson(i)} aria-label={`Remove person ${i + 2}`} title="Remove"
-                          className="text-sm rounded hover:underline" style={{ color: "var(--color-ink-muted)" }}>✕</button>
-                      </div>
-                    ))}
-                    <Button type="button" size="sm" variant="outline" onClick={addPerson}>+ Add person</Button>
+                    <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
+                      <input type="checkbox" checked={input.multiplePeople} onChange={(e) => setMultiple(e.target.checked)} />
+                      Contract is for more than one person
+                    </label>
+                    {input.multiplePeople && (
+                      <>
+                        <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
+                          List everyone the contract covers. One fee; only {signer || "the client"} signs and pays, and is listed only if the contract is for them too.
+                        </p>
+                        <div className="grid gap-2 items-center text-xs" style={{ gridTemplateColumns: cols, color: "var(--color-ink-muted)" }}>
+                          <span />
+                          <span>Name</span>{withANumber && <span>A#</span>}{withDob && <span>Date of birth</span>}<span />
+                        </div>
+                        {input.people.map((p, i) => (
+                          <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: cols }}>
+                            <span className="text-xs text-right" style={{ color: "var(--color-ink-faint)" }}>{i + 1}.</span>
+                            <input aria-label={`Person ${i + 1} name`} placeholder="Name" className={inputClass} style={inputStyle} value={p.name}
+                              onChange={(e) => setPerson(i, { name: e.target.value })} />
+                            {withANumber && <input aria-label={`Person ${i + 1} A#`} className={inputClass} style={inputStyle} value={p.aNumber}
+                              onChange={(e) => setPerson(i, { aNumber: e.target.value })} />}
+                            {withDob && <DateInput aria-label={`Person ${i + 1} date of birth`} className={inputClass} style={inputStyle} value={p.dob}
+                              onChange={(e) => setPerson(i, { dob: e.target.value })} />}
+                            <button type="button" onClick={() => removePerson(i)} aria-label={`Remove person ${i + 1}`} title="Remove"
+                              className="text-sm rounded hover:underline" style={{ color: "var(--color-ink-muted)" }}>✕</button>
+                          </div>
+                        ))}
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => addPerson()}>+ Add person</Button>
+                          {signer && !signerListed && (
+                            <Button type="button" size="sm" variant="ghost" onClick={() => addPerson(signer)}
+                              title="Only when the contract also covers the person who signs">
+                              + Add {signer} (signer)
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 );
               })()}

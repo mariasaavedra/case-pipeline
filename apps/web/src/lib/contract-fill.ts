@@ -15,11 +15,13 @@
 // AF + FF + postage (changed 2026-10-14; it was AF only). Most 2026 contracts
 // print it per fee instead, one "Surcharge Fee" line under each amount:
 // {{attorney_fee_surcharge}}, {{filing_fee_surcharge}}… = 3% of that one fee.
-// One contract can cover several people (a family at one Master Hearing): the
-// client plus anyone added with "+ Add person". A template repeats a block per
-// person with a loop, {{#people}}{{person_name}} A# {{person_a_number}}{{/people}},
-// or names them in a sentence with {{people_names}}. One fee for everyone, and
-// only the client signs.
+// One contract can cover several people (a family at one Master Hearing):
+// "Contract is for more than one person" in M22, then everyone it covers. The
+// client — who signs and pays — is listed only if typed in: a relative often
+// signs for someone detained. A template repeats a block per person with a
+// loop, {{#people}}{{person_name}} A# {{person_a_number}}{{/people}}, wrapped in
+// {{#has_people}}…{{/has_people}} so a one-person contract prints as before;
+// or names them in a sentence with {{people_names}}. One fee, one signer.
 // =============================================================================
 
 import PizZip from "pizzip";
@@ -60,10 +62,9 @@ export interface ContractInput {
   signByDate: string;
   attorneyName: string;
   creatorInitials: string;
-  /** The client's own A# / date of birth, for templates that list each person. */
-  clientANumber: string;
-  clientDob: string;
-  /** Everyone else on the contract ("+ Add person"), after the client. */
+  /** "Contract is for more than one person" — `people` counts only when ticked. */
+  multiplePeople: boolean;
+  /** Everyone the contract covers; the client (signer) only if listed. */
   people: ContractPerson[];
   /** TRIAL: the prep and the trial are separate fees, each with its own deadline. */
   trialPrepFee: number | null;
@@ -72,7 +73,7 @@ export interface ContractInput {
   trialDueDate: string;
 }
 
-/** Someone else covered by the same contract. */
+/** Someone the contract covers. */
 export interface ContractPerson {
   name: string;
   aNumber: string;
@@ -121,11 +122,14 @@ export const halfOf = (attorneyFee: number | null) => round2((attorneyFee ?? 0) 
 const has = (s: string) => s.trim() !== "";
 const positive = (n: number | null) => n !== null && Number.isFinite(n) && n > 0;
 
-/** The client first, then everyone added; rows left without a name don't count. */
-export const peopleOf = (f: ContractInput): ContractPerson[] => [
-  { name: f.clientName.trim(), aNumber: f.clientANumber.trim(), dob: f.clientDob },
-  ...f.people.filter((p) => has(p.name)).map((p) => ({ ...p, name: p.name.trim(), aNumber: p.aNumber.trim() })),
-];
+/** Everyone listed, when the contract is for more than one person; rows without a name don't count. */
+export const peopleOf = (f: ContractInput): ContractPerson[] =>
+  f.multiplePeople ? f.people.filter((p) => has(p.name)).map((p) => ({ ...p, name: p.name.trim(), aNumber: p.aNumber.trim() })) : [];
+/** The names a sentence uses: everyone listed, else the client alone. */
+const namesOf = (f: ContractInput) => {
+  const listed = peopleOf(f).map((p) => p.name);
+  return listed.length > 0 ? listed : [f.clientName.trim()];
+};
 /** "Ana, Juan and Maria" (Spanish: "y"). */
 export const joinNames = (names: string[], and: string) =>
   names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} ${and} ${names[names.length - 1]}`;
@@ -162,9 +166,9 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "motion_fee_surcharge", label: "Surcharge on the motion fee (3%)", example: "$45.00", value: (f) => money(surchargeFor(f.motionFee)), required: (f) => !positive(f.motionFee) },
   { tag: "hearing_fee", label: "Attorney fee for the hearing", example: "$1,000.00", value: (f) => money(f.hearingFee), required: (f) => !positive(f.hearingFee) },
   { tag: "hearing_fee_surcharge", label: "Surcharge on the hearing fee (3%)", example: "$30.00", value: (f) => money(surchargeFor(f.hearingFee)), required: (f) => !positive(f.hearingFee) },
-  { tag: "people_names", label: "Everyone on the contract, in a sentence", example: "Ana LOPEZ, Juan LOPEZ and Maria LOPEZ", value: (f) => joinNames(peopleOf(f).map((p) => p.name), "and"), required: (f) => !has(f.clientName) },
-  { tag: "people_names_es", label: "Everyone on the contract, Spanish", example: "Ana LOPEZ, Juan LOPEZ y Maria LOPEZ", value: (f) => joinNames(peopleOf(f).map((p) => p.name), "y"), required: (f) => !has(f.clientName) },
-  { tag: "people_count", label: "How many people", example: "3", value: (f) => String(peopleOf(f).length) },
+  { tag: "people_names", label: "Everyone on the contract, in a sentence", example: "Ana LOPEZ, Juan LOPEZ and Maria LOPEZ", value: (f) => joinNames(namesOf(f), "and"), required: (f) => !has(f.clientName) },
+  { tag: "people_names_es", label: "Everyone on the contract, Spanish", example: "Ana LOPEZ, Juan LOPEZ y Maria LOPEZ", value: (f) => joinNames(namesOf(f), "y"), required: (f) => !has(f.clientName) },
+  { tag: "people_count", label: "How many people", example: "3", value: (f) => String(namesOf(f).length) },
   { tag: "trial_prep_fee", label: "Trial prep fee", example: "$3,000.00", value: (f) => money(f.trialPrepFee), required: (f) => !positive(f.trialPrepFee) },
   { tag: "trial_prep_fee_surcharge", label: "Surcharge on the trial prep fee (3%)", example: "$90.00", value: (f) => money(surchargeFor(f.trialPrepFee)), required: (f) => !positive(f.trialPrepFee) },
   { tag: "trial_prep_due_date", label: "Trial prep fee due", example: "November 1, 2026", value: (f) => dateEn(f.trialPrepDueDate), required: (f) => !ymd(f.trialPrepDueDate) },
@@ -186,6 +190,10 @@ export const CONTRACT_FIELDS: ContractField[] = [
 
 /** The {{#people}} … {{/people}} loop: its tags print once per person. */
 export const PEOPLE_LOOP = "people";
+/** {{#has_people}} … {{/has_people}}: printed only when the contract is for more than one person. */
+export const PEOPLE_SECTION = "has_people";
+/** Fewer than this many listed = not "more than one person". */
+const MIN_PEOPLE = 2;
 export const PERSON_FIELDS: ContractField[] = [
   { tag: "person_name", label: "Person's name (inside the loop)", example: "Juan LOPEZ", value: () => "" },
   { tag: "person_number", label: "1, 2, 3… (inside the loop)", example: "2", value: () => "" },
@@ -235,12 +243,14 @@ export function contractDocumentName(f: ContractInput, tags: string[] = []): str
   // MASTER HEARING + MOTION: the motion names the matter ("Master Hearing + Motion to Recalendar").
   const motion = tags.includes("motion_name") && has(f.motionName) ? `Master Hearing + ${f.motionName.trim()}` : "";
   // Several people: "Ana LOPEZ + 3" so the file still sorts under the client.
-  const others = f.people.filter((p) => has(p.name)).length;
-  const client = others > 0 ? `${clean(f.clientName)} + ${others}` : clean(f.clientName);
+  const count = peopleOf(f).length;
+  const client = clean(f.clientName);
   let matter = clean((motion || f.formName.trim() || f.hearingType.trim() || "Fee K").split(" / ")[0]!);
   if (matter.length > 80) matter = `${matter.slice(0, 80).replace(/\s+\S*$/, "")}…`;
   const p = ymd(f.date);
   const date = p ? `${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}-${p.y}` : "";
+  // Several people: "… - Master Hearing (4 people) - …".
+  if (count > 0) matter = `${matter} (${count} people)`;
   return [client, matter, date].filter(Boolean).join(" - ");
 }
 
@@ -281,8 +291,8 @@ export function inspectContractTemplate(file: ArrayBuffer): TemplateCheck {
       },
     });
     return {
-      tags: [...CONTRACT_FIELDS.map((f) => f.tag), PEOPLE_LOOP, ...PERSON_TAGS].filter((t) => found.has(t)),
-      unknown: [...found].filter((t) => !BY_TAG.has(t) && t !== PEOPLE_LOOP && !PERSON_TAGS.has(t) && !isAdobeSignTag(t)),
+      tags: [...CONTRACT_FIELDS.map((f) => f.tag), PEOPLE_SECTION, PEOPLE_LOOP, ...PERSON_TAGS].filter((t) => found.has(t)),
+      unknown: [...found].filter((t) => !BY_TAG.has(t) && t !== PEOPLE_SECTION && t !== PEOPLE_LOOP && !PERSON_TAGS.has(t) && !isAdobeSignTag(t)),
       signTags: [...found].filter(isAdobeSignTag),
       errors: [],
     };
@@ -294,6 +304,10 @@ export function inspectContractTemplate(file: ArrayBuffer): TemplateCheck {
   }
 }
 
+/** The template lists or names the people a contract covers (M22 shows the People box). */
+export const usesPeople = (check: TemplateCheck) =>
+  check.tags.some((t) => t === PEOPLE_LOOP || t === PEOPLE_SECTION || t.startsWith("people_"));
+
 /** What stops this template from being filled with this input. Empty = OK. */
 export function contractProblems(check: TemplateCheck, input: ContractInput): string[] {
   const out = [...check.errors];
@@ -301,7 +315,9 @@ export function contractProblems(check: TemplateCheck, input: ContractInput): st
   for (const tag of check.tags) {
     if (BY_TAG.get(tag)?.required?.(input)) out.push(`${BY_TAG.get(tag)!.label} is missing`);
   }
-  if (check.tags.includes(PEOPLE_LOOP) && !has(input.clientName)) out.push("Client name is missing");
+  if (input.multiplePeople && usesPeople(check) && peopleOf(input).length < MIN_PEOPLE) {
+    out.push(`List at least ${MIN_PEOPLE} people, or untick "Contract is for more than one person"`);
+  }
   return out;
 }
 
@@ -349,7 +365,7 @@ function withoutTagHighlight(file: ArrayBuffer): PizZip {
 
 /** Fill a template. Call contractProblems first. */
 export function fillContractTemplate(file: ArrayBuffer, input: ContractInput): Blob {
-  const values: Record<string, unknown> = { ...contractValues(input), [PEOPLE_LOOP]: peopleRows(input) };
+  const values: Record<string, unknown> = { ...contractValues(input), [PEOPLE_LOOP]: peopleRows(input), [PEOPLE_SECTION]: peopleOf(input).length > 0 };
   const doc = new Docxtemplater(withoutTagHighlight(file), {
     ...OPTIONS,
     // Adobe Sign tags print back as they were typed (spaces included: they set the field's width).

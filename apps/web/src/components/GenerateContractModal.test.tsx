@@ -215,36 +215,49 @@ describe("M22 people on one contract", () => {
     el.dispatchEvent(new Event("input", { bubbles: true }));
   };
   const byLabel = (label: string) => document.querySelector(`input[aria-label='${label}']`) as HTMLInputElement;
-
-  it("no People box unless the template lists people", async () => {
+  const checkbox = () => Array.from(document.querySelectorAll("label")).find((l) => l.textContent?.includes("more than one person"))?.querySelector("input") as HTMLInputElement | undefined;
+  const open = async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
     await flush();
-    expect(button("+ Add person")).toBeUndefined();
+  };
+
+  it("no checkbox unless the template lists people", async () => {
+    await open();
+    expect(checkbox()).toBeUndefined();
   });
 
-  it("+ Add person adds rows, ✕ removes one, and everyone reaches the contract", async () => {
-    mocks.tags = ["client_name", "people", "person_name", "person_a_number"];
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
-    await flush();
+  it("the list shows only once ticked, and doesn't assume the signer is on it", async () => {
+    mocks.tags = ["client_name", "has_people", "people", "person_name", "person_a_number"];
+    await open();
+    expect(checkbox()!.checked).toBe(false);
+    expect(button("+ Add person")).toBeUndefined();
 
-    expect(byLabel("Client name").value).toBe("Ana Lopez");
-    await act(async () => { typeInto(byLabel("Client A#"), "111"); });
-    for (let i = 0; i < 3; i++) await act(async () => { button("+ Add person")!.click(); });
-    await act(async () => { typeInto(byLabel("Person 2 name"), "Juan Lopez"); });
-    await act(async () => { typeInto(byLabel("Person 3 name"), "Wrong Person"); });
-    await act(async () => { typeInto(byLabel("Person 4 name"), "Maria Lopez"); });
-    await act(async () => { typeInto(byLabel("Person 4 A#"), "444"); });
-    await act(async () => { (document.querySelector("button[aria-label='Remove person 3']") as HTMLButtonElement).click(); });
-    expect(byLabel("Person 3 name").value).toBe("Maria Lopez");
+    await act(async () => { checkbox()!.click(); });
+    // Two empty rows; the signer (Ana Lopez) isn't one of them.
+    expect(byLabel("Person 1 name").value).toBe("");
+    expect(byLabel("Person 2 name").value).toBe("");
+    await act(async () => { typeInto(byLabel("Person 1 name"), "Pedro Lopez"); });
+    await act(async () => { typeInto(byLabel("Person 1 A#"), "111"); });
+    await act(async () => { button("+ Add person")!.click(); });
+    await act(async () => { typeInto(byLabel("Person 2 name"), "Wrong Person"); });
+    await act(async () => { typeInto(byLabel("Person 3 name"), "Juan Lopez"); });
+    await act(async () => { (document.querySelector("button[aria-label='Remove person 2']") as HTMLButtonElement).click(); });
+    expect(byLabel("Person 2 name").value).toBe("Juan Lopez");
+    // The signer can be added on purpose.
+    await act(async () => { button("+ Add Ana Lopez (signer)")!.click(); });
+    expect(byLabel("Person 3 name").value).toBe("Ana Lopez");
+    expect(button("+ Add Ana Lopez (signer)")).toBeUndefined();
 
     await act(async () => { button("Preview PDF")!.click(); });
     await flush();
     const input = mocks.fill.mock.calls[0]![1];
-    expect(input.clientANumber).toBe("111");
-    expect(input.people).toEqual([{ name: "Juan Lopez", aNumber: "", dob: "" }, { name: "Maria Lopez", aNumber: "444", dob: "" }]);
+    expect(input.multiplePeople).toBe(true);
+    expect(input.people).toEqual([
+      { name: "Pedro Lopez", aNumber: "111", dob: "" },
+      { name: "Juan Lopez", aNumber: "", dob: "" },
+      { name: "Ana Lopez", aNumber: "", dob: "" },
+    ]);
   });
 });
