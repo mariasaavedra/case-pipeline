@@ -25,6 +25,12 @@
 export interface NameParts {
   firstName?: string | null;
   lastName?: string | null;
+  /**
+   * The profile's item name, read only when First Name AND Last Name are both
+   * empty — profiles made by a jail intake's Create Appt have just a title
+   * ("DETAINED Fidencio MERCADO"). See nameFromTitle.
+   */
+  itemName?: string | null;
 }
 
 export interface ConsultFolderName {
@@ -45,7 +51,8 @@ export type NameRefusal =
   | "illegal-character";
 
 export type NameResult =
-  | { ok: true; name: ConsultFolderName }
+  /** `fromTitle`: First / Last were empty, the name was split off the item name. */
+  | { ok: true; name: ConsultFolderName; fromTitle?: true }
   | { ok: false; reason: NameRefusal; detail: string };
 
 /** Bracketed asides: "[A221-455-213]", "(Det In Core Civic)". */
@@ -68,6 +75,19 @@ function clean(value: string | null | undefined): string {
  * name, and the row belongs on the review list.
  */
 export function consultFolderName(parts: NameParts): NameResult {
+  if (!clean(parts.firstName) && !clean(parts.lastName) && parts.itemName) {
+    const split = nameFromTitle(parts.itemName);
+    if (!split) {
+      return {
+        ok: false,
+        reason: "missing-first-name",
+        detail: `First / Last Name are empty and "${parts.itemName.trim()}" is not "Given SURNAME"`,
+      };
+    }
+    const result = consultFolderName(split);
+    return result.ok ? { ...result, fromTitle: true } : result;
+  }
+
   const given = clean(parts.firstName);
   const surname = clean(parts.lastName).toUpperCase();
 
@@ -98,6 +118,41 @@ export function consultFolderName(parts: NameParts): NameResult {
   }
 
   return { ok: true, name: { folder, initial: surname[0]!, surname, given } };
+}
+
+/** A word that is a surname by the firm's convention: upper-case, 2+ letters. */
+const isCapsWord = (w: string) => /\p{L}.*\p{L}/u.test(w) && w === w.toUpperCase() && w !== w.toLowerCase();
+
+/**
+ * Split an item name written the firm's way — given name as typed, SURNAME in
+ * capitals: "Gerbert Yoalmo BERMUDEZ-PAZ", "DETAINED Thelma Mariela LOPEZ
+ * [A221-455-213]". The surname is the trailing run of capitalised words; a lone
+ * capital ("Kong Bun B LY", "Juan C. CECENAS") is an initial and stays in the
+ * given name.
+ *
+ * Returns null — a human names it — for anything that doesn't read that way:
+ * no capitalised surname ("Mogtabi Azrag"), all capitals ("MUHAMMAD YAKAWU"),
+ * capitals inside the given name, a lower-case particle ("Maria de la CRUZ"),
+ * two people ("Esmeralda CANO - Jesus MERAZ"), or anything but letters.
+ */
+export function nameFromTitle(title: string): { firstName: string; lastName: string } | null {
+  const words = title
+    .replace(BRACKETED, " ")
+    .replace(/[[(（].*$/, " ") // an aside left unclosed runs to the end
+    .replace(/^\s*DETAINED\b:?/i, " ")
+    .split(/\s+/)
+    .filter((w) => w && !/\d/.test(w)); // a stray A-number outside brackets
+  if (words.some((w) => !/^\p{L}[\p{L}'.-]*$/u.test(w))) return null; // "-", "+", "|", "&": not one name
+
+  let cut = words.length;
+  while (cut > 0 && isCapsWord(words[cut - 1]!)) cut--;
+  const given = words.slice(0, cut);
+  const surname = words.slice(cut);
+  if (!given.length || !surname.length) return null;
+  if (given.some(isCapsWord)) return null;
+  if (given.slice(1).some((w) => w === w.toLowerCase())) return null;
+
+  return { firstName: given.join(" "), lastName: surname.join(" ") };
 }
 
 /** "2026 Consults/V/VENTURA, Milton" — the path under the document library. */

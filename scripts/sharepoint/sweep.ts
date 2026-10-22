@@ -100,7 +100,9 @@ export async function decide(
     return skip(`consult ${outcome} (${c.apptStatus ?? "no status"})`);
   }
 
-  const named = consultFolderName({ firstName: c.firstName, lastName: c.lastName });
+  // A jail intake's Create Appt makes a profile with only a title, so the
+  // title is read when First / Last are both empty.
+  const named = consultFolderName({ firstName: c.firstName, lastName: c.lastName, itemName: c.profileName });
   if (!named.ok) return skip(`name needs a human: ${named.detail}`);
 
   const year = Number(c.consultDate.slice(0, 4));

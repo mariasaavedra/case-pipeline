@@ -652,10 +652,11 @@ export function getReceptionConsults(
     const cv = parseJson(r.columnValues);
     const praw = parseJson(r.profileRaw);
     // The appointment's own First / Last Name first (what Calendly filled),
-    // then the profile's — the same sources the sweep reads.
+    // then the profile's, then the profile's title — the same sources the sweep reads.
     const named = consultFolderName({
       firstName: textOf(cv.first_name) ?? textOf(praw.first_name),
       lastName: textOf(cv.last_name) ?? textOf(praw.last_name),
+      itemName: r.profileName,
     });
     return {
       localId: r.localId,

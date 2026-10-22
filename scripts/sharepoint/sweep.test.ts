@@ -160,6 +160,18 @@ describe("decide — what the sweep will do", () => {
     const d = await decide(auth, candidate({ firstName: "RAKHIMOV,", lastName: "SHUKHRAT" }));
     expect(d.action.kind).toBe("skip");
   });
+
+  it("names a jail-intake profile from its title when First / Last are empty", async () => {
+    stubGraph(() => false);
+    const d = await decide(auth, candidate({ profileName: "DETAINED Milton VENTURA [A221-455-213]", firstName: null, lastName: null }));
+    expect(d.action).toMatchObject({ kind: "create", path: "2026 Consults/V/VENTURA, Milton" });
+  });
+
+  it("still skips a title that isn't Given SURNAME", async () => {
+    stubGraph(() => false);
+    const d = await decide(auth, candidate({ profileName: "Mogtabi Azrag", firstName: null, lastName: null }));
+    expect(d.action).toMatchObject({ kind: "skip", reason: expect.stringContaining("name needs a human") });
+  });
 });
 
 describe("perform", () => {
