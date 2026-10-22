@@ -5,7 +5,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 37;
+export const SCHEMA_VERSION = 38;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -590,6 +590,22 @@ CREATE TABLE IF NOT EXISTS client_uploads (
     UNIQUE (link_id, sha256)
 );
 CREATE INDEX IF NOT EXISTS idx_client_uploads_unfiled ON client_uploads(filed_at);
+
+-- Releases from detention (v38): one row per "Released?" (M17). A client's
+-- name keeps its "(Det. at CoreCivic)" after release, so the detained rule
+-- (libs/query/src/detention.ts) needs to know a release happened before the
+-- E&A entry comes back with the next full sync. Keyed by the profile's Monday
+-- id: local ids are per-sync surrogates. Local-only — NOT rebuilt by sync.
+CREATE TABLE IF NOT EXISTS detention_releases (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_monday_id      TEXT NOT NULL,
+    released_on            TEXT,                   -- YYYY-MM-DD staff gave, else NULL
+    facility               TEXT,                   -- where from, as shown at the time
+    author_oid             TEXT,
+    author_name            TEXT,
+    created_at             TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_detention_releases_profile ON detention_releases(profile_monday_id);
 
 -- Monday API calls per UTC day per job (v34). Monday caps the account's calls
 -- per day; this says which of our jobs spent them. See libs/monday/src/usage.ts.
@@ -1734,6 +1750,22 @@ export function initializeSchema(db: Database): void {
             UNIQUE (link_id, sha256)
         );
         CREATE INDEX IF NOT EXISTS idx_client_uploads_unfiled ON client_uploads(filed_at);
+      `);
+    }
+
+    // Migration v37 → v38: releases from detention. New table only.
+    if (fromVersion < 38) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS detention_releases (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_monday_id      TEXT NOT NULL,
+            released_on            TEXT,
+            facility               TEXT,
+            author_oid             TEXT,
+            author_name            TEXT,
+            created_at             TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_detention_releases_profile ON detention_releases(profile_monday_id);
       `);
     }
 

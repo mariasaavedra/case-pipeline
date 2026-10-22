@@ -58,4 +58,9 @@ describe("releaseActivity", () => {
     expect(releaseActivity(["Chase Co. (KS)", "Chase Co. (KS)", "Kay Co. (MO)"], null, "x").title)
       .toBe("Released from detention — Chase Co. (KS), Kay Co. (MO)");
   });
+
+  it("has a plain title when no place is known (detained by name or jail intake)", () => {
+    // Still starts "Released from detention", which the detained rule reads back.
+    expect(releaseActivity([], null, "x").title).toBe("Released from detention");
+  });
 });

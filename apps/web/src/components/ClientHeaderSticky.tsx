@@ -5,6 +5,7 @@ import { WatchlistPin } from "./WatchlistPin";
 import { DialogTitle } from "./ui/dialog";
 import { SectionCode } from "./ScreenCode";
 import { ReleaseDetentionModal } from "./ReleaseDetentionModal";
+import { detentionLabel, detentionTitle } from "../lib/detention";
 import { formatANumber, toUsE164 } from "@case-pipeline/core";
 import { SendSmsModal } from "./SendSmsModal";
 import { UploadLinkModal } from "./UploadLinkModal";
@@ -46,7 +47,7 @@ export function ClientHeaderSticky({ profile, data, variant = "page" }: Props) {
   // Hidden as soon as a release is saved; the next load reads the cleared
   // facility from live.db (updated optimistically by the API).
   const [released, setReleased] = useState(false);
-  const detainedAt = released ? null : profile.detainedAt;
+  const detention = released ? null : profile.detention ?? null;
   // M28 — free text to the client; Phone, else Phone 2.
   const [smsOpen, setSmsOpen] = useState(false);
   const textPhone = [profile.phone, profile.phone2].find((p) => p && toUsE164(p)) ?? null;
@@ -104,17 +105,17 @@ export function ClientHeaderSticky({ profile, data, variant = "page" }: Props) {
                   {priority.label}
                 </span>
               )}
-              {detainedAt && (
+              {detention && (
                 <span
                   className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0"
                   style={{ backgroundColor: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" }}
-                  title="From the Det. Facility on this client's open court case"
+                  title={detentionTitle(detention)}
                 >
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="4" y="3" width="16" height="18" rx="1" />
                     <path d="M9 3v18M15 3v18" />
                   </svg>
-                  Detained at {detainedAt}
+                  {detentionLabel(detention)}
                   <button
                     type="button"
                     onClick={() => setReleaseOpen(true)}
@@ -126,11 +127,11 @@ export function ClientHeaderSticky({ profile, data, variant = "page" }: Props) {
                   </button>
                 </span>
               )}
-              {releaseOpen && profile.detainedAt && (
+              {releaseOpen && profile.detention && (
                 <ReleaseDetentionModal
                   profileLocalId={profile.localId}
                   clientName={displayName}
-                  facility={profile.detainedAt}
+                  facility={profile.detention.at ?? "Detained, place unknown"}
                   onClose={() => setReleaseOpen(false)}
                   onReleased={() => setReleased(true)}
                 />
