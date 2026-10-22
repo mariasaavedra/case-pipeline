@@ -403,10 +403,14 @@ export async function ensureConsultDoc(
     if (!isUnmodifiedBy(existing, options.account)) {
       return { kind: "left-alone", name, reason: "edited by someone else" };
     }
-    // Ours — but is it a placeholder from before the rule above? Without this
-    // check every sweep would re-upload every finished summary.
+    // Ours — but is it a placeholder from before the rule above, or does it
+    // hold the note cut short (Monday's 250-character preview, before the
+    // sweep fetched full text)? Without this check every sweep would re-upload
+    // every finished summary.
     const content = await downloadFile(auth, drive.driveId, existing.id);
-    if (!docxMentions(content, MISSING_NOTE)) return { kind: "unchanged", name };
+    if (!docxMentions(content, MISSING_NOTE) && !holdsCutNote(content, vars.consult_note ?? "")) {
+      return { kind: "unchanged", name };
+    }
     await uploadSmallFile(auth, drive.driveId, sub.item!.id, name, render(vars), "replace");
     return { kind: "replaced", name };
   }
@@ -416,13 +420,37 @@ export async function ensureConsultDoc(
   return { kind: "written", name };
 }
 
-/** Whether a .docx body contains `text`. A malformed file counts as no. */
-function docxMentions(content: Buffer, text: string): boolean {
+/** A .docx body as plain text, run markup stripped. A malformed file is "". */
+function docxText(content: Buffer): string {
   try {
     const xml = new PizZip(content).file("word/document.xml")?.asText() ?? "";
     // Strip the run markup so a phrase split across runs still matches.
-    return xml.replace(/<[^>]+>/g, "").includes(text);
+    return xml
+      .replace(/<[^>]+>/g, "")
+      .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+      .replace(/&amp;/g, "&");
   } catch {
-    return false;
+    return "";
   }
 }
+
+/** Whether a .docx body contains `text`. A malformed file counts as no. */
+function docxMentions(content: Buffer, text: string): boolean {
+  return docxText(content).includes(text);
+}
+
+/**
+ * Whether the document holds the start of `note` but not all of it — written
+ * from a cut-short copy of the same note. Compared without whitespace: line
+ * breaks become run markup in the .docx, and the preview had its own spacing.
+ */
+export function holdsCutNote(content: Buffer, note: string): boolean {
+  const squash = (v: string) => v.replace(/\s+/g, "");
+  const full = squash(note);
+  if (full.length <= CUT_NOTE_PREFIX) return false;
+  const body = squash(docxText(content));
+  return body.includes(full.slice(0, CUT_NOTE_PREFIX)) && !body.includes(full);
+}
+
+/** Enough of a note's start to recognise it, well inside Monday's preview. */
+const CUT_NOTE_PREFIX = 150;

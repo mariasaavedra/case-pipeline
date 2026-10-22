@@ -268,6 +268,16 @@ same way.
 - **E&A timelines** (emails, calls, consult notes) have no webhook — only the
   nightly full sync pulls them. Same for **note deletions** (`delete_update` is
   received but skipped; the nightly full reconciles).
+- **E&A text is a preview until fetched in full.** Monday's timeline page
+  returns each entry as a ~250-character plain-text preview; only
+  `timeline_item(id:)` has the whole entry. The full sync stores notes,
+  activities and custom entries in full (`scripts/sync/ea-timeline.ts`; up to
+  `EA_FULL_TEXT_PER_RUN`, default 2,500, upgraded per run, 12 per call);
+  `content_sig` stays the preview's, so dedup is unchanged. Monday quietly
+  answers with previews again for 13+ entries per request, or when `id` is
+  selected beside `content` — hence 12 per call, `content` only. The backlog from
+  before 2026-10-22: `npm run ea:full-text` (dry run; `-- --apply`). **Emails
+  stay previews** — Monday returns only the preview for an email, even by id.
 - Webhook delivery is **best-effort**. A missed delivery self-heals at the next
   scheduled incremental (columns) or full (everything) sync — webhooks reduce
   latency, they are not the source of truth.

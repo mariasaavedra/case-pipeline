@@ -37,6 +37,37 @@ export interface TimelineNote {
   author: string | null;
   /** ISO date the entry was created, for the proximity check. */
   date: string | null;
+  /** Monday's timeline item id, to fetch the full text of a cut entry. */
+  id?: string | null;
+  /** True when `text` may be Monday's 250-character preview (`mayBeCut`). */
+  cut?: boolean;
+}
+
+/** True when `text` may be Monday's 250-character preview, cut short. */
+export { mayBeTimelinePreview as mayBeCut } from "@case-pipeline/monday";
+
+/**
+ * A full E&A entry's HTML as plain text, keeping its lines: attorneys write
+ * consult notes as one thought per line, and a note run together into one
+ * paragraph is much harder to read.
+ */
+export function noteHtmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(div|p|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\uFEFF/g, "")
+    .split("\n")
+    .map((line) => line.replace(/[ \t\u00a0]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export interface ResolvedNote {

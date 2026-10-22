@@ -41,6 +41,7 @@
     "uploads:file": "tsx --env-file-if-exists=.env scripts/client-uploads.ts",
     "feek:autofill": "tsx --env-file-if-exists=.env scripts/fee-k-autofill.ts",
     "history:backfill": "tsx --env-file-if-exists=.env scripts/history-backfill.ts",
+    "ea:full-text": "tsx --env-file-if-exists=.env scripts/ea-full-text.ts",
     "staff:import": "tsx --env-file-if-exists=.env scripts/staff-import.ts",
     "sms:check": "tsx --env-file-if-exists=.env scripts/ringcentral-check.ts"
   },

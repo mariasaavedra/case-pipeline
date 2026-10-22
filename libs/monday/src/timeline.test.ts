@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { test, expect, describe, beforeEach, afterEach, vi } from "vitest";
-import { fetchTimelineBatch, fetchCustomActivities, timelineAlias, setApiToken, normalizeEmailMetadata } from "./api";
+import { fetchTimelineBatch, fetchTimelineItemContents, fetchCustomActivities, timelineAlias, setApiToken, normalizeEmailMetadata } from "./api";
 
 describe("normalizeEmailMetadata", () => {
   test("turns Monday's null lists into empty ones and trims addresses", () => {
@@ -143,4 +143,38 @@ describe("fetchCustomActivities", () => {
     expect(map.get("abc")).toBe("Consult note");
     expect(map.size).toBe(1);
   });
+});
+
+describe("fetchTimelineItemContents", () => {
+  beforeEach(() => setApiToken("test-token"));
+  afterEach(() => vi.unstubAllGlobals());
+
+  test("fetches full content by timeline item id, batched, skipping missing ids and previews", async () => {
+    const queries: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, opts: { body: string }) => {
+      const { query } = JSON.parse(opts.body) as { query: string };
+      queries.push(query);
+      if (query.includes('"b"')) return mockResponse({ data: { c0: null } });
+      if (query.includes('"c"')) return mockResponse({ data: { c0: { id: "c", content: "a plain preview, as for an email" } } });
+      return mockResponse({ data: { c0: { id: "a", content: "<div>full note</div>" } } });
+    }));
+
+    const map = await fetchTimelineItemContents(["a", "b", "c"], undefined, 1);
+    expect(queries).toHaveLength(3);
+    expect(queries[0]).toContain('timeline_item(id: "a") { content }'); // `id` too → previews
+    expect(map).toEqual(new Map([["a", "<div>full note</div>"]]));
+  });
+});
+
+test("asks for at most 12 entries per request — Monday answers 13+ with previews", async () => {
+  setApiToken("test-token");
+  const sizes: number[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, opts: { body: string }) => {
+    const { query } = JSON.parse(opts.body) as { query: string };
+    sizes.push((query.match(/timeline_item\(/g) ?? []).length);
+    return mockResponse({ data: {} });
+  }));
+  await fetchTimelineItemContents(Array.from({ length: 30 }, (_, i) => `id${i}`));
+  expect(sizes).toEqual([12, 12, 6]);
+  vi.unstubAllGlobals();
 });
