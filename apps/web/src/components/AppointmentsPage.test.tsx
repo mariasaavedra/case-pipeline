@@ -11,7 +11,7 @@ const profile = (localId: string, name: string) =>
 function entry(o: Partial<MyDayEntry> & { localId: string; time: string }): MyDayEntry {
   return {
     mondayItemId: null, boardKey: "appointments_r", name: o.localId, status: null, date: "2026-10-07",
-    language: null, phone: null, clientWrote: null, description: null, detainedAt: null, sameDayCount: 0,
+    language: null, phone: null, clientWrote: null, description: null, detainedAt: null, detention: null, sameDayCount: 0,
     prep: null, profile: profile(`p-${o.localId}`, `Client ${o.localId}`), updates: [], caseSummary: null, ...o,
   };
 }

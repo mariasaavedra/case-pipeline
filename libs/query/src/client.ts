@@ -7,6 +7,7 @@ type Database = BetterSqlite3.Database;
 
 type SQLQueryBindings = string | number | bigint | Buffer | null;
 import type { ProfileSummary, SearchResult } from "./types";
+import { getDetention } from "./detention";
 
 /** FTS5 reserved words that must not appear as bare tokens in MATCH queries */
 const FTS5_RESERVED = new Set(["AND", "OR", "NOT", "NEAR"]);
@@ -145,6 +146,7 @@ export function getClientProfile(db: Database, localId: string): ProfileSummary 
     ...readLastName(rawColumnValues),
     dmsUrl: readDmsUrl(rawColumnValues),
     detainedAt: getDetainedAt(db, localId),
+    detention: getDetention(db, localId),
     ...readTextingContact(rawColumnValues),
   };
 }

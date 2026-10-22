@@ -41,7 +41,7 @@ import { withTokenFallback } from "../write-auth.js";
 import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
-import { getBoardColumnsFor } from "@case-pipeline/query";
+import { getBoardColumnsFor, batchGetDetentions, type Detention } from "@case-pipeline/query";
 import { fetchCustomActivities, MondayApiError } from "@case-pipeline/monday";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { activeBoardKeys, loadAttorneyBoards } from "../attorney-boards.js";
@@ -506,7 +506,6 @@ interface ConsultRow {
   prepPending: number | null;
   prepInterpNeed: string | null;
   prepInterpLanguage: string | null;
-  detainedAt: string | null;
   driveFolder: string | null;
 }
 
@@ -548,8 +547,10 @@ export interface ReceptionConsult {
    * names on the row can't be trusted to build one.
    */
   folderName: { ok: true; folder: string; initial: string } | { ok: false; detail: string };
-  /** Det. Facility on the client's open court case — pre-fills "Detained appt". */
+  /** Where the client is held, when known (Det. Facility, else read off a name) — pre-fills "Detained appt". */
   detainedAt: string | null;
+  /** Detained by the shared rule (libs/query detention.ts); null when not, or no profile. */
+  detention: Detention | null;
   /**
    * The Google Drive folder the client was sent to upload documents to: the
    * appointment's "Google Drive Folder" column, else the newest folder the
@@ -622,17 +623,6 @@ export function getReceptionConsults(
               cp.method AS prepMethod, cp.pending AS prepPending,
               json_extract(cp.fields, '$.interpreter.need') AS prepInterpNeed,
               json_extract(cp.fields, '$.interpreter.language') AS prepInterpLanguage,
-              -- Same rule as getOpenDetentions (P3.0's "Detained at …" pill):
-              -- the newest open "Court Case" row with a Det. Facility.
-              (SELECT json_extract(cc.column_values, '$.det_facility.label')
-                 FROM board_items cc
-                WHERE cc.profile_local_id = bi.profile_local_id
-                  AND cc.board_key = 'court_cases'
-                  AND cc.group_title = 'Court Case'
-                  AND cc.deleted_at IS NULL
-                  AND COALESCE(json_extract(cc.column_values, '$.det_facility.label'), '') <> ''
-                ORDER BY COALESCE(cc.updated_at_source, cc.created_at) DESC
-                LIMIT 1) AS detainedAt,
               (SELECT df.url FROM drive_folders df
                 WHERE df.appointment_local_id = bi.local_id AND df.match_status = 'matched'
                 ORDER BY df.drive_created_at DESC LIMIT 1) AS driveFolder
@@ -647,6 +637,8 @@ export function getReceptionConsults(
         ORDER BY bi.next_date ASC, COALESCE(bi.next_time, '99:99') ASC, bi.name ASC`,
     )
     .all(...opts.boardKeys, opts.from, opts.to) as ConsultRow[];
+  // P3.0's rule, in one batch for the page.
+  const detentions = batchGetDetentions(db, rows.map((r) => r.profileLocalId ?? ""));
 
   const consults = rows.map((r): ReceptionConsult => {
     const cv = parseJson(r.columnValues);
@@ -699,7 +691,8 @@ export function getReceptionConsults(
       folderName: named.ok
         ? { ok: true, folder: named.name.folder, initial: named.name.initial }
         : { ok: false, detail: named.detail },
-      detainedAt: r.profileLocalId ? r.detainedAt : null,
+      detainedAt: (r.profileLocalId && detentions.get(r.profileLocalId)?.at) || null,
+      detention: (r.profileLocalId && detentions.get(r.profileLocalId)) || null,
       driveFolder: httpUrlOf(textOf(cv.google_drive_folder)) ?? r.driveFolder,
       sameDayCount: 0,
     };

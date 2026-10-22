@@ -29,15 +29,17 @@ const DONE = new Set([
 /**
  * Why this is a detainee consult, or null when it isn't: reception prepped it
  * as "Detained appt", the board marks it "Today's consult (detainee)", or the
- * client's open court case has a detention facility.
+ * client is detained by the shared rule (Det. Facility, a name, a jail intake —
+ * libs/query detention.ts).
  */
-export function detaineeReason(entry: Pick<MyDayEntry, "prep" | "status" | "detainedAt">): string | null {
+export function detaineeReason(entry: Pick<MyDayEntry, "prep" | "status" | "detainedAt" | "detention">): string | null {
   if (entry.prep?.apptType.startsWith("Detained appt")) {
     const where = entry.prep.apptType.split(" — ")[1];
     return where ? `Detained at ${where}` : "Prepped as a detained appt";
   }
   if (/detainee/i.test(entry.status ?? "")) return "Detainee consult";
-  if (entry.detainedAt) return `Detained at ${entry.detainedAt}`;
+  const where = entry.detention?.at ?? entry.detainedAt;
+  if (entry.detention || entry.detainedAt) return where ? `Detained at ${where}` : "Detained";
   return null;
 }
 
