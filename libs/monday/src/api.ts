@@ -1507,22 +1507,47 @@ export async function fetchTimelineItemContents(
   const map = new Map<string, string>();
   const alias = (i: number) => `c${i}`;
   for (let i = 0; i < ids.length; i += chunk) {
-    const batch = ids.slice(i, i + chunk);
-    const fields = batch
-      .map((id, j) => `${alias(j)}: timeline_item(id: ${JSON.stringify(id)}) { content }`)
-      .join("\n");
-    const result = await mondayRequest<{ data: Record<string, { content: string | null } | null> }>(
-      `query { ${fields} }`,
-      undefined,
-      tokenOverride,
-      TIMELINE_API_VERSION
-    );
-    batch.forEach((id, j) => {
-      const content = result.data?.[alias(j)]?.content;
-      if (typeof content === "string" && content.trim().startsWith("<")) map.set(id, content);
-    });
+    let batch = ids.slice(i, i + chunk);
+    // An entry deleted in Monday fails the WHOLE request ("Timeline item not
+    // found", NOT_FOUND, at its alias) rather than coming back null — seen in
+    // prod 2026-10-22. Drop the aliases it names and ask again for the rest.
+    while (batch.length) {
+      const fields = batch
+        .map((id, j) => `${alias(j)}: timeline_item(id: ${JSON.stringify(id)}) { content }`)
+        .join("\n");
+      let result: { data: Record<string, { content: string | null } | null> };
+      try {
+        result = await mondayRequest(`query { ${fields} }`, undefined, tokenOverride, TIMELINE_API_VERSION);
+      } catch (err) {
+        const missing = notFoundAliases(err);
+        if (!missing.size) throw err;
+        batch = batch.filter((_, j) => !missing.has(alias(j)));
+        continue;
+      }
+      batch.forEach((id, j) => {
+        const content = result.data?.[alias(j)]?.content;
+        if (typeof content === "string" && content.trim().startsWith("<")) map.set(id, content);
+      });
+      break;
+    }
   }
   return map;
+}
+
+/** The aliases a Monday error reports as NOT_FOUND (empty for any other error). */
+function notFoundAliases(err: unknown): Set<string> {
+  if (!(err instanceof MondayApiError)) return new Set();
+  const json = err.message.replace(/^Monday API errors: /, "");
+  try {
+    const errors = JSON.parse(json) as Array<{ path?: unknown[]; extensions?: { code?: string } }>;
+    return new Set(
+      errors
+        .filter((e) => e.extensions?.code === "NOT_FOUND" && typeof e.path?.[0] === "string")
+        .map((e) => e.path![0] as string),
+    );
+  } catch {
+    return new Set();
+  }
 }
 
 /**
