@@ -825,6 +825,22 @@ export function sendSms(input: SendSmsInput): Promise<SendSmsResult> {
     body: JSON.stringify(input),
   });
 }
+/** Anyone: add a template (the key is made from the name). */
+export function createSmsTemplate(t: Omit<SmsTemplate, "key">): Promise<SmsTemplate> {
+  return apiFetch<SmsTemplate>("/api/sms/templates", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(t),
+  });
+}
+/** Anyone: edit a template's name and texts. */
+export function editSmsTemplate(key: string, t: Omit<SmsTemplate, "key">): Promise<SmsTemplate> {
+  return apiFetch<SmsTemplate>(`/api/sms/templates/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(t),
+  });
+}
 export function updateSmsTemplates(templates: SmsTemplate[]): Promise<SmsTemplate[]> {
   return apiFetch<SmsTemplate[]>("/api/settings/sms-templates", {
     method: "PUT",

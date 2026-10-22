@@ -1,21 +1,23 @@
 // =============================================================================
 // SendSmsModal (M28) — text a client through RingCentral
 // =============================================================================
-// Pick a template (English / Spanish), fill {{link}} if it has one, read the
-// text, press Send. Nothing is sent without that press. The text stays
-// editable; a {{placeholder}} still in it blocks Send (the server refuses it
-// too). Segment count is shown because a single á turns 160-character texts
-// into 70-character ones.
+// The form is SmsComposer (shared with M2's "Send a text"): template, language,
+// {{link}}, the text itself, and adding / editing templates. Nothing is sent
+// without the Send press here.
 //
-// Opened from Log Call (M2, "Text consult link"), Payment links (M21, "Text
-// links to client") and the client header (P3.0, "Text"). Rules: routes/sms.ts.
+// Opened from Payment links (M21, "Text links to client"), the client header
+// (P3.0, "Text") and the upload link popup. Log Call (M2) has it inline as a
+// checkbox instead. Rules: routes/sms.ts.
 // =============================================================================
 
-import { useEffect, useMemo, useState } from "react";
-import { fetchSmsConfig, sendSms, type SendSmsResult, type SmsConfig, type SmsContext } from "../api";
-import { firstNameOf, formatUsPhone, renderSmsTemplate, smsSegments, toUsE164, unfilledPlaceholders } from "@case-pipeline/core";
+import { useState } from "react";
+import { sendSms, type SendSmsResult, type SmsContext } from "../api";
+import { formatUsPhone } from "@case-pipeline/core";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { SmsComposer, type SmsComposerState } from "./SmsComposer";
+
+export { isSpanishLabel } from "./SmsComposer";
 
 interface Props {
   /** The number to text; editable in the popup. */
@@ -39,83 +41,24 @@ interface Props {
   onSent?: (r: SendSmsResult) => void;
 }
 
-const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)", marginBottom: 4, fontFamily: "var(--font-body)" } as const;
-const inputStyle = { border: "1px solid var(--color-border-light)", background: "var(--color-surface)", color: "var(--color-ink)", fontFamily: "var(--font-body)" } as const;
-
-/** Monday's Spanish labels: "Spanish" (Call Log), "Espanol" / "Español" (Profiles). */
-export const isSpanishLabel = (label: string | null | undefined) => /^(span|espa)/i.test(label?.trim() ?? "");
-
 export function SendSmsModal({
-  phone: initialPhone, altPhones, name, firstName, profileLocalId, language, templateKey, vars, context, onClose, onSent,
+  phone, altPhones, name, firstName, profileLocalId, language, templateKey, vars, context, onClose, onSent,
 }: Props) {
-  const [config, setConfig] = useState<SmsConfig | null>(null);
-  const [phone, setPhone] = useState(initialPhone);
-  // null until the templates load: absent prop → the first template.
-  const [chosenKey, setKey] = useState<string | null>(templateKey ?? null);
-  const key = chosenKey ?? "";
-  const [lang, setLang] = useState<"en" | "es">(isSpanishLabel(language) ? "es" : "en");
-  const [link, setLink] = useState("");
-  const [body, setBody] = useState("");
-  /** Staff edited the text by hand — a template/language switch then asks first. */
-  const [edited, setEdited] = useState(false);
+  const [state, setState] = useState<SmsComposerState>({ draft: null, problem: null, mode: null });
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<SendSmsResult | null>(null);
+  const [result, setResult] = useState<{ r: SendSmsResult; to: string } | null>(null);
 
-  useEffect(() => {
-    fetchSmsConfig()
-      .then((c) => {
-        setConfig(c);
-        // "" = free text, on purpose; an unknown or missing key falls back to the first template.
-        setKey((k) => (k === "" || c.templates.some((t) => t.key === k) ? k : c.templates[0]?.key ?? ""));
-      })
-      .catch((e: Error) => setError(e.message));
-  }, []);
-
-  const template = config?.templates.find((t) => t.key === key) ?? null;
-  const templateText = template ? (template[lang] || template[lang === "en" ? "es" : "en"]) : "";
-  const usesLink = /\{\{\s*link\s*\}\}/.test(templateText);
-
-  const rendered = useMemo(
-    () =>
-      renderSmsTemplate(templateText, {
-        firstName: firstName?.trim() || firstNameOf(name),
-        name: name.trim(),
-        link,
-        ...config?.firm,
-        ...vars,
-      }),
-    [templateText, name, firstName, link, config, vars],
-  );
-
-  // The text follows the template until staff type in it.
-  useEffect(() => {
-    if (!edited) setBody(rendered.body);
-  }, [rendered.body, edited]);
-
-  const switchTemplate = (fn: () => void) => {
-    if (edited && !window.confirm("Replace the text you edited with the template?")) return;
-    setEdited(false);
-    fn();
-  };
-
-  const to = toUsE164(phone);
-  // Other US numbers on file that aren't the one in the box.
-  const otherPhones = [...new Set([initialPhone, ...(altPhones ?? [])])].filter(
-    (p): p is string => !!p && !!toUsE164(p) && toUsE164(p) !== to,
-  );
-  const segs = smsSegments(body);
-  const unfilled = unfilledPlaceholders(body);
-  const mode = config?.mode ?? "off";
-  const canSend = mode !== "off" && !!to && body.trim().length > 0 && unfilled.length === 0 && !sending;
+  const { draft, mode } = state;
+  const canSend = !!draft && !sending;
 
   async function send() {
-    if (!canSend || !to) return;
+    if (!draft || sending) return;
     setSending(true);
     setError(null);
     try {
-      const r = await sendSms({ to, body, context, templateKey: key || null, language: lang, profileLocalId: profileLocalId ?? null });
-      setResult(r);
+      const r = await sendSms({ ...draft, context, profileLocalId: profileLocalId ?? null });
+      setResult({ r, to: draft.to });
       onSent?.(r);
     } catch (e) {
       setError((e as Error).message);
@@ -129,96 +72,23 @@ export function SendSmsModal({
       <DialogContent code="M28" className="gap-0 p-0 sm:max-w-[520px]">
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Send a text</DialogTitle>
-          <DialogDescription>
-            {name || formatUsPhone(phone)}
-            {config?.fromNumber ? ` · from ${config.fromNumber}` : ""}
-          </DialogDescription>
+          <DialogDescription>{name || formatUsPhone(phone)}</DialogDescription>
         </DialogHeader>
 
-        <div className="px-5 py-4 space-y-4" style={{ fontFamily: "var(--font-body)" }}>
-          {mode === "dry-run" && (
-            <p className="text-xs px-3 py-2 rounded" style={{ background: "var(--color-amber-light)", color: "var(--color-ink)" }}>
-              Test mode — the text is recorded but <strong>not sent</strong>.
-            </p>
-          )}
-          {config && mode === "off" && (
-            <p className="text-xs px-3 py-2 rounded" style={{ background: "var(--color-status-red-bg)", color: "var(--color-status-red)" }}>
-              Texting is turned off on the server.
-            </p>
-          )}
-
+        <div className="max-h-[75vh] overflow-y-auto px-5 py-4 space-y-4" style={{ fontFamily: "var(--font-body)" }}>
           {result ? (
             <div className="text-sm" style={{ color: "var(--color-ink)" }}>
-              <p>
-                ✓ {result.mode === "on" ? "Text sent" : "Test text recorded (not sent)"} to <strong>{formatUsPhone(phone)}</strong>
-                {result.segments > 1 ? ` (${result.segments} segments)` : ""}.
-              </p>
-              {result.activity === "logged" && <p className="mt-1 text-xs" style={{ color: "var(--color-ink-muted)" }}>Logged in the client&apos;s Emails &amp; Activities.</p>}
-              {result.activity === "queued" && <p className="mt-1 text-xs" style={{ color: "var(--color-ink-muted)" }}>Monday was unreachable — the timeline entry is queued.</p>}
+              <SmsSentLine result={result.r} to={result.to} />
               <div className="flex justify-end mt-4">
                 <Button type="button" onClick={onClose}>Done</Button>
               </div>
             </div>
           ) : (
             <>
-              <div className="flex gap-3">
-                <label className="flex-1">
-                  <span style={labelStyle}>To</span>
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                    className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
-                  {phone && !to && <span className="text-xs" style={{ color: "var(--color-status-red)" }}>Not a US number</span>}
-                  {otherPhones.map((p) => (
-                    <button key={p} type="button" onClick={() => setPhone(p)} className="block text-xs hover:underline mt-0.5"
-                      style={{ color: "var(--color-ink-muted)" }}>
-                      Use {formatUsPhone(p)} instead
-                    </button>
-                  ))}
-                </label>
-                <div>
-                  <span style={labelStyle}>Language</span>
-                  <div className="flex rounded-md overflow-hidden" style={{ border: "1px solid var(--color-border-light)" }}>
-                    {(["en", "es"] as const).map((l) => (
-                      <button key={l} type="button" onClick={() => switchTemplate(() => setLang(l))}
-                        className="px-3 py-1.5 text-sm"
-                        style={{ background: lang === l ? "var(--color-ink)" : "var(--color-surface)", color: lang === l ? "var(--color-surface)" : "var(--color-ink)" }}>
-                        {l === "en" ? "English" : "Español"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <label className="block">
-                <span style={labelStyle}>Template</span>
-                <select value={key} onChange={(e) => { const v = e.target.value; switchTemplate(() => setKey(v)); }}
-                  className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} disabled={!config}>
-                  {config?.templates.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-                  <option value="">Free text</option>
-                </select>
-              </label>
-
-              {usesLink && !edited && (
-                <label className="block">
-                  <span style={labelStyle}>Link</span>
-                  <input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://calendly.com/…"
-                    className="w-full rounded-md px-2 py-1.5 text-sm" style={inputStyle} />
-                </label>
-              )}
-
-              <label className="block">
-                <span style={labelStyle}>Text</span>
-                <textarea value={body} rows={6} onChange={(e) => { setBody(e.target.value); setEdited(true); }}
-                  className="w-full rounded-md px-2 py-1.5 text-sm" style={{ ...inputStyle, resize: "vertical" }} />
-                <span className="text-xs" style={{ color: segs.segments > 2 ? "var(--color-status-red)" : "var(--color-ink-faint)" }}>
-                  {segs.units} characters · {segs.segments} {segs.segments === 1 ? "text" : "texts"}
-                  {segs.encoding === "unicode" ? " (accents like á/í/ó/ú shorten each text to 70)" : ""}
-                </span>
-                {unfilled.length > 0 && (
-                  <span className="block text-xs" style={{ color: "var(--color-status-red)" }}>
-                    Fill in {unfilled.map((p) => `{{${p}}}`).join(", ")} before sending.
-                  </span>
-                )}
-              </label>
+              <SmsComposer
+                phone={phone} altPhones={altPhones} name={name} firstName={firstName}
+                language={language} templateKey={templateKey} vars={vars} onChange={setState}
+              />
 
               {error && <p role="alert" className="text-xs" style={{ color: "var(--color-status-red)" }}>{error}</p>}
 
@@ -233,5 +103,19 @@ export function SendSmsModal({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** "✓ Text sent to …" plus where it was logged — M28's result and M2's confirmation. */
+export function SmsSentLine({ result, to }: { result: SendSmsResult; to: string }) {
+  return (
+    <>
+      <p>
+        ✓ {result.mode === "on" ? "Text sent" : "Test text recorded (not sent)"} to <strong>{formatUsPhone(to)}</strong>
+        {result.segments > 1 ? ` (${result.segments} segments)` : ""}.
+      </p>
+      {result.activity === "logged" && <p className="mt-1 text-xs" style={{ color: "var(--color-ink-muted)" }}>Logged in the client&apos;s Emails &amp; Activities.</p>}
+      {result.activity === "queued" && <p className="mt-1 text-xs" style={{ color: "var(--color-ink-muted)" }}>Monday was unreachable — the timeline entry is queued.</p>}
+    </>
   );
 }
