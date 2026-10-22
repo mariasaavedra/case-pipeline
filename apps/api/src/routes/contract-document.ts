@@ -30,7 +30,7 @@ import { feeKCaseTypeSql, getBoardColumnsFor } from "@case-pipeline/query";
 import { usersDb } from "../db/users-db.js";
 import { FEE_K_ASSISTANT, makeMondayUserByLogin, peopleValue } from "../contract-info.js";
 import { hearingKindOf } from "@case-pipeline/query";
-import { letterAddress } from "../documents/us-address.js";
+import { letterAddress, oneLineAddress } from "../documents/us-address.js";
 import { loadDocumentSettings } from "../documents/document-settings.js";
 import type { AttorneyInfo } from "../documents/document-settings.js";
 
@@ -52,7 +52,7 @@ interface ContractDocRow {
 export interface ContractPrefill {
   clientName: string;
   email: string;
-  /** One line, as Monday keeps it. */
+  /** One line, tidied ("Street, City, ST zip"; as typed when it can't be split). */
   address: string;
   /** The same address split for a letter: street line + "City, ST zip" ("" when it can't tell). */
   street: string;
@@ -110,7 +110,7 @@ export function contractPrefill(
   return {
     clientName: (row.clientName ?? row.itemName).trim(),
     email: row.email?.trim() ?? "",
-    address: row.address?.trim() ?? "",
+    address: oneLineAddress(row.address),
     ...letterAddress(row.address),
     attorneyName,
     attorneyEmail: attorneyEmailFor(attorneyName, attorneys),
@@ -166,7 +166,12 @@ export function registerContractDocumentRoutes(
   const load = (localId: string) =>
     db.prepare(`
       SELECT c.monday_item_id, c.name AS itemName, p.local_id AS profileLocalId,
-             p.name AS clientName, p.email, p.address,
+             p.name AS clientName, p.email,
+             -- The profile's Address, else its Mailing address, else the Fee K's own
+             -- copy (a mirror) — the same order P14's "missing Address" flag uses.
+             COALESCE(NULLIF(TRIM(p.address), ''),
+                      NULLIF(TRIM(json_extract(p.raw_column_values, '$.mailing_address')), ''),
+                      json_extract(c.raw_column_values, '$.address')) AS address,
              json_extract(c.raw_column_values, '$.attorney.label')      AS attorney,
              ${feeKCaseTypeSql()} AS contractFor,
              json_extract(c.raw_column_values, '$.af')                  AS af,

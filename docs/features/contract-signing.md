@@ -73,7 +73,16 @@ add a contract.
   each fee has its own 3% tag (`{{attorney_fee_surcharge}}`,
   `{{filing_fee_surcharge}}`, `{{postage_fee_surcharge}}`, `{{bio_fee_surcharge}}`…;
   N/A when that fee is empty). A typed surcharge only changes `{{surcharge}}`.
-  Trial and BIA appeal fees are paid in two equal halves (`{{attorney_fee_half}}`);
+  BIA appeal fees are paid in two equal halves (`{{attorney_fee_half}}`). Trial
+  (2026-10-22) is not: the prep and the trial are separate fees, each with its
+  own deadline — `{{trial_prep_fee}}` / `{{trial_prep_due_date}}`, `{{trial_fee}}` /
+  `{{trial_due_date}}` (each with `_surcharge` / `_es`), `{{trial_total_fee}}` = both;
+  several people on one contract (2026-10-22, e.g. a family at one Master
+  Hearing): one fee, only the client signs; M22 shows a People box with
+  "+ Add person" when the template has a `{{#people}}…{{/people}}` loop
+  (`{{person_name}}`, `{{person_number}}`, `{{person_a_number}}`, `{{person_dob}}`,
+  client first) or `{{people_names}}` ("Ana, Juan and Maria"); the file is
+  named "Client + N - …";
   Bond + Master Hearing has its own `{{motion_fee}}` / `{{hearing_fee}}`;
   Master Hearing + Motion (2026-10-21) adds which motion, `{{motion_name}}` /
   `{{motion_name_es}}` (a pick list in M22 fills both: `MOTIONS`), and the
@@ -86,7 +95,13 @@ add a contract.
   pre-filled from Monday (client, e-mail, address, attorney, AF/FF, the next
   hearing from the client's court case: MCH → Master Hearing, Trial →
   Individual Hearing) and the user's initials. A field the template uses must
-  be filled.
+  be filled. The address (2026-10-22) is the profile's Address, else its
+  Mailing address, else the Fee K's own copy (P14's "missing" flag uses the
+  same order; a third of the Fee Ks since September had only a Mailing
+  address). It is tidied and split by `documents/us-address.ts`
+  (`letterAddress`): cities typed with no comma, a suffix glued to the city,
+  a unit before the city, "KCMO", the state from the zip when missing,
+  all-lowercase lines capitalised; one it can't split stays whole.
 - Everything happens in the browser: the template is filled there, and the
   PDF is made by the user's Microsoft 365 (`/me/drive/…/content?format=pdf`,
   a temporary file in their OneDrive folder "Case Pipeline (temporary)",
