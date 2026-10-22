@@ -169,7 +169,9 @@ function loadTimelineNotes(
 
   for (const { pid, raw, ...note } of rows) {
     const list = byProfile.get(pid) ?? [];
-    list.push({ ...note, cut: !!note.id && mayBeCut(raw) });
+    // Stored in full (HTML) since the sync fetches it: read with its lines kept.
+    const full = raw?.trim().startsWith("<") ? noteHtmlToText(raw) : "";
+    list.push({ ...note, text: full || note.text, cut: !!note.id && mayBeCut(raw) });
     byProfile.set(pid, list);
   }
   return byProfile;

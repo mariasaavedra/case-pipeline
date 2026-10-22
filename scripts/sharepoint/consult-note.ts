@@ -39,21 +39,12 @@ export interface TimelineNote {
   date: string | null;
   /** Monday's timeline item id, to fetch the full text of a cut entry. */
   id?: string | null;
-  /** True when `text` may be Monday's 250-character preview. See below. */
+  /** True when `text` may be Monday's 250-character preview (`mayBeCut`). */
   cut?: boolean;
 }
 
-/**
- * Monday's timeline page returns each entry's content as a plain-text preview
- * of about 250 characters; the full entry (HTML) only comes from fetching it by
- * id. A stored entry at least this long that is not HTML may be cut short.
- */
-export const PREVIEW_LENGTH = 240;
-
-export function mayBeCut(raw: string | null | undefined): boolean {
-  const v = (raw ?? "").trim();
-  return v.length >= PREVIEW_LENGTH && !v.startsWith("<");
-}
+/** True when `text` may be Monday's 250-character preview, cut short. */
+export { mayBeTimelinePreview as mayBeCut } from "@case-pipeline/monday";
 
 /**
  * A full E&A entry's HTML as plain text, keeping its lines: attorneys write

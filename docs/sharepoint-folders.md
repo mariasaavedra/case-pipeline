@@ -187,12 +187,12 @@ the folder and its CONSULT subfolder are still made. Until 2026-10-22 the sweep
 wrote a "no note was recorded" summary as soon as the consult's time passed,
 and staff read that as the report going out before the attorney's note.
 
-**E&A notes in full.** The E&A sync stores Monday's ~250-character preview of
-each entry (`timeline_items_page` never returns more; about half of all stored
-entries are cut). Before writing, `--apply` fetches the full text of any cut
-note within 7 days of a consult (`fetchTimelineItemContents`, batched by 25, a
-few calls per run), keeping the note's line breaks. Until 2026-10-22 long notes
-reached the summary cut off mid-sentence.
+**E&A notes in full.** Until 2026-10-22 the E&A sync stored only Monday's
+~250-character preview of each entry, and long notes reached the summary cut
+off mid-sentence. The sync now stores them in full (see `docs/webhooks.md`);
+for a note still on its preview, `--apply` fetches the full text of any cut
+note within 7 days of a consult (`fetchTimelineItemContents`, batched by 12, a
+few calls per run). Either way the note keeps its line breaks.
 
 **The summary converges; it never churns.** It is written once. A placeholder
 from before that rule is replaced when the note appears, and one holding a

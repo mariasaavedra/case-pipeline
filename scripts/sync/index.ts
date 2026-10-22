@@ -53,13 +53,12 @@ import {
   fetchItemUpdatesBatch,
   fetchTimelineBatch,
   fetchCustomActivities,
-  normalizeEmailMetadata,
   resolveAllColumns,
   parseStatusOptions,
   setDefaultMondayJob,
   drainMondayCallCounts,
 } from "@case-pipeline/monday";
-import type { MondayItem, MondayTimelineItem, MondayAsset, MondayColumn } from "@case-pipeline/monday";
+import type { MondayItem, MondayAsset, MondayColumn } from "@case-pipeline/monday";
 import { loadBoardsConfig } from "@case-pipeline/config";
 import { initializeSchema } from "@case-pipeline/seed/db/schema";
 import { addMondayCallCounts } from "@case-pipeline/query";
@@ -69,6 +68,7 @@ import { backupEncryptionKey, encryptFile } from "../../apps/api/src/backup/cryp
 import { archiveItemByMondayId } from "../../apps/api/src/webhooks/processor.js";
 import { acquireSyncLock, releaseSyncLock, refreshSyncLock, recordSyncResult } from "@case-pipeline/seed/db/sync-lock";
 import { normalizeANumber } from "@case-pipeline/core";
+import { timelineWriter, stripHtml } from "./ea-timeline.js";
 import {
   buildColumnValues,
   extractBoardItemFields,
@@ -880,7 +880,6 @@ async function main() {
       const TIMELINE_BATCH = 12;
       const DELAY_MS = 300;
       let totalUpdates = 0;
-      let totalTimeline = 0;
 
       // custom_activity id → name, so E&A rows of type=custom get a readable label.
       const customActivityNames = await fetchCustomActivities();
@@ -911,45 +910,6 @@ async function main() {
             fileSize: a.file_size ?? null,
           }))
         );
-      }
-
-      // E&A rows. INSERT OR IGNORE honors the content-signature unique index:
-      // the same event surfaces on the profile AND its connected board items
-      // (each with a different monday_timeline_id), so content_sig is what keeps
-      // one row per logical event per profile.
-      const insertTimelineItem = db.prepare(`
-        INSERT OR IGNORE INTO client_updates (
-          batch_id, local_id, monday_timeline_id, profile_local_id,
-          board_item_local_id, board_key, author_name, author_email,
-          title, text_body, body_html, source_type, activity_type_name, content_sig,
-          created_at_source, raw_json, sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
-      `);
-
-      // An email's sender/recipients (TimelineItem.metadata, API 2026-07+).
-      const setEmailParticipants = db.prepare(`
-        UPDATE client_updates SET email_participants = ?
-        WHERE profile_local_id = ? AND content_sig = ?
-      `);
-
-      // Content signature (must match the SQL backfill in schema migration v14):
-      // created_at + author + first 300 chars of the stripped body, \x1f-joined.
-      const US = "\x1f";
-      function contentSig(createdAt: string, author: string, strippedBody: string): string {
-        return `${createdAt}${US}${author}${US}${strippedBody.slice(0, 300)}`;
-      }
-
-      function stripHtml(html: string): string {
-        return html
-          .replace(/<[^>]+>/g, " ")
-          .replace(/&nbsp;/g, " ")
-          .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"')
-          .replace(/﻿/g, "")
-          .replace(/\s+/g, " ")
-          .trim();
       }
 
       for (let i = 0; i < allIds.length; i += BATCH) {
@@ -1003,49 +963,25 @@ async function main() {
       // Deduped by INSERT OR IGNORE on the content-signature index.
       let totalTimelineSkipped = 0;
 
-      // Insert one item's timeline entries; returns rows actually written
-      // (INSERT OR IGNORE returns 0 for a duplicate collapsed by content_sig).
-      const insertTimelineFor = (timelineMap: Map<string, MondayTimelineItem[]>) => {
-        const tx = db.transaction(() => {
-          for (const [mondayItemId, items] of timelineMap) {
-            const meta = itemMeta.get(mondayItemId);
-            if (!meta) continue;
-            for (const item of items) {
-              const html = item.content ?? "";
-              const author = item.user?.name ?? "Unknown";
-              const stripped = stripHtml(html);
-              const activityName =
-                item.custom_activity_id ? customActivityNames.get(item.custom_activity_id) ?? null : null;
-              const res = insertTimelineItem.run(
-                batchId, randomUUID(), item.id,
-                meta.profile_local_id, meta.board_item_local_id, meta.board_key,
-                author, null,
-                item.title ?? null, stripped, html || null,
-                item.type, activityName, contentSig(item.created_at, author, stripped),
-                item.created_at, JSON.stringify(item),
-              );
-              if (res.changes > 0) totalTimeline++;
-              // Written by UPDATE, not in the INSERT: INSERT OR IGNORE skips the
-              // rows already mirrored, and those are exactly the ones a full
-              // sync must backfill. Keyed like the dedup index, so it lands on
-              // whichever surface's row survived.
-              const participants = normalizeEmailMetadata(item.metadata);
-              if (participants) {
-                setEmailParticipants.run(
-                  JSON.stringify(participants), meta.profile_local_id, contentSig(item.created_at, author, stripped),
-                );
-              }
-            }
-          }
-        });
-        tx();
+      // E&A rows, deduped by content_sig and stored in full (up to
+      // EA_FULL_TEXT_PER_RUN entries upgraded from Monday's 250-char preview a
+      // run, 12 per call). See ea-timeline.ts.
+      const timeline = timelineWriter(db, {
+        batchId,
+        itemMeta,
+        activityNames: customActivityNames,
+        budget: Number(process.env.EA_FULL_TEXT_PER_RUN ?? 2500),
+      });
+      const insertTimelineFor = async (ids: string[]) => {
+        const timelines = await fetchTimelineBatch(ids, 50);
+        timeline.insert(timelines, await timeline.fullTextFor(timelines));
       };
 
       for (let i = 0; i < timelineIds.length; i += TIMELINE_BATCH) {
         keepLockAlive();
         const batch = timelineIds.slice(i, i + TIMELINE_BATCH);
         try {
-          insertTimelineFor(await fetchTimelineBatch(batch, 50));
+          await insertTimelineFor(batch);
         } catch (batchErr) {
           // A transient Monday CRM subgraph error must not abort the whole pass.
           // Retry the batch one item at a time; skip (and count) only the item(s)
@@ -1054,7 +990,7 @@ async function main() {
           console.warn(`\n  [E&A] batch failed (${msg.slice(0, 120)}); falling back to per-item…`);
           for (const id of batch) {
             try {
-              insertTimelineFor(await fetchTimelineBatch([id], 50));
+              await insertTimelineFor([id]);
             } catch (itemErr) {
               totalTimelineSkipped++;
               const im = itemErr instanceof Error ? itemErr.message : String(itemErr);
@@ -1063,12 +999,16 @@ async function main() {
           }
         }
 
-        process.stdout.write(`\r  emails & activities: ${Math.min(i + TIMELINE_BATCH, allIds.length)}/${allIds.length} items (${totalTimeline} entries${totalTimelineSkipped ? `, ${totalTimelineSkipped} skipped` : ""})`);
+        process.stdout.write(`\r  emails & activities: ${Math.min(i + TIMELINE_BATCH, allIds.length)}/${allIds.length} items (${timeline.totals.inserted} entries${totalTimelineSkipped ? `, ${totalTimelineSkipped} skipped` : ""})`);
         if (i + TIMELINE_BATCH < allIds.length) await new Promise((r) => setTimeout(r, DELAY_MS));
       }
 
-      process.stdout.write(`\r  emails & activities: ${allIds.length}/${allIds.length} items (${totalTimeline} entries${totalTimelineSkipped ? `, ${totalTimelineSkipped} skipped` : ""}) ✓\n`);
-      counts["emails_activities"] = totalTimeline;
+      process.stdout.write(`\r  emails & activities: ${allIds.length}/${allIds.length} items (${timeline.totals.inserted} entries${totalTimelineSkipped ? `, ${totalTimelineSkipped} skipped` : ""}) ✓\n`);
+      counts["emails_activities"] = timeline.totals.inserted;
+      if (timeline.totals.fullText > 0) {
+        counts["emails_activities_full_text"] = timeline.totals.fullText;
+        console.log(`  emails & activities: ${timeline.totals.fullText} entries stored in full (were 250-char previews)`);
+      }
       if (totalTimelineSkipped > 0) {
         counts["emails_activities_skipped"] = totalTimelineSkipped;
       }
