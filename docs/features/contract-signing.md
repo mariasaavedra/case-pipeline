@@ -73,7 +73,16 @@ add a contract.
   each fee has its own 3% tag (`{{attorney_fee_surcharge}}`,
   `{{filing_fee_surcharge}}`, `{{postage_fee_surcharge}}`, `{{bio_fee_surcharge}}`…;
   N/A when that fee is empty). A typed surcharge only changes `{{surcharge}}`.
-  Trial and BIA appeal fees are paid in two equal halves (`{{attorney_fee_half}}`);
+  BIA appeal fees are paid in two equal halves (`{{attorney_fee_half}}`). Trial
+  (2026-10-22) is not: the prep and the trial are separate fees, each with its
+  own deadline — `{{trial_prep_fee}}` / `{{trial_prep_due_date}}`, `{{trial_fee}}` /
+  `{{trial_due_date}}` (each with `_surcharge` / `_es`), `{{trial_total_fee}}` = both;
+  several people on one contract (2026-10-22, e.g. a family at one Master
+  Hearing): one fee, only the client signs; M22 shows a People box with
+  "+ Add person" when the template has a `{{#people}}…{{/people}}` loop
+  (`{{person_name}}`, `{{person_number}}`, `{{person_a_number}}`, `{{person_dob}}`,
+  client first) or `{{people_names}}` ("Ana, Juan and Maria"); the file is
+  named "Client + N - …";
   Bond + Master Hearing has its own `{{motion_fee}}` / `{{hearing_fee}}`;
   Master Hearing + Motion (2026-10-21) adds which motion, `{{motion_name}}` /
   `{{motion_name_es}}` (a pick list in M22 fills both: `MOTIONS`), and the

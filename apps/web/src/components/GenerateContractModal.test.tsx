@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   convert: vi.fn(),
   send: vi.fn(),
   log: vi.fn(),
+  tags: ["client_name"] as string[],
+  fill: vi.fn(),
 }));
 
 vi.mock("../api", () => ({
@@ -46,9 +48,10 @@ vi.mock("../sharepoint/graph", () => ({
   convertDocxToPdf: mocks.convert,
 }));
 vi.mock("../lib/contract-fill", () => ({
-  inspectContractTemplate: () => ({ tags: ["client_name"], unknown: [], signTags: ["Sig_es_:signer2:signature"], errors: [] }),
+  inspectContractTemplate: () => ({ tags: mocks.tags, unknown: [], signTags: ["Sig_es_:signer2:signature"], errors: [] }),
   contractProblems: () => [],
-  fillContractTemplate: () => new Blob(["filled"]),
+  fillContractTemplate: mocks.fill,
+  trialTotalOf: () => 0,
   surchargeOf: () => 150,
   totalOf: () => 5150,
   money: (n: number) => `$${n}`,
@@ -69,6 +72,9 @@ beforeEach(() => {
   mocks.convert.mockReset().mockResolvedValue(pdf);
   mocks.send.mockReset().mockResolvedValue({ id: 1, stage: "Atty Reviewing", warning: null });
   mocks.log.mockReset();
+  mocks.tags = ["client_name"];
+  mocks.fill.mockReset().mockReturnValue(new Blob(["filled"]));
+  localStorage.clear();
   URL.createObjectURL = vi.fn(() => "blob:preview-1");
   URL.revokeObjectURL = vi.fn();
 });
@@ -200,5 +206,45 @@ describe("M22 preview", () => {
     await act(async () => { button("Send for signature")!.click(); });
     await flush();
     expect(localStorage.getItem("m22-draft:c1")).toBeNull();
+  });
+});
+
+describe("M22 people on one contract", () => {
+  const typeInto = (el: HTMLInputElement, v: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, v);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const byLabel = (label: string) => document.querySelector(`input[aria-label='${label}']`) as HTMLInputElement;
+
+  it("no People box unless the template lists people", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
+    await flush();
+    expect(button("+ Add person")).toBeUndefined();
+  });
+
+  it("+ Add person adds rows, ✕ removes one, and everyone reaches the contract", async () => {
+    mocks.tags = ["client_name", "people", "person_name", "person_a_number"];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
+    await flush();
+
+    expect(byLabel("Client name").value).toBe("Ana Lopez");
+    await act(async () => { typeInto(byLabel("Client A#"), "111"); });
+    for (let i = 0; i < 3; i++) await act(async () => { button("+ Add person")!.click(); });
+    await act(async () => { typeInto(byLabel("Person 2 name"), "Juan Lopez"); });
+    await act(async () => { typeInto(byLabel("Person 3 name"), "Wrong Person"); });
+    await act(async () => { typeInto(byLabel("Person 4 name"), "Maria Lopez"); });
+    await act(async () => { typeInto(byLabel("Person 4 A#"), "444"); });
+    await act(async () => { (document.querySelector("button[aria-label='Remove person 3']") as HTMLButtonElement).click(); });
+    expect(byLabel("Person 3 name").value).toBe("Maria Lopez");
+
+    await act(async () => { button("Preview PDF")!.click(); });
+    await flush();
+    const input = mocks.fill.mock.calls[0]![1];
+    expect(input.clientANumber).toBe("111");
+    expect(input.people).toEqual([{ name: "Juan Lopez", aNumber: "", dob: "" }, { name: "Maria Lopez", aNumber: "444", dob: "" }]);
   });
 });
