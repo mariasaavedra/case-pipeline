@@ -78,11 +78,16 @@ add a contract.
   own deadline — `{{trial_prep_fee}}` / `{{trial_prep_due_date}}`, `{{trial_fee}}` /
   `{{trial_due_date}}` (each with `_surcharge` / `_es`), `{{trial_total_fee}}` = both;
   several people on one contract (2026-10-22, e.g. a family at one Master
-  Hearing): one fee, only the client signs; M22 shows a People box with
-  "+ Add person" when the template has a `{{#people}}…{{/people}}` loop
-  (`{{person_name}}`, `{{person_number}}`, `{{person_a_number}}`, `{{person_dob}}`,
-  client first) or `{{people_names}}` ("Ana, Juan and Maria"); the file is
-  named "Client + N - …";
+  Hearing): one fee, only the client signs and pays — and the client is NOT
+  assumed to be one of the people (a relative often signs for someone
+  detained). M22 shows "Contract is for more than one person" when the
+  template has a `{{#people}}…{{/people}}` loop (`{{person_name}}`,
+  `{{person_number}}`, `{{person_a_number}}`, `{{person_dob}}`) or
+  `{{people_names}}`; ticked, staff list everyone covered (at least 2; "+ Add
+  <client> (signer)" when the contract is for them too). Wrap the block in
+  `{{#has_people}}…{{/has_people}}` so a one-person contract prints as before;
+  `{{people_names}}` falls back to the client. The file is named
+  "Client - Matter (N people) - date";
   Bond + Master Hearing has its own `{{motion_fee}}` / `{{hearing_fee}}`;
   Master Hearing + Motion (2026-10-21) adds which motion, `{{motion_name}}` /
   `{{motion_name_es}}` (a pick list in M22 fills both: `MOTIONS`), and the

@@ -21,13 +21,15 @@ const INPUT: ContractInput = {
   attorneyFee: 5000, filingFee: 675, postageFee: null, surcharge: null, interviewFee: null,
   bioFee: null, motionName: "", motionNameEs: "", motionFee: null, hearingFee: null,
   dueDate: "", signByDate: "", attorneyName: "Jane Attorney", creatorInitials: "RC",
-  clientANumber: "", clientDob: "", people: [],
+  multiplePeople: false, people: [],
   trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
 };
 
+// The signer (Ana) is a relative; the contract is for three detained people.
 const FAMILY: ContractInput = {
-  ...INPUT, clientANumber: "111-111-111", clientDob: "1990-03-04",
+  ...INPUT, multiplePeople: true,
   people: [
+    { name: "Pedro LOPEZ", aNumber: "111-111-111", dob: "1990-03-04" },
     { name: "Juan LOPEZ", aNumber: "222-222-222", dob: "" },
     { name: "  ", aNumber: "", dob: "" },
     { name: "Maria LOPEZ", aNumber: "", dob: "2015-01-02" },
@@ -183,31 +185,57 @@ describe("the template's highlight on blanks", () => {
 });
 
 describe("several people on one contract", () => {
-  it("lists the client first, then everyone added; empty rows don't count", () => {
+  it("lists only the people typed in — the signer isn't assumed to be one; empty rows don't count", () => {
     expect(contractValues(FAMILY)).toMatchObject({
-      people_names: "Ana LOPEZ, Juan LOPEZ and Maria LOPEZ", people_names_es: "Ana LOPEZ, Juan LOPEZ y Maria LOPEZ", people_count: "3",
+      people_names: "Pedro LOPEZ, Juan LOPEZ and Maria LOPEZ", people_names_es: "Pedro LOPEZ, Juan LOPEZ y Maria LOPEZ", people_count: "3",
     });
-    expect(contractValues(INPUT)).toMatchObject({ people_names: "Ana LOPEZ", people_count: "1" });
     expect(peopleRows(FAMILY).map((r) => [r.person_number, r.person_name, r.person_a_number, r.person_dob])).toEqual([
-      ["1", "Ana LOPEZ", "111-111-111", "March 4, 1990"],
+      ["1", "Pedro LOPEZ", "111-111-111", "March 4, 1990"],
       ["2", "Juan LOPEZ", "222-222-222", ""],
       ["3", "Maria LOPEZ", "", "January 2, 2015"],
     ]);
   });
 
-  it("repeats the {{#people}} block once per person, contract fields still reachable inside", async () => {
-    const tmpl = docx(["Clients:", "{{#people}}", "{{person_number}}. {{person_name}} A# {{person_a_number}} ({{hearing_type}})", "{{/people}}", "Fee {{attorney_fee}}"]);
-    const check = inspectContractTemplate(tmpl);
-    expect(check.unknown).toEqual([]);
-    expect(check.tags).toEqual(expect.arrayContaining(["people", "person_name", "person_number", "person_a_number", "hearing_type"]));
-    expect(contractProblems(check, FAMILY)).toEqual([]);
-    const xml = new PizZip(await fillContractTemplate(tmpl, FAMILY).arrayBuffer()).file("word/document.xml")!.asText();
-    const text = [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]).join("|");
-    expect(text).toBe("Clients:|1. Ana LOPEZ A# 111-111-111 (Master Hearing)|2. Juan LOPEZ A# 222-222-222 (Master Hearing)|3. Maria LOPEZ A#  (Master Hearing)|Fee $5,000.00");
+  it("unticked: nobody listed, and a sentence names the client alone", () => {
+    expect(peopleRows({ ...FAMILY, multiplePeople: false })).toEqual([]);
+    expect(contractValues({ ...FAMILY, multiplePeople: false })).toMatchObject({ people_names: "Ana LOPEZ", people_count: "1" });
   });
 
-  it("names the file after the client + how many others", () => {
-    expect(contractDocumentName(FAMILY)).toBe("Ana LOPEZ + 2 - I-130 - 10-05-2026");
+  const TEMPLATE = docx([
+    "RE: {{hearing_type}}", "{{#has_people}}", "Persons:", "{{#people}}",
+    "{{person_number}}. {{person_name}}{{#person_a_number}}, A# {{person_a_number}}{{/person_a_number}} ({{hearing_type}})",
+    "{{/people}}", "{{/has_people}}", "Fee {{attorney_fee}}",
+  ]);
+  const text = async (input: ContractInput) => {
+    const xml = new PizZip(await fillContractTemplate(TEMPLATE, input).arrayBuffer()).file("word/document.xml")!.asText();
+    return [...xml.matchAll(/<w:p>[\s\S]*?<\/w:p>/g)].map((m) => [...m[0].matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((t) => t[1]).join("")).join("|");
+  };
+
+  it("prints the block once per person; A# only when typed; contract fields reachable inside", async () => {
+    const check = inspectContractTemplate(TEMPLATE);
+    expect(check.unknown).toEqual([]);
+    expect(check.tags).toEqual(expect.arrayContaining(["has_people", "people", "person_name", "person_number", "person_a_number"]));
+    expect(contractProblems(check, FAMILY)).toEqual([]);
+    expect(await text(FAMILY)).toBe(
+      "RE: Master Hearing|Persons:|1. Pedro LOPEZ, A# 111-111-111 (Master Hearing)|2. Juan LOPEZ, A# 222-222-222 (Master Hearing)|3. Maria LOPEZ (Master Hearing)|Fee $5,000.00",
+    );
+  });
+
+  it("a one-person contract prints without the block at all", async () => {
+    expect(await text(INPUT)).toBe("RE: Master Hearing|Fee $5,000.00");
+  });
+
+  it("ticked needs at least two people", () => {
+    const check = inspectContractTemplate(TEMPLATE);
+    const one = { ...FAMILY, people: [{ name: "Pedro LOPEZ", aNumber: "", dob: "" }] };
+    expect(contractProblems(check, one)).toEqual(['List at least 2 people, or untick "Contract is for more than one person"']);
+    // A template that doesn't list people doesn't care.
+    expect(contractProblems(inspectContractTemplate(docx("Fee {{attorney_fee}}")), one)).toEqual([]);
+  });
+
+  it("names the file after the client, with how many people", () => {
+    expect(contractDocumentName(FAMILY)).toBe("Ana LOPEZ - I-130 (3 people) - 10-05-2026");
+    expect(contractDocumentName(INPUT)).toBe("Ana LOPEZ - I-130 - 10-05-2026");
   });
 });
 
