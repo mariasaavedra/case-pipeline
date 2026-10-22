@@ -30,8 +30,12 @@ later phase.)
 
 ### Templates
 
-- Stored in `data/sms-templates.json` (same pattern as `document-settings.json`),
-  edited by admins in **Settings → Text templates**, audited.
+- Stored in `data/sms-templates.json` (same pattern as `document-settings.json`).
+  **Anyone** adds one (**+ New template**) or changes the one picked (**Edit
+  template**) right in the text form (M28, and M2's "Send a text");
+  everyone sees the same list. Reordering and deleting stay with admins in
+  **Settings → Text templates**. All audited (`sms_templates.created` /
+  `.edited` / `.updated`).
 - Each template: `key`, `label`, `en` text, `es` text, placeholders
   `{{firstName}}`, `{{link}}`, `{{links}}`, `{{attorney}}`, `{{firmPhone}}`.
 - Starting set: `consult_link` (Calendly booking link), `payment_links`.

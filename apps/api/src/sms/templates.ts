@@ -1,8 +1,10 @@
 // =============================================================================
-// SMS templates — firm-wide, admin-editable
+// SMS templates — firm-wide; anyone adds or edits one, admins reorder/delete
 // =============================================================================
 // Stored in data/sms-templates.json (same pattern as document-settings.json):
-// the defaults below until an admin saves. Each template has an English and a
+// the defaults below until someone saves. Staff add and edit templates from the
+// send popup (M28 / M2's "Send a text"); Settings → Firm (admin) replaces the
+// whole list. Each template has an English and a
 // Spanish text; placeholders are filled by renderSmsTemplate (libs/core).
 //
 // `{{link}}` is filled by staff in the send popup (a Calendly booking link,
@@ -84,6 +86,40 @@ export function saveSmsTemplates(input: unknown): SmsTemplate[] {
   const clean = withRequiredTemplates(sanitizeSmsTemplates(input));
   fs.writeFileSync(configPath, JSON.stringify(clean, null, 2));
   return clean;
+}
+
+export class SmsTemplateError extends Error {
+  constructor(message: string, readonly status: 400 | 404) {
+    super(message);
+  }
+}
+
+/** One template from untrusted input, or why not. The key is not taken from it. */
+function oneTemplate(input: unknown): Omit<SmsTemplate, "key"> {
+  const [t] = sanitizeSmsTemplates([{ ...(typeof input === "object" && input !== null ? input : {}), key: "x" }]);
+  if (!t) throw new SmsTemplateError("A template needs a name and an English or Spanish text", 400);
+  return { label: t.label, en: t.en, es: t.es };
+}
+
+/**
+ * Any signed-in user can add a template (M28 "+ New"). Appended to the list;
+ * the key comes from the name, made unique against the existing ones.
+ */
+export function createSmsTemplate(input: unknown): SmsTemplate {
+  const t = oneTemplate(input);
+  const list = loadSmsTemplates();
+  const saved = saveSmsTemplates([...list, t]);
+  return saved[saved.length - 1]!;
+}
+
+/** Any signed-in user can edit a template's name and texts; its key never changes. */
+export function updateSmsTemplate(key: string, input: unknown): SmsTemplate {
+  const t = oneTemplate(input);
+  const list = loadSmsTemplates();
+  const i = list.findIndex((x) => x.key === key);
+  if (i < 0) throw new SmsTemplateError("Template not found", 404);
+  list[i] = { key, ...t };
+  return saveSmsTemplates(list)[i]!;
 }
 
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");

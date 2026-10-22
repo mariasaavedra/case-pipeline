@@ -192,3 +192,47 @@ describe("POST /api/sms/send", () => {
     expect(sent).toHaveLength(0);
   });
 });
+
+describe("SMS templates — anyone adds and edits", () => {
+  async function call(method: string, path: string, body: unknown) {
+    const res = await fetch(`${base}${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    return { status: res.status, json: (await res.json()) as { data?: Record<string, unknown>; error?: string } };
+  }
+
+  beforeEach(async () => {
+    const { initSmsTemplates } = await import("../sms/templates.js");
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    initSmsTemplates(fs.mkdtempSync(path.join(os.tmpdir(), "sms-tpl-")));
+    await start();
+  });
+
+  it("adds a template after the defaults, with a key from its name", async () => {
+    const r = await call("POST", "/api/sms/templates", { label: "Court reminder", en: "Hi {{firstName}}, court is tomorrow.", es: "" });
+    expect(r.status).toBe(201);
+    expect(r.json.data).toMatchObject({ key: "court_reminder", label: "Court reminder" });
+    const { loadSmsTemplates } = await import("../sms/templates.js");
+    expect(loadSmsTemplates().at(-1)?.key).toBe("court_reminder");
+    expect(loadSmsTemplates()[0]?.key).toBe("consult_link");
+    expect(audits.at(-1)).toMatchObject({ action: "sms_templates.created" });
+  });
+
+  it("a second template with the same name gets its own key", async () => {
+    await call("POST", "/api/sms/templates", { label: "Reminder", en: "a" });
+    const r = await call("POST", "/api/sms/templates", { label: "Reminder", en: "b" });
+    expect(r.json.data?.key).toBe("reminder_2");
+  });
+
+  it("edits a template's texts and keeps its key", async () => {
+    const r = await call("PUT", "/api/sms/templates/consult_link", { key: "renamed", label: "Consult", en: "Book here: {{link}}", es: "Agende: {{link}}" });
+    expect(r.status).toBe(200);
+    expect(r.json.data).toEqual({ key: "consult_link", label: "Consult", en: "Book here: {{link}}", es: "Agende: {{link}}" });
+    expect(audits.at(-1)).toMatchObject({ action: "sms_templates.edited" });
+  });
+
+  it("refuses an empty template and an unknown key", async () => {
+    expect((await call("POST", "/api/sms/templates", { label: "x", en: "", es: "" })).status).toBe(400);
+    expect((await call("PUT", "/api/sms/templates/nope", { label: "x", en: "y" })).status).toBe(404);
+  });
+});
