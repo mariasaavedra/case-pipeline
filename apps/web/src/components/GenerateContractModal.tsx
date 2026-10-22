@@ -19,6 +19,10 @@
 // (template + fees). Send hands the PDF to Adobe Sign — attorney first, then
 // the client — and the API moves the stage, leaves a note and follows the
 // signatures (routes/esign.ts).
+// A template with a {{#people}} loop or {{people_names}} gets a People box:
+// the client, then "+ Add person" for everyone else on the same contract
+// (one fee, only the client signs). A Trial template asks for the prep and
+// the trial fee separately, each with its own deadline.
 // "Notes · Timeline · Documents" opens the client's case (M3, ClientCaseModal)
 // stacked over this form, so checking what was quoted or what is on file never
 // throws away a half-filled contract.
@@ -37,8 +41,8 @@ import {
   CONTRACT_TEMPLATES_FOLDER, GraphConsentRequiredError, type DriveItem,
 } from "../sharepoint/graph";
 import {
-  contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf, contractDocumentName, MOTIONS, motionEs,
-  type ContractInput, type TemplateCheck,
+  contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf, contractDocumentName, MOTIONS, motionEs, trialTotalOf,
+  type ContractInput, type ContractPerson, type TemplateCheck,
 } from "../lib/contract-fill";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { FeeSheetPicker } from "./FeeSheetPicker";
@@ -62,6 +66,9 @@ const today = () => new Date().toISOString().slice(0, 10);
 const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).map((w) => w[0]!.toUpperCase()).join("").slice(0, 3);
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[$,\s]/g, "")));
 const baseName = (file: string) => file.replace(/\.docx$/i, "");
+const NO_PERSON: ContractPerson = { name: "", aNumber: "", dob: "" };
+/** The AF recorded with the generation: a Trial contract's is prep + trial. */
+const afOf = (f: ContractInput) => f.attorneyFee ?? (f.trialPrepFee !== null || f.trialFee !== null ? trialTotalOf(f) : null);
 
 // ── Draft kept per Fee K, in this browser only ───────────────────────────────
 interface Draft { input: ContractInput; templateId: string | null; attorneyEmail: string; savedAt: string }
@@ -115,6 +122,14 @@ const INPUTS_FOR: Record<string, (keyof ContractInput)[]> = {
   bio_fee: ["bioFee"], bio_fee_surcharge: ["bioFee"],
   motion_name: ["motionName"], motion_name_es: ["motionNameEs"],
   motion_fee: ["motionFee"], motion_fee_surcharge: ["motionFee"], hearing_fee: ["hearingFee"], hearing_fee_surcharge: ["hearingFee"],
+  people_names: ["people"], people_names_es: ["people"], people_count: ["people"],
+  people: ["people"], person_name: ["people"], person_number: ["people"],
+  person_a_number: ["people", "clientANumber"], person_dob: ["people", "clientDob"], person_dob_es: ["people", "clientDob"],
+  trial_prep_fee: ["trialPrepFee"], trial_prep_fee_surcharge: ["trialPrepFee"],
+  trial_prep_due_date: ["trialPrepDueDate"], trial_prep_due_date_es: ["trialPrepDueDate"],
+  trial_fee: ["trialFee"], trial_fee_surcharge: ["trialFee"],
+  trial_due_date: ["trialDueDate"], trial_due_date_es: ["trialDueDate"],
+  trial_total_fee: ["trialPrepFee", "trialFee"],
   sign_by_date: ["signByDate"], sign_by_date_es: ["signByDate"],
   due_date: ["dueDate"], due_date_es: ["dueDate"], due_date_short: ["dueDate"],
   attorney_name: ["attorneyName"], creator_initials: ["creatorInitials"],
@@ -193,6 +208,8 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         attorneyFee: p.attorneyFee, filingFee: p.filingFee, postageFee: p.processingFee, surcharge: null, interviewFee: null,
         bioFee: null, motionName: "", motionNameEs: "", motionFee: null, hearingFee: null,
         dueDate: "", signByDate: "", attorneyName: p.attorneyName, creatorInitials: initialsOf(user?.name ?? ""),
+        clientANumber: "", clientDob: "", people: [],
+        trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
         };
         prefill.current = { input: fresh, attorneyEmail: p.attorneyEmail ?? "" };
         if (draft) {
@@ -294,6 +311,19 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
       </Field>
     ) : null;
 
+  const setPerson = (i: number, patch: Partial<ContractPerson>) => {
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, people: f.people.map((p, j) => (j === i ? { ...p, ...patch } : p)) } : f));
+  };
+  const addPerson = () => {
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, people: [...f.people, NO_PERSON] } : f));
+  };
+  const removePerson = (i: number) => {
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, people: f.people.filter((_, j) => j !== i) } : f));
+  };
+
   const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
   const sendReady = !!input && emailOk(attorneyEmail) && emailOk(input.email)
     && attorneyEmail.trim().toLowerCase() !== input.email.trim().toLowerCase();
@@ -308,7 +338,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
       const res = await sendContractForSignature(c.localId, preview.pdf, {
         attorneyEmail: attorneyEmail.trim(), clientEmail: input.email.trim(), documentName: preview.name,
       });
-      void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+      void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: afOf(input), filingFee: input.filingFee });
       // Sent: nothing left to resume.
       dirty.current = false;
       clearDraft(c.localId);
@@ -334,7 +364,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
       if (format === "docx") {
         save(docx, `${name}.docx`);
         setDone(`Downloaded ${name}.docx`);
-        void logContractGenerated(c.localId, { template: picked.name, format: "docx", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+        void logContractGenerated(c.localId, { template: picked.name, format: "docx", attorneyFee: afOf(input), filingFee: input.filingFee });
         return;
       }
       showPreview({ pdf: await convertDocxToPdf(docx, `${name}.docx`), name });
@@ -350,7 +380,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     if (!preview || !input || !picked) return;
     save(preview.pdf, `${preview.name}.pdf`);
     setDone(`Downloaded ${preview.name}.pdf`);
-    void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+    void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: afOf(input), filingFee: input.filingFee });
   };
 
   // From the click itself, so the browser allows the Microsoft popup.
@@ -497,12 +527,54 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {text("date", "Letter date", { type: "date" })}
                 {text("signByDate", "Signed contract due", { type: "date" })}
                 {text("dueDate", "Payment deadline", { type: "date" })}
+                {text("trialPrepDueDate", "Trial prep fee due", { type: "date" })}
+                {text("trialDueDate", "Trial fee due", { type: "date" })}
               </div>
+              {shown.has("people") && (() => {
+                const withANumber = shown.has("clientANumber");
+                const withDob = shown.has("clientDob");
+                const cols = `minmax(0,1fr)${withANumber ? " 9rem" : ""}${withDob ? " 9.5rem" : ""} 2rem`;
+                return (
+                  <div className="rounded-md p-3 space-y-2" style={{ border: "1px solid var(--color-border-light)" }}>
+                    <div className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>People on this contract</div>
+                    <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
+                      One fee for everyone; only the client signs. The client comes first.
+                    </p>
+                    <div className="grid gap-2 items-center text-xs" style={{ gridTemplateColumns: cols, color: "var(--color-ink-muted)" }}>
+                      <span>Name</span>{withANumber && <span>A#</span>}{withDob && <span>Date of birth</span>}<span />
+                    </div>
+                    <div className="grid gap-2 items-center" style={{ gridTemplateColumns: cols }}>
+                      <input aria-label="Client name" className={inputClass} style={inputStyle} value={input.clientName}
+                        onChange={(e) => set("clientName", e.target.value)} />
+                      {withANumber && <input aria-label="Client A#" className={inputClass} style={inputStyle} value={input.clientANumber}
+                        onChange={(e) => set("clientANumber", e.target.value)} />}
+                      {withDob && <DateInput aria-label="Client date of birth" className={inputClass} style={inputStyle} value={input.clientDob}
+                        onChange={(e) => set("clientDob", e.target.value)} />}
+                      <span className="text-xs text-center" style={{ color: "var(--color-ink-faint)" }} title="The client">1</span>
+                    </div>
+                    {input.people.map((p, i) => (
+                      <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: cols }}>
+                        <input aria-label={`Person ${i + 2} name`} placeholder="Name" className={inputClass} style={inputStyle} value={p.name}
+                          onChange={(e) => setPerson(i, { name: e.target.value })} />
+                        {withANumber && <input aria-label={`Person ${i + 2} A#`} className={inputClass} style={inputStyle} value={p.aNumber}
+                          onChange={(e) => setPerson(i, { aNumber: e.target.value })} />}
+                        {withDob && <DateInput aria-label={`Person ${i + 2} date of birth`} className={inputClass} style={inputStyle} value={p.dob}
+                          onChange={(e) => setPerson(i, { dob: e.target.value })} />}
+                        <button type="button" onClick={() => removePerson(i)} aria-label={`Remove person ${i + 2}`} title="Remove"
+                          className="text-sm rounded hover:underline" style={{ color: "var(--color-ink-muted)" }}>✕</button>
+                      </div>
+                    ))}
+                    <Button type="button" size="sm" variant="outline" onClick={addPerson}>+ Add person</Button>
+                  </div>
+                );
+              })()}
               {(shown.has("attorneyFee") || shown.has("filingFee")) && (
                 <FeeSheetPicker onPick={(fees) => { dirty.current = true; setInput((f) => (f ? { ...f, ...fees } : f)); }} />
               )}
               <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
                 {amount("attorneyFee", "Attorney fee $", file.check.tags.includes("attorney_fee_half") ? `Printed as two halves of ${money(halfOf(input.attorneyFee))}` : undefined)}
+                {amount("trialPrepFee", "Trial prep fee $")}
+                {amount("trialFee", "Trial fee $")}
                 {amount("motionFee", "Motion fee $")}
                 {amount("hearingFee", "Hearing fee $")}
                 {amount("filingFee", "Filing fee $")}
@@ -511,6 +583,9 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {amount("bioFee", "DHS bio fee $", "Empty prints N/A", "N/A")}
                 {amount("surcharge", "Surcharge $", input.surcharge === null ? `3% of AF + FF + postage = ${money(surchargeOf(input))}` : undefined, money(surchargeOf(input)))}
               </div>
+              {file.check.tags.includes("trial_total_fee") && (
+                <p className="text-sm" style={{ color: "var(--color-ink)" }}>Trial prep + trial: <strong className="tabular-nums">{money(trialTotalOf(input))}</strong></p>
+              )}
               {file.check.tags.includes("total_fee") && (
                 <p className="text-sm" style={{ color: "var(--color-ink)" }}>Total fee: <strong className="tabular-nums">{money(totalOf(input))}</strong></p>
               )}

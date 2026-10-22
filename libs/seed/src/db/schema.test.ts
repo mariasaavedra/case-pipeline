@@ -633,3 +633,30 @@ describe("v35 → v36 item activity log takes Monday history", () => {
     expect(idx).toEqual(expect.arrayContaining(["idx_item_events_trigger", "idx_item_events_item", "idx_item_events_board"]));
   });
 });
+
+describe("v36 → v37 client upload links", () => {
+  test("a v36 database gets both tables; one file per link once", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (36);
+    `);
+    initializeSchema(db);
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+    const link = db.prepare(
+      "INSERT INTO upload_links (profile_local_id, token_hash, language, expires_at) VALUES ('p1', 'h1', 'es', '2030-01-01 00:00:00')",
+    ).run().lastInsertRowid;
+    const ins = db.prepare(
+      "INSERT OR IGNORE INTO client_uploads (link_id, original_name, stored_name, size, content_type, sha256, kind) VALUES (?, 'a.pdf', 'a.pdf', 1, 'application/pdf', 's1', 'other')",
+    );
+    expect(ins.run(link).changes).toBe(1);
+    expect(ins.run(link).changes).toBe(0);
+  });
+
+  test("a fresh database has them too", () => {
+    const db = new Database(":memory:");
+    initializeSchema(db);
+    const names = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((r) => r.name);
+    expect(names).toEqual(expect.arrayContaining(["upload_links", "client_uploads"]));
+  });
+});

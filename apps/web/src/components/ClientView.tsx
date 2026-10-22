@@ -1,18 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
 import type { ClientCaseSummary, ClientUpdate } from "../api";
 import { fetchAllClientUpdates } from "../api";
-import { BOARD_CONFIG } from "../config";
 import { NoteComposer } from "./NoteComposer";
 import { navigate, clientPath } from "../router";
 import { ClientHeaderSticky } from "./ClientHeaderSticky";
 import { PageCode } from "./ScreenCode";
 import { ClientSnapshot } from "./ClientSnapshot";
 import { ClientTabs, type TabId } from "./ClientTabs";
-import { AppointmentsTab } from "./AppointmentsTab";
-import { ContractsTab } from "./ContractsTab";
-import { ActiveCasesTab } from "./ActiveCasesTab";
-import { CourtCasesTab } from "./CourtCasesTab";
 import { DocumentsTab } from "./DocumentsTab";
+import { ClientUploadsList } from "./ClientUploadsList";
 import { CaseTimelineTab } from "./CaseTimelineTab";
 import {
   TimelineFilters,
@@ -22,21 +18,12 @@ import {
   type DateRange,
 } from "./TimelineFilters";
 import { UpdatesTimeline } from "./UpdatesTimeline";
-import { RelationsView } from "./RelationsView";
-import { DebugTab } from "./DebugTab";
-import { useAuth } from "../auth/useAuth";
 
 /** Screen codes from docs/ui-map.md — P3 is Client 360, one number per tab. */
 const TAB_CODES: Record<TabId, string> = {
   overview: "P3.1",
   timeline: "P3.9",
-  appointments: "P3.2",
-  contracts: "P3.3",
-  active_cases: "P3.4",
-  court_cases: "P3.5",
   documents: "P3.6",
-  relations: "P3.7",
-  debug: "P3.8",
 };
 
 interface Props {
@@ -45,7 +32,6 @@ interface Props {
 }
 
 export function ClientView({ data, initialTab = "overview" }: Props) {
-  const isAdmin = useAuth().user?.role === "admin";
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("notes");
   const [timelinePeriod, setTimelinePeriod] = useState<TimelinePeriod>("all");
@@ -109,56 +95,15 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
     navigate(clientPath(data.profile.localId, tab));
   };
 
-  const courtLinkedItemIds = useMemo(
-    () => new Set(data.courtLinkedItemIds ?? []),
-    [data.courtLinkedItemIds]
-  );
-
-  // Count active cases (case boards minus court_cases, minus court-linked items)
-  const activeCaseCount = useMemo(() => {
-    let count = 0;
-    for (const b of BOARD_CONFIG) {
-      if (b.section !== "cases" || b.key === "court_cases") continue;
-      for (const item of data.boardItems[b.key] ?? []) {
-        if (!courtLinkedItemIds.has(item.localId)) count++;
-      }
-    }
-    return count;
-  }, [data.boardItems, courtLinkedItemIds]);
-
-  // Count court cases (court_cases board items + court-linked items)
-  const courtCaseCount = useMemo(() => {
-    let count = data.boardItems["court_cases"]?.length ?? 0;
-    count += courtLinkedItemIds.size;
-    return count;
-  }, [data.boardItems, courtLinkedItemIds]);
-
-  const contractCount = data.contracts.active.length + data.contracts.closed.length;
-
   return (
     <div>
       <PageCode code={TAB_CODES[activeTab]} />
-      <ClientHeaderSticky
-        profile={data.profile}
-        data={data}
-        onViewRelations={() => handleTabChange("relations")}
-      />
+      <ClientHeaderSticky profile={data.profile} data={data} />
 
       <div className="max-w-6xl mx-auto px-6 py-4 space-y-4">
         <ClientSnapshot data={data} />
 
-        <ClientTabs
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          showDebug={isAdmin}
-          counts={{
-            appointments: data.appointments.length,
-            contracts: contractCount,
-            activeCases: activeCaseCount,
-            courtCases: courtCaseCount,
-            relations: 0,
-          }}
-        />
+        <ClientTabs activeTab={activeTab} onTabChange={handleTabChange} />
 
         {/* Tab panels */}
         <div
@@ -208,45 +153,14 @@ export function ClientView({ data, initialTab = "overview" }: Props) {
 
           {activeTab === "timeline" && <CaseTimelineTab profileLocalId={data.profile.localId} />}
 
-          {activeTab === "appointments" && (
-            <AppointmentsTab
-              appointments={data.appointments}
-              profileLocalId={data.profile.localId}
-              clientName={data.profile.name}
-            />
-          )}
-
-          {activeTab === "contracts" && (
-            <ContractsTab contracts={data.contracts} profileLocalId={data.profile.localId} clientName={data.profile.name} />
-          )}
-
-          {activeTab === "active_cases" && (
-            <ActiveCasesTab
-              boardItems={data.boardItems}
-              courtLinkedItemIds={courtLinkedItemIds}
-            />
-          )}
-
-          {activeTab === "court_cases" && (
-            <CourtCasesTab
-              boardItems={data.boardItems}
-              courtLinkedItemIds={courtLinkedItemIds}
-            />
-          )}
-
           {activeTab === "documents" && (
-            <DocumentsTab
-              data={data}
-              eFile={{ profileLocalId: data.profile.localId, firstName: data.profile.firstName, lastName: data.profile.lastName }}
-            />
-          )}
-
-          {activeTab === "relations" && (
-            <RelationsView profileLocalId={data.profile.localId} />
-          )}
-
-          {activeTab === "debug" && isAdmin && (
-            <DebugTab data={data} />
+            <div className="space-y-4">
+              <ClientUploadsList profileLocalId={data.profile.localId} />
+              <DocumentsTab
+                data={data}
+                eFile={{ profileLocalId: data.profile.localId, firstName: data.profile.firstName, lastName: data.profile.lastName }}
+              />
+            </div>
           )}
         </div>
       </div>

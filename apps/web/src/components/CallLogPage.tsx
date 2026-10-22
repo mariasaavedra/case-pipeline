@@ -7,8 +7,9 @@
 // client's case OVER the list (ClientCaseModal — notes, documents, Fee Ks),
 // rather than navigating to the 360 view and taking the day filter, the scroll
 // position and the loaded page of rows with it; the full view is still a click
-// away inside the popup. The pencil button opens the same LogCallModal in edit
-// mode (name/phone/linked client only). The "+ Log call" button on this page (and the
+// away inside the popup. The caller's name, the pencil and the 💬 all open the
+// same LogCallModal (M2) in edit mode — every field plus the call's notes; 💬
+// opens it on the notes. The "+ Log call" button on this page (and the
 // header everywhere else) opens the same modal in create mode. Defaults to
 // today's calls — front desk staff mostly care about "what's come in today" —
 // with a date picker/"show all days" toggle for the historical/follow-up view.
@@ -23,7 +24,6 @@ import type { CallLogEntry } from "../api";
 import { StatusEditor } from "./StatusEditor";
 import { HighlightedForEditor } from "./HighlightedForEditor";
 import { LogCallModal } from "./LogCallModal";
-import { CallNotesModal } from "./CallNotesModal";
 import { ClientCaseModal } from "./ClientCaseModal";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -185,8 +185,8 @@ export function CallLogPage() {
   const [dayFilter, setDayFilter] = useState<string | null>(todayIso());
 
   const [showModal, setShowModal] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<CallLogEntry | null>(null);
-  const [notesEntry, setNotesEntry] = useState<CallLogEntry | null>(null);
+  /** The call open in M2; `notes` = opened from 💬, scrolled to the notes. */
+  const [editing, setEditing] = useState<{ entry: CallLogEntry; notes: boolean } | null>(null);
   /** Which linked client's case is open over the list, if any. */
   const [caseClient, setCaseClient] = useState<{ localId: string; name: string } | null>(null);
 
@@ -358,7 +358,22 @@ export function CallLogPage() {
                     }}
                   >
                     <div style={{ padding: "8px 10px" }}><TimeChip time={e.time} /></div>
-                    <div style={{ padding: "8px 10px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</div>
+                    <div style={{ padding: "8px 10px", overflow: "hidden" }}>
+                      <button
+                        type="button"
+                        onClick={() => setEditing({ entry: e, notes: false })}
+                        title="Open this call"
+                        style={{
+                          background: "none", border: "none", padding: 0, cursor: "pointer",
+                          fontSize: 13, color: "var(--color-ink)", fontFamily: "var(--font-body)",
+                          maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          display: "block", textAlign: "left",
+                        }}
+                        className="hover:underline"
+                      >
+                        {e.name}
+                      </button>
+                    </div>
                     <div style={{ padding: "8px 10px", color: "var(--color-ink-muted)", fontSize: 12 }}>{e.phone ?? "—"}</div>
                     <div style={{ padding: "8px 10px" }}>
                       <StatusEditor
@@ -413,7 +428,7 @@ export function CallLogPage() {
                     <div style={{ padding: "4px 6px", display: "flex", justifyContent: "center", gap: 6 }}>
                       <button
                         type="button"
-                        onClick={() => setEditingEntry(e)}
+                        onClick={() => setEditing({ entry: e, notes: false })}
                         title="Edit name, phone, or linked client"
                         aria-label="Edit call"
                         style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--color-ink-faint)", padding: 2, lineHeight: 1 }}
@@ -422,7 +437,7 @@ export function CallLogPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setNotesEntry(e)}
+                        onClick={() => setEditing({ entry: e, notes: true })}
                         title="View or add notes"
                         aria-label="Call notes"
                         style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--color-ink-faint)", padding: 2, lineHeight: 1 }}
@@ -452,26 +467,18 @@ export function CallLogPage() {
           onLogged={() => load(0, true)}
         />
       )}
-      {editingEntry && (
+      {editing && (
         <LogCallModal
           // Remount per entry: LogCallModal prefills and runs its phone lookup
           // in a mount-only effect, so reusing the instance for a different
           // call would show the previous one's match list. Today the modal
           // backdrop makes switching entries directly impossible, but that is
           // an invariant of ui/dialog.tsx, not of this component.
-          key={editingEntry.localId}
-          entry={editingEntry}
-          onClose={() => setEditingEntry(null)}
+          key={editing.entry.localId}
+          entry={editing.entry}
+          focusNotes={editing.notes}
+          onClose={() => setEditing(null)}
           onLogged={() => load(0, true)}
-        />
-      )}
-      {notesEntry && (
-        <CallNotesModal
-          localId={notesEntry.localId}
-          name={notesEntry.name}
-          mondayItemId={notesEntry.mondayItemId}
-          phone={notesEntry.phone}
-          onClose={() => setNotesEntry(null)}
         />
       )}
       {caseClient && (

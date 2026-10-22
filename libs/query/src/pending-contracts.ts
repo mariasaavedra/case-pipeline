@@ -289,7 +289,7 @@ export function getPendingContracts(db: Database, options: PendingContractsOptio
       -- The Fee K mirrors these from the profile; the profile's own copy is
       -- read too, so an edit made from M11 / M25 counts before the next sync.
       COALESCE(NULLIF(TRIM(p.email), ''), json_extract(c.raw_column_values, '$.e_mail'))     AS email,
-      COALESCE(NULLIF(TRIM(p.address), ''), json_extract(c.raw_column_values, '$.address')) AS address,
+      COALESCE(NULLIF(TRIM(p.address), ''), NULLIF(TRIM(json_extract(p.raw_column_values, '$.mailing_address')), ''), json_extract(c.raw_column_values, '$.address')) AS address,
       NULLIF(TRIM(p.phone), '') AS phone,
       p.raw_column_values       AS profileRaw,
       json_extract(c.raw_column_values, '$.payment_method.labels[0]')   AS paymentMethod,

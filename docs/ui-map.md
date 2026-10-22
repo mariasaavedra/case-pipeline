@@ -96,15 +96,9 @@ The header and snapshot sit above the tabs and stay the same on every tab.
 
 | Code | Name | Address | Notes |
 |---|---|---|---|
-| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17; **Watch** + a **⋯** menu → D37: Open in DMS / Monday.com / **Open e-file in SharePoint**, and **Generate document…** → M23; **Text** next to the phone → M28 on free text, Phone else Phone 2) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
-| P3.1 | Overview tab | `/clients/:id` | Timeline of notes + note composer; date range → D5 |
-| P3.2 | Appointments tab | `/clients/:id/appointments` | **+ Book a consult** → M10 |
-| P3.3 | Contracts tab | `/clients/:id/contracts` | **+ New contract** → M11 |
-| P3.4 | Active Cases tab | `/clients/:id/active_cases` | |
-| P3.5 | Court Cases tab | `/clients/:id/court_cases` | |
-| P3.6 | Documents tab | `/clients/:id/documents` | SharePoint files; click a file → M12. Inside a folder: **New folder**, **Upload files**. No e-file link → **Find or create e-file folder** (writes the profile's E-File) |
-| P3.7 | Relations tab | `/clients/:id/relations` | |
-| P3.8 | Debug tab | — | Admins only. Click an entry → M13 |
+| P3.0 | Client header + snapshot | — | Name bar (`ClientHeaderSticky.tsx`: First + Last name, "Detained at …" pill from the open court case → M17; **Watch** + a **⋯** menu → D37: Open in DMS / Monday.com / **Open e-file in SharePoint** / **Open consult folder in SharePoint**, and **Generate document…** → M23; **Text** next to the phone → M28 on free text, Phone else Phone 2) and four snapshot cards (`ClientSnapshot.tsx`) → D1–D4 |
+| P3.1 | Overview tab | `/clients/:id` | Timeline of notes + note composer; date range → D5. P3 has three tabs: Overview, Timeline, Documents (Appointments / Contracts / Active Cases / Court Cases / Relations / Debug removed 2026-10-22; their old URLs open Overview) |
+| P3.6 | Documents tab | `/clients/:id/documents` | SharePoint files; click a file → M12. Inside a folder: **New folder**, **Upload files**; drag a file or folder onto a folder row or a folder in the path to **move** it; trash icon → **Delete** (files and empty folders, after a confirm; goes to the SharePoint recycle bin). No e-file link → **Find or create e-file folder** (writes the profile's E-File) |
 | P3.9 | Timeline tab | `/clients/:id/timeline` | Where it stands / Needs attention / Coming up; lane chart (court, USCIS, fees, meetings, notes per month) with 12 months / 18 months / 3 years / Everything; click a marker, a story row or a Coming up item → M29 (the marker also highlights its row; filter by track, newest/oldest first). Needs attention items carry **Record outcome** (hearing with no outcome), **Fix** (missed deadline) or **Record decision** (motion still Filed) → M29 on that Monday item. Reloads after an edit. Milestones per board = `config/timeline.yaml`; rules = `libs/query/src/case-timeline.ts`. History (item activity log): **status / group changes** as thin ticks along each lane + story rows ("Calendaring Status: Check dates → ATTENDED · by Mayra"), hidden with **Status changes**; **moved dates** (hearing / interview / consult) as crossed-out events at the old date ("moved to Nov 20 on Oct 2 by …"). Also mounted in M3 |
 
 ### Inside P4 Appointments
@@ -214,7 +208,7 @@ by name); the board tabs switch to another attorney.
 | Code | Name | Notes |
 |---|---|---|
 | P10.1 | Filters | Status, taken by, unlinked only, day |
-| P10.2 | Call table | Pencil → M2, notes → M4, client → M3 |
+| P10.2 | Call table | Caller name / pencil → M2 (edit), 💬 → M2 on its notes, client → M3 |
 
 ### Inside P11 Settings
 
@@ -234,7 +228,7 @@ Four tabs, each with its own URL (`/settings/<tab>`); `/settings` opens My accou
 | P11.3.2 | Status tags | |
 | P11.3.3 | Urgency | |
 | P11.3.4 | Documents | Firm address/phone/fax, attorneys (email, USCIS account, bars — first is used), detention facility addresses by Det. Facility label — what M23 fills that Monday doesn't hold |
-| P11.3.5 | Text templates | The texts M28 can send: name + English + Spanish text, placeholders listed, segment count per language, SMS mode (off / test / live). `data/sms-templates.json`, audited |
+| P11.3.5 | Text templates | The texts M28 can send (anyone can add / edit one from M28; reorder + delete here, admin): name + English + Spanish text, placeholders listed, segment count per language, SMS mode (off / test / live). `data/sms-templates.json`, audited |
 | P11.3.6 | Fee K Types | The case lookup table: one row per Fee K Type on Monday — Spanish name, board once paid ("It will go to…" labels), fee sheet job (its AF / FF shown). Filter; rows for a label Monday dropped are marked. Feeds the Fee K auto-fill ("It will go to…") and the contract forms' AF / FF pre-fill. `data/fee-k-types.json`, audited |
 | P11.4 | **Admin** tab *(admin)* | `/settings/admin` |
 | P11.4.1 | Users | Per user: **staff record** (which roster person this login is — sets their My Cases lane and My Day board), role, disable |
@@ -264,18 +258,17 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | Code | Name | Title on screen | Opened from | Component |
 |---|---|---|---|---|
 | M1 | KPI detail | The card's name | P1 → click a KPI card | `KpiDetailModal.tsx` |
-| M2 | Log a call | "Log a call" / "Edit call" | Top bar **+ Log call** (every page); P10 → pencil on a row | `LogCallModal.tsx` |
+| M2 | Log a call | "Log a call" / "Edit call" | Top bar **+ Log call** (every page); P10 → caller name, pencil or 💬 on a row (💬 opens on the notes). Edit = every field + the call's Monday notes thread + **Add note**. **Send a text** checkbox = M28's form inline; the text goes after the call is saved, same press | `LogCallModal.tsx` |
 | M3 | Client case | The client's name (360 header) | Tabs: Notes / **Timeline** (P3.9 itself, with M29) / Documents / Contracts. Any client name outside P2 — opens over the current page as `?client=<id>`, Back closes it (`ClientPeek.tsx`); inside M2 → "View profile" after picking a linked client (opens on top of M2); P10 → a row's client | `ClientCaseModal.tsx` |
-| M4 | Call notes | "Notes — *name*" | P10 → notes on a row | `CallNotesModal.tsx` |
+| M4 | *(retired 2026-10-22 — merged into M2 edit)* | | | |
 | M5 | Appointment detail | The client's name | P17.2 → **Focus**; M18 → "Focus view — notes & documents" (opens on top). Emails hidden until **Show emails (N)**; a note posted to several places shows once, "· also on …" | `AppointmentModal.tsx` |
 | M6 | *Client notes* | — | Retired 2026-10-07 with the old P4 (notes are P4.5's Notes tab) | — |
 | M7 | Day agenda | The date | P7 → click a day | `CalendarPage.tsx` (`DayModal`) |
 | M8 | New jail intake | "New jail intake" | P9 → **+ New intake**. Intake status (New Detainee / Payment link sent. Waiting on payment) + optional POC e-mail — the same fields as M2's "this call is a jail intake" | `NewJailIntakeModal.tsx` |
 | M9 | Jail intake detail | The detainee's name | P9 → click an intake. The status chip changes the status (D6). A paid intake ("Needs to be scheduled") shows **Book consult**: attorney + date + time → saved to Monday, then a link to press Create Appt there | `JailIntakeDetailModal.tsx` |
-| M10 | Book a consult | "Book a consult" | P3.2; P17.1 **+ Book Appt** (starts with a client search). 30-minute time slots; "Needs to pay?" shown disabled (under construction) | `NewAppointmentModal.tsx` |
-| M11 | New contract | "New contract (Fee K)" | P3.3; P4.6 **+ New contract**; P14.1 (starts with a client search). Case type: pick from the list, or **+ New** to type one Monday adds to the "Contract for…" list. **Required** (since 2026-10-14, same in M2's contract section): case type, AF, attorney, client e-mail and address — attorney / e-mail / address pre-filled from the profile, editable; e-mail / address saved on the profile | `NewContractModal.tsx` |
+| M10 | Book a consult | "Book a consult" | P17.1 **+ Book Appt** (starts with a client search). 30-minute time slots; "Needs to pay?" shown disabled (under construction) | `NewAppointmentModal.tsx` |
+| M11 | New contract | "New contract (Fee K)" | M3 Contracts; P4.6 **+ New contract**; P14.1 (starts with a client search). Case type: pick from the list, or **+ New** to type one Monday adds to the "Contract for…" list. **Required** (since 2026-10-14, same in M2's contract section): case type, AF, attorney, client e-mail and address — attorney / e-mail / address pre-filled from the profile, editable; e-mail / address saved on the profile | `NewContractModal.tsx` |
 | M12 | File preview | The file name | P3.6; P4.5 Documents; the documents section of M5 | `FilePreviewModal.tsx` |
-| M13 | Entry editor | The entry's name | P3.8 (admin) | `EntryEditorModal.tsx` |
 | M14 | What's new | Changelog | Version badge on P1 Home / P0 Sign in | `VersionBadge.tsx` |
 | M15 | Mail review | The notice type and form | P8 → a "Mail to review" row; P12 → **Review** on a notice | `MailReviewModal.tsx` |
 | M16 | Connect Monday.com | "Connect your Monday.com account" / "Reconnect…" / "Monday.com connected" | Opens by itself after sign-in when Monday isn't connected (any page but P11); **Not now** hides it for 12 h | `MondayConnectPrompt.tsx` |
@@ -289,7 +282,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M25 | Edit contract | "Edit contract" | P14.3 → ⋯ → **Edit contract…**, or click the case type / the fees / the "Missing:" line. Everything a contract is generated from: case type (the Fee Ks "Contract for…" dropdown, one label — replaces what was there; **+ New case type…** adds a label on Monday), AF / FF / PF, **attorney** (Fee K People column) and the client's **e-mail / address** (saved on the client's profile — the Fee K mirrors them). Only what changed is written (Fee K in one write, profile in a second); empty fee clears, e-mail / address can't be emptied; refused if Monday changed since; queued on an outage | `EditContractModal.tsx` |
 | M26 | Client files | "E-file / Consult file" | P14.3 → ⋯ → **E-file / Consult file…**, or M27 → **Browse files here**. The client's SharePoint e-file / consult folders browsed in place (same browser as P4.5); a file → M12 | `ClientFilesModal.tsx` |
 | M27 | Case card | client name | P6.2 / P6.3 → a row. **Open E-File** (profile's link, else the Fee K / Open Form mirror) + **Browse files here** (→ M26), or **Link E-File folder** (paste a SharePoint link → the profile's E-File on Monday, only when it has none); **Client** (→ M3) and **Monday ↗**. PS Stage (Fee K) / Status (Open Form) via D39 with a confirm; dates — Fee K: Hired, **Reminder sent**, **Evidence received**; Open Form: On Open Forms since, Hired, **Forms appointment**, **Target date**, **Forms sent** — Set / Edit / Clear, and **Today** on the ones that record something done. Two tabs: **Details** (all of the above) and **Notes** — the client's timeline as in M3 (Notes / All with emails, replies) with a box on top that posts a note on the profile. Every write is refused if Monday changed since, queued on an outage | `CaseCardModal.tsx` |
-| M28 | Send a text | "Send a text" | M2 (after a call is logged) → **Text consult link**; M21 → **Text links to client**; P3.0 → **Text**. To (the number dialled / the client's Phone, with **Use Phone 2 instead**), English / Español (from the call's Language or the profile's Preferred Language), {{firstName}} from the profile's First Name, template from P11.3.5, **Link** when the template has `{{link}}`, the text (editable), segment count. **Send text** → RingCentral; logged on the linked client's E&A ("Text message", else Casenote). Test mode says **Send (test)** and sends nothing | `SendSmsModal.tsx` |
+| M28 | Send a text | "Send a text" | M2 → **Send a text** checkbox (inline, same form); M21 → **Text links to client**; P3.0 → **Text**. To (the number dialled / the client's Phone, with **Use Phone 2 instead**), English / Español (from the call's Language or the profile's Preferred Language), {{firstName}} from the profile's First Name, template from P11.3.5, **Link** when the template has `{{link}}`, the text (editable), segment count. **Edit template** / **+ New template** — anyone, everyone sees it (audited). **Send text** → RingCentral; logged on the linked client's E&A ("Text message", else Casenote). Test mode says **Send (test)** and sends nothing | `SendSmsModal.tsx`, `SmsComposer.tsx` |
 | M29 | Timeline event | the event's label (or the attention item's text) | P3.9 (or M3 → Timeline) → a marker, a story row, a Coming up item, or **Record outcome** / **Fix** / **Record decision** on a Needs attention item. What to record (for a Needs attention item); the entry's text; the Monday item with **Monday ↗** — the fields the timeline reads first (`status`, the board's milestone columns, its `edit` list in `config/timeline.yaml`), **Other fields (n)** behind a toggle, each saved on blur/pick via `PATCH /api/board-items/:localId/columns` (local copy updated at once, queued on outage). A hearing with no outcome gets one-click outcomes (ATTENDED, RECHED/ CONT/ … NOT HAPPENING, WITHDREW, VISITING IJ NO SHOW). A note box: **Reply** under an E&A entry, else a `Re: <event> (<date>) —` update on the profile. A Fee K points to the Contracts tab. **History**: every change on the item in Monday, newest first (field: old → new, when, who — staff roster names, "a Monday automation"), 8 then **Show all** | `TimelineEventPanel.tsx` |
 | M20 | Change consult | "Change consult" | P17.2 → **Edit**. Attorney, date, time; a new attorney moves the appointment to their board in Monday. Calendly is not changed (reminder shown) | `ConsultScheduleModal.tsx` |
 
@@ -302,7 +295,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D3 | Relief card menu | P3.0 → Relief card | `ClientSnapshot.tsx` |
 | D4 | Next action card menu | P3.0 → Next action card | `ClientSnapshot.tsx` |
 | D5 | Timeline date range | P3.1 → date range filter | `TimelineFilters.tsx` |
-| D6 | Status picker | P10 row status; M13; M9 intake status; P4.6 appointment status | `StatusEditor.tsx` |
+| D6 | Status picker | P10 row status; M9 intake status; P4.6 appointment status | `StatusEditor.tsx` |
 | D7 | Highlighted For picker | P10 row | `HighlightedForEditor.tsx` |
 | D8 | Status filter | P2.3 | `FilterBar.tsx` |
 | D9 | Attorney filter | P2.3 | `FilterBar.tsx` |
@@ -335,6 +328,6 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | D36 | Detention center | M18 → Type of appt **Detained appt**: the Court Cases board's Det. Facility labels (synced) + **Other** (free text). Pre-filled from the client's open court case | `ConsultPrepModal.tsx` |
 | D38 | Whose cases | P6.1: each paralegal on the Fee Ks / Open Forms boards ("(me)" = the user's linked name) + **Everyone** | `MyCasesPage.tsx` |
 | D39 | Case status picker | M27: the board's real PS Stage / Status labels in their Monday colours; picking one asks to confirm | `CaseCardModal.tsx` |
-| D37 | Client actions menu | P3.0 → **⋯** (also in the M3 header, links only): **Open in DMS** (only when the profile has a DMS link — Innovation Law Lab, cases up to end of 2024; opens one reusable window, DMS can't be embedded), **Open in Monday.com**, **Copy client summary**, **Generate document…** (→ M23), **Relations** | `ActionButtons.tsx` |
+| D37 | Client actions menu | P3.0 → **⋯** (also in the M3 header, links only): **Open in DMS** (only when the profile has a DMS link — Innovation Law Lab, cases up to end of 2024; opens one reusable window, DMS can't be embedded), **Open in Monday.com**, **Open e-file in SharePoint**, **Open consult folder in SharePoint** (only when there is a consult folder link), **Copy client summary**, **Generate document…** (→ M23) | `ActionButtons.tsx` |
 
 All components live in `apps/web/src/components/` unless the path says `pages/`.

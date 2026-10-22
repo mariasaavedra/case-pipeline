@@ -3,6 +3,8 @@
 // =============================================================================
 //   GET  /api/sms/config               mode, sending number, templates, firm name/phone
 //   PUT  /api/settings/sms-templates   admin: replace the template list (audited)
+//   POST /api/sms/templates            anyone: add a template (audited)
+//   PUT  /api/sms/templates/:key       anyone: edit a template's name + texts (audited)
 //   POST /api/sms/send                 send one text (click-to-send, never automatic)
 //   GET  /api/profiles/:localId/sms    texts sent to a client
 //
@@ -34,7 +36,7 @@ import { currentUserId } from "../db/user-context.js";
 import { fetchCustomActivities } from "@case-pipeline/monday";
 import { formatUsPhone, smsSegments } from "@case-pipeline/core";
 import { smsMode, ringCentral, RingCentralError, type SmsMode } from "../sms/ringcentral.js";
-import { loadSmsTemplates, saveSmsTemplates } from "../sms/templates.js";
+import { createSmsTemplate, loadSmsTemplates, saveSmsTemplates, SmsTemplateError, updateSmsTemplate } from "../sms/templates.js";
 import { recordSms, recentlySent, smsHistoryForProfile } from "../sms/log.js";
 import { parseSmsSendBody, smsActivity } from "../sms/send-plan.js";
 import { loadDocumentSettings } from "../documents/document-settings.js";
@@ -101,6 +103,28 @@ export function registerSmsRoutes(app: Express, deps: SmsDeps): void {
       res.json({ data: saved });
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
+    }
+  });
+
+  // Staff add and edit templates from the send popup; the whole-list PUT above
+  // (reorder, delete) stays admin-only in Settings → Firm.
+  app.post("/api/sms/templates", requireAuth, (req, res) => {
+    try {
+      const t = createSmsTemplate(req.body);
+      auditFromReq(req, "sms_templates.created", { targetType: "settings", targetId: "sms-templates", metadata: { key: t.key, label: t.label } });
+      res.status(201).json({ data: t });
+    } catch (err) {
+      res.status(err instanceof SmsTemplateError ? err.status : 500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.put("/api/sms/templates/:key", requireAuth, (req, res) => {
+    try {
+      const t = updateSmsTemplate(String(req.params.key), req.body);
+      auditFromReq(req, "sms_templates.edited", { targetType: "settings", targetId: "sms-templates", metadata: { key: t.key, label: t.label } });
+      res.json({ data: t });
+    } catch (err) {
+      res.status(err instanceof SmsTemplateError ? err.status : 500).json({ error: (err as Error).message });
     }
   });
 

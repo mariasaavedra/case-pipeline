@@ -797,7 +797,7 @@ export interface SmsConfig {
   templates: SmsTemplate[];
   firm: { firmName: string; firmPhone: string };
 }
-export type SmsContext = "call_log" | "payment_links" | "client";
+export type SmsContext = "call_log" | "payment_links" | "client" | "upload_link";
 export interface SendSmsInput {
   to: string;
   body: string;
@@ -823,6 +823,22 @@ export function sendSms(input: SendSmsInput): Promise<SendSmsResult> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+  });
+}
+/** Anyone: add a template (the key is made from the name). */
+export function createSmsTemplate(t: Omit<SmsTemplate, "key">): Promise<SmsTemplate> {
+  return apiFetch<SmsTemplate>("/api/sms/templates", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(t),
+  });
+}
+/** Anyone: edit a template's name and texts. */
+export function editSmsTemplate(key: string, t: Omit<SmsTemplate, "key">): Promise<SmsTemplate> {
+  return apiFetch<SmsTemplate>(`/api/sms/templates/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(t),
   });
 }
 export function updateSmsTemplates(templates: SmsTemplate[]): Promise<SmsTemplate[]> {
@@ -1398,6 +1414,63 @@ export function setProfileEFile(
   });
 }
 
+// ---- Client upload links (M30, docs/features/client-uploads.md) ----
+
+export interface ClientUpload {
+  id: number;
+  received_at: string;
+  stored_name: string;
+  size: number;
+  content_type: string;
+  kind: "id" | "notice" | "evidence" | "other";
+  note: string | null;
+  sharepoint_url: string | null;
+  filed_where: string | null;
+  filed_at: string | null;
+  last_error: string | null;
+}
+
+export interface UploadLinkInfo {
+  id: number;
+  language: "es" | "en";
+  active: boolean;
+  createdAt: string;
+  createdBy: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  lastUsedAt: string | null;
+  uploads: ClientUpload[];
+}
+
+export function fetchUploadLinks(profileLocalId: string): Promise<{ enabled: boolean; links: UploadLinkInfo[] }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/upload-links`);
+}
+
+/** The only response that carries the link itself: it is never shown again. */
+export function createUploadLink(
+  profileLocalId: string,
+  input: { language: "es" | "en"; days?: number },
+): Promise<{ id: number; url: string; expiresAt: string; replaced: boolean }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/upload-links`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function extendUploadLink(id: number, days = 30): Promise<{ id: number; expiresAt: string }> {
+  return apiFetch(`/api/upload-links/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ days }),
+  });
+}
+
+export function revokeUploadLink(id: number): Promise<{ id: number; revoked: boolean }> {
+  return apiFetch(`/api/upload-links/${id}`, { method: "DELETE" });
+}
+
 // ---- Watchlist ----
 export function getWatchlist(): Promise<WatchlistItem[]> {
   return apiFetch<WatchlistItem[]>("/api/watchlist");
@@ -1886,6 +1959,89 @@ export function attachConsultFile(appointmentLocalId: string, file: Blob, name: 
     headers: { "Content-Type": "application/octet-stream" },
     body: file,
   });
+}
+
+// -----------------------------------------------------------------------------
+// Slack queue — M18 step 2 + P17's Slack Queue tab (routes/slack-queue.ts)
+// -----------------------------------------------------------------------------
+
+/** Whether the "Consult ready" Slack event would post right now, and where. */
+export interface SlackEventStatus {
+  mode: "off" | "dry-run" | "on";
+  enabled: boolean;
+  channel: string | null;
+}
+
+export interface SlackQueued {
+  id: number;
+  kind: "consult_ready";
+  appointmentMondayId: string | null;
+  boardKey: string | null;
+  /** Slack mrkdwn: *bold*, <url|label>, <@U…>. */
+  text: string;
+  sendAt: string;
+  /** Firm time, for the edit fields. */
+  sendDate: string;
+  sendTime: string;
+  status: "queued" | "sending" | "sent" | "failed";
+  dryRun: boolean;
+  error: string | null;
+  sentAt: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+}
+
+export interface SlackDraft {
+  draft: { text: string; sendDate: string; sendTime: string };
+  /** The message already waiting for this consult (queueing again replaces it). */
+  existing: SlackQueued | null;
+  attorney: string | null;
+  attorneyHasSlack: boolean;
+  slack: SlackEventStatus;
+}
+
+export function fetchSlackDraft(appointmentLocalId: string): Promise<SlackDraft> {
+  return apiFetch<SlackDraft>(`/api/reception/consults/${encodeURIComponent(appointmentLocalId)}/slack-draft`);
+}
+
+export interface SlackQueueInput {
+  text: string;
+  sendDate: string;
+  sendTime: string;
+}
+
+export function queueConsultSlack(
+  appointmentLocalId: string,
+  input: SlackQueueInput,
+): Promise<{ queued: SlackQueued; replaced: boolean; slack: SlackEventStatus }> {
+  return apiFetch(`/api/reception/consults/${encodeURIComponent(appointmentLocalId)}/slack`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export interface SlackQueueMessage extends SlackQueued {
+  badge: string | null;
+  /** The consult as it is now — null when it was deleted in Monday. */
+  appointment: { localId: string; client: string; date: string | null; time: string | null; attorney: string | null } | null;
+}
+
+export function fetchSlackQueue(): Promise<{ today: string; slack: SlackEventStatus; messages: SlackQueueMessage[] }> {
+  return apiFetch("/api/reception/slack-queue");
+}
+
+/** Edit words / time. A failed message goes back in the queue (Retry). */
+export function editSlackQueued(id: number, patch: Partial<SlackQueueInput>): Promise<SlackQueued> {
+  return apiFetch(`/api/reception/slack-queue/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteSlackQueued(id: number): Promise<{ deleted: true }> {
+  return apiFetch(`/api/reception/slack-queue/${id}`, { method: "DELETE" });
 }
 
 /** An attorney M20 can move a consult to — one per active appointment board. */

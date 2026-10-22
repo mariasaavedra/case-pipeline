@@ -12,7 +12,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { SmsConfig } from "../api";
 
-const mocks = vi.hoisted(() => ({ send: vi.fn(), mode: "on" as "on" | "dry-run" | "off" }));
+const mocks = vi.hoisted(() => ({ send: vi.fn(), create: vi.fn(), edit: vi.fn(), mode: "on" as "on" | "dry-run" | "off" }));
 
 vi.mock("../api", () => ({
   fetchSmsConfig: async (): Promise<SmsConfig> => ({
@@ -25,6 +25,8 @@ vi.mock("../api", () => ({
     ],
   }),
   sendSms: mocks.send,
+  createSmsTemplate: mocks.create,
+  editSmsTemplate: mocks.edit,
 }));
 
 const { SendSmsModal } = await import("./SendSmsModal");
@@ -55,6 +57,8 @@ async function open(props: Partial<Parameters<typeof SendSmsModal>[0]> = {}) {
 beforeEach(() => {
   document.body.innerHTML = "";
   mocks.mode = "on";
+  mocks.create.mockReset();
+  mocks.edit.mockReset();
   mocks.send.mockReset().mockResolvedValue({ mode: "on", status: "Queued", activity: "logged", segments: 1 });
 });
 
@@ -128,5 +132,30 @@ describe("SendSmsModal", () => {
     await act(async () => { button("Send (test)")!.click(); });
     await flush();
     expect(document.body.textContent).toContain("Test text recorded (not sent)");
+  });
+
+  it("+ New template: anyone adds one, and it is picked", async () => {
+    mocks.create.mockResolvedValue({ key: "court", label: "Court reminder", en: "Hi {{firstName}}, court is tomorrow.", es: "" });
+    await open({ templateKey: "plain" });
+    await act(async () => { button("+ New template")!.click(); });
+    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="text"]');
+    await type(inputs[inputs.length - 1]!, "Court reminder");
+    await type(document.querySelectorAll("textarea")[0]!, "Hi {{firstName}}, court is tomorrow.");
+    await act(async () => { button("Add template")!.click(); });
+    await flush();
+    expect(mocks.create).toHaveBeenCalledWith({ label: "Court reminder", en: "Hi {{firstName}}, court is tomorrow.", es: "" });
+    expect((document.querySelector("select") as HTMLSelectElement).value).toBe("court");
+    expect(textarea().value).toBe("Hi Maria, court is tomorrow.");
+  });
+
+  it("Edit template changes the picked one in place", async () => {
+    mocks.edit.mockResolvedValue({ key: "plain", label: "Plain", en: "Call us today at {{firmPhone}}", es: "" });
+    await open({ templateKey: "plain" });
+    await act(async () => { button("Edit template")!.click(); });
+    await type(document.querySelectorAll("textarea")[0]!, "Call us today at {{firmPhone}}");
+    await act(async () => { button("Save template")!.click(); });
+    await flush();
+    expect(mocks.edit).toHaveBeenCalledWith("plain", { label: "Plain", en: "Call us today at {{firmPhone}}", es: "" });
+    expect(textarea().value).toBe("Call us today at (816) 994-2300");
   });
 });

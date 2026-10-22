@@ -508,6 +508,31 @@ export async function createFolder(driveId: string, parentItemId: string, name: 
   });
 }
 
+/**
+ * Move an item into another folder of the same drive. Graph's default on a
+ * PATCH move is to fail on a name clash (409) — never a silent overwrite.
+ */
+export async function moveItem(driveId: string, itemId: string, newParentId: string): Promise<DriveItem> {
+  return graphFetch<DriveItem>(`/drives/${driveId}/items/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ parentReference: { id: newParentId } }),
+  });
+}
+
+/**
+ * Delete an item. SharePoint puts it in the site's recycle bin (kept 93 days),
+ * so a mistake can be restored there. 204 has no body, hence no graphFetch.
+ */
+export async function deleteItem(driveId: string, itemId: string): Promise<void> {
+  const token = await getGraphToken();
+  const res = await fetch(`${GRAPH}/drives/${driveId}/items/${itemId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new GraphError(res.status, await describeError(res));
+}
+
 // ---- Client folders ---------------------------------------------------------
 
 /** The firm's tenant and the three sites a client folder can live on. */
