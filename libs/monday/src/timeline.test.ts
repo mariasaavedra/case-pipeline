@@ -178,3 +178,31 @@ test("asks for at most 12 entries per request — Monday answers 13+ with previe
   expect(sizes).toEqual([12, 12, 6]);
   vi.unstubAllGlobals();
 });
+
+test("drops an entry deleted in Monday and fetches the rest of its batch", async () => {
+  setApiToken("test-token");
+  const queries: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, opts: { body: string }) => {
+    const { query } = JSON.parse(opts.body) as { query: string };
+    queries.push(query);
+    if (query.includes('"gone"')) {
+      return mockResponse({
+        data: null,
+        errors: [{ message: "Timeline item not found.", path: ["c1"], extensions: { code: "NOT_FOUND" } }],
+      });
+    }
+    return mockResponse({ data: { c0: { content: "<div>a</div>" }, c1: { content: "<div>b</div>" } } });
+  }));
+  const map = await fetchTimelineItemContents(["a", "gone", "b"]);
+  expect(queries).toHaveLength(2);
+  expect(map).toEqual(new Map([["a", "<div>a</div>"], ["b", "<div>b</div>"]]));
+  vi.unstubAllGlobals();
+});
+
+test("still throws an error that is not NOT_FOUND", async () => {
+  setApiToken("test-token");
+  vi.stubGlobal("fetch", vi.fn(async () =>
+    mockResponse({ data: null, errors: [{ message: "Parse error", extensions: { code: "PARSE" } }] })));
+  await expect(fetchTimelineItemContents(["a"])).rejects.toThrow("Parse error");
+  vi.unstubAllGlobals();
+});
