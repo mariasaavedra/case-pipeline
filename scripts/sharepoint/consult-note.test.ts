@@ -132,6 +132,24 @@ describe("resolveConsultNote — date bounds", () => {
     expect(r!.text).toBe("same day");
   });
 
+  it("ignores a Casenote written before the consult (reception's intake, a payment)", () => {
+    expect(resolveConsultNote({
+      timeline: [activity("Casenote", "PAID, POC is a friend", "2026-03-03", "Miguel Vence")],
+      consultDate: CONSULT_DATE,
+    })).toBeNull();
+  });
+
+  it("takes the later of two same-day entries — the note written after the meeting", () => {
+    const r = resolveConsultNote({
+      timeline: [
+        activity("Casenote", "Your upcoming Master hearing is on…", CONSULT_DATE, "Fernando Ayala"),
+        activity("Casenote", "Met with mom of three", CONSULT_DATE, "Caitlin Riffer"),
+      ],
+      consultDate: CONSULT_DATE,
+    });
+    expect(r!.text).toBe("Met with mom of three");
+  });
+
   it("ignores an undated entry rather than assuming it belongs", () => {
     expect(resolveConsultNote({
       timeline: [{ activityType: "Consult note", text: "x", author: null, date: null }],

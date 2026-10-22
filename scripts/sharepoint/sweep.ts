@@ -262,7 +262,7 @@ export async function perform(
 }
 
 export type DocOutcome =
-  | { kind: "written"; name: string; awaitingNote: boolean }
+  | { kind: "written"; name: string }
   | { kind: "replaced"; name: string }
   | { kind: "unchanged"; name: string }
   | { kind: "left-alone"; name: string; reason: string };
@@ -387,21 +387,22 @@ export async function ensureConsultDoc(
 
   if (!options.writeDocument) return null;
 
+  // The summary is the attorney's note — none is written before there is one.
+  // (It used to be written as soon as the consult's time passed, saying "no
+  // note was recorded", which staff read as the report going out too early.)
   const vars = buildConsultDocVars(sources);
-  const awaitingNote = isAwaitingNote(vars);
+  if (isAwaitingNote(vars)) return null;
   const name = consultDocName(sources.consultDate);
 
   const existing = await getItemByPath(auth, drive.driveId, `${subPath}/${name}`);
   if (existing?.file) {
-    // Still no note, so a rewrite would say exactly what is already there.
-    if (awaitingNote) return { kind: "unchanged", name };
     // Replace only a document the automation wrote itself — an attorney's
     // edits have no undo.
     if (!isUnmodifiedBy(existing, options.account)) {
       return { kind: "left-alone", name, reason: "edited by someone else" };
     }
-    // Ours — but does it still stand in for a missing note? Without this check
-    // every sweep would re-upload every finished summary.
+    // Ours — but is it a placeholder from before the rule above? Without this
+    // check every sweep would re-upload every finished summary.
     const content = await downloadFile(auth, drive.driveId, existing.id);
     if (!docxMentions(content, MISSING_NOTE)) return { kind: "unchanged", name };
     await uploadSmallFile(auth, drive.driveId, sub.item!.id, name, render(vars), "replace");
@@ -410,7 +411,7 @@ export async function ensureConsultDoc(
 
   if (!sub.item?.folder) throw new Error(`${subPath} is missing after being ensured`);
   await uploadSmallFile(auth, drive.driveId, sub.item.id, name, render(vars), "fail");
-  return { kind: "written", name, awaitingNote };
+  return { kind: "written", name };
 }
 
 /** Whether a .docx body contains `text`. A malformed file counts as no. */

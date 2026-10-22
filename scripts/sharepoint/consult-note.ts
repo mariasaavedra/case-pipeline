@@ -89,21 +89,27 @@ function shortDate(iso: string | null): string {
  * Pick the timeline entry of a given type that sits closest to the consult
  * date, within `windowDays`. Closest rather than first: a client with two
  * consultations has entries for both, and the nearer one is the right one.
+ *
+ * On a tie (dates are days, so every same-day entry ties) the LATER entry in
+ * `timeline` wins — callers pass it oldest first, and the note written after
+ * the meeting comes after the morning's hearing reminder or intake note.
  */
 function nearestActivity(
   timeline: TimelineNote[],
   activityType: string,
   consultDate: string,
   windowDays: number,
+  notBefore = false,
 ): TimelineNote | null {
   let best: { note: TimelineNote; distance: number } | null = null;
   for (const note of timeline) {
     if (note.activityType.toLowerCase() !== activityType.toLowerCase()) continue;
     if (!clean(note.text)) continue;
     if (!note.date) continue;
+    if (notBefore && note.date.slice(0, 10) < consultDate.slice(0, 10)) continue;
     const distance = daysBetween(note.date, consultDate);
     if (distance === null || distance > windowDays) continue;
-    if (!best || distance < best.distance) best = { note, distance };
+    if (!best || distance <= best.distance) best = { note, distance };
   }
   return best?.note ?? null;
 }
@@ -149,9 +155,11 @@ export function resolveConsultNote(input: NoteInput): ResolvedNote | null {
     };
   }
 
-  // 4. A Casenote, only if it sits right on the consultation.
+  // 4. A Casenote, only if it sits right on the consultation — and not before
+  //    it: a Casenote from the days before is reception's intake or a payment,
+  //    never what the attorney said in a meeting that had not happened yet.
   const casenote = consultDate
-    ? nearestActivity(timeline, "Casenote", consultDate, CASENOTE_WINDOW_DAYS)
+    ? nearestActivity(timeline, "Casenote", consultDate, CASENOTE_WINDOW_DAYS, true)
     : null;
   if (casenote) {
     return {

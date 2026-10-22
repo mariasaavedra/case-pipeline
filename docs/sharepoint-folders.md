@@ -180,10 +180,16 @@ write the summary once, never touch a document someone edited. Off unless
 CSV in `data/receipts/consult-sweep-<timestamp>.csv` — under `data/` because
 that is the directory mounted from the host, so receipts survive a redeploy.
 
-**The summary converges; it never churns.** It is written once. A summary the
-sweep wrote before the attorney's note existed is replaced when the note
-appears; one that already holds the note, or that a person has edited, is
-never touched again. Both are silent on later runs.
+**The summary waits for the note.** No note found (`consult-note.ts`: the M
+Consult Note column, a Consult note within 7 days, the profile's Consultation
+Notes, or a Casenote on the consult day or the 2 days after) = no summary yet;
+the folder and its CONSULT subfolder are still made. Until 2026-10-22 the sweep
+wrote a "no note was recorded" summary as soon as the consult's time passed,
+and staff read that as the report going out before the attorney's note.
+
+**The summary converges; it never churns.** It is written once. A placeholder
+from before that rule is replaced when the note appears; a summary that holds
+the note, or that a person has edited, is never touched again.
 
 Deliberately targeted rather than the full scan `--match` does: a sweep looks at
 a few days of consults, where the folder is either at the expected path or does
