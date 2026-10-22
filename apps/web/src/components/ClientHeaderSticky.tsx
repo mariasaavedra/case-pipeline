@@ -27,16 +27,15 @@ interface Props {
   /**
    * "page" is the 360 view's sticky header. "popup" is the same header inside a
    * dialog (M3 Client case): not sticky, its ⋯ menu has only the DMS / Monday
-   * links (no document/relations actions), and the
+   * links (no document actions), and the
    * name is the dialog's title so screen readers announce it.
    */
   variant?: "page" | "popup";
   /** Needed for the page variant's action buttons; unused in a popup. */
   data?: ClientCaseSummary;
-  onViewRelations?: () => void;
 }
 
-export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "page" }: Props) {
+export function ClientHeaderSticky({ profile, data, variant = "page" }: Props) {
   const priority = profile.priority ? PRIORITY_STYLES[profile.priority] : null;
   const isPopup = variant === "popup";
   const Name = isPopup ? DialogTitle : "h2";
@@ -142,7 +141,6 @@ export function ClientHeaderSticky({ profile, data, onViewRelations, variant = "
                 <ActionButtons
                   profile={profile}
                   data={isPopup ? undefined : data}
-                  onViewRelations={isPopup ? undefined : onViewRelations}
                 />
               </div>
             </div>

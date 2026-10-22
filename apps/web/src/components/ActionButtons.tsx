@@ -9,13 +9,13 @@ import { collectClientFolders } from "../sharepoint/collectFolders";
 // P3.0's ⋯ menu (D37): every header action except Watch, which stays a button
 // beside it. Open in DMS only when the profile has a DMS link (cases up to the
 // end of 2024); Open e-file only when there is an e-file (or closed e-file)
-// folder link. The M3 popup header passes no `data`, so it gets just the links.
+// folder link, Open consult folder only when there is a consult folder link.
+// The M3 popup header passes no `data`, so it gets just the links.
 
 interface Props {
   profile: ProfileSummary;
-  /** The full 360 data — Copy summary / Generate Doc / Relations need it. */
+  /** The full 360 data — Copy summary / Generate Doc need it. */
   data?: ClientCaseSummary;
-  onViewRelations?: () => void;
 }
 
 function generateSummaryText(data: ClientCaseSummary): string {
@@ -99,7 +99,7 @@ const ExternalIcon = () => (
   </Icon>
 );
 
-export function ActionButtons({ profile, data, onViewRelations }: Props) {
+export function ActionButtons({ profile, data }: Props) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -117,11 +117,14 @@ export function ActionButtons({ profile, data, onViewRelations }: Props) {
   };
 
   // The live e-file first (the profile's own link leads the list), then a closed
-  // one (SCALClosed) — never a consult folder. Repeats are labelled "e-file (2)".
+  // one (SCALClosed). The consult folder is its own item: the profile's Consult
+  // File first, then one mirrored from a board item or appointment. Repeats are
+  // labelled "e-file (2)" / "Consult (2)".
   const folders = collectClientFolders(data ?? { profile });
   const eFile = folders.find((f) => f.label.startsWith("e-file")) ?? folders.find((f) => f.label.startsWith("Archived")) ?? null;
+  const consult = folders.find((f) => f.label.startsWith("Consult")) ?? null;
 
-  const hasLinks = !!profile.dmsUrl || !!profile.mondayItemId || !!eFile;
+  const hasLinks = !!profile.dmsUrl || !!profile.mondayItemId || !!eFile || !!consult;
   if (!hasLinks && !data) return null;
 
   return (
@@ -177,6 +180,20 @@ export function ActionButtons({ profile, data, onViewRelations }: Props) {
                 {eFile.label.startsWith("Archived") ? "Open closed e-file in SharePoint" : "Open e-file in SharePoint"}
               </a>
             )}
+            {consult && (
+              <a
+                role="menuitem"
+                className="status-menu-item"
+                style={menuItemStyle}
+                href={consult.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setOpen(false)}
+              >
+                <ExternalIcon />
+                Open consult folder in SharePoint
+              </a>
+            )}
             {data && (
               <>
                 {hasLinks && <div style={{ height: 1, margin: "4px 6px", background: "var(--color-border-light)" }} />}
@@ -194,18 +211,6 @@ export function ActionButtons({ profile, data, onViewRelations }: Props) {
                   </Icon>
                   Generate document…
                 </button>
-                {onViewRelations && (
-                  <button type="button" role="menuitem" className="status-menu-item" style={menuItemStyle} onClick={pick(onViewRelations)}>
-                    <Icon>
-                      <circle cx="18" cy="5" r="3" />
-                      <circle cx="6" cy="12" r="3" />
-                      <circle cx="18" cy="19" r="3" />
-                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                    </Icon>
-                    Relations
-                  </button>
-                )}
               </>
             )}
           </div>

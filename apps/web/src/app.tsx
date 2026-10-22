@@ -33,7 +33,7 @@ const CallLogPage = lazy(() => import("./components/CallLogPage").then((m) => ({
 const JailIntakesPage = lazy(() => import("./components/JailIntakesPage").then((m) => ({ default: m.JailIntakesPage })));
 const MailPage = lazy(() => import("./components/MailPage").then((m) => ({ default: m.MailPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
-import type { TabId } from "./components/ClientTabs";
+import { TAB_IDS, type TabId } from "./components/ClientTabs";
 import { matchRoute, navigate } from "./router";
 import type { Route } from "./router";
 
@@ -159,7 +159,8 @@ function App() {
 
     if (route.page === "client-detail") {
       const localId = route.params.id!;
-      const tab = (route.params.tab as TabId) ?? "overview";
+      // A bookmarked link to a removed tab (contracts, relations…) opens Overview.
+      const tab = TAB_IDS.find((t) => t === route.params.tab) ?? "overview";
 
       // Same client, just switching tabs
       if (currentClientId.current === localId && clientRef.current) {
