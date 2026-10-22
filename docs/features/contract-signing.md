@@ -95,7 +95,13 @@ add a contract.
   pre-filled from Monday (client, e-mail, address, attorney, AF/FF, the next
   hearing from the client's court case: MCH → Master Hearing, Trial →
   Individual Hearing) and the user's initials. A field the template uses must
-  be filled.
+  be filled. The address (2026-10-22) is the profile's Address, else its
+  Mailing address, else the Fee K's own copy (P14's "missing" flag uses the
+  same order; a third of the Fee Ks since September had only a Mailing
+  address). It is tidied and split by `documents/us-address.ts`
+  (`letterAddress`): cities typed with no comma, a suffix glued to the city,
+  a unit before the city, "KCMO", the state from the zip when missing,
+  all-lowercase lines capitalised; one it can't split stays whole.
 - Everything happens in the browser: the template is filled there, and the
   PDF is made by the user's Microsoft 365 (`/me/drive/…/content?format=pdf`,
   a temporary file in their OneDrive folder "Case Pipeline (temporary)",

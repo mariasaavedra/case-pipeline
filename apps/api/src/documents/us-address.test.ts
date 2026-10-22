@@ -59,6 +59,22 @@ describe("letterAddress (M22 contract: street line + City, ST zip)", () => {
     ["1234 Main St, Kansas City MO 64105", "1234 Main St", "Kansas City, MO 64105"],
     ["1234 Main St Kansas City Missouri 64105", "1234 Main St", "Kansas City, MO 64105"],
     ["515 Avenida Cesar E. Chavez, Kansas City, MO", "515 Avenida Cesar E. Chavez", "Kansas City, MO"],
+    // Real shapes from live.db (2026-10-22).
+    ["1018 S.W. JEWELL TOPEKA, KS 66604", "1018 S.W. JEWELL", "TOPEKA, KS 66604"],
+    ["4004 W 150th Overland Park KS, 66224", "4004 W 150th", "Overland Park, KS 66224"],
+    ["554 Oakland AveKansas City, KS 66101", "554 Oakland Ave", "Kansas City, KS 66101"],
+    ["2912 W. 42nd Ave., #3 Kansas City, KS 66103", "2912 W. 42nd Ave #3", "Kansas City, KS 66103"],
+    ["1040 Rd V5  lakin Ks 67860", "1040 Rd V5", "Lakin, KS 67860"],
+    ["18504 E 5th Terrace N Independence, MO 64056", "18504 E 5th Terrace N", "Independence, MO 64056"],
+    ["711 S 15th St St. Joseph, MO 64501", "711 S 15th St", "St. Joseph, MO 64501"],
+    ["1719 Gillespie Place KCMO 64106", "1719 Gillespie Place", "Kansas City, MO 64106"],
+    ["9100 W 124th Street, Overland Park 66203", "9100 W 124th Street", "Overland Park, KS 66203"],
+    ["32825 Switzer Rd., Paola, null 66071", "32825 Switzer Rd", "Paola, KS 66071"],
+    ["2201 harper st lawrence 66046 KS", "2201 Harper St", "Lawrence, KS 66046"],
+    ["3515 N 39TH ST Kansas City, KS66104", "3515 N 39TH ST", "Kansas City, KS 66104"],
+    ["13327 W 88th circle appt C, Lenexa, Kansas - 66215", "13327 W 88th circle appt C", "Lenexa, KS 66215"],
+    ["1918 POPLAR AVE., KANSAS CITY, MO 64127 KANSAS CITY, MO 64127", "1918 POPLAR AVE", "KANSAS CITY, MO 64127"],
+    ["2418 n 12 st kansas city ks", "2418 N 12 St", "Kansas City, KS"],
   ])("%s", (line, street, cityStateZip) => {
     expect(letterAddress(line)).toEqual({ street, cityStateZip });
   });
@@ -66,5 +82,7 @@ describe("letterAddress (M22 contract: street line + City, ST zip)", () => {
   it("keeps a line it can't split whole, for staff to fix", () => {
     expect(letterAddress("1234 Main St")).toEqual({ street: "1234 Main St", cityStateZip: "" });
     expect(letterAddress(null)).toEqual({ street: "", cityStateZip: "" });
+    // A bad zip isn't guessed at.
+    expect(letterAddress("5201 hadley st mission, KS 662020").cityStateZip).toBe("");
   });
 });
