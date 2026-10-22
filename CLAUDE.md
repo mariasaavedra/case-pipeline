@@ -125,6 +125,7 @@ Internal modules (not in `package.json` exports, imported via `@case-pipeline/qu
 | `address-changes.ts` | P18 Address Changes: open changes of address by phase (paid/our turn → client/attorney → submitted → waiting on payment), aged from Date Received (7/14 days on our turn, else 30/60), next hearing for court changes, cleanup flags |
 | `workload.ts` | P20 Workload: open items per person across P5/P13/P14/P15/P19 (each page's own query, North Pole out), names resolved by the staff roster's matcher (passed in); "no one assigned" + "held only by inactive staff" (also an Alerts group) |
 | `foias.ts` | P19 FOIAs: open FOIA requests by phase (decide / our turn / waiting on the agency / North Pole); "Done FOIAS" group, COMPLETED, NOT PROCEEDING or a Results Received date = done; agencies quoted vs filed; inquiry due |
+| `efiles-to-open.ts` | P21 E-Files to open: paid Fee Ks at Contract Stage "Paid needs action" / "Open E FILE", each with its hire plan (`buildHirePlan`): path (new E-File / court / FOIA / existing), next free case number (profiles + E-File folder names; the ledger is checked in the browser), folder + subfolders, Monday changes, ledger row. Read-only (phase 1). See `docs/features/consult-to-efile.md` |
 | `board-columns.ts` | Per-board column schema for the in-place field editors |
 | `board-items.ts` | Per-profile board item queries + `batchGetClientBoardItems` |
 | `case-summary.ts` | Full 360° client summary + `batchGetClientCaseSummaries` |
@@ -174,6 +175,7 @@ Data reads:
 | `GET /api/foias` | P19 data: open FOIAs with phase, age (14/30 days our turn, 30/60 since filed), agencies still to file, cleanup flags; done count |
 | `GET /api/alerts` | Grouped alerts by severity (critical / warning / info), incl. "Appeal & Federal Deadlines", "I-918B Expiring", "I-918B Requests Pending", "Mail to review" and "Assigned to inactive staff" |
 | `GET /api/workload` | P20 (admin): open work per person + no one assigned + held only by inactive staff. Query = `libs/query/src/workload.ts` |
+| `GET /api/efiles-to-open` | P21 (admin): the hire protocol queue + each Fee K's plan, read-only. Query = `libs/query/src/efiles-to-open.ts`; the browser reads the ledger tab (`lib/ledger.ts`) before showing the number |
 | `GET /api/search` | Cross-type search: profiles, contracts, court cases, etc. |
 | `GET /api/filter-options` | Distinct values for filter dropdowns (priorities, statuses, attorneys, board types) |
 | `GET /api/clients` | Filtered + paginated profile listing |

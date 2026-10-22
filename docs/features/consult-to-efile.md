@@ -1,6 +1,6 @@
 # Consult → E-File (hire protocol)
 
-**Status:** spec, not built · **Last updated:** 2026-10-22
+**Status:** phase 1 built (P21 queue + M30 plan, read-only, admins) · **Last updated:** 2026-10-22
 
 ## Goal
 

@@ -424,6 +424,18 @@ export async function loadFeeSheet(): Promise<{ name: string; webUrl: string; va
   return { name: sheet.name, webUrl: sheet.webUrl, values: range.values };
 }
 
+/**
+ * One year tab of the case-number ledger (lib/ledger.ts), read by Excel's own
+ * API. Read-only: P21 checks the next number against it before showing it.
+ */
+export async function loadLedgerTab(ledgerUrl: string, tab: string): Promise<{ webUrl: string; values: unknown[][] }> {
+  const { driveId, item } = await resolveFileLink(ledgerUrl);
+  const range = await graphFetch<{ values: unknown[][] }>(
+    `/drives/${driveId}/items/${item.id}/workbook/worksheets/${encodeURIComponent(tab)}/usedRange(valuesOnly=true)?$select=values`,
+  );
+  return { webUrl: item.webUrl, values: range.values };
+}
+
 // ---- E-mail -----------------------------------------------------------------
 
 /** Mail.Send token; same consent rules as getGraphToken (popup only from a click). */
