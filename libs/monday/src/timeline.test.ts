@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { test, expect, describe, beforeEach, afterEach, vi } from "vitest";
-import { fetchTimelineBatch, fetchCustomActivities, timelineAlias, setApiToken, normalizeEmailMetadata } from "./api";
+import { fetchTimelineBatch, fetchTimelineItemContents, fetchCustomActivities, timelineAlias, setApiToken, normalizeEmailMetadata } from "./api";
 
 describe("normalizeEmailMetadata", () => {
   test("turns Monday's null lists into empty ones and trims addresses", () => {
@@ -142,5 +142,26 @@ describe("fetchCustomActivities", () => {
     const map = await fetchCustomActivities();
     expect(map.get("abc")).toBe("Consult note");
     expect(map.size).toBe(1);
+  });
+});
+
+describe("fetchTimelineItemContents", () => {
+  beforeEach(() => setApiToken("test-token"));
+  afterEach(() => vi.unstubAllGlobals());
+
+  test("fetches full content by timeline item id, batched, skipping ids Monday lacks", async () => {
+    const queries: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, opts: { body: string }) => {
+      const { query } = JSON.parse(opts.body) as { query: string };
+      queries.push(query);
+      return query.includes('"b"')
+        ? mockResponse({ data: { c0: null } })
+        : mockResponse({ data: { c0: { id: "a", content: "<div>full note</div>" } } });
+    }));
+
+    const map = await fetchTimelineItemContents(["a", "b"], undefined, 1);
+    expect(queries).toHaveLength(2);
+    expect(queries[0]).toContain('timeline_item(id: "a")');
+    expect(map).toEqual(new Map([["a", "<div>full note</div>"]]));
   });
 });

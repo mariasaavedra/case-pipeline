@@ -277,6 +277,26 @@ describe("ensureConsultDoc", () => {
     expect(puts).toEqual([]);
   });
 
+  it("replaces its own document that holds the note cut short", async () => {
+    const note = "Charged with trespassing, not an issue. ".repeat(10).trim();
+    const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
+      lastModifiedBy: { user: { email: ME } } }, [], docx(note.slice(0, 250)));
+    const r = await ensureConsultDoc(auth, VENTURA, { ...sources, profile: { consultation_notes: note } }, render,
+      { writeDocument: true, account: ME });
+    expect(r).toMatchObject({ kind: "replaced" });
+    expect(puts[0]).toContain("conflictBehavior=replace");
+  });
+
+  it("leaves a document holding the whole note alone, line breaks or not", async () => {
+    const note = "Charged with trespassing, not an issue.\n".repeat(10).trim();
+    const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
+      lastModifiedBy: { user: { email: ME } } }, [], docx(note.replace(/\n/g, "</w:t><w:br/><w:t>")));
+    const r = await ensureConsultDoc(auth, VENTURA, { ...sources, profile: { consultation_notes: note } }, render,
+      { writeDocument: true, account: ME });
+    expect(r).toMatchObject({ kind: "unchanged" });
+    expect(puts).toEqual([]);
+  });
+
   it("writes into an E-File folder too", async () => {
     const puts = stubFiles(null);
     const r = await ensureConsultDoc(auth, { site: "scalefiles", path: "V/VENTURA, Milton" }, sources, render,

@@ -1472,6 +1472,41 @@ export function timelineAlias(itemId: string): string {
 }
 
 /**
+ * The full `content` of E&A entries, by timeline item id (HTML).
+ *
+ * `timeline_items_page` hands back a ~250-character plain-text PREVIEW of each
+ * entry's content; only `timeline_item(id:)` returns the whole thing. Verified
+ * live 2026-10-22: a 655-character consult note came back from the page as its
+ * first 250 characters, cut mid-sentence. Batched by alias; ids Monday no longer
+ * has are left out of the map.
+ */
+export async function fetchTimelineItemContents(
+  ids: string[],
+  tokenOverride?: string,
+  chunk = 25,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const alias = (i: number) => `c${i}`;
+  for (let i = 0; i < ids.length; i += chunk) {
+    const batch = ids.slice(i, i + chunk);
+    const fields = batch
+      .map((id, j) => `${alias(j)}: timeline_item(id: ${JSON.stringify(id)}) { id content }`)
+      .join("\n");
+    const result = await mondayRequest<{ data: Record<string, { id: string; content: string | null } | null> }>(
+      `query { ${fields} }`,
+      undefined,
+      tokenOverride,
+      TIMELINE_API_VERSION
+    );
+    batch.forEach((id, j) => {
+      const content = result.data?.[alias(j)]?.content;
+      if (typeof content === "string") map.set(id, content);
+    });
+  }
+  return map;
+}
+
+/**
  * Fetch the account's custom activity types as an id → name map. Used to label
  * E&A rows whose type is `custom` (e.g. "Consult note", "HEARING NOTES").
  */

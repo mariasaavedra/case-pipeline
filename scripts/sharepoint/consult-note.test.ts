@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveConsultNote, type TimelineNote } from "./consult-note.js";
+import { resolveConsultNote, mayBeCut, noteHtmlToText, type TimelineNote } from "./consult-note.js";
 
 const activity = (activityType: string, text: string, date: string, author = "Michael Sharma-Crawford"): TimelineNote =>
   ({ activityType, text, date, author });
@@ -155,5 +155,22 @@ describe("resolveConsultNote — date bounds", () => {
       timeline: [{ activityType: "Consult note", text: "x", author: null, date: null }],
       consultDate: CONSULT_DATE,
     })).toBeNull();
+  });
+});
+
+describe("Monday's cut-short E&A previews", () => {
+  it("flags long plain text as possibly cut, never HTML or short text", () => {
+    expect(mayBeCut("x".repeat(250))).toBe(true);
+    expect(mayBeCut("short note")).toBe(false);
+    expect(mayBeCut(`<div>${"x".repeat(300)}</div>`)).toBe(false);
+    expect(mayBeCut(null)).toBe(false);
+  });
+
+  it("turns a full entry's HTML into text with its lines kept", () => {
+    const html = "<div>Charged with trespassing&nbsp;not an issue</div><div>OPT &amp; CPT</div>" +
+      "<div><br></div><div>lots of questions for pub defender</div><div><br></div>";
+    expect(noteHtmlToText(html)).toBe(
+      "Charged with trespassing not an issue\nOPT & CPT\n\nlots of questions for pub defender",
+    );
   });
 });

@@ -37,6 +37,46 @@ export interface TimelineNote {
   author: string | null;
   /** ISO date the entry was created, for the proximity check. */
   date: string | null;
+  /** Monday's timeline item id, to fetch the full text of a cut entry. */
+  id?: string | null;
+  /** True when `text` may be Monday's 250-character preview. See below. */
+  cut?: boolean;
+}
+
+/**
+ * Monday's timeline page returns each entry's content as a plain-text preview
+ * of about 250 characters; the full entry (HTML) only comes from fetching it by
+ * id. A stored entry at least this long that is not HTML may be cut short.
+ */
+export const PREVIEW_LENGTH = 240;
+
+export function mayBeCut(raw: string | null | undefined): boolean {
+  const v = (raw ?? "").trim();
+  return v.length >= PREVIEW_LENGTH && !v.startsWith("<");
+}
+
+/**
+ * A full E&A entry's HTML as plain text, keeping its lines: attorneys write
+ * consult notes as one thought per line, and a note run together into one
+ * paragraph is much harder to read.
+ */
+export function noteHtmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(div|p|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\uFEFF/g, "")
+    .split("\n")
+    .map((line) => line.replace(/[ \t\u00a0]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export interface ResolvedNote {
