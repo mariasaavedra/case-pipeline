@@ -162,6 +162,7 @@ function loadTimelineNotes(
       WHERE profile_local_id IN (${ids})
         AND activity_type_name IN (${types})
         AND TRIM(COALESCE(text_body, '')) <> ''
+      ORDER BY created_at_source
     `)
     .all(...profileIds, ...NOTE_ACTIVITY_TYPES) as Array<TimelineNote & { pid: string }>;
 

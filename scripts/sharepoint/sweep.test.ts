@@ -235,7 +235,7 @@ describe("ensureConsultDoc", () => {
     const puts = stubFiles(null);
     const r = await ensureConsultDoc(auth, VENTURA, sources, render,
       { writeDocument: true, account: ME });
-    expect(r).toMatchObject({ kind: "written", awaitingNote: false });
+    expect(r).toMatchObject({ kind: "written" });
     expect(puts).toHaveLength(1);
     // The upload addresses its parent by id, so the subfolder shows up in the
     // lookups that preceded it rather than in the PUT url.
@@ -243,12 +243,21 @@ describe("ensureConsultDoc", () => {
     expect(puts[0]).toContain("conflictBehavior=fail");
   });
 
-  it("does not rewrite while the note is still missing", async () => {
+  it("writes nothing before there is a note, even once the consult has happened", async () => {
+    const puts = stubFiles(null);
+    const r = await ensureConsultDoc(auth, VENTURA, { ...sources, profile: {} }, render,
+      { writeDocument: true, account: ME });
+    expect(r).toBeNull();
+    expect(puts).toEqual([]);
+    expect(seen.some((u) => u.includes(CONSULT_SUBFOLDER))).toBe(true);
+  });
+
+  it("does not rewrite an old placeholder while the note is still missing", async () => {
     const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
       lastModifiedBy: { user: { email: ME } } });
     const r = await ensureConsultDoc(auth, VENTURA, { ...sources, profile: {} }, render,
       { writeDocument: true, account: ME });
-    expect(r).toMatchObject({ kind: "unchanged" });
+    expect(r).toBeNull();
     expect(puts).toEqual([]);
   });
 
