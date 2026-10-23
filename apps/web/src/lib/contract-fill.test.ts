@@ -23,6 +23,7 @@ const INPUT: ContractInput = {
   dueDate: "", signByDate: "", attorneyName: "Jane Attorney", creatorInitials: "RC",
   multiplePeople: false, people: [],
   trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
+  services: "", servicesEs: "", servicesExcluded: "", servicesExcludedEs: "",
 };
 
 // The signer (Ana) is a relative; the contract is for three detained people.
@@ -254,5 +255,18 @@ describe("trial: prep and trial are separate fees", () => {
     const check = inspectContractTemplate(docx("{{trial_prep_fee}} by {{trial_prep_due_date}}, {{trial_fee}} by {{trial_due_date}}"));
     expect(contractProblems(check, TRIAL)).toEqual([]);
     expect(contractProblems(check, INPUT)).toEqual(["Trial prep fee is missing", "Trial prep fee due is missing", "Trial fee is missing", "Trial fee due is missing"]);
+  });
+});
+
+describe("scope of services", () => {
+  it("prints the Fee K Type's text; empty prints nothing and isn't required", async () => {
+    const tmpl = docx(["Included: Preparing and filing your {{form_name}}. {{services}}", "Not included: {{services_excluded}} Unless listed above…"]);
+    const check = inspectContractTemplate(tmpl);
+    expect(check.unknown).toEqual([]);
+    expect(contractProblems(check, INPUT)).toEqual([]);
+    const filled = { ...INPUT, services: "Prepare and file Form I-130.", servicesExcluded: "Any interview." };
+    const xml = new PizZip(await fillContractTemplate(tmpl, filled).arrayBuffer()).file("word/document.xml")!.asText();
+    expect(xml).toContain("Included: Preparing and filing your I-130. Prepare and file Form I-130.");
+    expect(xml).toContain("Not included: Any interview. Unless listed above…");
   });
 });

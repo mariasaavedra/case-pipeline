@@ -654,6 +654,8 @@ export interface ContractPrefill {
   processingFee: number | null;
   hearingType: string;
   hearingDate: string;
+  /** Scope of services for the Fee K's type(s); "" each when none. */
+  scope?: { services: string; servicesEs: string; excluded: string; excludedEs: string };
 }
 
 export async function fetchContractPrefill(localId: string): Promise<ContractPrefill> {
@@ -858,6 +860,11 @@ export interface FeeKTypeRow {
   board: string;
   /** A fee sheet Job; "" = not set. */
   feeSheetJob: string;
+  /** Scope of services the contract prints (EN + ES); "" = none. */
+  services: string;
+  servicesEs: string;
+  excluded: string;
+  excludedEs: string;
 }
 export interface FeeKTypesTable {
   rows: FeeKTypeRow[];

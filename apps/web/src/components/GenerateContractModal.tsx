@@ -131,6 +131,7 @@ const INPUTS_FOR: Record<string, (keyof ContractInput)[]> = {
   trial_fee: ["trialFee"], trial_fee_surcharge: ["trialFee"],
   trial_due_date: ["trialDueDate"], trial_due_date_es: ["trialDueDate"],
   trial_total_fee: ["trialPrepFee", "trialFee"],
+  services: ["services"], services_es: ["servicesEs"], services_excluded: ["servicesExcluded"], services_excluded_es: ["servicesExcludedEs"],
   sign_by_date: ["signByDate"], sign_by_date_es: ["signByDate"],
   due_date: ["dueDate"], due_date_es: ["dueDate"], due_date_short: ["dueDate"],
   attorney_name: ["attorneyName"], creator_initials: ["creatorInitials"],
@@ -211,6 +212,9 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         dueDate: "", signByDate: "", attorneyName: p.attorneyName, creatorInitials: initialsOf(user?.name ?? ""),
         multiplePeople: false, people: [],
         trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
+        // The Fee K Type's scope of services (Settings → Firm → Fee K Types).
+        services: p.scope?.services ?? "", servicesEs: p.scope?.servicesEs ?? "",
+        servicesExcluded: p.scope?.excluded ?? "", servicesExcludedEs: p.scope?.excludedEs ?? "",
         };
         prefill.current = { input: fresh, attorneyEmail: p.attorneyEmail ?? "" };
         if (draft) {
@@ -302,6 +306,13 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
           <input id={`m22-${k}`} type={extra?.type ?? "text"} placeholder={extra?.placeholder} className={inputClass} style={inputStyle}
             value={(input[k] as string | null) ?? ""} onChange={(e) => set(k, e.target.value as never)} />
         )}
+      </Field>
+    ) : null;
+  const longText = (k: keyof ContractInput, label: string, hint?: string) =>
+    shown.has(k) && input ? (
+      <Field id={`m22-${k}`} label={label} hint={hint}>
+        <textarea id={`m22-${k}`} rows={3} className={inputClass} style={inputStyle}
+          value={(input[k] as string | null) ?? ""} onChange={(e) => set(k, e.target.value as never)} />
       </Field>
     ) : null;
   const amount = (k: keyof ContractInput, label: string, hint?: string, placeholder?: string) =>
@@ -590,6 +601,20 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                   </div>
                 );
               })()}
+              {(shown.has("services") || shown.has("servicesExcluded")) && (
+                <div className="rounded-md p-3 space-y-3" style={{ border: "1px solid var(--color-border-light)" }}>
+                  <div className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>Scope of services</div>
+                  <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
+                    From the Fee K Type (Settings → Firm → Fee K Types). Change it here for this contract only; empty prints nothing extra.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {longText("services", "Included")}
+                    {longText("servicesEs", "Included, Spanish")}
+                    {longText("servicesExcluded", "Not included")}
+                    {longText("servicesExcludedEs", "Not included, Spanish")}
+                  </div>
+                </div>
+              )}
               {(shown.has("attorneyFee") || shown.has("filingFee")) && (
                 <FeeSheetPicker onPick={(fees) => { dirty.current = true; setInput((f) => (f ? { ...f, ...fees } : f)); }} />
               )}

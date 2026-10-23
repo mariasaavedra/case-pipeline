@@ -94,6 +94,16 @@ add a contract.
   motion's FF is `{{filing_fee}}`; that contract's file is named after the motion; Court
   Application adds the DHS `{{bio_fee}}`; Trial's "signed contract by" date is
   `{{sign_by_date}}` (payment = `{{due_date}}`).
+- Scope of services (2026-10-23, approved by Michael + Rekha): every contract
+  gets an unnumbered "Scope of Services / Alcance de los Servicios" section
+  after the introduction (so "Sections 1 through 12" and the 12 initials stay).
+  Court templates carry it as fixed text in the Word file. FORMS prints a
+  common opening ("Preparing and filing your {{form_name}} with USCIS…") plus
+  `{{services}}` / `{{services_excluded}}` (+ `_es`) from the Fee K Type's
+  scope in Settings → Firm → Fee K Types ("Scope…" on each row; the draft
+  carries the 11 approved examples and is used until the table is saved);
+  M22 shows them in a "Scope of services" box, editable for that contract,
+  empty = nothing extra printed.
 - **Generate contract…** lists the folder, downloads the picked template and
   checks it. Broken braces or an unknown tag (a typo) block it, with a link to
   open the file in Word. The form shows only the fields that template uses,
