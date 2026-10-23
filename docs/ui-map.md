@@ -63,6 +63,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P18 | Address Changes | `/address-changes` | Sidebar → Address Changes (admins only for now) | `components/AddressChangesPage.tsx` |
 | P19 | FOIAs | `/foias` | Sidebar → FOIAs (admins only for now) | `components/FoiasPage.tsx` |
 | P20 | Workload | `/workload` | Sidebar → Workload (admins only for now) | `components/WorkloadPage.tsx` |
+| P22 | Manual | `/manual`, `/manual/<chapter>` | Sidebar → **Manual** (bottom, above Settings, can't be hidden); top bar **? Help** opens the chapter for the current page | `components/ManualPage.tsx` |
 | P21 | E-Files to open | `/efiles-to-open` | Sidebar → E-Files to open (admins only for now) | `components/EFilesToOpenPage.tsx` |
 
 ### Global
@@ -70,7 +71,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | Code | Name | Notes |
 |---|---|---|
 | G1 | Sidebar | Page links, Settings, your name and sign-out (`Sidebar.tsx`). **Customize** (above Settings) lets each user drag pages into their own order, hide ones they don't use, and group pages into named folders (one level, foldable; open/closed is per device); saved per user in `preferences.sidebarNav`. The collapsed icon rail lists folder pages flat |
-| G2 | Top bar | Back and **+ Log call** (`app.tsx`); not on Settings |
+| G2 | Top bar | Back, **? Help** (the P22 chapter for this page) and **+ Log call** (`app.tsx`); not on Settings |
 
 The **Version badge** (opens M14) sits in the Home header and on Sign in
 (`VersionBadge.tsx`).
@@ -181,6 +182,12 @@ by name); the board tabs switch to another attorney.
 |---|---|---|
 | P21.1 | Header | Waiting count, a week or more, blocked, next free number (before the ledger check) |
 | P21.2 | Queue by path | New E-File · New court E-File · Already has an E-File · FOIA. Row: client (→ M3), Contract Stage, Blocked / to-check tags, Fee K Type + where it goes, hired date + days (3+ yellow, 7+ red), case number, **See plan** → M31. Phase 1: read-only |
+### Inside P22 Manual
+
+| Code | Name | Notes |
+|---|---|---|
+| P22.1 | Chapter | Left: search, **Show for** (Everyone / Reception / Paralegals / Attorneys / Billing / Admins, remembered per browser), chapters by section (admin-only chapters hidden from staff). Right: the manual's home (chapter cards), a chapter (On this page, Open this page →, admins: Edit this chapter ↗ on GitHub, previous / next), or search results (chapter › heading + snippet → jumps to that heading). Chapters = `apps/web/src/manual/chapters/*.md`; What's new = `changelog.ts` |
+
 ### Inside P6 My Cases
 
 | Code | Name | Notes |

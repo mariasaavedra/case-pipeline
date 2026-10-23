@@ -751,6 +751,22 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
           </span>
         </div>
 
+        {/* P22 Manual — fixed here, like Settings, so no one can hide it */}
+        <button
+          onClick={() => { navigate("/manual"); onMobileClose(); }}
+          className={`sidebar-item ${pathname.startsWith("/manual") ? "sidebar-item-active" : ""}`}
+          title={rail ? "Manual" : undefined}
+          style={{ justifyContent: rail ? "center" : "flex-start" }}
+        >
+          <span className="sidebar-icon">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M10 5c-1.5-1.3-3.7-2-6.5-2v12c2.8 0 5 .7 6.5 2 1.5-1.3 3.7-2 6.5-2V3c-2.8 0-5 .7-6.5 2z" />
+              <path d="M10 5v12" />
+            </svg>
+          </span>
+          {!rail && <span className="sidebar-label">Manual</span>}
+        </button>
+
         {/* Settings */}
         <button
           onClick={() => { navigate("/settings"); onMobileClose(); }}

@@ -97,6 +97,19 @@ tsx/Node loads `.env` automatically via `--env-file` flag in the sync command. F
 - **Batch query pattern:** Multi-profile queries (e.g. appointments) use batch preload via `IN (...)` + `GROUP BY`, not per-row sub-queries. See `libs/query/src/appointments.ts`.
 - **Write-back token policy:** Writes go out under the acting user's personal Monday OAuth token (for attribution), falling back to the shared `MONDAY_API_TOKEN` **only** when Monday refuses theirs on permission grounds — a rate limit or outage still throws so the write queue retries it. See `apps/api/src/write-auth.ts`. Adding a scope to `buildOAuthUrl` silently breaks every existing connection (Monday never widens an issued token), so a scope change must ship with the reconnect prompt. See `docs/decisions.md`, 2026-08-07.
 
+## Staff manual (P22) — update it with every merge
+
+The in-app manual (`/manual`, sidebar → **Manual**, top bar **? Help**) is the staff's reference. Its chapters are Markdown in `apps/web/src/manual/chapters/` (format: `apps/web/src/manual/README.md`).
+
+**Every PR that changes what staff see or do updates the manual in the same PR**, before it is merged:
+
+- Edit the chapter whose `routes:` covers the changed page (new steps, renamed buttons, removed features), and bump its `updated:` date. Button names exactly as on screen, in **bold**; plain language, no file paths or API names.
+- A new page → a new chapter with `routes:` set (`manual.test.ts` fails typecheck until the page is listed in `NEEDS_CHAPTER`).
+- A user-visible change also gets an entry at the top of `apps/web/src/changelog.ts` (it feeds the manual's "What's new").
+- Nothing staff would notice (refactor, tests, infra) → write `Manual: n/a — <why>` in the PR description.
+
+CI's `manual` job fails a PR that changes `apps/web/src/components|pages/*.tsx` or `apps/api/src/routes/` without touching the manual or the changelog, unless the description says `Manual: n/a`.
+
 ## Query Layer (`libs/query`)
 
 Package exports four public subpaths:
@@ -250,6 +263,7 @@ Writes and user/account routes:
 |---|---|
 | `config/` | `boards.yaml` (board & column definitions), `templates.yaml` (template variable mappings), `timeline.yaml` (which board dates are case-timeline milestones, P3.9) |
 | `data/` | SQLite databases — `seed.db` (local dev, gitignored), `live.db` (real data, gitignored) |
+| `apps/web/src/manual/` | P22 staff manual: one Markdown chapter per page in `chapters/`, loaded by `manual.ts`. Keep it current with every merge (see Staff manual above) |
 | `templates/` | Handlebars `.txt` and DOCX template files used by the render pipeline; `templates/forms/` = official fillable PDFs (G-28) filled by `apps/api/src/documents/` |
 | `output/` | Rendered document output (gitignored) |
 | `docs/` | Architecture docs, board maps, decisions log, feature specs, nightly logs |

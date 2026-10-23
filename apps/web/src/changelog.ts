@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-23",
+    title: "A manual for the app",
+    items: [
+      "New Manual page (bottom of the sidebar): step-by-step help for every page — Reception, Appointments, Contracts, My Cases and the rest.",
+      "On any page, the ? Help button at the top opens the chapter for that page.",
+      "Search the whole manual from the box at the top, and use “Show for” to see only the chapters for your job.",
+      "The manual is updated every time the app changes, so it always matches what's on screen.",
+    ],
+  },
+  {
     date: "2026-10-19",
     title: "Timeline: what changed, and when",
     items: [
