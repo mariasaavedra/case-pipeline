@@ -7,6 +7,11 @@
 // and the job on the firm's fee sheet that prices it (AF + FF). Prices stay in
 // the fee sheet — this only names the row.
 //
+// Scope of services (2026-10-23, approved by Michael + Rekha): what a contract
+// for this type includes and leaves out, in English and Spanish. The FORMS
+// contract prints it as {{services}} / {{services_excluded}} (+ _es), after its
+// common opening; staff can change it for one contract in M22.
+//
 // Used by: the Fee K auto-fill (an empty "It will go to…" ← the board) and the
 // contract forms M11 / M2 / M25 (picking a Fee K Type fills an empty AF / FF
 // from its fee sheet job — read in the browser, like FeeSheetPicker).
@@ -28,9 +33,17 @@ export interface FeeKTypeRow {
   board: string;
   /** The fee sheet's Job that prices it. "" = not set. */
   feeSheetJob: string;
+  /** Scope of services: what the contract includes / leaves out, EN + ES. "" = nothing beyond the template's own text. */
+  services: string;
+  servicesEs: string;
+  excluded: string;
+  excludedEs: string;
 }
 
+export const SCOPE_FIELDS = ["services", "servicesEs", "excluded", "excludedEs"] as const;
+
 const MAX_LABEL = 120;
+const MAX_SCOPE = 1000;
 
 let configPath: string | null = null;
 
@@ -60,7 +73,7 @@ export function saveFeeKTypes(input: unknown): FeeKTypeRow[] {
   return clean;
 }
 
-const str = (v: unknown): string => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, MAX_LABEL) : "");
+const str = (v: unknown, max = MAX_LABEL): string => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
 const key = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
 /**
@@ -76,8 +89,12 @@ export function sanitizeFeeKTypes(input: unknown): FeeKTypeRow[] {
     const o = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
     const feeKType = typeof o.feeKType === "string" ? o.feeKType.trim().slice(0, MAX_LABEL) : "";
     if (!feeKType || seen.has(key(feeKType))) return [];
-    const row = { feeKType, spanish: str(o.spanish), board: str(o.board), feeSheetJob: str(o.feeSheetJob) };
-    if (!row.spanish && !row.board && !row.feeSheetJob) return [];
+    const row: FeeKTypeRow = {
+      feeKType, spanish: str(o.spanish), board: str(o.board), feeSheetJob: str(o.feeSheetJob),
+      services: str(o.services, MAX_SCOPE), servicesEs: str(o.servicesEs, MAX_SCOPE),
+      excluded: str(o.excluded, MAX_SCOPE), excludedEs: str(o.excludedEs, MAX_SCOPE),
+    };
+    if (!row.spanish && !row.board && !row.feeSheetJob && SCOPE_FIELDS.every((k) => !row[k])) return [];
     seen.add(key(feeKType));
     return [row];
   });
@@ -87,4 +104,33 @@ export function sanitizeFeeKTypes(input: unknown): FeeKTypeRow[] {
 export function feeKTypeLookup(rows: FeeKTypeRow[]): (feeKType: string) => FeeKTypeRow | undefined {
   const byKey = new Map(rows.map((r) => [key(r.feeKType), r]));
   return (t) => byKey.get(key(t));
+}
+
+/**
+ * The scope text for a Fee K's type(s), joined when it has several. From the
+ * saved table, else the draft (whose scope text was approved 2026-10-23) — so
+ * contracts get it before an admin first saves the table.
+ */
+export function scopeFor(
+  feeKTypes: string[],
+  rows: FeeKTypeRow[],
+): Pick<FeeKTypeRow, (typeof SCOPE_FIELDS)[number]> {
+  const find = feeKTypeLookup(rows);
+  const hits = feeKTypes.map(find).filter((r): r is FeeKTypeRow => !!r);
+  return Object.fromEntries(SCOPE_FIELDS.map((k) => [k, hits.map((r) => r[k]).filter(Boolean).join(" ")])) as Pick<FeeKTypeRow, (typeof SCOPE_FIELDS)[number]>;
+}
+
+/** A Fee K Type as a contract names it: Monday's "(c)" court marker and doubled spaces dropped. */
+export const contractTitle = (feeKType: string) => feeKType.replace(/\(c\)/gi, "").replace(/\s+/g, " ").trim();
+
+/**
+ * The matter a contract is for, from its Fee K Type(s), in English and Spanish
+ * ("I-130 - Petition for Alien Relative" / "Petición de familiar extranjero
+ * (I-130)"), several joined with " + ". A type with no Spanish name keeps its English one.
+ */
+export function contractTitles(feeKTypes: string[], rows: FeeKTypeRow[]): { en: string; es: string } {
+  const find = feeKTypeLookup(rows);
+  const en = feeKTypes.map(contractTitle).filter(Boolean);
+  const es = feeKTypes.map((t) => find(t)?.spanish || contractTitle(t)).filter(Boolean);
+  return { en: en.join(" + "), es: es.join(" + ") };
 }

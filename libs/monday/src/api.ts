@@ -1472,6 +1472,85 @@ export function timelineAlias(itemId: string): string {
 }
 
 /**
+ * `timeline_items_page` returns each entry's content as a plain-text preview of
+ * about 250 characters. Stored content at least this long that is not HTML may
+ * be such a preview, cut short; the full entry (HTML) only comes from
+ * `fetchTimelineItemContents`.
+ */
+export const TIMELINE_PREVIEW_LENGTH = 240;
+
+export function mayBeTimelinePreview(content: string | null | undefined): boolean {
+  const v = (content ?? "").trim();
+  return v.length >= TIMELINE_PREVIEW_LENGTH && !v.startsWith("<");
+}
+
+/**
+ * The full `content` of E&A entries, by timeline item id (HTML).
+ *
+ * `timeline_items_page` hands back a ~250-character plain-text PREVIEW of each
+ * entry's content; only `timeline_item(id:)` returns the whole thing. Verified
+ * live 2026-10-22: a 655-character consult note came back from the page as its
+ * first 250 characters, cut mid-sentence. Batched by alias, and two things
+ * quietly turn the answer back into previews (measured 2026-10-22, same ids):
+ * 13 or more aliases in one request, and selecting `id` beside `content`. So
+ * 12 per request, `content` only. Only HTML counts as full text; ids Monday no
+ * longer has, emails (Monday holds only their preview) and previews are left
+ * out of the map.
+ */
+export const TIMELINE_FULL_TEXT_BATCH = 12;
+
+export async function fetchTimelineItemContents(
+  ids: string[],
+  tokenOverride?: string,
+  chunk = TIMELINE_FULL_TEXT_BATCH,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const alias = (i: number) => `c${i}`;
+  for (let i = 0; i < ids.length; i += chunk) {
+    let batch = ids.slice(i, i + chunk);
+    // An entry deleted in Monday fails the WHOLE request ("Timeline item not
+    // found", NOT_FOUND, at its alias) rather than coming back null — seen in
+    // prod 2026-10-22. Drop the aliases it names and ask again for the rest.
+    while (batch.length) {
+      const fields = batch
+        .map((id, j) => `${alias(j)}: timeline_item(id: ${JSON.stringify(id)}) { content }`)
+        .join("\n");
+      let result: { data: Record<string, { content: string | null } | null> };
+      try {
+        result = await mondayRequest(`query { ${fields} }`, undefined, tokenOverride, TIMELINE_API_VERSION);
+      } catch (err) {
+        const missing = notFoundAliases(err);
+        if (!missing.size) throw err;
+        batch = batch.filter((_, j) => !missing.has(alias(j)));
+        continue;
+      }
+      batch.forEach((id, j) => {
+        const content = result.data?.[alias(j)]?.content;
+        if (typeof content === "string" && content.trim().startsWith("<")) map.set(id, content);
+      });
+      break;
+    }
+  }
+  return map;
+}
+
+/** The aliases a Monday error reports as NOT_FOUND (empty for any other error). */
+function notFoundAliases(err: unknown): Set<string> {
+  if (!(err instanceof MondayApiError)) return new Set();
+  const json = err.message.replace(/^Monday API errors: /, "");
+  try {
+    const errors = JSON.parse(json) as Array<{ path?: unknown[]; extensions?: { code?: string } }>;
+    return new Set(
+      errors
+        .filter((e) => e.extensions?.code === "NOT_FOUND" && typeof e.path?.[0] === "string")
+        .map((e) => e.path![0] as string),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+/**
  * Fetch the account's custom activity types as an id → name map. Used to label
  * E&A rows whose type is `custom` (e.g. "Consult note", "HEARING NOTES").
  */

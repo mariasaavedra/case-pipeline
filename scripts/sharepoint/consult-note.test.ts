@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveConsultNote, type TimelineNote } from "./consult-note.js";
+import { resolveConsultNote, mayBeCut, noteHtmlToText, type TimelineNote } from "./consult-note.js";
 
 const activity = (activityType: string, text: string, date: string, author = "Michael Sharma-Crawford"): TimelineNote =>
   ({ activityType, text, date, author });
@@ -132,10 +132,45 @@ describe("resolveConsultNote — date bounds", () => {
     expect(r!.text).toBe("same day");
   });
 
+  it("ignores a Casenote written before the consult (reception's intake, a payment)", () => {
+    expect(resolveConsultNote({
+      timeline: [activity("Casenote", "PAID, POC is a friend", "2026-03-03", "Miguel Vence")],
+      consultDate: CONSULT_DATE,
+    })).toBeNull();
+  });
+
+  it("takes the later of two same-day entries — the note written after the meeting", () => {
+    const r = resolveConsultNote({
+      timeline: [
+        activity("Casenote", "Your upcoming Master hearing is on…", CONSULT_DATE, "Fernando Ayala"),
+        activity("Casenote", "Met with mom of three", CONSULT_DATE, "Caitlin Riffer"),
+      ],
+      consultDate: CONSULT_DATE,
+    });
+    expect(r!.text).toBe("Met with mom of three");
+  });
+
   it("ignores an undated entry rather than assuming it belongs", () => {
     expect(resolveConsultNote({
       timeline: [{ activityType: "Consult note", text: "x", author: null, date: null }],
       consultDate: CONSULT_DATE,
     })).toBeNull();
+  });
+});
+
+describe("Monday's cut-short E&A previews", () => {
+  it("flags long plain text as possibly cut, never HTML or short text", () => {
+    expect(mayBeCut("x".repeat(250))).toBe(true);
+    expect(mayBeCut("short note")).toBe(false);
+    expect(mayBeCut(`<div>${"x".repeat(300)}</div>`)).toBe(false);
+    expect(mayBeCut(null)).toBe(false);
+  });
+
+  it("turns a full entry's HTML into text with its lines kept", () => {
+    const html = "<div>Charged with trespassing&nbsp;not an issue</div><div>OPT &amp; CPT</div>" +
+      "<div><br></div><div>lots of questions for pub defender</div><div><br></div>";
+    expect(noteHtmlToText(html)).toBe(
+      "Charged with trespassing not an issue\nOPT & CPT\n\nlots of questions for pub defender",
+    );
   });
 });

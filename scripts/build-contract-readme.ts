@@ -12,7 +12,7 @@
 
 import fs from "node:fs";
 import PizZip from "pizzip";
-import { CONTRACT_FIELDS } from "../apps/web/src/lib/contract-fill";
+import { CONTRACT_FIELDS, PERSON_FIELDS } from "../apps/web/src/lib/contract-fill";
 
 const out = process.argv[2];
 if (!out) {
@@ -42,6 +42,19 @@ const body = [
   row([cell(run("Type this", { bold: true }), 3000), cell(run("What it is", { bold: true }), 3800), cell(run("Prints like", { bold: true }), 2800)], true),
   ...CONTRACT_FIELDS.map((f) => row([cell(run(`{{${f.tag}}}`, { mono: true }), 3000), cell(run(f.label), 3800), cell(run(f.example), 2800)])),
   "</w:tbl>",
+  para(""),
+  para(run("Several people on one contract", { bold: true, size: 28 })),
+  para(run("For a contract that covers several people (one fee; the client signs and pays, and may not be one of them \u2014 e.g. a relative signing for someone detained), the dashboard has a \u201cContract is for more than one person\u201d box; ticked, staff list everyone the contract covers. Put the lines to repeat between "), run("{{#people}}", { mono: true }), run(" and "), run("{{/people}}", { mono: true }), run(" (each on its own line); they print once per person. Wrap the whole block in "), run("{{#has_people}}", { mono: true }), run(" \u2026 "), run("{{/has_people}}", { mono: true }), run(" so a one-person contract prints without it:")),
+  para(run("{{#has_people}}", { mono: true })),
+  para(run("Persons represented / Personas representadas:", { mono: true })),
+  para(run("{{#people}}", { mono: true })),
+  para(run("{{person_number}}. {{person_name}}{{#person_a_number}}, A# {{person_a_number}}{{/person_a_number}}", { mono: true })),
+  para(run("{{/people}}", { mono: true })),
+  para(run("{{/has_people}}", { mono: true })),
+  para(run("The "), run("{{#person_a_number}}", { mono: true }), run(" \u2026 "), run("{{/person_a_number}}", { mono: true }), run(" around the A# prints it only for people who have one.")),
+  para(run("Inside the loop:")),
+  ...PERSON_FIELDS.map((f) => para(run(`{{${f.tag}}}`, { mono: true }), run(` \u2014 ${f.label.replace(/ \(inside the loop\)/, "")}, e.g. ${f.example}`))),
+  para(run("To name everyone in a sentence instead, use "), run("{{people_names}}", { mono: true }), run(" (in the table above).")),
   para(""),
   para(run("Need a field that isn't listed? Ask for it to be added to the dashboard first — an unknown field blocks the template.", { size: 20 })),
 ].join("");

@@ -6,7 +6,8 @@
 // this server. The API only:
 //   GET  /api/contracts/:localId/document-form — what Monday knows, to pre-fill
 //        the form: client, e-mail, address, attorney, AF / FF / PF, and the
-//        client's next hearing (type + date) from their open court case.
+//        client's next hearing (type + date) from their open court case, and
+//        the scope of services for its Fee K Type(s) (Fee K Types table).
 //   POST /api/contracts/:localId/document-generated — audit entry for a
 //        generated contract (template name + fees; no client details). M22
 //        calls it on Send for signature and on each Download, not on Preview.
@@ -30,8 +31,10 @@ import { feeKCaseTypeSql, getBoardColumnsFor } from "@case-pipeline/query";
 import { usersDb } from "../db/users-db.js";
 import { FEE_K_ASSISTANT, makeMondayUserByLogin, peopleValue } from "../contract-info.js";
 import { hearingKindOf } from "@case-pipeline/query";
-import { letterAddress } from "../documents/us-address.js";
+import { letterAddress, oneLineAddress } from "../documents/us-address.js";
 import { loadDocumentSettings } from "../documents/document-settings.js";
+import { contractTitles, feeKTypesSaved, loadFeeKTypes, scopeFor, type FeeKTypeRow } from "../fee-k-types.js";
+import { DRAFT_FEE_K_TYPES } from "../fee-k-types-draft.js";
 import type { AttorneyInfo } from "../documents/document-settings.js";
 
 interface ContractDocRow {
@@ -52,7 +55,7 @@ interface ContractDocRow {
 export interface ContractPrefill {
   clientName: string;
   email: string;
-  /** One line, as Monday keeps it. */
+  /** One line, tidied ("Street, City, ST zip"; as typed when it can't be split). */
   address: string;
   /** The same address split for a letter: street line + "City, ST zip" ("" when it can't tell). */
   street: string;
@@ -61,6 +64,9 @@ export interface ContractPrefill {
   /** From Settings → Documents, matched by name; "" when unknown. For Adobe Sign. */
   attorneyEmail: string;
   contractFor: string[];
+  /** The matter for the contract from the Fee K Type(s): clean English title, and Spanish. */
+  formName: string;
+  formNameEs: string;
   attorneyFee: number | null;
   filingFee: number | null;
   processingFee: number | null;
@@ -68,6 +74,8 @@ export interface ContractPrefill {
   hearingType: string;
   /** ISO date of the next hearing; "" when none. */
   hearingDate: string;
+  /** Scope of services for the Fee K's type(s) (Fee K Types table), "" each when none. */
+  scope: Pick<FeeKTypeRow, "services" | "servicesEs" | "excluded" | "excludedEs">;
 }
 
 const amount = (raw: unknown): number | null => {
@@ -104,22 +112,27 @@ export function contractPrefill(
   row: ContractDocRow,
   hearing: { type: string | null; date: string | null } | null,
   attorneys: Pick<AttorneyInfo, "givenName" | "familyName" | "email">[] = [],
+  feeKTypes: FeeKTypeRow[] = [],
 ): ContractPrefill {
   // First listed attorney; a people label can read "A, B".
+  const titles = contractTitles(labels(row.contractFor), feeKTypes);
   const attorneyName = (row.attorney ?? "").split(",").map((s) => s.trim()).find((s) => s && !s.includes("@")) ?? "";
   return {
     clientName: (row.clientName ?? row.itemName).trim(),
     email: row.email?.trim() ?? "",
-    address: row.address?.trim() ?? "",
+    address: oneLineAddress(row.address),
     ...letterAddress(row.address),
     attorneyName,
     attorneyEmail: attorneyEmailFor(attorneyName, attorneys),
     contractFor: labels(row.contractFor),
+    formName: titles.en,
+    formNameEs: titles.es,
     attorneyFee: amount(row.af),
     filingFee: amount(row.ff),
     processingFee: amount(row.pf),
     hearingType: contractHearingType(hearing?.type ?? null),
     hearingDate: hearing?.date ?? "",
+    scope: scopeFor(labels(row.contractFor), feeKTypes),
   };
 }
 
@@ -166,7 +179,12 @@ export function registerContractDocumentRoutes(
   const load = (localId: string) =>
     db.prepare(`
       SELECT c.monday_item_id, c.name AS itemName, p.local_id AS profileLocalId,
-             p.name AS clientName, p.email, p.address,
+             p.name AS clientName, p.email,
+             -- The profile's Address, else its Mailing address, else the Fee K's own
+             -- copy (a mirror) — the same order P14's "missing Address" flag uses.
+             COALESCE(NULLIF(TRIM(p.address), ''),
+                      NULLIF(TRIM(json_extract(p.raw_column_values, '$.mailing_address')), ''),
+                      json_extract(c.raw_column_values, '$.address')) AS address,
              json_extract(c.raw_column_values, '$.attorney.label')      AS attorney,
              ${feeKCaseTypeSql()} AS contractFor,
              json_extract(c.raw_column_values, '$.af')                  AS af,
@@ -193,7 +211,9 @@ export function registerContractDocumentRoutes(
            ORDER BY next_date LIMIT 1
         `).get(row.profileLocalId, today) as { type: string | null; date: string | null } | undefined) ?? null
       : null;
-    res.json({ data: contractPrefill(row, hearing, loadDocumentSettings().attorneys) });
+    // The saved table, else the draft: its scope text is approved (2026-10-23).
+    const feeKTypes = feeKTypesSaved() ? loadFeeKTypes() : DRAFT_FEE_K_TYPES;
+    res.json({ data: contractPrefill(row, hearing, loadDocumentSettings().attorneys, feeKTypes) });
   });
 
   app.post("/api/contracts/:localId/document-generated", requireAuth, async (req, res) => {

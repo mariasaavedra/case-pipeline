@@ -2,14 +2,14 @@
 // API Client — Typed fetch wrappers
 // =============================================================================
 
-import type { SearchResult, ClientCaseSummary, ProfileSummary, ClientUpdate, KpiCard, KpiCardDetail, TypedSearchResult, SearchType, BoardStatusOptions, BoardColumns } from "@case-pipeline/query/types";
+import type { SearchResult, ClientCaseSummary, ProfileSummary, ClientUpdate, Detention, KpiCard, KpiCardDetail, TypedSearchResult, SearchType, BoardStatusOptions, BoardColumns } from "@case-pipeline/query/types";
 import type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
 import type { AppointmentsResult } from "@case-pipeline/query/appointments";
 import type { FilteredProfileResult, FilterOptions, ProfileFilterOptions } from "@case-pipeline/query/client";
 import type { AlertsResult } from "@case-pipeline/query/types";
 import type { ActiveCasesResult, ActiveCase, MyCasesData, PreschedulingResult, PendingContractsResult, ContractStep, CourtCasesResult, CalendarResult, CalendarCategory, CallLogEntry, CallLogIntakeMatch, CallLogListResult, MailScanResult, MailDocumentDetail, MatchedOpenForm, MailWriteBackPlan, FieldEdits } from "@case-pipeline/query";
 
-export type { SearchResult, ClientCaseSummary, ProfileSummary, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
+export type { SearchResult, ClientCaseSummary, ProfileSummary, Detention, DetentionSource, ContractSummary, ContractLinkedCase, ContractTotals, ClientContracts, ContractStatusKey, StatusTone, BoardItemSummary, ClientUpdate, ClientUpdateAttachment, BoardStatusOptions, StatusColumnOption, BoardColumns, BoardColumn, KpiCard, KpiItem, KpiCardDetail, KpiDetailItem, KpiColumnOption, TypedSearchResult, SearchType } from "@case-pipeline/query/types";
 export type { AlertsResult, AlertGroup, AlertItem, AlertSeverity } from "@case-pipeline/query/types";
 export type { RelationshipWithDetails } from "@case-pipeline/query/relationships";
 export type { AppointmentsResult, AppointmentEntry, AppointmentSnapshot } from "@case-pipeline/query/appointments";
@@ -650,11 +650,16 @@ export interface ContractPrefill {
   /** From Settings → Documents; "" when the attorney isn't listed there. */
   attorneyEmail: string;
   contractFor: string[];
+  /** The matter from the Fee K Type(s): clean English title + Spanish. */
+  formName?: string;
+  formNameEs?: string;
   attorneyFee: number | null;
   filingFee: number | null;
   processingFee: number | null;
   hearingType: string;
   hearingDate: string;
+  /** Scope of services for the Fee K's type(s); "" each when none. */
+  scope?: { services: string; servicesEs: string; excluded: string; excludedEs: string };
 }
 
 export async function fetchContractPrefill(localId: string): Promise<ContractPrefill> {
@@ -826,6 +831,22 @@ export function sendSms(input: SendSmsInput): Promise<SendSmsResult> {
     body: JSON.stringify(input),
   });
 }
+/** Anyone: add a template (the key is made from the name). */
+export function createSmsTemplate(t: Omit<SmsTemplate, "key">): Promise<SmsTemplate> {
+  return apiFetch<SmsTemplate>("/api/sms/templates", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(t),
+  });
+}
+/** Anyone: edit a template's name and texts. */
+export function editSmsTemplate(key: string, t: Omit<SmsTemplate, "key">): Promise<SmsTemplate> {
+  return apiFetch<SmsTemplate>(`/api/sms/templates/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(t),
+  });
+}
 export function updateSmsTemplates(templates: SmsTemplate[]): Promise<SmsTemplate[]> {
   return apiFetch<SmsTemplate[]>("/api/settings/sms-templates", {
     method: "PUT",
@@ -843,6 +864,11 @@ export interface FeeKTypeRow {
   board: string;
   /** A fee sheet Job; "" = not set. */
   feeSheetJob: string;
+  /** Scope of services the contract prints (EN + ES); "" = none. */
+  services: string;
+  servicesEs: string;
+  excluded: string;
+  excludedEs: string;
 }
 export interface FeeKTypesTable {
   rows: FeeKTypeRow[];
@@ -1789,8 +1815,10 @@ export interface ReceptionConsult {
   } | null;
   /** The folder name the consult sweep would use, or why the row's names can't build one. */
   folderName: { ok: true; folder: string; initial: string } | { ok: false; detail: string };
-  /** Det. Facility on the client's open court case — pre-fills "Detained appt". */
+  /** Where the client is held, when known (Det. Facility, else read off a name) — pre-fills "Detained appt". */
   detainedAt: string | null;
+  /** Detained by the shared rule (libs/query detention.ts); null when not. */
+  detention: Detention | null;
   /** The Google Drive folder the client was sent to upload documents to, if known. */
   driveFolder: string | null;
   /** Other consults for the same client on the same day (a likely double booking). */
@@ -1827,6 +1855,7 @@ export interface MyDayEntry {
   clientWrote: string | null;
   description: string | null;
   detainedAt: string | null;
+  detention: Detention | null;
   sameDayCount: number;
   prep: MyDayPrep | null;
   profile: ProfileSummary | null;

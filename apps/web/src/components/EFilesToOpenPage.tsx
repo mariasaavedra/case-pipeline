@@ -13,7 +13,7 @@ import { LEDGER_URL, checkLedgerTab, followingCaseNo, maxCaseNo, type LedgerChec
 // P21 E-Files to open
 // =============================================================================
 // The hire protocol's queue: paid Fee Ks (Contract Stage "Paid needs action" or
-// "Open E FILE") waiting for the person who opens E-Files. Each row opens M30,
+// "Open E FILE") waiting for the person who opens E-Files. Each row opens M31,
 // the plan — path, case number, folder, Monday changes, ledger row — checked
 // live against the ledger and the consult folder in SharePoint.
 // Phase 1: shows the plan only, writes nothing. See docs/features/consult-to-efile.md.
@@ -88,7 +88,7 @@ function Row({ item, onOpen }: { item: EFileToOpen; onOpen: () => void }) {
 }
 
 // =============================================================================
-// M30 — the plan, checked live in SharePoint
+// M31 — the plan, checked live in SharePoint
 // =============================================================================
 
 type Live<T> = { state: "loading" } | { state: "ok"; value: T } | { state: "consent" } | { state: "error"; message: string };
@@ -186,7 +186,7 @@ function PlanModal({ item, highestOnMonday, onClose }: { item: EFileToOpen; high
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent code="M30" className="gap-0 p-0 sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
+      <DialogContent code="M31" className="gap-0 p-0 sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
         <DialogHeader className="gap-0.5 px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Open E-File — {item.clientName}</DialogTitle>
           <DialogDescription>{plan.pathReason}. What it would do, nothing is changed yet.</DialogDescription>

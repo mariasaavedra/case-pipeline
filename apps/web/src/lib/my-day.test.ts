@@ -61,10 +61,13 @@ describe("P4 My Day rules", () => {
 
   it("knows a detainee consult from the prep, the status, or the court case", () => {
     const prep = (apptType: string) => ({ apptType }) as MyDayEntry["prep"];
-    expect(detaineeReason({ prep: prep("Detained appt — Chase Co. (KS)"), status: null, detainedAt: null })).toBe("Detained at Chase Co. (KS)");
-    expect(detaineeReason({ prep: null, status: "Today's consult (detainee)", detainedAt: null })).toBe("Detainee consult");
-    expect(detaineeReason({ prep: null, status: null, detainedAt: "Butler Co." })).toBe("Detained at Butler Co.");
-    expect(detaineeReason({ prep: prep("1st time"), status: "Upcoming", detainedAt: null })).toBeNull();
+    expect(detaineeReason({ prep: prep("Detained appt — Chase Co. (KS)"), status: null, detainedAt: null, detention: null })).toBe("Detained at Chase Co. (KS)");
+    expect(detaineeReason({ prep: null, status: "Today's consult (detainee)", detainedAt: null, detention: null })).toBe("Detainee consult");
+    expect(detaineeReason({ prep: null, status: null, detainedAt: "Butler Co.", detention: null })).toBe("Detained at Butler Co.");
+    expect(detaineeReason({ prep: prep("1st time"), status: "Upcoming", detainedAt: null, detention: null })).toBeNull();
+    // The wider rule: a jail intake or a name, with or without a place.
+    expect(detaineeReason({ prep: null, status: "Upcoming", detainedAt: null, detention: { at: null, source: "intake" } })).toBe("Detained");
+    expect(detaineeReason({ prep: null, status: "Upcoming", detainedAt: "CoreCivic", detention: { at: "CoreCivic", source: "name" } })).toBe("Detained at CoreCivic");
   });
 
   it("badges a picked document by its extension", () => {

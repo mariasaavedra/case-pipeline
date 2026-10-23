@@ -40,7 +40,7 @@ import { usersDb } from "../db/users-db.js";
 import { normName, staffForUser } from "../staff/roster.js";
 import { getAppointments, getBoardColumnsFor } from "@case-pipeline/query";
 import { caseTypeColumn, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
-import type { ClientCaseSummary, ClientUpdate, ProfileSummary } from "@case-pipeline/query";
+import type { ClientCaseSummary, ClientUpdate, Detention, ProfileSummary } from "@case-pipeline/query";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { FIRM_TIMEZONE } from "../firm.js";
 import { loadAttorneyBoards, type AttorneyBoard } from "../attorney-boards.js";
@@ -127,6 +127,8 @@ export interface MyDayEntry {
   /** The rest of the Description: reception's part, or all of it when not from Calendly. */
   description: string | null;
   detainedAt: string | null;
+  /** Detained by the shared rule (libs/query detention.ts). */
+  detention: Detention | null;
   /** Other consults for the same client that day (a likely double booking). */
   sameDayCount: number;
   prep: MyDayPrep | null;
@@ -212,6 +214,7 @@ export function getMyDay(db: DatabaseInstance, boardKey: string, date: string, b
       clientWrote: c.fromCalendly ? desc.client || null : null,
       description: (c.fromCalendly ? desc.reception : desc.client) || null,
       detainedAt: c.detainedAt,
+      detention: c.detention,
       sameDayCount: c.sameDayCount,
       prep,
       profile: e?.profile ?? null,

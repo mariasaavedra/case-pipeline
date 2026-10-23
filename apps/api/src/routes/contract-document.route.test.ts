@@ -116,3 +116,42 @@ describe("Fee K assistant auto-assign", () => {
     expect(localAssistant()).toBe("Ana Reyes");
   });
 });
+
+describe("contract pre-fill: the client's address", () => {
+  const prefillAddress = async () => {
+    const res = await fetch(`${base}/api/contracts/c1/document-form`);
+    return ((await res.json()) as { data: { address: string; street: string; cityStateZip: string } }).data;
+  };
+  const setProfile = (address: string | null, mailing: string | null) =>
+    db.prepare("UPDATE profiles SET address = ?, raw_column_values = ? WHERE local_id = 'p1'")
+      .run(address, JSON.stringify(mailing ? { mailing_address: mailing } : {}));
+
+  it("takes the profile's Address, else its Mailing address, else the Fee K's copy", async () => {
+    db.prepare(
+      `INSERT INTO contracts (batch_id, local_id, monday_item_id, profile_local_id, name, raw_column_values) VALUES (1, 'c1', '555', 'p1', 'Fee K', ?)`,
+    ).run(JSON.stringify({ address: "9 Fee K Rd, Olathe, KS 66061" }));
+
+    setProfile("1 Main St, Topeka, KS 66603", "2 Mail Ave, Lawrence, KS 66044");
+    expect(await prefillAddress()).toMatchObject({ address: "1 Main St, Topeka, KS 66603", street: "1 Main St", cityStateZip: "Topeka, KS 66603" });
+
+    setProfile(" ", "554 Oakland AveKansas City, KS 66101");
+    expect(await prefillAddress()).toMatchObject({ address: "554 Oakland Ave, Kansas City, KS 66101", street: "554 Oakland Ave", cityStateZip: "Kansas City, KS 66101" });
+
+    setProfile(null, null);
+    expect((await prefillAddress()).cityStateZip).toBe("Olathe, KS 66061");
+  });
+});
+
+describe("contract pre-fill: scope of services", () => {
+  it("comes from the Fee K Type (the draft until an admin saves the table)", async () => {
+    db.prepare(
+      `INSERT INTO contracts (batch_id, local_id, monday_item_id, profile_local_id, name, raw_column_values) VALUES (1, 'c1', '555', 'p1', 'Fee K', ?)`,
+    ).run(JSON.stringify({ fee_k_type: { labels: ["N-400 - Naturalization"] } }));
+    const res = await fetch(`${base}/api/contracts/c1/document-form`);
+    const { data } = (await res.json()) as { data: { contractFor: string[]; scope: Record<string, string> } };
+    expect(data.contractFor).toEqual(["N-400 - Naturalization"]);
+    expect(data.scope.services).toBe("Prepare and file Form N-400.");
+    expect(data.scope.excludedEs).toMatch(/N-336/);
+    expect(data).toMatchObject({ formName: "N-400 - Naturalization", formNameEs: "Ciudadanía / naturalización (N-400)" });
+  });
+});

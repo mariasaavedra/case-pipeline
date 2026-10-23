@@ -24,7 +24,7 @@
 import Database from "better-sqlite3";
 import { countMondayCalls } from "./lib/monday-usage.js";
 import fs from "node:fs";
-import { setApiToken, mondayRequest } from "@case-pipeline/monday";
+import { setApiToken, mondayRequest, fetchTimelineItemContents } from "@case-pipeline/monday";
 import { graphAuthFromEnv } from "./sharepoint/auth.js";
 import {
   decide, perform, ensureConsultDoc, resolveLinkedFolder, isDocSite,
@@ -33,7 +33,7 @@ import {
 import { consultOutcome, consultHasTakenPlace } from "./sharepoint/consult-status.js";
 import { cachedAccount } from "./sharepoint/auth.js";
 import { renderDocxTemplate } from "@case-pipeline/template";
-import type { TimelineNote } from "./sharepoint/consult-note.js";
+import { mayBeCut, noteHtmlToText, CONSULT_NOTE_WINDOW_DAYS, type TimelineNote } from "./sharepoint/consult-note.js";
 
 import { listAppointmentBoardKeys } from "@case-pipeline/query/appointment-boards";
 const PROFILES_BOARD_ID = "8025265377";
@@ -157,17 +157,21 @@ function loadTimelineNotes(
     .prepare(`
       SELECT profile_local_id AS pid, activity_type_name AS activityType,
              text_body AS text, author_name AS author,
-             substr(created_at_source, 1, 10) AS date
+             substr(created_at_source, 1, 10) AS date,
+             monday_timeline_id AS id, body_html AS raw
       FROM client_updates
       WHERE profile_local_id IN (${ids})
         AND activity_type_name IN (${types})
         AND TRIM(COALESCE(text_body, '')) <> ''
+      ORDER BY created_at_source
     `)
-    .all(...profileIds, ...NOTE_ACTIVITY_TYPES) as Array<TimelineNote & { pid: string }>;
+    .all(...profileIds, ...NOTE_ACTIVITY_TYPES) as Array<TimelineNote & { pid: string; raw: string | null }>;
 
-  for (const { pid, ...note } of rows) {
+  for (const { pid, raw, ...note } of rows) {
     const list = byProfile.get(pid) ?? [];
-    list.push(note);
+    // Stored in full (HTML) since the sync fetches it: read with its lines kept.
+    const full = raw?.trim().startsWith("<") ? noteHtmlToText(raw) : "";
+    list.push({ ...note, text: full || note.text, cut: !!note.id && mayBeCut(raw) });
     byProfile.set(pid, list);
   }
   return byProfile;
@@ -178,6 +182,51 @@ let templateBuffer: Buffer | null = null;
 function consultTemplate(): Buffer {
   templateBuffer ??= fs.readFileSync("templates/consult-summary.docx");
   return templateBuffer;
+}
+
+/**
+ * Replace cut-short notes near each consult with their full text from Monday.
+ *
+ * The E&A sync stores Monday's 250-character preview of every entry, so a long
+ * consult note reached the summary cut off mid-sentence. Only notes that could
+ * be picked for a consult (within the Consult note window of its date) are
+ * fetched, in a few batched calls per sweep. A fetch failure leaves the preview
+ * in place rather than holding up every document.
+ */
+async function completeCutNotes(
+  notesByProfile: Map<string, TimelineNote[]>,
+  candidates: SweepCandidate[],
+): Promise<number> {
+  const wanted = new Map<string, TimelineNote[]>();
+  for (const c of candidates) {
+    if (!c.consultDate) continue;
+    const consult = Date.parse(c.consultDate);
+    for (const note of notesByProfile.get(c.profileLocalId) ?? []) {
+      if (!note.cut || !note.id || !note.date) continue;
+      if (Math.abs(Date.parse(note.date) - consult) / 86_400_000 > CONSULT_NOTE_WINDOW_DAYS) continue;
+      wanted.set(note.id, [...(wanted.get(note.id) ?? []), note]);
+    }
+  }
+  if (!wanted.size) return 0;
+
+  let full: Map<string, string>;
+  try {
+    full = await fetchTimelineItemContents([...wanted.keys()]);
+  } catch (err) {
+    console.warn(`[sweep] full note text unavailable, using previews: ${err instanceof Error ? err.message : err}`);
+    return 0;
+  }
+  let completed = 0;
+  for (const [id, notes] of wanted) {
+    const text = full.has(id) ? noteHtmlToText(full.get(id)!) : "";
+    if (!text) continue;
+    for (const note of notes) {
+      if (text.length > note.text.length) completed++;
+      note.text = text;
+      note.cut = false;
+    }
+  }
+  return completed;
 }
 
 /**
@@ -258,6 +307,10 @@ async function main() {
     : `[sweep] ${candidates.length} Calendly consults in the last ${days} days`);
   if (one && !candidates.length) process.exitCode = 1;
   console.log(`[sweep] ${apply ? "APPLY" : "dry run"} — ${auth.describe()}`);
+  if (apply) {
+    const completed = await completeCutNotes(notesByProfile, candidates.filter(happened));
+    if (completed) console.log(`[sweep] ${completed} cut-short note(s) completed from Monday`);
+  }
 
   const tally = { linked: 0, created: 0, skipped: 0, failed: 0, docs: 0 };
   const receipt: string[] = ["action,profile,monday_item_id,path,url,detail"];

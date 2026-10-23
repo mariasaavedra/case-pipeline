@@ -160,6 +160,18 @@ describe("decide — what the sweep will do", () => {
     const d = await decide(auth, candidate({ firstName: "RAKHIMOV,", lastName: "SHUKHRAT" }));
     expect(d.action.kind).toBe("skip");
   });
+
+  it("names a jail-intake profile from its title when First / Last are empty", async () => {
+    stubGraph(() => false);
+    const d = await decide(auth, candidate({ profileName: "DETAINED Milton VENTURA [A221-455-213]", firstName: null, lastName: null }));
+    expect(d.action).toMatchObject({ kind: "create", path: "2026 Consults/V/VENTURA, Milton" });
+  });
+
+  it("still skips a title that isn't Given SURNAME", async () => {
+    stubGraph(() => false);
+    const d = await decide(auth, candidate({ profileName: "Mogtabi Azrag", firstName: null, lastName: null }));
+    expect(d.action).toMatchObject({ kind: "skip", reason: expect.stringContaining("name needs a human") });
+  });
 });
 
 describe("perform", () => {
@@ -235,7 +247,7 @@ describe("ensureConsultDoc", () => {
     const puts = stubFiles(null);
     const r = await ensureConsultDoc(auth, VENTURA, sources, render,
       { writeDocument: true, account: ME });
-    expect(r).toMatchObject({ kind: "written", awaitingNote: false });
+    expect(r).toMatchObject({ kind: "written" });
     expect(puts).toHaveLength(1);
     // The upload addresses its parent by id, so the subfolder shows up in the
     // lookups that preceded it rather than in the PUT url.
@@ -243,12 +255,21 @@ describe("ensureConsultDoc", () => {
     expect(puts[0]).toContain("conflictBehavior=fail");
   });
 
-  it("does not rewrite while the note is still missing", async () => {
+  it("writes nothing before there is a note, even once the consult has happened", async () => {
+    const puts = stubFiles(null);
+    const r = await ensureConsultDoc(auth, VENTURA, { ...sources, profile: {} }, render,
+      { writeDocument: true, account: ME });
+    expect(r).toBeNull();
+    expect(puts).toEqual([]);
+    expect(seen.some((u) => u.includes(CONSULT_SUBFOLDER))).toBe(true);
+  });
+
+  it("does not rewrite an old placeholder while the note is still missing", async () => {
     const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
       lastModifiedBy: { user: { email: ME } } });
     const r = await ensureConsultDoc(auth, VENTURA, { ...sources, profile: {} }, render,
       { writeDocument: true, account: ME });
-    expect(r).toMatchObject({ kind: "unchanged" });
+    expect(r).toBeNull();
     expect(puts).toEqual([]);
   });
 
@@ -264,6 +285,26 @@ describe("ensureConsultDoc", () => {
     const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
       lastModifiedBy: { user: { email: ME } } }, [], docx("seen 30 min, wants I-589"));
     const r = await ensureConsultDoc(auth, VENTURA, sources, render, { writeDocument: true, account: ME });
+    expect(r).toMatchObject({ kind: "unchanged" });
+    expect(puts).toEqual([]);
+  });
+
+  it("replaces its own document that holds the note cut short", async () => {
+    const note = "Charged with trespassing, not an issue. ".repeat(10).trim();
+    const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
+      lastModifiedBy: { user: { email: ME } } }, [], docx(note.slice(0, 250)));
+    const r = await ensureConsultDoc(auth, VENTURA, { ...sources, profile: { consultation_notes: note } }, render,
+      { writeDocument: true, account: ME });
+    expect(r).toMatchObject({ kind: "replaced" });
+    expect(puts[0]).toContain("conflictBehavior=replace");
+  });
+
+  it("leaves a document holding the whole note alone, line breaks or not", async () => {
+    const note = "Charged with trespassing, not an issue.\n".repeat(10).trim();
+    const puts = stubFiles({ id: "f1", name: "d.docx", webUrl: "w", file: {},
+      lastModifiedBy: { user: { email: ME } } }, [], docx(note.replace(/\n/g, "</w:t><w:br/><w:t>")));
+    const r = await ensureConsultDoc(auth, VENTURA, { ...sources, profile: { consultation_notes: note } }, render,
+      { writeDocument: true, account: ME });
     expect(r).toMatchObject({ kind: "unchanged" });
     expect(puts).toEqual([]);
   });

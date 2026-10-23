@@ -37,6 +37,37 @@ export interface TimelineNote {
   author: string | null;
   /** ISO date the entry was created, for the proximity check. */
   date: string | null;
+  /** Monday's timeline item id, to fetch the full text of a cut entry. */
+  id?: string | null;
+  /** True when `text` may be Monday's 250-character preview (`mayBeCut`). */
+  cut?: boolean;
+}
+
+/** True when `text` may be Monday's 250-character preview, cut short. */
+export { mayBeTimelinePreview as mayBeCut } from "@case-pipeline/monday";
+
+/**
+ * A full E&A entry's HTML as plain text, keeping its lines: attorneys write
+ * consult notes as one thought per line, and a note run together into one
+ * paragraph is much harder to read.
+ */
+export function noteHtmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(div|p|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\uFEFF/g, "")
+    .split("\n")
+    .map((line) => line.replace(/[ \t\u00a0]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export interface ResolvedNote {
@@ -89,21 +120,27 @@ function shortDate(iso: string | null): string {
  * Pick the timeline entry of a given type that sits closest to the consult
  * date, within `windowDays`. Closest rather than first: a client with two
  * consultations has entries for both, and the nearer one is the right one.
+ *
+ * On a tie (dates are days, so every same-day entry ties) the LATER entry in
+ * `timeline` wins — callers pass it oldest first, and the note written after
+ * the meeting comes after the morning's hearing reminder or intake note.
  */
 function nearestActivity(
   timeline: TimelineNote[],
   activityType: string,
   consultDate: string,
   windowDays: number,
+  notBefore = false,
 ): TimelineNote | null {
   let best: { note: TimelineNote; distance: number } | null = null;
   for (const note of timeline) {
     if (note.activityType.toLowerCase() !== activityType.toLowerCase()) continue;
     if (!clean(note.text)) continue;
     if (!note.date) continue;
+    if (notBefore && note.date.slice(0, 10) < consultDate.slice(0, 10)) continue;
     const distance = daysBetween(note.date, consultDate);
     if (distance === null || distance > windowDays) continue;
-    if (!best || distance < best.distance) best = { note, distance };
+    if (!best || distance <= best.distance) best = { note, distance };
   }
   return best?.note ?? null;
 }
@@ -149,9 +186,11 @@ export function resolveConsultNote(input: NoteInput): ResolvedNote | null {
     };
   }
 
-  // 4. A Casenote, only if it sits right on the consultation.
+  // 4. A Casenote, only if it sits right on the consultation — and not before
+  //    it: a Casenote from the days before is reception's intake or a payment,
+  //    never what the attorney said in a meeting that had not happened yet.
   const casenote = consultDate
-    ? nearestActivity(timeline, "Casenote", consultDate, CASENOTE_WINDOW_DAYS)
+    ? nearestActivity(timeline, "Casenote", consultDate, CASENOTE_WINDOW_DAYS, true)
     : null;
   if (casenote) {
     return {

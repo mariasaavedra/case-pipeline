@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest";
 import PizZip from "pizzip";
 import {
+  peopleRows, fromFeeKTypes, contractTitle,
   contractValues, contractProblems, contractDocumentName, motionEs, CONTRACT_FIELDS, inspectContractTemplate, fillContractTemplate, surchargeFor, unhighlightTags,
   type ContractInput,
 } from "./contract-fill";
@@ -20,14 +21,30 @@ const INPUT: ContractInput = {
   attorneyFee: 5000, filingFee: 675, postageFee: null, surcharge: null, interviewFee: null,
   bioFee: null, motionName: "", motionNameEs: "", motionFee: null, hearingFee: null,
   dueDate: "", signByDate: "", attorneyName: "Jane Attorney", creatorInitials: "RC",
+  multiplePeople: false, people: [],
+  trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
+  services: "", servicesEs: "", servicesExcluded: "", servicesExcludedEs: "",
+  formNameEs: "", feeKTypes: [],
 };
 
-/** A one-paragraph .docx whose text is `text`. */
-function docx(text: string): ArrayBuffer {
+// The signer (Ana) is a relative; the contract is for three detained people.
+const FAMILY: ContractInput = {
+  ...INPUT, multiplePeople: true,
+  people: [
+    { name: "Pedro LOPEZ", aNumber: "111-111-111", dob: "1990-03-04" },
+    { name: "Juan LOPEZ", aNumber: "222-222-222", dob: "" },
+    { name: "  ", aNumber: "", dob: "" },
+    { name: "Maria LOPEZ", aNumber: "", dob: "2015-01-02" },
+  ],
+};
+
+/** A one-paragraph .docx whose text is `text` (or one paragraph per string). */
+function docx(text: string | string[]): ArrayBuffer {
+  const paras = (Array.isArray(text) ? text : [text]).map((t) => `<w:p><w:r><w:t xml:space="preserve">${t}</w:t></w:r></w:p>`).join("");
   const zip = new PizZip();
   zip.file("[Content_Types].xml", '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
   zip.file("_rels/.rels", '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-  zip.file("word/document.xml", `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p></w:body></w:document>`);
+  zip.file("word/document.xml", `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paras}</w:body></w:document>`);
   return zip.generate({ type: "arraybuffer" });
 }
 
@@ -166,5 +183,114 @@ describe("the template's highlight on blanks", () => {
     const xml = new PizZip(await out.arrayBuffer()).file("word/document.xml")!.asText();
     expect(xml).toContain("Ana LOPEZ");
     expect(xml).not.toContain("w:highlight");
+  });
+});
+
+describe("several people on one contract", () => {
+  it("lists only the people typed in — the signer isn't assumed to be one; empty rows don't count", () => {
+    expect(contractValues(FAMILY)).toMatchObject({
+      people_names: "Pedro LOPEZ, Juan LOPEZ and Maria LOPEZ", people_names_es: "Pedro LOPEZ, Juan LOPEZ y Maria LOPEZ", people_count: "3",
+    });
+    expect(peopleRows(FAMILY).map((r) => [r.person_number, r.person_name, r.person_a_number, r.person_dob])).toEqual([
+      ["1", "Pedro LOPEZ", "111-111-111", "March 4, 1990"],
+      ["2", "Juan LOPEZ", "222-222-222", ""],
+      ["3", "Maria LOPEZ", "", "January 2, 2015"],
+    ]);
+  });
+
+  it("unticked: nobody listed, and a sentence names the client alone", () => {
+    expect(peopleRows({ ...FAMILY, multiplePeople: false })).toEqual([]);
+    expect(contractValues({ ...FAMILY, multiplePeople: false })).toMatchObject({ people_names: "Ana LOPEZ", people_count: "1" });
+  });
+
+  const TEMPLATE = docx([
+    "RE: {{hearing_type}}", "{{#has_people}}", "Persons:", "{{#people}}",
+    "{{person_number}}. {{person_name}}{{#person_a_number}}, A# {{person_a_number}}{{/person_a_number}} ({{hearing_type}})",
+    "{{/people}}", "{{/has_people}}", "Fee {{attorney_fee}}",
+  ]);
+  const text = async (input: ContractInput) => {
+    const xml = new PizZip(await fillContractTemplate(TEMPLATE, input).arrayBuffer()).file("word/document.xml")!.asText();
+    return [...xml.matchAll(/<w:p>[\s\S]*?<\/w:p>/g)].map((m) => [...m[0].matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((t) => t[1]).join("")).join("|");
+  };
+
+  it("prints the block once per person; A# only when typed; contract fields reachable inside", async () => {
+    const check = inspectContractTemplate(TEMPLATE);
+    expect(check.unknown).toEqual([]);
+    expect(check.tags).toEqual(expect.arrayContaining(["has_people", "people", "person_name", "person_number", "person_a_number"]));
+    expect(contractProblems(check, FAMILY)).toEqual([]);
+    expect(await text(FAMILY)).toBe(
+      "RE: Master Hearing|Persons:|1. Pedro LOPEZ, A# 111-111-111 (Master Hearing)|2. Juan LOPEZ, A# 222-222-222 (Master Hearing)|3. Maria LOPEZ (Master Hearing)|Fee $5,000.00",
+    );
+  });
+
+  it("a one-person contract prints without the block at all", async () => {
+    expect(await text(INPUT)).toBe("RE: Master Hearing|Fee $5,000.00");
+  });
+
+  it("ticked needs at least two people", () => {
+    const check = inspectContractTemplate(TEMPLATE);
+    const one = { ...FAMILY, people: [{ name: "Pedro LOPEZ", aNumber: "", dob: "" }] };
+    expect(contractProblems(check, one)).toEqual(['List at least 2 people, or untick "Contract is for more than one person"']);
+    // A template that doesn't list people doesn't care.
+    expect(contractProblems(inspectContractTemplate(docx("Fee {{attorney_fee}}")), one)).toEqual([]);
+  });
+
+  it("names the file after the client, with how many people", () => {
+    expect(contractDocumentName(FAMILY)).toBe("Ana LOPEZ - I-130 (3 people) - 10-05-2026");
+    expect(contractDocumentName(INPUT)).toBe("Ana LOPEZ - I-130 - 10-05-2026");
+  });
+});
+
+describe("trial: prep and trial are separate fees", () => {
+  const TRIAL: ContractInput = { ...INPUT, trialPrepFee: 3000, trialPrepDueDate: "2026-11-01", trialFee: 4500, trialDueDate: "2027-01-15" };
+
+  it("prints each fee, its 3% and its own deadline", () => {
+    expect(contractValues(TRIAL)).toMatchObject({
+      trial_prep_fee: "$3,000.00", trial_prep_fee_surcharge: "$90.00", trial_prep_due_date: "November 1, 2026", trial_prep_due_date_es: "1 de Noviembre, 2026",
+      trial_fee: "$4,500.00", trial_fee_surcharge: "$135.00", trial_due_date: "January 15, 2027", trial_due_date_es: "15 de Enero, 2027",
+      trial_total_fee: "$7,500.00",
+    });
+  });
+
+  it("requires both fees and dates when the template uses them", () => {
+    const check = inspectContractTemplate(docx("{{trial_prep_fee}} by {{trial_prep_due_date}}, {{trial_fee}} by {{trial_due_date}}"));
+    expect(contractProblems(check, TRIAL)).toEqual([]);
+    expect(contractProblems(check, INPUT)).toEqual(["Trial prep fee is missing", "Trial prep fee due is missing", "Trial fee is missing", "Trial fee due is missing"]);
+  });
+});
+
+describe("scope of services", () => {
+  it("prints the Fee K Type's text; empty prints nothing and isn't required", async () => {
+    const tmpl = docx(["Included: Preparing and filing your {{form_name}}. {{services}}", "Not included: {{services_excluded}} Unless listed above…"]);
+    const check = inspectContractTemplate(tmpl);
+    expect(check.unknown).toEqual([]);
+    expect(contractProblems(check, INPUT)).toEqual([]);
+    const filled = { ...INPUT, services: "Prepare and file Form I-130.", servicesExcluded: "Any interview." };
+    const xml = new PizZip(await fillContractTemplate(tmpl, filled).arrayBuffer()).file("word/document.xml")!.asText();
+    expect(xml).toContain("Included: Preparing and filing your I-130. Prepare and file Form I-130.");
+    expect(xml).toContain("Not included: Any interview. Unless listed above…");
+  });
+});
+
+describe("case type picked from the Fee K Types", () => {
+  const ROWS = [
+    { feeKType: "I-130 - Petition for Alien Relative", spanish: "Petición de familiar extranjero (I-130)", services: "A.", servicesEs: "A es.", excluded: "No A.", excludedEs: "No A es." },
+    { feeKType: "I-765 - EAD Renewal", spanish: "", services: "B.", servicesEs: "B es.", excluded: "", excludedEs: "" },
+  ];
+
+  it("names the matter in English and Spanish, joined; no Spanish name = English", () => {
+    expect(contractTitle("Trial/Trial Preparation  (c)")).toBe("Trial/Trial Preparation");
+    expect(fromFeeKTypes(["I-130 - Petition for Alien Relative", "I-765 - EAD Renewal"], ROWS)).toEqual({
+      feeKTypes: ["I-130 - Petition for Alien Relative", "I-765 - EAD Renewal"],
+      formName: "I-130 - Petition for Alien Relative + I-765 - EAD Renewal",
+      formNameEs: "Petición de familiar extranjero (I-130) + I-765 - EAD Renewal",
+      services: "A. B.", servicesEs: "A es. B es.", servicesExcluded: "No A.", servicesExcludedEs: "No A es.",
+    });
+    expect(fromFeeKTypes([], ROWS)).toMatchObject({ formName: "", formNameEs: "", services: "" });
+  });
+
+  it("{{form_name_es}} prints the Spanish title, else the English one", () => {
+    expect(contractValues({ ...INPUT, formName: "I-130", formNameEs: "Petición (I-130)" })).toMatchObject({ form_name_es: "Petición (I-130)" });
+    expect(contractValues({ ...INPUT, formName: "I-130", formNameEs: "" })).toMatchObject({ form_name_es: "I-130" });
   });
 });

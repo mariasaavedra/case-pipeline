@@ -1,12 +1,14 @@
 // =============================================================================
 // Detention write-back — mark a detained client as released
 // =============================================================================
-// P3.0 shows "Detained at <facility>" from the Det. Facility on the client's
-// open court cases (libs/query getOpenDetentions). Releasing does two things in
-// Monday, so Monday and the dashboard agree:
+// P3.0 shows "Detained" by the rule in libs/query detention.ts: Det. Facility
+// on an open court case, else a name, a jail intake or a detainee appointment.
+// Releasing does three things, so Monday and the dashboard agree:
 //
-//   1. clears Det. Facility on every open court case that has one, and
-//   2. logs a "Casenote" in the profile's Emails & Activities saying where they
+//   1. clears Det. Facility on every open court case that has one,
+//   2. records the release in detention_releases (schema v38) — a name that
+//      still says "(Det. at CoreCivic)" stops counting at once, and
+//   3. logs a "Casenote" in the profile's Emails & Activities saying where they
 //      were released from, when (optional), and the note staff typed.
 //
 // The facility is gone from the column after this, so the E&A entry is where
@@ -27,7 +29,7 @@ import { withTokenFallback } from "../write-auth.js";
 import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
-import { getBoardColumnsFor, getOpenDetentions } from "@case-pipeline/query";
+import { getBoardColumnsFor, getDetention, getOpenDetentions } from "@case-pipeline/query";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 
 /**
@@ -87,7 +89,8 @@ export function releaseActivity(
 ): Omit<CreateTimelineItemInput, "itemId"> {
   const where = [...new Set(facilities)].join(", ");
   return {
-    title: `Released from detention — ${where}`,
+    // No place known (detained by name or jail intake only): just the title.
+    title: where ? `Released from detention — ${where}` : "Released from detention",
     customActivityId: CASENOTE_ACTIVITY_ID,
     content: releasedOn ? `Released: ${formatDay(releasedOn)}\n\n${note}` : note,
   };
@@ -129,9 +132,12 @@ export function registerDetentionWriteRoutes(app: Express, deps: DetentionWriteD
     }
     const profileMondayId = profile.monday_item_id;
 
+    // Detained by the wider rule (a name, a jail intake…) counts too: then there
+    // is no Det. Facility to clear, and detention_releases is what switches it off.
+    const detention = getDetention(db, localId);
     const detentions = getOpenDetentions(db, localId);
-    if (detentions.length === 0) {
-      res.status(409).json({ error: "This client has no open court case with a detention facility" });
+    if (!detention && detentions.length === 0) {
+      res.status(409).json({ error: "This client is not shown as detained" });
       return;
     }
     if (detentions.some((d) => !d.mondayItemId)) {
@@ -141,7 +147,7 @@ export function registerDetentionWriteRoutes(app: Express, deps: DetentionWriteD
 
     const schema = getBoardColumnsFor(db, "court_cases");
     const facilityCol = schema?.columns.find((c) => /^det\.?\s*facility$/i.test(c.title.trim()));
-    if (!schema || !facilityCol) {
+    if (detentions.length > 0 && (!schema || !facilityCol)) {
       res.status(409).json({ error: "Could not resolve the Det. Facility column on Court Cases — run a sync first" });
       return;
     }
@@ -156,9 +162,12 @@ export function registerDetentionWriteRoutes(app: Express, deps: DetentionWriteD
     );
     for (const d of detentions) {
       const mondayItemId = d.mondayItemId as string;
+      // Checked above whenever there is a detention to clear.
+      const boardId = schema!.mondayBoardId;
+      const columnId = facilityCol!.columnId;
       try {
         await withTokenFallback(
-          (token) => dataSource.setColumnValue(schema.mondayBoardId, mondayItemId, facilityCol.columnId, "", token),
+          (token) => dataSource.setColumnValue(boardId, mondayItemId, columnId, "", token),
           writeTokenOptions(req),
         );
       } catch (err) {
@@ -167,15 +176,23 @@ export function registerDetentionWriteRoutes(app: Express, deps: DetentionWriteD
         enqueueWrite(db, {
           opType: "change_column", targetTable: "board_items", targetLocalId: d.courtCaseLocalId,
           mondayItemId, authorOid,
-          payload: { boardId: schema.mondayBoardId, columnId: facilityCol.columnId, value: "" },
+          payload: { boardId, columnId, value: "" },
         });
       }
       clearLocal.run(d.courtCaseLocalId);
     }
 
-    // 2. Log the release in the profile's Emails & Activities.
+    // 2. Record it here, so a name that still says "(Det. at …)" stops counting
+    //    now rather than after the E&A entry comes back with the full sync.
+    const facilities = detentions.length ? detentions.map((d) => d.facility) : detention?.at ? [detention.at] : [];
+    db.prepare(
+      `INSERT INTO detention_releases (profile_monday_id, released_on, facility, author_oid, author_name)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(profileMondayId, releasedOn, facilities.join(", ") || null, authorOid, req.user?.name ? String(req.user.name) : null);
+
+    // 3. Log the release in the profile's Emails & Activities.
     const input: CreateTimelineItemInput = {
-      ...releaseActivity(detentions.map((d) => d.facility), releasedOn, note),
+      ...releaseActivity(facilities, releasedOn, note),
       itemId: profileMondayId,
     };
     try {
@@ -192,7 +209,8 @@ export function registerDetentionWriteRoutes(app: Express, deps: DetentionWriteD
     auditFromReq(req, "monday.client_released", {
       targetType: "profile", targetId: localId, targetMondayId: profileMondayId,
       metadata: {
-        facilities: detentions.map((d) => d.facility),
+        facilities,
+        source: detention?.source ?? "facility",
         courtCases: detentions.map((d) => d.mondayItemId),
         releasedOn,
         queued,

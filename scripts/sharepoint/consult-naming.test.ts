@@ -55,6 +55,63 @@ describe("consultFolderName", () => {
   });
 });
 
+describe("consultFolderName — from the profile title (jail-intake profiles)", () => {
+  const titled = (itemName: string) => consultFolderName({ firstName: null, lastName: "", itemName });
+
+  it("splits Given SURNAME when First / Last are both empty", () => {
+    // Real titles the sweep skipped on 2026-10-22.
+    expect(titled("Gerbert Yoalmo BERMUDEZ-PAZ")).toMatchObject({
+      ok: true, fromTitle: true, name: { folder: "BERMUDEZ-PAZ, Gerbert Yoalmo", initial: "B" },
+    });
+    expect(titled("DETAINED Fidencio MERCADO")).toMatchObject({ ok: true, name: { folder: "MERCADO, Fidencio" } });
+    expect(titled("Bobb Marlon MARTINEZ JIMENEZ")).toMatchObject({ ok: true, name: { folder: "MARTINEZ JIMENEZ, Bobb Marlon" } });
+    expect(titled("Gilberto DE JESUS GARCIA [Det Core Civic][A220-099-183]")).toMatchObject({
+      ok: true, name: { folder: "DE JESUS GARCIA, Gilberto" },
+    });
+  });
+
+  it("drops brackets, an unclosed aside and a stray A-number", () => {
+    expect(titled("Pedro RECINOS RECINOS  (Det in Greene Co)[A222-597-888]")).toMatchObject({
+      ok: true, name: { folder: "RECINOS RECINOS, Pedro" },
+    });
+    expect(titled("Isaac GONZALEZ MOLINA A214-099-391 [DETAINED IN CHASE]")).toMatchObject({
+      ok: true, name: { folder: "GONZALEZ MOLINA, Isaac" },
+    });
+    expect(titled("Celso VERA CAMPOS (Det Chase County")).toMatchObject({ ok: true, name: { folder: "VERA CAMPOS, Celso" } });
+  });
+
+  it("keeps a single capital as an initial of the given name", () => {
+    expect(titled("Kong Bun B LY")).toMatchObject({ ok: true, name: { folder: "LY, Kong Bun B" } });
+    expect(titled("Juan C. CECENAS GARCIA")).toMatchObject({ ok: true, name: { folder: "CECENAS GARCIA, Juan C." } });
+  });
+
+  it("refuses a title that doesn't read Given SURNAME", () => {
+    for (const t of [
+      "Mogtabi Azrag (Detained at Core Civic) A212-666-597", // no capitalised surname
+      "MUHAMMAD YAKAWU", // all capitals: which is the surname?
+      "DETAINED Yessica Marisol Peña Olivas",
+      "Juan CARLOS Perez SMITH", // capitals inside the given name
+      "Maria de la CRUZ", // a particle belongs to the surname
+      "Esmeralda CANO - Jesus I. MERAZ MARTINEZ", // two people
+      "Adriana PENALOZA + Edith PENALOZA",
+      "[A221-455-213]",
+    ]) {
+      expect(titled(t), t).toMatchObject({ ok: false, reason: "missing-first-name" });
+    }
+  });
+
+  it("never overrides a First / Last Name someone filled in", () => {
+    expect(consultFolderName({ firstName: "Milton", lastName: "Ventura", itemName: "Somebody ELSE" })).toMatchObject({
+      ok: true, name: { folder: "VENTURA, Milton" },
+    });
+    expect(consultFolderName({ firstName: "Milton", lastName: "Ventura" })).not.toHaveProperty("fromTitle");
+    // Only one of the two filled = still a human's call, not the title's.
+    expect(consultFolderName({ firstName: "", lastName: "Ventura", itemName: "Milton VENTURA" })).toMatchObject({
+      ok: false, reason: "missing-first-name",
+    });
+  });
+});
+
 describe("consultFolderPath", () => {
   it("builds the three-level path", () => {
     const result = consultFolderName({ firstName: "Milton", lastName: "Ventura" });

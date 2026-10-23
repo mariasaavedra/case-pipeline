@@ -7,6 +7,7 @@ import { ClientLink } from "./ClientPeek";
 import { SectionCode } from "./ScreenCode";
 import { Tag, PersonChip, ListSection } from "./caseBoardParts";
 import { ConsultPrepModal } from "./ConsultPrepModal";
+import { detentionTitle } from "../lib/detention";
 import { ConsultScheduleModal } from "./ConsultScheduleModal";
 import { ConsultLinkModal } from "./ConsultLinkModal";
 import { NewAppointmentModal } from "./NewAppointmentModal";
@@ -134,7 +135,9 @@ function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit, on
           {c.fromCalendly && <Tag color="later" title="Booked through Calendly">Calendly</Tag>}
           {c.language && <Tag color="court" title="Language">{c.language}</Tag>}
           {c.lastPrep?.interpreter && <Tag color="court" title="Interpreter needed (from the prep)">Interpreter · {c.lastPrep.interpreter}</Tag>}
-          {c.detainedAt && <Tag color="overdue" title="Det. Facility on the client's open court case">Detained · {c.detainedAt}</Tag>}
+          {c.detention && (
+            <Tag color="overdue" title={detentionTitle(c.detention)}>{c.detention.at ? `Detained · ${c.detention.at}` : "Detained"}</Tag>
+          )}
         </div>
         {(c.profile?.phone ?? c.phone) && (
           <div className="text-xs mt-0.5" style={{ color: "var(--color-ink-faint)" }}>{c.profile?.phone ?? c.phone}</div>

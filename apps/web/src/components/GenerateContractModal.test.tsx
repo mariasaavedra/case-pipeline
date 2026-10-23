@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   convert: vi.fn(),
   send: vi.fn(),
   log: vi.fn(),
+  tags: ["client_name"] as string[],
+  fill: vi.fn(),
 }));
 
 vi.mock("../api", () => ({
@@ -26,6 +28,11 @@ vi.mock("../api", () => ({
     contractFor: ["Court"], attorneyFee: 5000, filingFee: null, processingFee: null, hearingType: "Master Hearing", hearingDate: "2026-11-12",
   }),
   fetchEsignStatus: async () => ({ enabled: true }),
+  fetchFeeKTypes: async () => ({
+    feeKTypes: ["I-130 - Petition for Alien Relative", "Master (c)"], boards: [], draft: true,
+    rows: [{ feeKType: "I-130 - Petition for Alien Relative", spanish: "Petición de familiar extranjero (I-130)", board: "", feeSheetJob: "",
+      services: "Prepare and file Form I-130.", servicesEs: "Preparar el I-130.", excluded: "", excludedEs: "" }],
+  }),
   logContractGenerated: mocks.log,
   sendContractForSignature: mocks.send,
 }));
@@ -45,10 +52,12 @@ vi.mock("../sharepoint/graph", () => ({
   downloadDriveFile: async () => new Blob(["docx"]),
   convertDocxToPdf: mocks.convert,
 }));
-vi.mock("../lib/contract-fill", () => ({
-  inspectContractTemplate: () => ({ tags: ["client_name"], unknown: [], signTags: ["Sig_es_:signer2:signature"], errors: [] }),
+vi.mock("../lib/contract-fill", async (orig) => ({
+  ...(await orig<typeof import("../lib/contract-fill")>()),
+  inspectContractTemplate: () => ({ tags: mocks.tags, unknown: [], signTags: ["Sig_es_:signer2:signature"], errors: [] }),
   contractProblems: () => [],
-  fillContractTemplate: () => new Blob(["filled"]),
+  fillContractTemplate: mocks.fill,
+  trialTotalOf: () => 0,
   surchargeOf: () => 150,
   totalOf: () => 5150,
   money: (n: number) => `$${n}`,
@@ -69,6 +78,9 @@ beforeEach(() => {
   mocks.convert.mockReset().mockResolvedValue(pdf);
   mocks.send.mockReset().mockResolvedValue({ id: 1, stage: "Atty Reviewing", warning: null });
   mocks.log.mockReset();
+  mocks.tags = ["client_name"];
+  mocks.fill.mockReset().mockReturnValue(new Blob(["filled"]));
+  localStorage.clear();
   URL.createObjectURL = vi.fn(() => "blob:preview-1");
   URL.revokeObjectURL = vi.fn();
 });
@@ -200,5 +212,89 @@ describe("M22 preview", () => {
     await act(async () => { button("Send for signature")!.click(); });
     await flush();
     expect(localStorage.getItem("m22-draft:c1")).toBeNull();
+  });
+});
+
+describe("M22 people on one contract", () => {
+  const typeInto = (el: HTMLInputElement, v: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, v);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const byLabel = (label: string) => document.querySelector(`input[aria-label='${label}']`) as HTMLInputElement;
+  const checkbox = () => Array.from(document.querySelectorAll("label")).find((l) => l.textContent?.includes("more than one person"))?.querySelector("input") as HTMLInputElement | undefined;
+  const open = async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
+    await flush();
+  };
+
+  it("no checkbox unless the template lists people", async () => {
+    await open();
+    expect(checkbox()).toBeUndefined();
+  });
+
+  it("the list shows only once ticked, and doesn't assume the signer is on it", async () => {
+    mocks.tags = ["client_name", "has_people", "people", "person_name", "person_a_number"];
+    await open();
+    expect(checkbox()!.checked).toBe(false);
+    expect(button("+ Add person")).toBeUndefined();
+
+    await act(async () => { checkbox()!.click(); });
+    // Two empty rows; the signer (Ana Lopez) isn't one of them.
+    expect(byLabel("Person 1 name").value).toBe("");
+    expect(byLabel("Person 2 name").value).toBe("");
+    await act(async () => { typeInto(byLabel("Person 1 name"), "Pedro Lopez"); });
+    await act(async () => { typeInto(byLabel("Person 1 A#"), "111"); });
+    await act(async () => { button("+ Add person")!.click(); });
+    await act(async () => { typeInto(byLabel("Person 2 name"), "Wrong Person"); });
+    await act(async () => { typeInto(byLabel("Person 3 name"), "Juan Lopez"); });
+    await act(async () => { (document.querySelector("button[aria-label='Remove person 2']") as HTMLButtonElement).click(); });
+    expect(byLabel("Person 2 name").value).toBe("Juan Lopez");
+    // The signer can be added on purpose.
+    await act(async () => { button("+ Add Ana Lopez (signer)")!.click(); });
+    expect(byLabel("Person 3 name").value).toBe("Ana Lopez");
+    expect(button("+ Add Ana Lopez (signer)")).toBeUndefined();
+
+    await act(async () => { button("Preview PDF")!.click(); });
+    await flush();
+    const input = mocks.fill.mock.calls[0]![1];
+    expect(input.multiplePeople).toBe(true);
+    expect(input.people).toEqual([
+      { name: "Pedro Lopez", aNumber: "111", dob: "" },
+      { name: "Juan Lopez", aNumber: "", dob: "" },
+      { name: "Ana Lopez", aNumber: "", dob: "" },
+    ]);
+  });
+});
+
+describe("M22 case type and hearing type are picked, not typed", () => {
+  const select = (id: string) => document.getElementById(id) as HTMLSelectElement;
+  const choose = (el: HTMLSelectElement, v: string) => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(el, v);
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  it("picking a Fee K Type sets the English + Spanish title and the scope; hearing type is a list", async () => {
+    mocks.tags = ["client_name", "form_name", "form_name_es", "services", "hearing_type"];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
+    await flush();
+
+    // The Fee K's own type ("Court") comes pre-picked; drop it, pick I-130.
+    await act(async () => { (document.querySelector("button[aria-label='Remove Court']") as HTMLButtonElement).click(); });
+    await act(async () => { choose(select("m22-feeKType"), "I-130 - Petition for Alien Relative"); });
+    expect(document.body.textContent).toContain("Prints: I-130 - Petition for Alien Relative / Petición de familiar extranjero (I-130)");
+    expect(Array.from(select("m22-hearingType").options).map((o) => o.value)).toEqual(["", "Master Hearing", "Individual Hearing"]);
+    await act(async () => { choose(select("m22-hearingType"), "Individual Hearing"); });
+
+    await act(async () => { button("Preview PDF")!.click(); });
+    await flush();
+    expect(mocks.fill.mock.calls[0]![1]).toMatchObject({
+      feeKTypes: ["I-130 - Petition for Alien Relative"],
+      formName: "I-130 - Petition for Alien Relative", formNameEs: "Petición de familiar extranjero (I-130)",
+      services: "Prepare and file Form I-130.", hearingType: "Individual Hearing",
+    });
   });
 });

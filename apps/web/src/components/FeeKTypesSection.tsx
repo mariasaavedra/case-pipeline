@@ -5,13 +5,15 @@
 // board the case goes to once paid (Monday's "It will go to…" labels) and the
 // fee sheet job that prices it (its AF / FF shown from the sheet). Rows saved
 // for a label Monday no longer has stay, marked, until someone clears them.
+// Each row also holds its scope of services ("Scope…": included / not
+// included, English + Spanish), which the FORMS contract prints (M22).
 // Used by the Fee K auto-fill ("It will go to…") and the contract forms (AF /
-// FF). Admin-only (the tab is); saved to data/fee-k-types.json, audited.
+// FF, scope). Admin-only (the tab is); saved to data/fee-k-types.json, audited.
 // Before the first save it shows the starting draft (fee-k-types-draft.ts):
 // boards from past routing, Spanish names to review — used for nothing until saved.
 // =============================================================================
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { fetchFeeKTypes, updateFeeKTypes, type FeeKTypeRow } from "../api";
 import { feeSheetOnce, type FeeSheet } from "./FeeSheetPicker";
 import { money } from "../lib/contract-fill";
@@ -21,6 +23,10 @@ import { settingsSectionTitle } from "./settingsStyles";
 
 const inputStyle = { backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border-light)", color: "var(--color-ink)", fontFamily: "var(--font-body)" } as const;
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+const EMPTY = { spanish: "", board: "", feeSheetJob: "", services: "", servicesEs: "", excluded: "", excludedEs: "" };
+const SCOPE: [keyof typeof EMPTY, string][] = [
+  ["services", "Included"], ["servicesEs", "Included, Spanish"], ["excluded", "Not included"], ["excludedEs", "Not included, Spanish"],
+];
 
 interface Row extends FeeKTypeRow {
   /** The label is no longer on Monday's Fee K Type list. */
@@ -30,9 +36,9 @@ interface Row extends FeeKTypeRow {
 /** Monday's labels in Monday's order, each with its saved row; then saved rows Monday dropped. */
 function mergeRows(saved: FeeKTypeRow[], labels: string[]): Row[] {
   const byKey = new Map(saved.map((r) => [norm(r.feeKType), r]));
-  const onMonday = labels.map((l) => ({ ...(byKey.get(norm(l)) ?? { spanish: "", board: "", feeSheetJob: "" }), feeKType: l, gone: false }));
+  const onMonday = labels.map((l) => ({ ...EMPTY, ...byKey.get(norm(l)), feeKType: l, gone: false }));
   const known = new Set(labels.map(norm));
-  return [...onMonday, ...saved.filter((r) => !known.has(norm(r.feeKType))).map((r) => ({ ...r, gone: true }))];
+  return [...onMonday, ...saved.filter((r) => !known.has(norm(r.feeKType))).map((r) => ({ ...EMPTY, ...r, gone: true }))];
 }
 
 export function FeeKTypesSection() {
@@ -45,6 +51,9 @@ export function FeeKTypesSection() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Rows whose scope of services is open for editing.
+  const [openScope, setOpenScope] = useState<Set<string>>(new Set());
+  const toggleScope = (t: string) => setOpenScope((o) => { const n = new Set(o); if (n.has(t)) n.delete(t); else n.add(t); return n; });
 
   useEffect(() => {
     fetchFeeKTypes()
@@ -89,7 +98,8 @@ export function FeeKTypesSection() {
       <p style={{ fontSize: 13, color: "var(--color-ink-faint)", fontFamily: "var(--font-body)", marginBottom: 8, lineHeight: 1.5 }}>
         One row per case type on Monday&apos;s Fee K Type list. <strong>Board once paid</strong> fills an empty
         &quot;It will go to…&quot; on new Fee Ks. <strong>Fee sheet job</strong> fills an empty AF / FF when staff pick the
-        type in New contract, Log a call or Edit contract — prices stay in the fee sheet.
+        type in New contract, Log a call or Edit contract — prices stay in the fee sheet. <strong>Scope…</strong> is what
+        the FORMS contract says it includes and leaves out, in English and Spanish.
         {sheet && <> <a href={sheet.webUrl} target="_blank" rel="noreferrer" className="underline">Open the fee sheet</a>.</>}
       </p>
       {sheetError && (
@@ -138,10 +148,16 @@ export function FeeKTypesSection() {
               <tbody>
                 {shown!.map((r) => {
                   const job = r.feeSheetJob ? jobs.get(norm(r.feeSheetJob)) : undefined;
+                  const scopeSet = !!(r.services || r.excluded);
                   return (
-                    <tr key={r.feeKType} style={{ borderTop: "1px solid var(--color-border-light)", verticalAlign: "top" }}>
+                    <Fragment key={r.feeKType}>
+                    <tr style={{ borderTop: "1px solid var(--color-border-light)", verticalAlign: "top" }}>
                       <td className="px-2 py-1.5" style={{ color: r.gone ? "var(--color-ink-faint)" : "var(--color-ink)" }}>
                         <span style={{ whiteSpace: "pre-wrap" }}>{r.feeKType}</span>
+                        <button type="button" className="block text-xs underline mt-0.5" style={{ color: scopeSet ? "var(--color-ink-muted)" : "var(--color-ink-faint)" }}
+                          aria-expanded={openScope.has(r.feeKType)} onClick={() => toggleScope(r.feeKType)}>
+                          {scopeSet ? "Scope ✓" : "Scope…"}
+                        </button>
                         {r.gone && (
                           <span className="block text-xs" style={{ color: "var(--color-status-red)" }}>
                             Not on Monday anymore —{" "}
@@ -175,6 +191,22 @@ export function FeeKTypesSection() {
                         )}
                       </td>
                     </tr>
+                    {openScope.has(r.feeKType) && (
+                      <tr style={{ verticalAlign: "top" }}>
+                        <td colSpan={4} className="px-2 pb-3">
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {SCOPE.map(([k, label]) => (
+                              <label key={k} className="text-xs" style={{ color: "var(--color-ink-muted)" }}>
+                                {label}
+                                <textarea rows={2} className="w-full text-sm px-2 py-1 rounded mt-0.5" style={inputStyle} maxLength={1000}
+                                  aria-label={`${label} for ${r.feeKType}`} value={r[k]} onChange={(e) => set(r.feeKType, { [k]: e.target.value })} />
+                              </label>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>

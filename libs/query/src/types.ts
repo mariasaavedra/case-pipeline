@@ -2,6 +2,16 @@
 // Query Layer Types
 // =============================================================================
 
+/** What said a client is detained (libs/query detention.ts), strongest first. */
+export type DetentionSource = "facility" | "name" | "intake" | "appointment";
+
+export interface Detention {
+  /** Where, when known: the Det. Facility label, else read off a name ("CoreCivic"). */
+  at: string | null;
+  /** What said so — the pill's tooltip. */
+  source: DetentionSource;
+}
+
 export interface ProfileSummary {
   localId: string;
   mondayItemId: string | null;
@@ -50,6 +60,13 @@ export interface ProfileSummary {
    * Only the full client detail sets it.
    */
   detainedAt?: string | null;
+  /**
+   * Whether the client is detained, by the wider rule (libs/query
+   * detention.ts): Det. Facility, else a name, jail intake or detainee
+   * appointment. What the "Detained" pill shows. Only the full client detail
+   * sets it.
+   */
+  detention?: Detention | null;
   /**
    * For texting the client (M28): Phone 2, Preferred Language ("Espanol",
    * "English"…) and First Name from the Profiles board. Only the full client

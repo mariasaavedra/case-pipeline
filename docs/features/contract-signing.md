@@ -73,20 +73,57 @@ add a contract.
   each fee has its own 3% tag (`{{attorney_fee_surcharge}}`,
   `{{filing_fee_surcharge}}`, `{{postage_fee_surcharge}}`, `{{bio_fee_surcharge}}`…;
   N/A when that fee is empty). A typed surcharge only changes `{{surcharge}}`.
-  Trial and BIA appeal fees are paid in two equal halves (`{{attorney_fee_half}}`);
+  BIA appeal fees are paid in two equal halves (`{{attorney_fee_half}}`). Trial
+  (2026-10-22) is not: the prep and the trial are separate fees, each with its
+  own deadline — `{{trial_prep_fee}}` / `{{trial_prep_due_date}}`, `{{trial_fee}}` /
+  `{{trial_due_date}}` (each with `_surcharge` / `_es`), `{{trial_total_fee}}` = both;
+  several people on one contract (2026-10-22, e.g. a family at one Master
+  Hearing): one fee, only the client signs and pays — and the client is NOT
+  assumed to be one of the people (a relative often signs for someone
+  detained). M22 shows "Contract is for more than one person" when the
+  template has a `{{#people}}…{{/people}}` loop (`{{person_name}}`,
+  `{{person_number}}`, `{{person_a_number}}`, `{{person_dob}}`) or
+  `{{people_names}}`; ticked, staff list everyone covered (at least 2; "+ Add
+  <client> (signer)" when the contract is for them too). Wrap the block in
+  `{{#has_people}}…{{/has_people}}` so a one-person contract prints as before;
+  `{{people_names}}` falls back to the client. The file is named
+  "Client - Matter (N people) - date";
   Bond + Master Hearing has its own `{{motion_fee}}` / `{{hearing_fee}}`;
   Master Hearing + Motion (2026-10-21) adds which motion, `{{motion_name}}` /
   `{{motion_name_es}}` (a pick list in M22 fills both: `MOTIONS`), and the
   motion's FF is `{{filing_fee}}`; that contract's file is named after the motion; Court
   Application adds the DHS `{{bio_fee}}`; Trial's "signed contract by" date is
   `{{sign_by_date}}` (payment = `{{due_date}}`).
+- Scope of services (2026-10-23, approved by Michael + Rekha): every contract
+  gets "Scope of Services / Alcance de los Servicios" — section 1 with its own
+  initials (Rafael, same day: the old sections are 2–13, initials and Adobe
+  `IntN` fields 1–13, "Sections 1 through 13", Fees = Section 3). It sits right
+  before "2. Office Procedures" (after the Trial / Habeas deadline notices).
+  Court templates carry it as fixed text in the Word file. FORMS prints a
+  common opening ("Preparing and filing your {{form_name}} with USCIS…") plus
+  `{{services}}` / `{{services_excluded}}` (+ `_es`) from the Fee K Type's
+  scope in Settings → Firm → Fee K Types ("Scope…" on each row; the draft
+  carries the 11 approved examples and is used until the table is saved);
+  M22 shows them in a "Scope of services" box, editable for that contract,
+  empty = nothing extra printed.
 - **Generate contract…** lists the folder, downloads the picked template and
   checks it. Broken braces or an unknown tag (a typo) block it, with a link to
   open the file in Word. The form shows only the fields that template uses,
   pre-filled from Monday (client, e-mail, address, attorney, AF/FF, the next
   hearing from the client's court case: MCH → Master Hearing, Trial →
   Individual Hearing) and the user's initials. A field the template uses must
-  be filled.
+  be filled. Case type and hearing type are picked, not typed (2026-10-23):
+  the Fee K Type(s) from the Fee K Types list (the Fee K's own pre-picked, more
+  can be added) give `{{form_name}}` (Monday's label without "(c)", several
+  joined with " + "), `{{form_name_es}}` (the type's Spanish name, else the
+  English) and the scope; "Edit the title" types a matter not on the list.
+  Hearing type = Master Hearing / Individual Hearing. The address (2026-10-22) is the profile's Address, else its
+  Mailing address, else the Fee K's own copy (P14's "missing" flag uses the
+  same order; a third of the Fee Ks since September had only a Mailing
+  address). It is tidied and split by `documents/us-address.ts`
+  (`letterAddress`): cities typed with no comma, a suffix glued to the city,
+  a unit before the city, "KCMO", the state from the zip when missing,
+  all-lowercase lines capitalised; one it can't split stays whole.
 - Everything happens in the browser: the template is filled there, and the
   PDF is made by the user's Microsoft 365 (`/me/drive/…/content?format=pdf`,
   a temporary file in their OneDrive folder "Case Pipeline (temporary)",

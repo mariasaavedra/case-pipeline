@@ -109,4 +109,78 @@ const rows: [feeKType: string, spanish: string, board: string, feeSheetJob: stri
   ["Criminal Consequences", "Consecuencias migratorias de un caso penal", "", "Criminal Consequence letter"],
 ];
 
-export const DRAFT_FEE_K_TYPES: FeeKTypeRow[] = rows.map(([feeKType, spanish, board, feeSheetJob]) => ({ feeKType, spanish, board, feeSheetJob }));
+// Scope of services, approved by Michael + Rekha 2026-10-23 ("Scope of Services -
+// DRAFT for attorney review", section 3). [included EN, included ES, not included EN, not included ES]
+const SCOPE: Record<string, [string, string, string, string]> = {
+  "I-130 - Petition for Alien Relative": [
+    "Prepare and file Form I-130 with the evidence of your relationship.",
+    "Preparar y presentar el Formulario I-130 con la evidencia de su relación familiar.",
+    "Adjustment of status (I-485) or consular processing; the Affidavit of Support (I-864); any interview.",
+    "El ajuste de estatus (I-485) o el proceso consular; la Declaración Jurada de Patrocinio (I-864); cualquier entrevista.",
+  ],
+  "I-485 + I-130 - Full Packet": [
+    "Prepare and file Forms I-130 and I-485 with the Affidavit of Support (I-864) and supporting evidence.",
+    "Preparar y presentar los Formularios I-130 e I-485 con la Declaración Jurada de Patrocinio (I-864) y la evidencia correspondiente.",
+    "Attending the interview (separate Interview contract); medical exam (I-693) fees.",
+    "Acompañarlo(a) a la entrevista (contrato de Entrevista por separado); el costo del examen médico (I-693).",
+  ],
+  "I-765 - EAD Renewal": [
+    "Prepare and file Form I-765 to renew your work permit.",
+    "Preparar y presentar el Formulario I-765 para renovar su permiso de trabajo.",
+    "Any other application.",
+    "Cualquier otra solicitud.",
+  ],
+  "I-821D - DACA - Childhood Deferred Action": [
+    "Prepare and file your DACA renewal: Forms I-821D, I-765 and I-765WS.",
+    "Preparar y presentar su renovación de DACA: Formularios I-821D, I-765 e I-765WS.",
+    "Advance parole (I-131).",
+    "El permiso de viaje (I-131).",
+  ],
+  "I-751 - LPR Removal of Conditions": [
+    "Prepare and file Form I-751 with evidence of your marriage (or with the waiver request that applies).",
+    "Preparar y presentar el Formulario I-751 con la evidencia de su matrimonio (o con la solicitud de exención que corresponda).",
+    "Attending the interview, if USCIS schedules one.",
+    "Acompañarlo(a) a la entrevista, si USCIS la programa.",
+  ],
+  "N-400 - Naturalization": [
+    "Prepare and file Form N-400.",
+    "Preparar y presentar el Formulario N-400.",
+    "Interview preparation or attendance; a request for a hearing (N-336) if it is denied.",
+    "La preparación o la asistencia a la entrevista; una solicitud de audiencia (N-336) si es negada.",
+  ],
+  "I-90 - GC Renewal": [
+    "Prepare and file Form I-90 to renew your permanent resident card.",
+    "Preparar y presentar el Formulario I-90 para renovar su tarjeta de residente permanente.",
+    "Any other application.",
+    "Cualquier otra solicitud.",
+  ],
+  "I-90 - GC Replacement": [
+    "Prepare and file Form I-90 to replace your permanent resident card.",
+    "Preparar y presentar el Formulario I-90 para reemplazar su tarjeta de residente permanente.",
+    "Any other application.",
+    "Cualquier otra solicitud.",
+  ],
+  "I-601A - Waiver": [
+    "Prepare and file Form I-601A with the evidence of extreme hardship to your qualifying relative.",
+    "Preparar y presentar el Formulario I-601A con la evidencia de dificultad extrema para su familiar calificado.",
+    "The consular interview; a waiver of a prior removal (I-212); psychological or other evaluations.",
+    "La entrevista consular; el perdón por una deportación previa (I-212); evaluaciones psicológicas u otras.",
+  ],
+  "USCIS RFE Response": [
+    "Prepare and file one response to the Request for Evidence on your application.",
+    "Preparar y presentar una respuesta a la Solicitud de Evidencia sobre su solicitud.",
+    "Any later request for evidence or notice of intent to deny.",
+    "Cualquier solicitud de evidencia o aviso de intención de negar posterior.",
+  ],
+  "FOIA": [
+    "Prepare and file your records request(s) with the agency(ies) named above and follow up until the records arrive.",
+    "Preparar y presentar su(s) solicitud(es) de expediente ante la(s) agencia(s) indicada(s) y darle seguimiento hasta recibir los documentos.",
+    "Appealing a denied or incomplete response.",
+    "Apelar una respuesta negada o incompleta.",
+  ],
+};
+
+export const DRAFT_FEE_K_TYPES: FeeKTypeRow[] = rows.map(([feeKType, spanish, board, feeSheetJob]) => {
+  const [services = "", servicesEs = "", excluded = "", excludedEs = ""] = SCOPE[feeKType] ?? [];
+  return { feeKType, spanish, board, feeSheetJob, services, servicesEs, excluded, excludedEs };
+});

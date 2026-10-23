@@ -27,6 +27,11 @@
 // create-only "add a note" box — submitting through PATCH /api/call-log/:localId
 // instead of POST.
 //
+// "Send a text" (both modes) shows the M28 text form inline (SmsComposer):
+// the text goes out after the call is saved, on the same button press, and
+// only when it is ready (template filled, US number) — checked before the call
+// is written, like the intake and contract below.
+//
 // When no profile has the number that called, the phone lookup falls back to
 // jail intakes whose POC phone matches: a detainee's family calls before there
 // is any profile. Picking one links the call to that intake through the same
@@ -50,8 +55,9 @@ import {
   fetchCallLogNotes,
   addCallLogNote,
   stripMentionMarkers,
+  sendSms,
 } from "../api";
-import type { SearchResult, MondayStaffUser, CallLogEntry, CallLogIntakeMatch, MentionedUser, NoteThreadEntry } from "../api";
+import type { SearchResult, MondayStaffUser, CallLogEntry, CallLogIntakeMatch, MentionedUser, NoteThreadEntry, SendSmsResult } from "../api";
 import { useBoardStatusOptions } from "../StatusOptionsProvider";
 import { useAuth } from "../auth/useAuth";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -62,7 +68,8 @@ import { ProfileNotesPreview } from "./ProfileNotesPreview";
 import { NewJailIntakeModal } from "./NewJailIntakeModal";
 import { createJailIntake, createContract } from "../api";
 import { NewContractModal } from "./NewContractModal";
-import { SendSmsModal } from "./SendSmsModal";
+import { SmsSentLine } from "./SendSmsModal";
+import { SmsComposer, type SmsComposerState } from "./SmsComposer";
 import {
   ContractFields,
   contractFieldProblems,
@@ -86,6 +93,8 @@ interface Props {
   onLogged?: () => void;
   /** Present → edit mode: prefills every field from this entry and PATCHes it instead of creating a new call. */
   entry?: CallLogEntry;
+  /** Edit mode: open scrolled to the notes with the note box focused (the Call Log's 💬). */
+  focusNotes?: boolean;
 }
 
 // "Portugese" (no "u") is not a typo — it's Monday's actual live status label
@@ -261,7 +270,7 @@ function MatchList({
   );
 }
 
-export function LogCallModal({ onClose, onLogged, entry }: Props) {
+export function LogCallModal({ onClose, onLogged, entry, focusNotes }: Props) {
   const isEdit = !!entry;
   const statusDef = useBoardStatusOptions("call_log");
   const { user } = useAuth();
@@ -301,11 +310,14 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
     mondayItemId: string | null;
     intake?: { name: string; linked: boolean };
     contract?: { name: string; pending: boolean };
+    sms?: { result: SendSmsResult; to: string };
   } | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
-  const [smsOpen, setSmsOpen] = useState(false);
-  const [smsSent, setSmsSent] = useState(false);
+  // "Send a text" — the composer reports a ready draft (or why not).
+  const [sendText, setSendText] = useState(false);
+  const [smsState, setSmsState] = useState<SmsComposerState>({ draft: null, problem: null, mode: null });
+  const notesRef = useRef<HTMLDivElement | null>(null);
   // "This call is a jail intake" — filled in alongside the call and created
   // straight after it, so the intake can carry the new call's monday id. The
   // fields are the shared set, so this cannot fall behind the popup again.
@@ -364,7 +376,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
   }, []);
 
   // Edit mode's note section: the entry's real Monday comment thread, same
-  // source as CallNotesModal. Only meaningful once the item exists in Monday.
+  // source the Call Log has always used. Only meaningful once the item exists in Monday.
   const [thread, setThread] = useState<NoteThreadEntry[] | null>(null);
   const [threadError, setThreadError] = useState<string | null>(null);
   const [notePending, setNotePending] = useState(false);
@@ -383,6 +395,23 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
   useEffect(() => {
     if (isEdit) loadThread();
   }, [isEdit, loadThread]);
+
+  useEffect(() => {
+    if (!isEdit || !focusNotes) return;
+    notesRef.current?.scrollIntoView({ block: "start" });
+    notesRef.current?.querySelector("textarea")?.focus();
+  }, [isEdit, focusNotes]);
+
+  /** Sends the drafted text after the call is saved; an error message on failure. */
+  const sendDraftedText = async (): Promise<{ sms?: { result: SendSmsResult; to: string }; error?: string }> => {
+    if (!sendText || !smsState.draft) return {};
+    try {
+      const result = await sendSms({ ...smsState.draft, context: "call_log", profileLocalId: selectedProfile?.localId ?? null });
+      return { sms: { result, to: smsState.draft.to } };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Failed to send the text" };
+    }
+  };
 
   const onPhoneChange = (value: string) => {
     setPhone(value);
@@ -462,6 +491,10 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
       setError(`The contract still needs: ${contractMissing.join(", ")} \u2014 or untick \u201cthis call requests a contract\u201d.`);
       return;
     }
+    if (sendText && !smsState.draft) {
+      setError(`The text: ${smsState.problem ?? "not ready"} \u2014 or untick \u201cSend a text\u201d.`);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -477,7 +510,14 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
           highlightedForUserId: highlightedForId || null,
         });
         onLogged?.();
-        onClose();
+        if (!sendText) {
+          onClose();
+          return;
+        }
+        // Saved; stay open to show what happened to the text.
+        const text = await sendDraftedText();
+        if (text.error) setError(`The call was saved, but the text failed: ${text.error}`);
+        setDone({ name: effectiveName, pending: false, mondayItemId: entry.mondayItemId, sms: text.sms });
         return;
       }
       const trimmedNote = note.trim();
@@ -537,7 +577,10 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
           );
         }
       }
-      setDone({ name: res.name, pending: res.pending, mondayItemId: res.mondayItemId, intake: intakeResult, contract: contractResult });
+      // Last: the call (and anything made from it) is in, whatever the text does.
+      const text = await sendDraftedText();
+      if (text.error) setError(`The call was logged, but the text failed: ${text.error}`);
+      setDone({ name: res.name, pending: res.pending, mondayItemId: res.mondayItemId, intake: intakeResult, contract: contractResult, sms: text.sms });
       onLogged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : `Failed to ${isEdit ? "save the call" : "log the call"}`);
@@ -580,7 +623,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
     setNoteMentions([]);
     setLanguage("");
     setHighlightedForId("");
-    setSmsSent(false);
+    setSendText(false);
     // Without these, "Log another call" keeps the toggle on and the detainee's
     // details filled in, and the next save creates a second intake for the same
     // person against a different call.
@@ -614,7 +657,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
           {done ? (
             <div style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "var(--color-ink)" }}>
               <p style={{ marginBottom: 8 }}>
-                ✓ Call logged as <strong>{done.name}</strong>
+                ✓ Call {isEdit ? "saved" : "logged"} as <strong>{done.name}</strong>
                 {selectedProfile ? <> and linked to <strong>{selectedProfile.name}</strong></> : null}
                 {!selectedProfile && selectedIntake ? <> and linked to the jail intake for <strong>{selectedIntake.name}</strong></> : null}
                 {done.pending ? " — queued (Monday was unreachable, will sync shortly)." : "."}
@@ -633,7 +676,8 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                   {done.contract.pending ? "queued (will sync to Monday shortly)." : "created in Monday."}
                 </p>
               )}
-              {/* A failed intake/contract after a logged call lands here. */}
+              {done.sms && <div style={{ marginBottom: 8 }}><SmsSentLine result={done.sms.result} to={done.sms.to} /></div>}
+              {/* A failed intake/contract/text after a logged call lands here. */}
               {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
               {/* Offered here rather than on the form: a jail intake links back
                   to the call through "link to Call Log", and the call has no
@@ -642,22 +686,17 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
                 {/* A call is one or the other, never both: whichever was just
                     created hides the button for the other. */}
-                {!done.contract && (
+                {!done.contract && !isEdit && (
                   <Button type="button" variant="outline" onClick={() => setIntakeOpen(true)}>
                     New jail intake
                   </Button>
                 )}
-                {!done.intake && !done.contract && (
+                {!done.intake && !done.contract && !isEdit && (
                   <Button type="button" variant="outline" onClick={() => setContractOpen(true)}>
                     Request contract
                   </Button>
                 )}
-                {/* M28 — click-to-send, template + preview. Texts the number
-                    dialled, else the linked client's phone. */}
-                <Button type="button" variant="outline" onClick={() => setSmsOpen(true)}>
-                  {smsSent ? "Text again" : "Text consult link"}
-                </Button>
-                <Button type="button" variant="outline" onClick={logAnother}>Log another call</Button>
+                {!isEdit && <Button type="button" variant="outline" onClick={logAnother}>Log another call</Button>}
                 <Button type="button" onClick={onClose}>Done</Button>
               </div>
             </div>
@@ -667,7 +706,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                 {fieldLabel("Caller's phone")}
                 <input
                   type="tel"
-                  autoFocus
+                  autoFocus={!focusNotes}
                   value={phone}
                   onChange={(e) => onPhoneChange(e.target.value)}
                   placeholder="(555) 123-4567"
@@ -906,6 +945,7 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
               {/* Notes. Creating a call posts one comment with the entry; editing
                   one appends to the same Monday thread, so the existing notes are
                   shown above the box rather than silently replaced. */}
+              <div ref={notesRef} style={{ scrollMarginTop: 8 }}>
               {isEdit && (
                 <div style={{ marginBottom: 12, paddingTop: 4, borderTop: "1px solid var(--color-border-light)" }}>
                   {fieldLabel("Notes on this call")}
@@ -955,6 +995,30 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                   </Button>
                 </div>
               )}
+              </div>
+
+              {/* M28 inline: the text goes out after the call is saved, on the
+                  same press. Texts the number dialled, else the linked client's. */}
+              <div style={{ marginBottom: 12, padding: "10px 0", borderTop: "1px solid var(--color-border-light)", borderBottom: "1px solid var(--color-border-light)" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={sendText} onChange={(e) => setSendText(e.target.checked)} style={{ cursor: "pointer" }} />
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink)", fontFamily: "var(--font-body)" }}>
+                    Send a text
+                  </span>
+                </label>
+                {sendText && (
+                  <div style={{ marginTop: 10 }}>
+                    <SmsComposer
+                      templateKey="consult_link"
+                      phone={phone.trim() || selectedProfile?.phone || ""}
+                      altPhones={[selectedProfile?.phone, selectedProfile?.phone2]}
+                      name={name.trim() || selectedProfile?.name || ""}
+                      language={language}
+                      onChange={setSmsState}
+                    />
+                  </div>
+                )}
+              </div>
 
               {error && <p role="alert" style={{ fontSize: 12, color: "var(--color-status-red)", marginBottom: 8 }}>{error}</p>}
 
@@ -976,14 +1040,16 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
                   disabled={saving || !effectiveName || (isContract && contractCaseTypes.length === 0)}
                 >
                   {isEdit
-                    ? (saving ? "Saving…" : "Save")
+                    ? (saving ? "Saving…" : sendText ? "Save + send text" : "Save")
                     : saving
                       ? "Logging…"
                       : isIntake
                         ? "Log call + intake"
                         : isContract
                           ? "Log call + contract"
-                          : "Log call"}
+                          : sendText
+                            ? "Log call + send text"
+                            : "Log call"}
                 </Button>
               </div>
             </>
@@ -997,18 +1063,6 @@ export function LogCallModal({ onClose, onLogged, entry }: Props) {
           callLogItemId={done?.mondayItemId ?? entry?.mondayItemId ?? null}
           initialPocName={effectiveName || undefined}
           initialPocPhone={phone.trim() || undefined}
-        />
-      )}
-      {smsOpen && (
-        <SendSmsModal
-          context="call_log"
-          templateKey="consult_link"
-          phone={phone.trim() || selectedProfile?.phone || ""}
-          name={name.trim() || selectedProfile?.name || ""}
-          profileLocalId={selectedProfile?.localId ?? null}
-          language={language}
-          onSent={() => setSmsSent(true)}
-          onClose={() => setSmsOpen(false)}
         />
       )}
       {/* M11 as-is: fixed to the linked client, or its own client search when

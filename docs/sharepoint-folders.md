@@ -156,7 +156,12 @@ For each Calendly consultation in the last `CONSULT_SWEEP_DAYS` days:
    (`consult-status.ts`). An upcoming consult gets its folder now, so there is
    somewhere to put material during the meeting; the summary waits.
 3. **Skip** if the name needs a human — a missing first name, a surname that is
-   really an A-number, a reversed entry.
+   really an A-number, a reversed entry. A profile with First Name **and** Last
+   Name both empty — what a jail intake's Create Appt makes — is named from its
+   title instead when it reads "Given SURNAME" ("DETAINED Fidencio MERCADO" →
+   `MERCADO, Fidencio`; `nameFromTitle` in `libs/core/src/consult-naming.ts`).
+   A title that doesn't ("Mogtabi Azrag", "MUHAMMAD YAKAWU", two people) is
+   still skipped.
 4. **Look** for the folder at three exact paths, most-advanced first: SCAL
    Closed, then E-Files, then Consults. A client who has hired or closed must
    never be given a fresh consult folder.
@@ -180,10 +185,24 @@ write the summary once, never touch a document someone edited. Off unless
 CSV in `data/receipts/consult-sweep-<timestamp>.csv` — under `data/` because
 that is the directory mounted from the host, so receipts survive a redeploy.
 
-**The summary converges; it never churns.** It is written once. A summary the
-sweep wrote before the attorney's note existed is replaced when the note
-appears; one that already holds the note, or that a person has edited, is
-never touched again. Both are silent on later runs.
+**The summary waits for the note.** No note found (`consult-note.ts`: the M
+Consult Note column, a Consult note within 7 days, the profile's Consultation
+Notes, or a Casenote on the consult day or the 2 days after) = no summary yet;
+the folder and its CONSULT subfolder are still made. Until 2026-10-22 the sweep
+wrote a "no note was recorded" summary as soon as the consult's time passed,
+and staff read that as the report going out before the attorney's note.
+
+**E&A notes in full.** Until 2026-10-22 the E&A sync stored only Monday's
+~250-character preview of each entry, and long notes reached the summary cut
+off mid-sentence. The sync now stores them in full (see `docs/webhooks.md`);
+for a note still on its preview, `--apply` fetches the full text of any cut
+note within 7 days of a consult (`fetchTimelineItemContents`, batched by 12, a
+few calls per run). Either way the note keeps its line breaks.
+
+**The summary converges; it never churns.** It is written once. A placeholder
+from before that rule is replaced when the note appears, and one holding a
+cut-short note is replaced with the full one; a summary that holds the whole
+note, or that a person has edited, is never touched again.
 
 Deliberately targeted rather than the full scan `--match` does: a sweep looks at
 a few days of consults, where the folder is either at the expected path or does

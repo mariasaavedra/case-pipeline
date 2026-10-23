@@ -19,6 +19,11 @@
 // (template + fees). Send hands the PDF to Adobe Sign — attorney first, then
 // the client — and the API moves the stage, leaves a note and follows the
 // signatures (routes/esign.ts).
+// A template with a {{#people}} loop or {{people_names}} gets a "Contract is
+// for more than one person" box: ticked, everyone the contract covers is
+// listed. The client signs and pays but is listed only when the contract is for
+// them too (a relative often signs for someone detained); one fee. A Trial template asks for the prep and
+// the trial fee separately, each with its own deadline.
 // "Notes · Timeline · Documents" opens the client's case (M3, ClientCaseModal)
 // stacked over this form, so checking what was quoted or what is on file never
 // throws away a half-filled contract.
@@ -29,7 +34,7 @@
 // =============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchContractPrefill, fetchEsignStatus, logContractGenerated, sendContractForSignature } from "../api";
+import { fetchContractPrefill, fetchEsignStatus, fetchFeeKTypes, logContractGenerated, sendContractForSignature } from "../api";
 import type { PendingContract } from "../api";
 import { useAuth } from "../auth/useAuth";
 import {
@@ -37,8 +42,8 @@ import {
   CONTRACT_TEMPLATES_FOLDER, GraphConsentRequiredError, type DriveItem,
 } from "../sharepoint/graph";
 import {
-  contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf, contractDocumentName, MOTIONS, motionEs,
-  type ContractInput, type TemplateCheck,
+  contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf, contractDocumentName, MOTIONS, motionEs, contractTitle, fromFeeKTypes, trialTotalOf,
+  type ContractInput, type ContractPerson, type FeeKTypeText, type TemplateCheck,
 } from "../lib/contract-fill";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { FeeSheetPicker } from "./FeeSheetPicker";
@@ -62,6 +67,11 @@ const today = () => new Date().toISOString().slice(0, 10);
 const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).map((w) => w[0]!.toUpperCase()).join("").slice(0, 3);
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[$,\s]/g, "")));
 const baseName = (file: string) => file.replace(/\.docx$/i, "");
+/** How the COURT templates name a hearing (the API maps Monday's hearing types to these). */
+const HEARING_TYPES = ["Master Hearing", "Individual Hearing"];
+const NO_PERSON: ContractPerson = { name: "", aNumber: "", dob: "" };
+/** The AF recorded with the generation: a Trial contract's is prep + trial. */
+const afOf = (f: ContractInput) => f.attorneyFee ?? (f.trialPrepFee !== null || f.trialFee !== null ? trialTotalOf(f) : null);
 
 // ── Draft kept per Fee K, in this browser only ───────────────────────────────
 interface Draft { input: ContractInput; templateId: string | null; attorneyEmail: string; savedAt: string }
@@ -106,7 +116,7 @@ const INPUTS_FOR: Record<string, (keyof ContractInput)[]> = {
   client_name: ["clientName"], salutation: ["salutation"], email: ["email"],
   address: ["address"], city_state_zip: ["cityStateZip"], address_full: ["address", "cityStateZip"],
   hearing_type: ["hearingType"], hearing_date: ["hearingDate"], hearing_date_es: ["hearingDate"],
-  form_name: ["formName"],
+  form_name: ["formName"], form_name_es: ["formNameEs"],
   attorney_fee: ["attorneyFee"], filing_fee: ["filingFee"], postage_fee: ["postageFee"],
   surcharge: ["attorneyFee", "surcharge"], total_fee: ["attorneyFee", "filingFee", "postageFee", "surcharge"],
   interview_fee: ["interviewFee"],
@@ -115,6 +125,15 @@ const INPUTS_FOR: Record<string, (keyof ContractInput)[]> = {
   bio_fee: ["bioFee"], bio_fee_surcharge: ["bioFee"],
   motion_name: ["motionName"], motion_name_es: ["motionNameEs"],
   motion_fee: ["motionFee"], motion_fee_surcharge: ["motionFee"], hearing_fee: ["hearingFee"], hearing_fee_surcharge: ["hearingFee"],
+  people_names: ["people"], people_names_es: ["people"], people_count: ["people"],
+  people: ["people"], person_name: ["people"], person_number: ["people"],
+  person_a_number: ["people"], person_dob: ["people"], person_dob_es: ["people"], has_people: ["people"],
+  trial_prep_fee: ["trialPrepFee"], trial_prep_fee_surcharge: ["trialPrepFee"],
+  trial_prep_due_date: ["trialPrepDueDate"], trial_prep_due_date_es: ["trialPrepDueDate"],
+  trial_fee: ["trialFee"], trial_fee_surcharge: ["trialFee"],
+  trial_due_date: ["trialDueDate"], trial_due_date_es: ["trialDueDate"],
+  trial_total_fee: ["trialPrepFee", "trialFee"],
+  services: ["services"], services_es: ["servicesEs"], services_excluded: ["servicesExcluded"], services_excluded_es: ["servicesExcludedEs"],
   sign_by_date: ["signByDate"], sign_by_date_es: ["signByDate"],
   due_date: ["dueDate"], due_date_es: ["dueDate"], due_date_short: ["dueDate"],
   attorney_name: ["attorneyName"], creator_initials: ["creatorInitials"],
@@ -149,6 +168,9 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   const [needsConsent, setNeedsConsent] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [showCase, setShowCase] = useState(false);
+  const [types, setTypes] = useState<{ labels: string[]; rows: FeeKTypeText[] } | null>(null);
+  // "Edit the title": the matter typed by hand (a type not on the list, or a wording change).
+  const [editTitle, setEditTitle] = useState(false);
   // The Monday pre-fill, for "Start over".
   const prefill = useRef<{ input: ContractInput; attorneyEmail: string } | null>(null);
   // Saved only once someone changes something, so opening and closing leaves no draft.
@@ -177,6 +199,10 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     draftTemplate.current = draft?.templateId ?? null;
     void loadTemplates();
     fetchEsignStatus().then((s) => setEsign(s.enabled)).catch(() => setEsign(false));
+    // The Fee K Type list (Monday's labels) + each type's Spanish name and scope.
+    fetchFeeKTypes()
+      .then((t) => setTypes({ labels: t.feeKTypes.length > 0 ? t.feeKTypes : t.rows.map((r) => r.feeKType), rows: t.rows }))
+      .catch(() => setTypes({ labels: [], rows: [] }));
     fetchContractPrefill(c.localId)
       .then((p) => {
         setAttorneyEmail(draft?.attorneyEmail ?? p.attorneyEmail ?? "");
@@ -188,11 +214,18 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         date: today(), clientName: p.clientName, salutation: p.clientName, email: p.email,
         // Monday keeps one line; split below when the picked template has a City, State zip line.
         address: p.address, cityStateZip: "",
-        hearingType: p.hearingType, hearingDate: p.hearingDate, formName: p.contractFor.join(", "),
+        hearingType: p.hearingType, hearingDate: p.hearingDate,
+        // The matter = the Fee K's type(s), as picked in Monday; changed with the type picker below.
+        feeKTypes: p.contractFor, formName: p.formName ?? p.contractFor.join(", "), formNameEs: p.formNameEs ?? "",
         // The Fee K's PF is the postage.
         attorneyFee: p.attorneyFee, filingFee: p.filingFee, postageFee: p.processingFee, surcharge: null, interviewFee: null,
         bioFee: null, motionName: "", motionNameEs: "", motionFee: null, hearingFee: null,
         dueDate: "", signByDate: "", attorneyName: p.attorneyName, creatorInitials: initialsOf(user?.name ?? ""),
+        multiplePeople: false, people: [],
+        trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
+        // The Fee K Type's scope of services (Settings → Firm → Fee K Types).
+        services: p.scope?.services ?? "", servicesEs: p.scope?.servicesEs ?? "",
+        servicesExcluded: p.scope?.excluded ?? "", servicesExcludedEs: p.scope?.excludedEs ?? "",
         };
         prefill.current = { input: fresh, attorneyEmail: p.attorneyEmail ?? "" };
         if (draft) {
@@ -286,6 +319,13 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         )}
       </Field>
     ) : null;
+  const longText = (k: keyof ContractInput, label: string, hint?: string) =>
+    shown.has(k) && input ? (
+      <Field id={`m22-${k}`} label={label} hint={hint}>
+        <textarea id={`m22-${k}`} rows={3} className={inputClass} style={inputStyle}
+          value={(input[k] as string | null) ?? ""} onChange={(e) => set(k, e.target.value as never)} />
+      </Field>
+    ) : null;
   const amount = (k: keyof ContractInput, label: string, hint?: string, placeholder?: string) =>
     shown.has(k) && input ? (
       <Field id={`m22-${k}`} label={label} hint={hint}>
@@ -293,6 +333,36 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
           value={(input[k] as number | null) ?? ""} onChange={(e) => set(k, num(e.target.value) as never)} />
       </Field>
     ) : null;
+
+  const setPerson = (i: number, patch: Partial<ContractPerson>) => {
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, people: f.people.map((p, j) => (j === i ? { ...p, ...patch } : p)) } : f));
+  };
+  const addPerson = (name = "") => {
+    dirty.current = true;
+    setInput((f) => {
+      if (!f) return f;
+      // Filling the first empty row beats adding one below it.
+      const empty = name ? f.people.findIndex((p) => !p.name.trim()) : -1;
+      const people = empty >= 0 ? f.people.map((p, j) => (j === empty ? { ...p, name } : p)) : [...f.people, { ...NO_PERSON, name }];
+      return { ...f, people };
+    });
+  };
+  /** Ticking starts two empty rows; unticking keeps what was typed, unused. */
+  const setMultiple = (on: boolean) => {
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, multiplePeople: on, people: on && f.people.length === 0 ? [NO_PERSON, NO_PERSON] : f.people } : f));
+  };
+  const removePerson = (i: number) => {
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, people: f.people.filter((_, j) => j !== i) } : f));
+  };
+
+  /** Pick / drop a Fee K Type: the matter (EN + ES) and the scope follow. */
+  const setTypesPicked = (picked: string[]) => {
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, ...fromFeeKTypes(picked, types?.rows ?? []) } : f));
+  };
 
   const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
   const sendReady = !!input && emailOk(attorneyEmail) && emailOk(input.email)
@@ -308,7 +378,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
       const res = await sendContractForSignature(c.localId, preview.pdf, {
         attorneyEmail: attorneyEmail.trim(), clientEmail: input.email.trim(), documentName: preview.name,
       });
-      void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+      void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: afOf(input), filingFee: input.filingFee });
       // Sent: nothing left to resume.
       dirty.current = false;
       clearDraft(c.localId);
@@ -334,7 +404,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
       if (format === "docx") {
         save(docx, `${name}.docx`);
         setDone(`Downloaded ${name}.docx`);
-        void logContractGenerated(c.localId, { template: picked.name, format: "docx", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+        void logContractGenerated(c.localId, { template: picked.name, format: "docx", attorneyFee: afOf(input), filingFee: input.filingFee });
         return;
       }
       showPreview({ pdf: await convertDocxToPdf(docx, `${name}.docx`), name });
@@ -350,7 +420,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     if (!preview || !input || !picked) return;
     save(preview.pdf, `${preview.name}.pdf`);
     setDone(`Downloaded ${preview.name}.pdf`);
-    void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: input.attorneyFee, filingFee: input.filingFee });
+    void logContractGenerated(c.localId, { template: picked.name, format: "pdf", attorneyFee: afOf(input), filingFee: input.filingFee });
   };
 
   // From the click itself, so the browser allows the Microsoft popup.
@@ -474,9 +544,62 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {text("email", "Email", { type: "email" })}
                 {text("address", "Address", { hint: shown.has("cityStateZip") ? "Street only — the city goes in the next field." : undefined })}
                 {text("cityStateZip", "City, State zip", { placeholder: "Kansas City, MO 64105" })}
-                {text("hearingType", "Hearing type", { placeholder: "Master Hearing / Individual Hearing" })}
+                {shown.has("hearingType") && (
+                  <Field id="m22-hearingType" label="Hearing type">
+                    <select id="m22-hearingType" className={inputClass} style={inputStyle} value={input.hearingType}
+                      onChange={(e) => set("hearingType", e.target.value)}>
+                      <option value="">Select…</option>
+                      {HEARING_TYPES.map((h) => <option key={h} value={h}>{h}</option>)}
+                      {/* A label Monday had that isn't one of the two stays visible, to be changed. */}
+                      {input.hearingType && !HEARING_TYPES.includes(input.hearingType) && <option value={input.hearingType}>{input.hearingType}</option>}
+                    </select>
+                  </Field>
+                )}
                 {text("hearingDate", "Hearing date", { type: "date" })}
-                {text("formName", "Form(s) / matter", { placeholder: "I-130" })}
+                {(shown.has("formName") || shown.has("formNameEs")) && (() => {
+                  const labels = types?.labels ?? [];
+                  const picked = input.feeKTypes;
+                  return (
+                    <div className="sm:col-span-2 rounded-md p-3 space-y-2" style={{ border: "1px solid var(--color-border-light)" }}>
+                      <label style={labelStyle} htmlFor="m22-feeKType">Case type (Fee K Type)</label>
+                      {picked.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {picked.map((t) => (
+                            <span key={t} className="text-xs rounded px-2 py-1 inline-flex items-center gap-1"
+                              style={{ background: "var(--color-surface-warm)", border: "1px solid var(--color-border-light)", color: "var(--color-ink)" }}>
+                              {contractTitle(t)}
+                              <button type="button" aria-label={`Remove ${t}`} title="Remove"
+                                onClick={() => setTypesPicked(picked.filter((x) => x !== t))}>✕</button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <select id="m22-feeKType" aria-label="Add a case type" className={inputClass} style={inputStyle} value=""
+                        disabled={!types} onChange={(e) => { if (e.target.value) setTypesPicked([...picked, e.target.value]); }}>
+                        <option value="">{!types ? "Loading types…" : picked.length > 0 ? "+ Add another type…" : "Pick a type…"}</option>
+                        {labels.filter((l) => !picked.includes(l)).map((l) => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                      <p className="text-xs" style={{ color: "var(--color-ink-muted)" }}>
+                        Prints: <strong>{input.formName || "—"}</strong>
+                        {shown.has("formNameEs") && <> / <em>{input.formNameEs || input.formName || "—"}</em></>}
+                        {" · "}
+                        <button type="button" className="underline" onClick={() => setEditTitle((v) => !v)}>
+                          {editTitle ? "Done" : "Edit the title"}
+                        </button>
+                      </p>
+                      {editTitle && (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <input aria-label="Title in English" className={inputClass} style={inputStyle} value={input.formName}
+                            onChange={(e) => set("formName", e.target.value)} />
+                          {shown.has("formNameEs") && (
+                            <input aria-label="Title in Spanish" className={inputClass} style={inputStyle} value={input.formNameEs}
+                              onChange={(e) => set("formNameEs", e.target.value)} />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {shown.has("motionName") && (
                   <Field id="m22-motionName" label="Motion" hint="Pick one, or type another.">
                     <input id="m22-motionName" list="m22-motions" placeholder="Motion to Recalendar" className={inputClass} style={inputStyle}
@@ -497,12 +620,78 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {text("date", "Letter date", { type: "date" })}
                 {text("signByDate", "Signed contract due", { type: "date" })}
                 {text("dueDate", "Payment deadline", { type: "date" })}
+                {text("trialPrepDueDate", "Trial prep fee due", { type: "date" })}
+                {text("trialDueDate", "Trial fee due", { type: "date" })}
               </div>
+              {shown.has("people") && (() => {
+                const withANumber = file.check.tags.includes("person_a_number");
+                const withDob = file.check.tags.includes("person_dob") || file.check.tags.includes("person_dob_es");
+                const cols = `1.5rem minmax(0,1fr)${withANumber ? " 9rem" : ""}${withDob ? " 9.5rem" : ""} 2rem`;
+                const signer = input.clientName.trim();
+                const signerListed = input.people.some((p) => p.name.trim().toLowerCase() === signer.toLowerCase());
+                return (
+                  <div className="rounded-md p-3 space-y-2" style={{ border: "1px solid var(--color-border-light)" }}>
+                    <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
+                      <input type="checkbox" checked={input.multiplePeople} onChange={(e) => setMultiple(e.target.checked)} />
+                      Contract is for more than one person
+                    </label>
+                    {input.multiplePeople && (
+                      <>
+                        <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
+                          List everyone the contract covers. One fee; only {signer || "the client"} signs and pays, and is listed only if the contract is for them too.
+                        </p>
+                        <div className="grid gap-2 items-center text-xs" style={{ gridTemplateColumns: cols, color: "var(--color-ink-muted)" }}>
+                          <span />
+                          <span>Name</span>{withANumber && <span>A#</span>}{withDob && <span>Date of birth</span>}<span />
+                        </div>
+                        {input.people.map((p, i) => (
+                          <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: cols }}>
+                            <span className="text-xs text-right" style={{ color: "var(--color-ink-faint)" }}>{i + 1}.</span>
+                            <input aria-label={`Person ${i + 1} name`} placeholder="Name" className={inputClass} style={inputStyle} value={p.name}
+                              onChange={(e) => setPerson(i, { name: e.target.value })} />
+                            {withANumber && <input aria-label={`Person ${i + 1} A#`} className={inputClass} style={inputStyle} value={p.aNumber}
+                              onChange={(e) => setPerson(i, { aNumber: e.target.value })} />}
+                            {withDob && <DateInput aria-label={`Person ${i + 1} date of birth`} className={inputClass} style={inputStyle} value={p.dob}
+                              onChange={(e) => setPerson(i, { dob: e.target.value })} />}
+                            <button type="button" onClick={() => removePerson(i)} aria-label={`Remove person ${i + 1}`} title="Remove"
+                              className="text-sm rounded hover:underline" style={{ color: "var(--color-ink-muted)" }}>✕</button>
+                          </div>
+                        ))}
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => addPerson()}>+ Add person</Button>
+                          {signer && !signerListed && (
+                            <Button type="button" size="sm" variant="ghost" onClick={() => addPerson(signer)}
+                              title="Only when the contract also covers the person who signs">
+                              + Add {signer} (signer)
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+              {(shown.has("services") || shown.has("servicesExcluded")) && (
+                <div className="rounded-md p-3 space-y-3" style={{ border: "1px solid var(--color-border-light)" }}>
+                  <div className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>Scope of services</div>
+                  <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
+                    From the Fee K Type (Settings → Firm → Fee K Types). Change it here for this contract only; empty prints nothing extra.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {longText("services", "Included")}
+                    {longText("servicesEs", "Included, Spanish")}
+                    {longText("servicesExcluded", "Not included")}
+                    {longText("servicesExcludedEs", "Not included, Spanish")}
+                  </div>
+                </div>
+              )}
               {(shown.has("attorneyFee") || shown.has("filingFee")) && (
                 <FeeSheetPicker onPick={(fees) => { dirty.current = true; setInput((f) => (f ? { ...f, ...fees } : f)); }} />
               )}
               <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
                 {amount("attorneyFee", "Attorney fee $", file.check.tags.includes("attorney_fee_half") ? `Printed as two halves of ${money(halfOf(input.attorneyFee))}` : undefined)}
+                {amount("trialPrepFee", "Trial prep fee $")}
+                {amount("trialFee", "Trial fee $")}
                 {amount("motionFee", "Motion fee $")}
                 {amount("hearingFee", "Hearing fee $")}
                 {amount("filingFee", "Filing fee $")}
@@ -511,6 +700,9 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {amount("bioFee", "DHS bio fee $", "Empty prints N/A", "N/A")}
                 {amount("surcharge", "Surcharge $", input.surcharge === null ? `3% of AF + FF + postage = ${money(surchargeOf(input))}` : undefined, money(surchargeOf(input)))}
               </div>
+              {file.check.tags.includes("trial_total_fee") && (
+                <p className="text-sm" style={{ color: "var(--color-ink)" }}>Trial prep + trial: <strong className="tabular-nums">{money(trialTotalOf(input))}</strong></p>
+              )}
               {file.check.tags.includes("total_fee") && (
                 <p className="text-sm" style={{ color: "var(--color-ink)" }}>Total fee: <strong className="tabular-nums">{money(totalOf(input))}</strong></p>
               )}
