@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { feeKTypeLookup, sanitizeFeeKTypes, scopeFor, type FeeKTypeRow } from "./fee-k-types.js";
+import { contractTitles, feeKTypeLookup, sanitizeFeeKTypes, scopeFor, type FeeKTypeRow } from "./fee-k-types.js";
 import { DRAFT_FEE_K_TYPES } from "./fee-k-types-draft.js";
 
 const BLANK: FeeKTypeRow = { feeKType: "", spanish: "", board: "", feeSheetJob: "", services: "", servicesEs: "", excluded: "", excludedEs: "" };
@@ -74,5 +74,14 @@ describe("scope of services", () => {
     expect(withScope.map((r) => r.feeKType)).toContain("I-485 + I-130 - Full Packet");
     expect(withScope).toHaveLength(11);
     for (const r of withScope) expect([r.servicesEs, r.excluded, r.excludedEs].every(Boolean)).toBe(true);
+  });
+});
+
+describe("contractTitles", () => {
+  it("clean English titles + Spanish names, joined; the court marker dropped", () => {
+    const rows = [{ ...BLANK, feeKType: "Master (c)", spanish: "Audiencia preliminar (master)" }];
+    expect(contractTitles(["Master (c)", "I-765 - EAD Renewal"], rows))
+      .toEqual({ en: "Master + I-765 - EAD Renewal", es: "Audiencia preliminar (master) + I-765 - EAD Renewal" });
+    expect(contractTitles([], rows)).toEqual({ en: "", es: "" });
   });
 });

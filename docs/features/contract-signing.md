@@ -95,8 +95,10 @@ add a contract.
   Application adds the DHS `{{bio_fee}}`; Trial's "signed contract by" date is
   `{{sign_by_date}}` (payment = `{{due_date}}`).
 - Scope of services (2026-10-23, approved by Michael + Rekha): every contract
-  gets an unnumbered "Scope of Services / Alcance de los Servicios" section
-  after the introduction (so "Sections 1 through 12" and the 12 initials stay).
+  gets "Scope of Services / Alcance de los Servicios" — section 1 with its own
+  initials (Rafael, same day: the old sections are 2–13, initials and Adobe
+  `IntN` fields 1–13, "Sections 1 through 13", Fees = Section 3). It sits right
+  before "2. Office Procedures" (after the Trial / Habeas deadline notices).
   Court templates carry it as fixed text in the Word file. FORMS prints a
   common opening ("Preparing and filing your {{form_name}} with USCIS…") plus
   `{{services}}` / `{{services_excluded}}` (+ `_es`) from the Fee K Type's
@@ -110,7 +112,12 @@ add a contract.
   pre-filled from Monday (client, e-mail, address, attorney, AF/FF, the next
   hearing from the client's court case: MCH → Master Hearing, Trial →
   Individual Hearing) and the user's initials. A field the template uses must
-  be filled. The address (2026-10-22) is the profile's Address, else its
+  be filled. Case type and hearing type are picked, not typed (2026-10-23):
+  the Fee K Type(s) from the Fee K Types list (the Fee K's own pre-picked, more
+  can be added) give `{{form_name}}` (Monday's label without "(c)", several
+  joined with " + "), `{{form_name_es}}` (the type's Spanish name, else the
+  English) and the scope; "Edit the title" types a matter not on the list.
+  Hearing type = Master Hearing / Individual Hearing. The address (2026-10-22) is the profile's Address, else its
   Mailing address, else the Fee K's own copy (P14's "missing" flag uses the
   same order; a third of the Fee Ks since September had only a Mailing
   address). It is tidied and split by `documents/us-address.ts`

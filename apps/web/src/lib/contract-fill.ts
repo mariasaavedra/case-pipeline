@@ -46,6 +46,10 @@ export interface ContractInput {
   hearingDate: string;
   /** FORMS: the form(s) the contract is for, e.g. "I-130". */
   formName: string;
+  /** The same in Spanish (the Fee K Type's Spanish name). */
+  formNameEs: string;
+  /** The Fee K Type(s) picked in M22; formName / formNameEs / the scope follow them. */
+  feeKTypes: string[];
   attorneyFee: number | null;
   filingFee: number | null;
   /** Null prints "N/A". */
@@ -156,7 +160,8 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "hearing_type", label: "Hearing type", example: "Master Hearing", value: (f) => f.hearingType.trim(), required: (f) => !has(f.hearingType) },
   { tag: "hearing_date", label: "Hearing date", example: "November 12, 2026", value: (f) => dateEn(f.hearingDate), required: (f) => !ymd(f.hearingDate) },
   { tag: "hearing_date_es", label: "Hearing date, Spanish", example: "12 de Noviembre, 2026", value: (f) => dateEs(f.hearingDate), required: (f) => !ymd(f.hearingDate) },
-  { tag: "form_name", label: "Form(s) / matter", example: "I-130", value: (f) => f.formName.trim(), required: (f) => !has(f.formName) },
+  { tag: "form_name", label: "Form(s) / matter", example: "I-130 - Petition for Alien Relative", value: (f) => f.formName.trim(), required: (f) => !has(f.formName) },
+  { tag: "form_name_es", label: "Form(s) / matter, Spanish (English when there's none)", example: "Petición de familiar extranjero (I-130)", value: (f) => f.formNameEs.trim() || f.formName.trim(), required: (f) => !has(f.formName) && !has(f.formNameEs) },
   { tag: "attorney_fee", label: "Attorney fee (AF)", example: "$5,000.00", value: (f) => money(f.attorneyFee), required: (f) => !positive(f.attorneyFee) },
   { tag: "filing_fee", label: "Filing fee (FF)", example: "$675.00", value: (f) => money(f.filingFee ?? 0) },
   { tag: "postage_fee", label: "Postage fee (N/A when empty)", example: "$100.00", value: (f) => (f.postageFee === null ? "N/A" : money(f.postageFee)) },
@@ -200,6 +205,38 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "attorney_name", label: "Attorney (signs the letter)", example: "Jane Attorney", value: (f) => f.attorneyName.trim(), required: (f) => !has(f.attorneyName) },
   { tag: "creator_initials", label: "Initials of who made the Fee K", example: "RC", value: (f) => f.creatorInitials.trim(), required: (f) => !has(f.creatorInitials) },
 ];
+
+/** What M22 needs of a Fee K Types row (Settings → Firm). */
+export interface FeeKTypeText {
+  feeKType: string;
+  spanish: string;
+  services: string;
+  servicesEs: string;
+  excluded: string;
+  excludedEs: string;
+}
+const typeKey = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+/** A Fee K Type as a contract names it: Monday's "(c)" court marker and doubled spaces dropped. */
+export const contractTitle = (feeKType: string) => feeKType.replace(/\(c\)/gi, "").replace(/\s+/g, " ").trim();
+
+/**
+ * Picking Fee K Type(s) in M22: the contract's matter in English and Spanish
+ * (several joined with " + "; no Spanish name = the English one) and the scope
+ * of services (each type's text, joined). Mirrors the API's pre-fill.
+ */
+export function fromFeeKTypes(types: string[], rows: FeeKTypeText[]): Pick<ContractInput,
+  "feeKTypes" | "formName" | "formNameEs" | "services" | "servicesEs" | "servicesExcluded" | "servicesExcludedEs"> {
+  const byKey = new Map(rows.map((r) => [typeKey(r.feeKType), r]));
+  const hits = types.map((t) => byKey.get(typeKey(t)));
+  const join = (k: keyof FeeKTypeText) => hits.map((r) => r?.[k] ?? "").filter(Boolean).join(" ");
+  return {
+    feeKTypes: types,
+    formName: types.map(contractTitle).filter(Boolean).join(" + "),
+    formNameEs: types.map((t, i) => hits[i]?.spanish || contractTitle(t)).filter(Boolean).join(" + "),
+    services: join("services"), servicesEs: join("servicesEs"),
+    servicesExcluded: join("excluded"), servicesExcludedEs: join("excludedEs"),
+  };
+}
 
 /** The {{#people}} … {{/people}} loop: its tags print once per person. */
 export const PEOPLE_LOOP = "people";

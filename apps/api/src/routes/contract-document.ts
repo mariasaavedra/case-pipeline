@@ -33,7 +33,7 @@ import { FEE_K_ASSISTANT, makeMondayUserByLogin, peopleValue } from "../contract
 import { hearingKindOf } from "@case-pipeline/query";
 import { letterAddress, oneLineAddress } from "../documents/us-address.js";
 import { loadDocumentSettings } from "../documents/document-settings.js";
-import { feeKTypesSaved, loadFeeKTypes, scopeFor, type FeeKTypeRow } from "../fee-k-types.js";
+import { contractTitles, feeKTypesSaved, loadFeeKTypes, scopeFor, type FeeKTypeRow } from "../fee-k-types.js";
 import { DRAFT_FEE_K_TYPES } from "../fee-k-types-draft.js";
 import type { AttorneyInfo } from "../documents/document-settings.js";
 
@@ -64,6 +64,9 @@ export interface ContractPrefill {
   /** From Settings → Documents, matched by name; "" when unknown. For Adobe Sign. */
   attorneyEmail: string;
   contractFor: string[];
+  /** The matter for the contract from the Fee K Type(s): clean English title, and Spanish. */
+  formName: string;
+  formNameEs: string;
   attorneyFee: number | null;
   filingFee: number | null;
   processingFee: number | null;
@@ -112,6 +115,7 @@ export function contractPrefill(
   feeKTypes: FeeKTypeRow[] = [],
 ): ContractPrefill {
   // First listed attorney; a people label can read "A, B".
+  const titles = contractTitles(labels(row.contractFor), feeKTypes);
   const attorneyName = (row.attorney ?? "").split(",").map((s) => s.trim()).find((s) => s && !s.includes("@")) ?? "";
   return {
     clientName: (row.clientName ?? row.itemName).trim(),
@@ -121,6 +125,8 @@ export function contractPrefill(
     attorneyName,
     attorneyEmail: attorneyEmailFor(attorneyName, attorneys),
     contractFor: labels(row.contractFor),
+    formName: titles.en,
+    formNameEs: titles.es,
     attorneyFee: amount(row.af),
     filingFee: amount(row.ff),
     processingFee: amount(row.pf),

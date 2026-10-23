@@ -152,5 +152,6 @@ describe("contract pre-fill: scope of services", () => {
     expect(data.contractFor).toEqual(["N-400 - Naturalization"]);
     expect(data.scope.services).toBe("Prepare and file Form N-400.");
     expect(data.scope.excludedEs).toMatch(/N-336/);
+    expect(data).toMatchObject({ formName: "N-400 - Naturalization", formNameEs: "Ciudadanía / naturalización (N-400)" });
   });
 });

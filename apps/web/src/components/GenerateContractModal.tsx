@@ -34,7 +34,7 @@
 // =============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchContractPrefill, fetchEsignStatus, logContractGenerated, sendContractForSignature } from "../api";
+import { fetchContractPrefill, fetchEsignStatus, fetchFeeKTypes, logContractGenerated, sendContractForSignature } from "../api";
 import type { PendingContract } from "../api";
 import { useAuth } from "../auth/useAuth";
 import {
@@ -42,8 +42,8 @@ import {
   CONTRACT_TEMPLATES_FOLDER, GraphConsentRequiredError, type DriveItem,
 } from "../sharepoint/graph";
 import {
-  contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf, contractDocumentName, MOTIONS, motionEs, trialTotalOf,
-  type ContractInput, type ContractPerson, type TemplateCheck,
+  contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf, contractDocumentName, MOTIONS, motionEs, contractTitle, fromFeeKTypes, trialTotalOf,
+  type ContractInput, type ContractPerson, type FeeKTypeText, type TemplateCheck,
 } from "../lib/contract-fill";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { FeeSheetPicker } from "./FeeSheetPicker";
@@ -67,6 +67,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).map((w) => w[0]!.toUpperCase()).join("").slice(0, 3);
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[$,\s]/g, "")));
 const baseName = (file: string) => file.replace(/\.docx$/i, "");
+/** How the COURT templates name a hearing (the API maps Monday's hearing types to these). */
+const HEARING_TYPES = ["Master Hearing", "Individual Hearing"];
 const NO_PERSON: ContractPerson = { name: "", aNumber: "", dob: "" };
 /** The AF recorded with the generation: a Trial contract's is prep + trial. */
 const afOf = (f: ContractInput) => f.attorneyFee ?? (f.trialPrepFee !== null || f.trialFee !== null ? trialTotalOf(f) : null);
@@ -114,7 +116,7 @@ const INPUTS_FOR: Record<string, (keyof ContractInput)[]> = {
   client_name: ["clientName"], salutation: ["salutation"], email: ["email"],
   address: ["address"], city_state_zip: ["cityStateZip"], address_full: ["address", "cityStateZip"],
   hearing_type: ["hearingType"], hearing_date: ["hearingDate"], hearing_date_es: ["hearingDate"],
-  form_name: ["formName"],
+  form_name: ["formName"], form_name_es: ["formNameEs"],
   attorney_fee: ["attorneyFee"], filing_fee: ["filingFee"], postage_fee: ["postageFee"],
   surcharge: ["attorneyFee", "surcharge"], total_fee: ["attorneyFee", "filingFee", "postageFee", "surcharge"],
   interview_fee: ["interviewFee"],
@@ -166,6 +168,9 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   const [needsConsent, setNeedsConsent] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [showCase, setShowCase] = useState(false);
+  const [types, setTypes] = useState<{ labels: string[]; rows: FeeKTypeText[] } | null>(null);
+  // "Edit the title": the matter typed by hand (a type not on the list, or a wording change).
+  const [editTitle, setEditTitle] = useState(false);
   // The Monday pre-fill, for "Start over".
   const prefill = useRef<{ input: ContractInput; attorneyEmail: string } | null>(null);
   // Saved only once someone changes something, so opening and closing leaves no draft.
@@ -194,6 +199,10 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     draftTemplate.current = draft?.templateId ?? null;
     void loadTemplates();
     fetchEsignStatus().then((s) => setEsign(s.enabled)).catch(() => setEsign(false));
+    // The Fee K Type list (Monday's labels) + each type's Spanish name and scope.
+    fetchFeeKTypes()
+      .then((t) => setTypes({ labels: t.feeKTypes.length > 0 ? t.feeKTypes : t.rows.map((r) => r.feeKType), rows: t.rows }))
+      .catch(() => setTypes({ labels: [], rows: [] }));
     fetchContractPrefill(c.localId)
       .then((p) => {
         setAttorneyEmail(draft?.attorneyEmail ?? p.attorneyEmail ?? "");
@@ -205,7 +214,9 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         date: today(), clientName: p.clientName, salutation: p.clientName, email: p.email,
         // Monday keeps one line; split below when the picked template has a City, State zip line.
         address: p.address, cityStateZip: "",
-        hearingType: p.hearingType, hearingDate: p.hearingDate, formName: p.contractFor.join(", "),
+        hearingType: p.hearingType, hearingDate: p.hearingDate,
+        // The matter = the Fee K's type(s), as picked in Monday; changed with the type picker below.
+        feeKTypes: p.contractFor, formName: p.formName ?? p.contractFor.join(", "), formNameEs: p.formNameEs ?? "",
         // The Fee K's PF is the postage.
         attorneyFee: p.attorneyFee, filingFee: p.filingFee, postageFee: p.processingFee, surcharge: null, interviewFee: null,
         bioFee: null, motionName: "", motionNameEs: "", motionFee: null, hearingFee: null,
@@ -345,6 +356,12 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   const removePerson = (i: number) => {
     dirty.current = true;
     setInput((f) => (f ? { ...f, people: f.people.filter((_, j) => j !== i) } : f));
+  };
+
+  /** Pick / drop a Fee K Type: the matter (EN + ES) and the scope follow. */
+  const setTypesPicked = (picked: string[]) => {
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, ...fromFeeKTypes(picked, types?.rows ?? []) } : f));
   };
 
   const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
@@ -527,9 +544,62 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {text("email", "Email", { type: "email" })}
                 {text("address", "Address", { hint: shown.has("cityStateZip") ? "Street only — the city goes in the next field." : undefined })}
                 {text("cityStateZip", "City, State zip", { placeholder: "Kansas City, MO 64105" })}
-                {text("hearingType", "Hearing type", { placeholder: "Master Hearing / Individual Hearing" })}
+                {shown.has("hearingType") && (
+                  <Field id="m22-hearingType" label="Hearing type">
+                    <select id="m22-hearingType" className={inputClass} style={inputStyle} value={input.hearingType}
+                      onChange={(e) => set("hearingType", e.target.value)}>
+                      <option value="">Select…</option>
+                      {HEARING_TYPES.map((h) => <option key={h} value={h}>{h}</option>)}
+                      {/* A label Monday had that isn't one of the two stays visible, to be changed. */}
+                      {input.hearingType && !HEARING_TYPES.includes(input.hearingType) && <option value={input.hearingType}>{input.hearingType}</option>}
+                    </select>
+                  </Field>
+                )}
                 {text("hearingDate", "Hearing date", { type: "date" })}
-                {text("formName", "Form(s) / matter", { placeholder: "I-130" })}
+                {(shown.has("formName") || shown.has("formNameEs")) && (() => {
+                  const labels = types?.labels ?? [];
+                  const picked = input.feeKTypes;
+                  return (
+                    <div className="sm:col-span-2 rounded-md p-3 space-y-2" style={{ border: "1px solid var(--color-border-light)" }}>
+                      <label style={labelStyle} htmlFor="m22-feeKType">Case type (Fee K Type)</label>
+                      {picked.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {picked.map((t) => (
+                            <span key={t} className="text-xs rounded px-2 py-1 inline-flex items-center gap-1"
+                              style={{ background: "var(--color-surface-warm)", border: "1px solid var(--color-border-light)", color: "var(--color-ink)" }}>
+                              {contractTitle(t)}
+                              <button type="button" aria-label={`Remove ${t}`} title="Remove"
+                                onClick={() => setTypesPicked(picked.filter((x) => x !== t))}>✕</button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <select id="m22-feeKType" aria-label="Add a case type" className={inputClass} style={inputStyle} value=""
+                        disabled={!types} onChange={(e) => { if (e.target.value) setTypesPicked([...picked, e.target.value]); }}>
+                        <option value="">{!types ? "Loading types…" : picked.length > 0 ? "+ Add another type…" : "Pick a type…"}</option>
+                        {labels.filter((l) => !picked.includes(l)).map((l) => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                      <p className="text-xs" style={{ color: "var(--color-ink-muted)" }}>
+                        Prints: <strong>{input.formName || "—"}</strong>
+                        {shown.has("formNameEs") && <> / <em>{input.formNameEs || input.formName || "—"}</em></>}
+                        {" · "}
+                        <button type="button" className="underline" onClick={() => setEditTitle((v) => !v)}>
+                          {editTitle ? "Done" : "Edit the title"}
+                        </button>
+                      </p>
+                      {editTitle && (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <input aria-label="Title in English" className={inputClass} style={inputStyle} value={input.formName}
+                            onChange={(e) => set("formName", e.target.value)} />
+                          {shown.has("formNameEs") && (
+                            <input aria-label="Title in Spanish" className={inputClass} style={inputStyle} value={input.formNameEs}
+                              onChange={(e) => set("formNameEs", e.target.value)} />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {shown.has("motionName") && (
                   <Field id="m22-motionName" label="Motion" hint="Pick one, or type another.">
                     <input id="m22-motionName" list="m22-motions" placeholder="Motion to Recalendar" className={inputClass} style={inputStyle}

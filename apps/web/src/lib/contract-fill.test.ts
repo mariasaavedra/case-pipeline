@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import PizZip from "pizzip";
 import {
-  peopleRows,
+  peopleRows, fromFeeKTypes, contractTitle,
   contractValues, contractProblems, contractDocumentName, motionEs, CONTRACT_FIELDS, inspectContractTemplate, fillContractTemplate, surchargeFor, unhighlightTags,
   type ContractInput,
 } from "./contract-fill";
@@ -24,6 +24,7 @@ const INPUT: ContractInput = {
   multiplePeople: false, people: [],
   trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
   services: "", servicesEs: "", servicesExcluded: "", servicesExcludedEs: "",
+  formNameEs: "", feeKTypes: [],
 };
 
 // The signer (Ana) is a relative; the contract is for three detained people.
@@ -268,5 +269,28 @@ describe("scope of services", () => {
     const xml = new PizZip(await fillContractTemplate(tmpl, filled).arrayBuffer()).file("word/document.xml")!.asText();
     expect(xml).toContain("Included: Preparing and filing your I-130. Prepare and file Form I-130.");
     expect(xml).toContain("Not included: Any interview. Unless listed above…");
+  });
+});
+
+describe("case type picked from the Fee K Types", () => {
+  const ROWS = [
+    { feeKType: "I-130 - Petition for Alien Relative", spanish: "Petición de familiar extranjero (I-130)", services: "A.", servicesEs: "A es.", excluded: "No A.", excludedEs: "No A es." },
+    { feeKType: "I-765 - EAD Renewal", spanish: "", services: "B.", servicesEs: "B es.", excluded: "", excludedEs: "" },
+  ];
+
+  it("names the matter in English and Spanish, joined; no Spanish name = English", () => {
+    expect(contractTitle("Trial/Trial Preparation  (c)")).toBe("Trial/Trial Preparation");
+    expect(fromFeeKTypes(["I-130 - Petition for Alien Relative", "I-765 - EAD Renewal"], ROWS)).toEqual({
+      feeKTypes: ["I-130 - Petition for Alien Relative", "I-765 - EAD Renewal"],
+      formName: "I-130 - Petition for Alien Relative + I-765 - EAD Renewal",
+      formNameEs: "Petición de familiar extranjero (I-130) + I-765 - EAD Renewal",
+      services: "A. B.", servicesEs: "A es. B es.", servicesExcluded: "No A.", servicesExcludedEs: "No A es.",
+    });
+    expect(fromFeeKTypes([], ROWS)).toMatchObject({ formName: "", formNameEs: "", services: "" });
+  });
+
+  it("{{form_name_es}} prints the Spanish title, else the English one", () => {
+    expect(contractValues({ ...INPUT, formName: "I-130", formNameEs: "Petición (I-130)" })).toMatchObject({ form_name_es: "Petición (I-130)" });
+    expect(contractValues({ ...INPUT, formName: "I-130", formNameEs: "" })).toMatchObject({ form_name_es: "I-130" });
   });
 });
