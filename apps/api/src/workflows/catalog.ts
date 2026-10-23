@@ -234,7 +234,7 @@ export const WORKFLOWS: WorkflowDef[] = [
   {
     key: "slack_events",
     name: "Slack notifications",
-    when: "A contract is signed, a payment arrives, a client sends documents, mail is scanned…",
+    when: "A contract is signed, a payment arrives, a client sends documents, mail is filed…",
     then: "Post it to the Slack channel set for that event (Settings → Integrations)",
     group: "messages", kind: "event",
     enabled: ({ env }) => {

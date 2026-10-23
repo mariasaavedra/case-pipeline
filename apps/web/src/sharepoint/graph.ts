@@ -14,6 +14,7 @@ import { InteractionRequiredAuthError } from "@azure/msal-browser";
 import { msalInstance } from "../auth/AuthProvider";
 import { graphRequest, mailRequest } from "../auth/msal-config";
 import { parseSharePointLink, type SharePointFolder } from "./parseLink";
+import { CC_FOLDER_NAME, pickCcFolder } from "../lib/mail-filing";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
@@ -449,7 +450,13 @@ export function getMailToken(interactive = false): Promise<string> {
  * allowed sending once (call again with interactive=true from a click).
  */
 export async function sendMailAsMe(
-  msg: { to: string; subject: string; html: string },
+  msg: {
+    to: string;
+    subject: string;
+    html: string;
+    /** Small files only: the whole request must stay under ~4 MB. */
+    attachments?: { name: string; contentType: string; contentBytes: string }[];
+  },
   interactive = false,
 ): Promise<void> {
   const token = await getMailToken(interactive);
@@ -461,6 +468,9 @@ export async function sendMailAsMe(
         subject: msg.subject,
         body: { contentType: "HTML", content: msg.html },
         toRecipients: [{ emailAddress: { address: msg.to } }],
+        ...(msg.attachments?.length
+          ? { attachments: msg.attachments.map((a) => ({ "@odata.type": "#microsoft.graph.fileAttachment", ...a })) }
+          : {}),
       },
       saveToSentItems: true,
     }),
@@ -518,6 +528,20 @@ export async function createFolder(driveId: string, parentItemId: string, name: 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: name.trim(), folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
   });
+}
+
+/**
+ * The CC folder inside a client's E-File (M32: where mail goes), made as "CC"
+ * in the rare E-File without one. `eFile` = the profile's E-File link.
+ */
+export async function findCcFolder(eFile: string): Promise<ResolvedItem & { created: boolean; eFileName: string }> {
+  const link = parseSharePointLink(eFile);
+  if (!link) throw new GraphError(400, "The client's E-File link isn't a SharePoint folder.");
+  const efile = await resolveFolder(link);
+  if (!efile.isFolder) throw new GraphError(400, "The client's E-File link points at a file, not a folder.");
+  const existing = pickCcFolder(await listChildren(efile.driveId, efile.itemId));
+  const cc = existing ?? (await createFolder(efile.driveId, efile.itemId, CC_FOLDER_NAME));
+  return { driveId: efile.driveId, itemId: cc.id, name: cc.name, webUrl: cc.webUrl, isFolder: true, created: !existing, eFileName: efile.name };
 }
 
 /**

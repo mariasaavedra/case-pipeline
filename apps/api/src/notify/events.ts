@@ -39,13 +39,14 @@ export function consultPrepEvent(e: {
   return withLink(text, e.link, "Monday");
 }
 
-export function mailScanEvent(e: { notices: number; needsReview: number; by?: string | null; link: string | null }): string | null {
-  if (e.notices === 0) return null;
+/** A piece of mail filed from the Mail page (P12 → M32). */
+export function mailFiledEvent(e: { clientName: string; noticeType: string | null; emailed: boolean; by?: string | null; link: string | null }): string {
   const text =
-    `:envelope: Mail scanned: ${e.notices} notice${e.notices === 1 ? "" : "s"}` +
-    (e.needsReview ? `, *${e.needsReview} to review*` : ", all matched") +
+    `:envelope: Mail filed for *${slackEscape(e.clientName)}*` +
+    (e.noticeType ? ` (${slackEscape(e.noticeType)})` : "") +
+    (e.emailed ? ", client e-mailed" : "") +
     who(e.by);
-  return withLink(text, e.needsReview ? e.link : null, "Alerts");
+  return withLink(text, e.link, "Monday");
 }
 
 const SMS_CONTEXT_TEXT: Record<string, string> = {

@@ -94,7 +94,7 @@ function ChoiceRow({
 
 const STEP_LABEL = { receipt_no: "Receipt No.", receipt_status: "Receipt Status", attach: "Attach notice" } as const;
 
-function PlanPreview({ plan, loading }: { plan: MailWriteBackPlan | null; loading: boolean }) {
+export function PlanPreview({ plan, loading, action = "Assign" }: { plan: MailWriteBackPlan | null; loading: boolean; action?: string }) {
   if (loading && !plan) {
     return (
       <p className="text-xs" style={faint}>
@@ -112,7 +112,7 @@ function PlanPreview({ plan, loading }: { plan: MailWriteBackPlan | null; loadin
   }
   return (
     <div className="text-xs px-3 py-2 rounded-md flex flex-col gap-1" style={{ background: "var(--color-status-blue-bg)", color: "var(--color-status-blue)", fontFamily: "var(--font-body)" }}>
-      <span className="font-semibold">{plan.steps.length > 0 ? "Assign will update Monday:" : "Assign changes nothing in Monday:"}</span>
+      <span className="font-semibold">{plan.steps.length > 0 ? `${action} will update Monday:` : `${action} changes nothing in Monday:`}</span>
       {plan.steps.map((st) => (
         <span key={st.kind}>
           • {st.kind === "attach" ? `${st.columnTitle}: attach “${st.value}”` : `${st.columnTitle}: ${st.current ?? "empty"} → ${st.value}`}
