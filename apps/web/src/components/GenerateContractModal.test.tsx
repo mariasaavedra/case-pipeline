@@ -28,6 +28,11 @@ vi.mock("../api", () => ({
     contractFor: ["Court"], attorneyFee: 5000, filingFee: null, processingFee: null, hearingType: "Master Hearing", hearingDate: "2026-11-12",
   }),
   fetchEsignStatus: async () => ({ enabled: true }),
+  fetchFeeKTypes: async () => ({
+    feeKTypes: ["I-130 - Petition for Alien Relative", "Master (c)"], boards: [], draft: true,
+    rows: [{ feeKType: "I-130 - Petition for Alien Relative", spanish: "Petición de familiar extranjero (I-130)", board: "", feeSheetJob: "",
+      services: "Prepare and file Form I-130.", servicesEs: "Preparar el I-130.", excluded: "", excludedEs: "" }],
+  }),
   logContractGenerated: mocks.log,
   sendContractForSignature: mocks.send,
 }));
@@ -47,7 +52,8 @@ vi.mock("../sharepoint/graph", () => ({
   downloadDriveFile: async () => new Blob(["docx"]),
   convertDocxToPdf: mocks.convert,
 }));
-vi.mock("../lib/contract-fill", () => ({
+vi.mock("../lib/contract-fill", async (orig) => ({
+  ...(await orig<typeof import("../lib/contract-fill")>()),
   inspectContractTemplate: () => ({ tags: mocks.tags, unknown: [], signTags: ["Sig_es_:signer2:signature"], errors: [] }),
   contractProblems: () => [],
   fillContractTemplate: mocks.fill,
@@ -259,5 +265,36 @@ describe("M22 people on one contract", () => {
       { name: "Juan Lopez", aNumber: "", dob: "" },
       { name: "Ana Lopez", aNumber: "", dob: "" },
     ]);
+  });
+});
+
+describe("M22 case type and hearing type are picked, not typed", () => {
+  const select = (id: string) => document.getElementById(id) as HTMLSelectElement;
+  const choose = (el: HTMLSelectElement, v: string) => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(el, v);
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  it("picking a Fee K Type sets the English + Spanish title and the scope; hearing type is a list", async () => {
+    mocks.tags = ["client_name", "form_name", "form_name_es", "services", "hearing_type"];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
+    await flush();
+
+    // The Fee K's own type ("Court") comes pre-picked; drop it, pick I-130.
+    await act(async () => { (document.querySelector("button[aria-label='Remove Court']") as HTMLButtonElement).click(); });
+    await act(async () => { choose(select("m22-feeKType"), "I-130 - Petition for Alien Relative"); });
+    expect(document.body.textContent).toContain("Prints: I-130 - Petition for Alien Relative / Petición de familiar extranjero (I-130)");
+    expect(Array.from(select("m22-hearingType").options).map((o) => o.value)).toEqual(["", "Master Hearing", "Individual Hearing"]);
+    await act(async () => { choose(select("m22-hearingType"), "Individual Hearing"); });
+
+    await act(async () => { button("Preview PDF")!.click(); });
+    await flush();
+    expect(mocks.fill.mock.calls[0]![1]).toMatchObject({
+      feeKTypes: ["I-130 - Petition for Alien Relative"],
+      formName: "I-130 - Petition for Alien Relative", formNameEs: "Petición de familiar extranjero (I-130)",
+      services: "Prepare and file Form I-130.", hearingType: "Individual Hearing",
+    });
   });
 });

@@ -119,3 +119,18 @@ export function scopeFor(
   const hits = feeKTypes.map(find).filter((r): r is FeeKTypeRow => !!r);
   return Object.fromEntries(SCOPE_FIELDS.map((k) => [k, hits.map((r) => r[k]).filter(Boolean).join(" ")])) as Pick<FeeKTypeRow, (typeof SCOPE_FIELDS)[number]>;
 }
+
+/** A Fee K Type as a contract names it: Monday's "(c)" court marker and doubled spaces dropped. */
+export const contractTitle = (feeKType: string) => feeKType.replace(/\(c\)/gi, "").replace(/\s+/g, " ").trim();
+
+/**
+ * The matter a contract is for, from its Fee K Type(s), in English and Spanish
+ * ("I-130 - Petition for Alien Relative" / "Petición de familiar extranjero
+ * (I-130)"), several joined with " + ". A type with no Spanish name keeps its English one.
+ */
+export function contractTitles(feeKTypes: string[], rows: FeeKTypeRow[]): { en: string; es: string } {
+  const find = feeKTypeLookup(rows);
+  const en = feeKTypes.map(contractTitle).filter(Boolean);
+  const es = feeKTypes.map((t) => find(t)?.spanish || contractTitle(t)).filter(Boolean);
+  return { en: en.join(" + "), es: es.join(" + ") };
+}

@@ -649,6 +649,9 @@ export interface ContractPrefill {
   /** From Settings → Documents; "" when the attorney isn't listed there. */
   attorneyEmail: string;
   contractFor: string[];
+  /** The matter from the Fee K Type(s): clean English title + Spanish. */
+  formName?: string;
+  formNameEs?: string;
   attorneyFee: number | null;
   filingFee: number | null;
   processingFee: number | null;
