@@ -23,6 +23,7 @@ import { withTokenFallback } from "../write-auth.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { mondayItemUrl, notifyEvent, notifyOps } from "../notify/slack.js";
 import { clientUploadEvent } from "../notify/events.js";
+import { recordRun } from "../workflows/runs.js";
 import { MAX_ATTEMPTS, QUIET_MINUTES, WAITING_ALERT_HOURS, kindSummary, uploadNoteHtml, type FiledFile } from "./filing.js";
 
 export interface FilingResult {
@@ -39,6 +40,8 @@ export interface FilingDeps {
   seed: boolean;
   /** Tests replace the script run. */
   runScript?: (args: string[]) => Promise<FilingResult>;
+  /** users.db: each run is recorded for Settings → Workflows (workflows/runs.ts). */
+  runs?: DatabaseInstance;
 }
 
 let deps: FilingDeps | null = null;
@@ -84,7 +87,13 @@ export function runFilingNow(quietMinutes = QUIET_MINUTES): Promise<void> {
   inFlight = (async () => {
     try {
       const args = ["--apply", `--quiet=${quietMinutes}`, ...(d.seed ? ["--db=seed"] : [])];
+      const startedAt = new Date();
       const result = await (d.runScript ?? runFilingScript)(args);
+      if (d.runs) {
+        recordRun(d.runs, "client_uploads", startedAt, result.ok
+          ? { summary: `${result.filed ?? 0} filed, ${result.waiting?.length ?? 0} waiting, ${result.failed?.length ?? 0} failed` }
+          : { error: result.reason ?? "unknown error" });
+      }
       if (!result.ok) {
         console.error("[uploads] filing failed:", result.reason);
         await notifyOps("ops_client_uploads", `Filing client uploads failed: ${result.reason ?? "unknown error"}. Their files are safe on the server and will be filed on a later run.`);
