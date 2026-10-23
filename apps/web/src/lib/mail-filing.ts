@@ -1,5 +1,5 @@
 // =============================================================================
-// Filing a piece of mail (M31): the CC folder, the file name, the client e-mail
+// Filing a piece of mail (M32): the CC folder, the file name, the client e-mail
 // =============================================================================
 // The letter goes into the client's E-File → CC folder (every E-File has one;
 // spelled "CC", "CCs" or "CC's"), and the client is told by e-mail from the
@@ -44,7 +44,7 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 export interface MailEmail {
   subject: string;
   html: string;
-  /** The same message as plain text, for the preview in M31. */
+  /** The same message as plain text, for the preview in M32. */
   text: string;
 }
 

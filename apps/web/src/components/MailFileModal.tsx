@@ -1,5 +1,5 @@
 // =============================================================================
-// MailFileModal (M31) — file one piece of mail to a client
+// MailFileModal (M32) — file one piece of mail to a client
 // =============================================================================
 // Opens on the Mail page (P12) as soon as an upload has been read. The letter
 // sits on the left; on the right, everything a person decides, pre-filled
@@ -336,7 +336,7 @@ export function MailFileModal({
 
   return (
     <Dialog open onOpenChange={(o) => !o && !running && onClose()}>
-      <DialogContent code="M31" className="gap-0 p-0 sm:max-w-[1100px]">
+      <DialogContent code="M32" className="gap-0 p-0 sm:max-w-[1100px]">
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>File mail: {title}</DialogTitle>
           <DialogDescription>

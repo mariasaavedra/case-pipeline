@@ -2,7 +2,7 @@
 // MailPage (P12) — file incoming mail, one piece at a time
 // =============================================================================
 // A staff member scans ONE letter to a PDF and drops it here. The API reads it
-// (text layer, else OCR) and M31 opens with what it could read pre-filled:
+// (text layer, else OCR) and M32 opens with what it could read pre-filled:
 // they check it, pick the client (and Open Form), and file it — saved to the
 // client's E-File → CC folder, the client e-mailed, a note on the profile.
 // One upload per letter (decided 2026-10-23: splitting a whole day's scan

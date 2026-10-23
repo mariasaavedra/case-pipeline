@@ -39,6 +39,7 @@ export { getCourtMotions, getMotionWriteSchema, motionDateFieldFor, phaseOf as m
 export type { CourtMotion, MotionAge, MotionFlag, MotionPhase } from "./court-motions";
 export { getAddressChanges } from "./address-changes";
 export { getFoias } from "./foias";
+export { getEFilesToOpen } from "./efiles-to-open";
 export { getWorkload, buildWorkload, collectWorkloadItems, getInactiveAssigneeAlertGroup, WORKLOAD_SOURCES, PRIMARY_COLUMN } from "./workload";
 export type { WorkloadResult, WorkloadPerson, WorkloadItem, WorkloadAssignment, WorkloadSource, WorkloadColumn, WorkloadLevel, StaffResolver, WorkloadOptions } from "./workload";
 export { getCallLogEntries, getCallLogStaffOptions, searchJailIntakesByPocPhone } from "./call-log";
@@ -61,6 +62,7 @@ export type { PendingContract, PendingContractsResult, PendingContractsOptions, 
 export type { CaseMotion, CourtCase, CourtCasesResult, CourtCasesOptions, CourtCaseFlag, HearingKind, Readiness, ReadinessThresholds } from "./court-cases";
 export type { AddressChange, AddressChangesResult, AddressChangePhase, AddressChangeFlag } from "./address-changes";
 export type { Foia, FoiasResult, FoiaPhase, FoiaFlag } from "./foias";
+export type { EFileToOpen, EFilesToOpenResult, HirePlan, HirePath, MondayChange, LedgerRow } from "./efiles-to-open";
 export type {
   ProfileSummary,
   ContractSummary,

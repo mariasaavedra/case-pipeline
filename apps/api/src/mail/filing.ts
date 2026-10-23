@@ -1,5 +1,5 @@
 // =============================================================================
-// Filing a piece of mail (P12 → M31): the rules, no I/O
+// Filing a piece of mail (P12 → M32): the rules, no I/O
 // =============================================================================
 // A staff member uploads one piece of mail, checks what was read, picks the
 // client, and files it. The browser saves the PDF to the client's E-File → CC

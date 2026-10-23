@@ -43,7 +43,7 @@ interface NavItem {
 
 /** Pages still being built: admins use them, everyone else sees them greyed
  *  out here and a notice on the page itself (app.tsx). Remove an id to open it. */
-export const UNDER_CONSTRUCTION_PAGES = new Set(["alerts", "mail", "court-cases", "address-changes", "foias", "workload", "map"]);
+export const UNDER_CONSTRUCTION_PAGES = new Set(["alerts", "mail", "court-cases", "address-changes", "foias", "efiles-to-open", "workload", "map"]);
 
 const NAV_ITEMS: NavItem[] = [
   {
@@ -202,6 +202,17 @@ const NAV_ITEMS: NavItem[] = [
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M3 9.5L8 5l5 4.5V16H3V9.5z" />
         <path d="M12 7h5M15 4.5L17.5 7 15 9.5" />
+      </svg>
+    ),
+  },
+  {
+    id: "efiles-to-open",
+    label: "E-Files to open",
+    path: "/efiles-to-open",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M2.5 5.5a1 1 0 011-1h4l1.5 2h7.5a1 1 0 011 1V15a1 1 0 01-1 1h-13a1 1 0 01-1-1V5.5z" />
+        <path d="M10 9v4.5M7.75 11.25h4.5" />
       </svg>
     ),
   },

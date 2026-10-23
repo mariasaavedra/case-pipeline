@@ -39,7 +39,7 @@ export function consultPrepEvent(e: {
   return withLink(text, e.link, "Monday");
 }
 
-/** A piece of mail filed from the Mail page (P12 → M31). */
+/** A piece of mail filed from the Mail page (P12 → M32). */
 export function mailFiledEvent(e: { clientName: string; noticeType: string | null; emailed: boolean; by?: string | null; link: string | null }): string {
   const text =
     `:envelope: Mail filed for *${slackEscape(e.clientName)}*` +

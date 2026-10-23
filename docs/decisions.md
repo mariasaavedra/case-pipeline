@@ -545,7 +545,7 @@ The mail intake tried to split a whole day's scan into notices and match each on
 
 **Decisions**:
 - **One upload = one piece of mail.** `scanMailPages(…, { split: false })` reads all pages as one notice. The splitter stays in `libs/query/src/mail.ts` for the old scans and tests, unused by the page.
-- **Every letter gets M31**, pre-filled from what was read. The person filing it is the review, so these notices never go to Alerts → Mail to review (`needs_review = 0`).
+- **Every letter gets M32**, pre-filled from what was read. The person filing it is the review, so these notices never go to Alerts → Mail to review (`needs_review = 0`).
 - **The PDF is never stored on the server.** The API reads it in memory and keeps only what was read (`mail_scans.pdf_path` NULL). The browser saves it to the client's **E-File → CC** (any spelling: CC / CCs / CC's, made as "CC" if missing) and attaches it to the e-mail. Nothing to attach on the Open Form, so its write-back is Receipt No. + Receipt Status only.
 - **E-mail from the staff member's own Outlook** (Graph `Mail.Send`, as M21), English + Spanish in one message, the letter attached up to 2.5 MB.
 - **The automatic note is a Monday update** on the profile (what came, the SharePoint link, e-mailed or not, plus the staff note), under the staff member's token, queued on an outage.

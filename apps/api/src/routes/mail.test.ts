@@ -4,7 +4,7 @@
 // End to end over HTTP: one piece of mail goes in as a raw PDF body and comes
 // back read and matched against an in-memory DB — once with a text layer, once
 // as images only, which forces real OCR — with nothing written to disk. Then
-// corrected, filed (M31) and resolved. Auth, the user lookup and the audit log
+// corrected, filed (M32) and resolved. Auth, the user lookup and the audit log
 // are stubbed; each has its own tests.
 // =============================================================================
 
@@ -153,7 +153,7 @@ describe("client details for filing", () => {
   });
 });
 
-describe("filing (M31)", () => {
+describe("filing (M32)", () => {
   const savedTo = {
     url: "https://sharmacrawford.sharepoint.com/sites/scalefiles/Shared Documents/L/LOPEZ, Juan/CC/receipt.pdf",
     fileName: "receipt.pdf",
