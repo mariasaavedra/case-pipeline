@@ -11,6 +11,7 @@ describe("matchRoute", () => {
     expect(matchRoute("/settings/admin")).toEqual({ page: "settings", params: { tab: "admin" } });
     expect(matchRoute("/settings/firm/")).toEqual({ page: "settings", params: { tab: "firm" } });
     expect(matchRoute("/settings/integrations")).toEqual({ page: "settings", params: { tab: "integrations" } });
+    expect(matchRoute("/settings/workflows")).toEqual({ page: "settings", params: { tab: "workflows" } });
     expect(matchRoute("/settings/bogus")).toEqual({ page: "settings", params: { tab: "account" } });
   });
 

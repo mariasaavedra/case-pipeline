@@ -11,6 +11,7 @@ import { DocumentSettingsSection } from "../components/DocumentSettingsSection";
 import { SmsTemplatesSection } from "../components/SmsTemplatesSection";
 import { FeeKTypesSection } from "../components/FeeKTypesSection";
 import { IntegrationsSection } from "../components/IntegrationsSection";
+import { WorkflowsSection } from "../components/WorkflowsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
 import { MondayUsageSection } from "../components/MondayUsageSection";
 import { AuditLogSection } from "../components/AuditLogSection";
@@ -871,16 +872,17 @@ function PreferencesSections() {
 }
 
 // =============================================================================
-// Main Settings page — six tabs, each with its own URL (/settings/:tab)
+// Main Settings page — seven tabs, each with its own URL (/settings/:tab)
 // =============================================================================
 
-type SettingsTab = "account" | "preferences" | "firm" | "integrations" | "staff" | "admin";
+type SettingsTab = "account" | "preferences" | "firm" | "integrations" | "workflows" | "staff" | "admin";
 
 const TABS: { id: SettingsTab; label: string; code: string; hint: string; adminOnly?: boolean }[] = [
   { id: "account", label: "My account", code: "P11.1", hint: "Profile, board identity, Monday.com" },
   { id: "preferences", label: "Preferences", code: "P11.2", hint: "Theme, dates, language" },
   { id: "firm", label: "Firm setup", code: "P11.3", hint: "Attorney boards, status tags, urgency, documents", adminOnly: true },
   { id: "integrations", label: "Integrations", code: "P11.5", hint: "Slack notifications, texting", adminOnly: true },
+  { id: "workflows", label: "Workflows", code: "P11.7", hint: "Every automation, last run, failures", adminOnly: true },
   { id: "staff", label: "Staff", code: "P11.6", hint: "Roster, roles, names on the boards", adminOnly: true },
   { id: "admin", label: "Admin", code: "P11.4", hint: "Users, sync health, audit log", adminOnly: true },
 ];
@@ -964,6 +966,8 @@ export function SettingsPage({ tab }: { tab: string }) {
           )}
 
           {active.id === "integrations" && <IntegrationsSection />}
+
+          {active.id === "workflows" && <WorkflowsSection />}
 
           {active.id === "staff" && <StaffSection />}
 
