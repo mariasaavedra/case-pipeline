@@ -1,17 +1,19 @@
 // =============================================================================
 // Mail intake routes
 // =============================================================================
-// A scan is saved: the PDF under data/mail/, its notices in mail_documents. The
-// notices the matcher couldn't settle appear in Alerts → "Mail to review",
-// where a person assigns each to an Open Form (or client) or dismisses it.
+// One upload = one piece of mail (decided 2026-10-23; the automatic split of a
+// whole day's scan guessed wrong too often). POST /scan reads it — text layer,
+// else OCR (mail/ocr.ts) — and keeps only what was read: the PDF stays in the
+// browser and is never written to this server. M31 then shows the fields to
+// check and correct (PATCH …/fields re-matches), and POST …/file records where
+// it went: the browser has already saved it to the client's E-File → CC and
+// e-mailed the client; here the Open Form gets its receipt fields
+// (mail/writeback.ts — nothing to attach, since no file is kept) and the
+// client's profile gets a note (mail/filing.ts).
 //
-// Assigning to an Open Form then pushes it to Monday (mail/writeback.ts): fill
-// Receipt No., set Receipt Status, attach the notice. The popup previews that
-// exact plan first (GET …/writeback-plan). A failed write-back can be retried
-// (POST …/writeback) without repeating the steps that already landed.
-//
-// Pages with a text layer are read directly; image-only pages go through OCR
-// (see mail/ocr.ts), which is what makes a plain scanner PDF work.
+// Older scans (before 2026-10-23) were split and stored under data/mail/; their
+// notices still show in Alerts → "Mail to review" (M15) until settled, and
+// GET …/pdf still cuts their pages.
 // =============================================================================
 
 import express, { type Express } from "express";
@@ -22,7 +24,7 @@ import { PDFDocument } from "pdf-lib";
 import {
   scanMailPages,
   saveMailScan,
-  setMailScanPdfPath,
+  getBoardColumnsFor,
   getMailDocument,
   resolveMailDocument,
   findFormsForProfile,
@@ -41,8 +43,12 @@ import { buildSampleMailPdf, buildScannedSampleMailPdf } from "../mail/sample.js
 import { readPdfPages } from "../mail/ocr.js";
 import { executeMailWriteBack } from "../mail/writeback.js";
 import type { WriteTokenOptions } from "../write-token.js";
-import { notifyEvent, inBackground, appUrl } from "../notify/slack.js";
-import { mailScanEvent } from "../notify/events.js";
+import { notifyEvent, inBackground, mondayItemUrl } from "../notify/slack.js";
+import { mailFiledEvent } from "../notify/events.js";
+import { dataSource } from "../data-source/index.js";
+import { withTokenFallback } from "../write-auth.js";
+import { enqueueWrite } from "../write-queue/processor.js";
+import { linkUrl, mailFiledNote, parseFileMailInput } from "../mail/filing.js";
 
 type DatabaseInstance = BetterSqlite3.Database;
 
@@ -50,7 +56,7 @@ const MAX_PDF_BYTES = 40 * 1024 * 1024;
 
 export interface MailDeps {
   db: DatabaseInstance;
-  /** Where scans are kept (as <dataDir>/mail/scan-<id>.pdf). Defaults to data/. */
+  /** Where older scans were kept (<dataDir>/mail/scan-<id>.pdf). Defaults to data/. */
   dataDir?: string;
   /** Without it, assignments are recorded but nothing is written to Monday. */
   mondayApiToken?: string;
@@ -61,39 +67,6 @@ export interface MailDeps {
 function cleanFileName(raw: unknown): string {
   const name = typeof raw === "string" ? path.basename(raw).replace(/[^\w .()-]/g, "").trim() : "";
   return (name || "scan.pdf").slice(0, 120);
-}
-
-interface StoredScan {
-  id: number;
-  uploadedAt: string;
-  uploadedByName: string | null;
-}
-
-/**
- * An earlier (non-sample) scan of these exact bytes with notices still waiting
- * in Alerts → Mail to review. Once they're all resolved the file may be scanned again —
- * that is how a notice misread by an older reader gets a fresh reading. Files
- * are compared by size first, so only a same-size scan is ever read.
- */
-export function findStoredScan(db: DatabaseInstance, dataDir: string, body: Buffer): StoredScan | null {
-  const rows = db
-    .prepare(
-      `SELECT id, pdf_path AS pdfPath, uploaded_at AS uploadedAt, uploaded_by_name AS uploadedByName
-       FROM mail_scans s WHERE is_sample = 0 AND pdf_path IS NOT NULL
-         AND EXISTS (SELECT 1 FROM mail_documents d
-                     WHERE d.scan_id = s.id AND d.needs_review = 1 AND d.review_state = 'open')
-       ORDER BY id`,
-    )
-    .all() as Array<StoredScan & { pdfPath: string }>;
-  for (const { pdfPath, ...scan } of rows) {
-    const file = path.join(dataDir, pdfPath);
-    try {
-      if (fs.statSync(file).size === body.length && fs.readFileSync(file).equals(body)) return scan;
-    } catch {
-      // a missing file just isn't a duplicate
-    }
-  }
-  return null;
 }
 
 function parseId(raw: unknown): number | null {
@@ -134,7 +107,6 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
       },
     });
   };
-  const mailDir = path.join(dataDir, "mail");
 
   // ?scanned=1 → the same notices as images only, so every page needs OCR.
   app.get("/api/mail/sample.pdf", requireAuth, async (req, res) => {
@@ -149,8 +121,9 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
     }
   });
 
-  // Body: the raw PDF. ?name= the original file name, ?sample=1 for the
-  // built-in samples (kept out of Alerts after a day).
+  // Body: the raw PDF of ONE piece of mail. ?name= the original file name,
+  // ?sample=1 for the built-in samples (never written to Monday). Read in
+  // memory; only the reading is saved.
   app.post(
     "/api/mail/scan",
     requireAuth,
@@ -166,15 +139,6 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
         return;
       }
       const isSample = req.query.sample === "1";
-      // The same file scanned again would put every notice in Alerts twice.
-      const earlier = isSample ? null : findStoredScan(db, dataDir, body);
-      if (earlier) {
-        res.status(409).json({
-          error: `This file was already scanned on ${earlier.uploadedAt.slice(0, 10)}${earlier.uploadedByName ? ` by ${earlier.uploadedByName}` : ""} — its notices are in Alerts → Mail to review.`,
-          scanId: earlier.id,
-        });
-        return;
-      }
       let pages: MailPageInput[];
       try {
         pages = await readPdfPages(new Uint8Array(body));
@@ -184,49 +148,141 @@ export function registerMailRoutes(app: Express, deps: MailDeps): void {
         return;
       }
 
+      const read = scanMailPages(db, pages, { split: false });
+      if (read.documents.length === 0) {
+        res.status(400).json({ error: "Every page of that PDF is blank" });
+        return;
+      }
+      // The person filing it is the review (M31): nothing goes to Alerts.
+      read.documents = read.documents.map((d) => ({ ...d, needsReview: false }));
+
       const user = currentUser(req);
       const fileName = cleanFileName(req.query.name);
       const result = saveMailScan(
         db,
         { fileName, pdfPath: null, isSample, uploadedBy: user?.id ?? null, uploadedByName: user?.name ?? null },
-        scanMailPages(db, pages),
+        read,
       );
-
-      // The notices are saved even if the file can't be — the review still
-      // works from the extracted fields, just without a preview.
-      try {
-        fs.mkdirSync(mailDir, { recursive: true });
-        const rel = path.join("mail", `scan-${result.scanId}.pdf`);
-        fs.writeFileSync(path.join(dataDir, rel), body);
-        setMailScanPdfPath(db, result.scanId!, rel);
-      } catch (err) {
-        console.error("[mail] could not store scan PDF:", err);
-      }
 
       auditFromReq(req, "mail.scan", {
         targetType: "mail_scan",
         targetId: String(result.scanId),
-        metadata: {
-          fileName,
-          sample: isSample,
-          pages: result.totalPages,
-          ocrPages: result.ocrPages.length,
-          notices: result.documents.length,
-          toReview: result.documents.filter((d) => d.needsReview).length,
-        },
+        metadata: { fileName, sample: isSample, pages: result.totalPages, ocrPages: result.ocrPages.length },
       });
       res.json({ data: result });
-
-      // Samples are demos, not mail.
-      const text = !isSample && mailScanEvent({
-        notices: result.documents.length,
-        needsReview: result.documents.filter((d) => d.needsReview).length,
-        by: user?.name,
-        link: appUrl("/alerts"),
-      });
-      if (text) inBackground(notifyEvent("mail_scanned", text));
     },
   );
+
+  // What M31 needs to file a letter for a client: their E-File (CC is inside
+  // it), the e-mail to write to, and their Open Forms.
+  app.get("/api/mail/clients/:localId", requireAuth, (req, res) => {
+    const row = db
+      .prepare(
+        `SELECT local_id AS localId, name, email, json_extract(raw_column_values, '$.e_file') AS eFile
+           FROM profiles WHERE local_id = ? AND deleted_at IS NULL`,
+      )
+      .get(req.params.localId) as { localId: string; name: string; email: string | null; eFile: unknown } | undefined;
+    if (!row) {
+      res.status(404).json({ error: "Client not found" });
+      return;
+    }
+    res.json({
+      data: {
+        localId: row.localId,
+        name: row.name,
+        email: row.email?.trim() || null,
+        eFile: linkUrl(row.eFile),
+        openForms: findFormsForProfile(db, row.localId),
+      },
+    });
+  });
+
+  // File a piece of mail (M31). The browser has saved the PDF to the client's
+  // E-File → CC (`savedTo`) and e-mailed the client (`emailedTo`, when it did).
+  // Here: the decision, the Open Form's receipt fields, and the note on the
+  // client's profile (queued on an outage).
+  app.post("/api/mail/documents/:id/file", requireAuth, async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id || !getMailDocument(db, id)) {
+      res.status(404).json({ error: "Mail document not found" });
+      return;
+    }
+    const input = parseFileMailInput(req.body);
+    if ("error" in input) {
+      res.status(400).json({ error: input.error });
+      return;
+    }
+    const user = currentUser(req);
+    const resolved = resolveMailDocument(
+      db,
+      id,
+      { action: "assign", profileLocalId: input.profileLocalId, openFormLocalId: input.openFormLocalId, note: input.note },
+      { userId: user?.id ?? null, userName: user?.name ?? null },
+    );
+    if (!resolved.ok) {
+      res.status(resolved.status).json({ error: resolved.error });
+      return;
+    }
+    const doc = resolved.document;
+    if (doc.openForm) {
+      try {
+        await runWriteBack(req, id);
+      } catch (err) {
+        // The filing stands; the receipt fields can be retried (POST …/writeback).
+        console.error("[mail] write-back crashed:", err);
+        recordWriteBack(db, id, "failed", [], err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    const profile = db
+      .prepare(`SELECT name, monday_item_id AS mondayItemId FROM profiles WHERE local_id = ?`)
+      .get(input.profileLocalId) as { name: string; mondayItemId: string | null };
+    const body = mailFiledNote({ fields: doc.fields, input, openFormName: doc.openForm?.name ?? null });
+    // Seed profiles have no Monday item; samples are demos, not mail.
+    let note: "posted" | "queued" | "skipped" = "skipped";
+    if (profile.mondayItemId && !doc.isSample && writeBackEnabled) {
+      const mondayItemId = profile.mondayItemId;
+      try {
+        await withTokenFallback((token) => dataSource.postUpdate(mondayItemId, body, token), writeTokenOptions!(req));
+        note = "posted";
+      } catch (err) {
+        console.error("[mail] filing note failed; queueing:", err);
+        enqueueWrite(db, {
+          opType: "create_update", targetTable: "profiles", targetLocalId: input.profileLocalId,
+          mondayItemId, authorOid: req.user?.oid ?? null, payload: { body },
+        });
+        note = "queued";
+      }
+    }
+
+    auditFromReq(req, "mail.filed", {
+      targetType: "mail_document",
+      targetId: String(id),
+      targetMondayId: profile.mondayItemId,
+      metadata: {
+        profile: input.profileLocalId,
+        openForm: doc.openForm?.localId ?? null,
+        folder: input.savedTo.folder,
+        emailed: Boolean(input.emailedTo),
+        note,
+      },
+    });
+    if (!doc.isSample) {
+      inBackground(
+        notifyEvent(
+          "mail_scanned",
+          mailFiledEvent({
+            clientName: profile.name,
+            noticeType: doc.fields.noticeType,
+            emailed: Boolean(input.emailedTo),
+            by: user?.name,
+            link: mondayItemUrl(getBoardColumnsFor(db, "profiles")?.mondayBoardId, profile.mondayItemId),
+          }),
+        ),
+      );
+    }
+    res.json({ data: { ...publicDoc(id), note } });
+  });
 
   app.get("/api/mail/documents/:id", requireAuth, (req, res) => {
     const id = parseId(req.params.id);

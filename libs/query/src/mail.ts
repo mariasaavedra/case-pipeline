@@ -564,6 +564,28 @@ export function splitIntoDocuments(pages: PageInfo[]): { documents: SplitDocumen
   return { documents, separatorPages };
 }
 
+/**
+ * The whole upload as one document — one piece of mail per upload (decided
+ * 2026-10-23: the automatic split guessed wrong too often). Blank pages are
+ * skipped; the fields come from the pages that look like a notice, plus the
+ * first page, as in the split.
+ */
+export function asOneDocument(pages: PageInfo[]): { documents: SplitDocument[]; separatorPages: number[] } {
+  const content = pages.filter((p) => !p.blank);
+  const separatorPages = pages.filter((p) => p.blank).map((p) => p.page);
+  if (content.length === 0) return { documents: [], separatorPages };
+  const doc: SplitDocument = { pages: [], splitReason: "first_page", uncertainPages: [], ocrPages: [], ocrConfidence: null, fields: emptyFields() };
+  content.forEach((p, i) => {
+    if (p.looksLikeNotice || i === 0) doc.fields = mergeFields(doc.fields, p.fields);
+    doc.pages.push(p.page);
+    if (p.ocr) {
+      doc.ocrPages.push(p.page);
+      if (p.ocrConfidence != null && p.looksLikeNotice) doc.ocrConfidence = Math.min(doc.ocrConfidence ?? 100, p.ocrConfidence);
+    }
+  });
+  return { documents: [doc], separatorPages };
+}
+
 // -----------------------------------------------------------------------------
 // 3. Matching against the local mirror
 // -----------------------------------------------------------------------------
@@ -1020,9 +1042,14 @@ export function needsReview(doc: Pick<MailScanDocument, "match" | "ocrConfidence
 // Orchestration
 // -----------------------------------------------------------------------------
 
-export function scanMailPages(db: Database, pageInputs: Array<string | MailPageInput>): MailScanResult {
+/** `split: false` reads the pages as one piece of mail (the Mail page's flow). */
+export function scanMailPages(
+  db: Database,
+  pageInputs: Array<string | MailPageInput>,
+  opts: { split?: boolean } = {},
+): MailScanResult {
   const pages = pageInputs.map((t, i) => analyzePage(i + 1, t));
-  const { documents, separatorPages } = splitIntoDocuments(pages);
+  const { documents, separatorPages } = opts.split === false ? asOneDocument(pages) : splitIntoDocuments(pages);
   const scanned = documents.map((d) => {
     const text = d.pages.map((n) => pages[n - 1]!.text).join("\n");
     const named = findNamedClients(db, text).map((p) => p.name);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { contractStepEvent, consultPrepEvent, mailScanEvent, smsSentEvent } from "./events.js";
+import { contractStepEvent, consultPrepEvent, mailFiledEvent, smsSentEvent } from "./events.js";
 
 const link = "https://scaltheclinic.monday.com/boards/1/pulses/2";
 
@@ -28,13 +28,12 @@ describe("consultPrepEvent", () => {
   });
 });
 
-describe("mailScanEvent", () => {
-  it("links to Alerts only when something needs review", () => {
-    expect(mailScanEvent({ notices: 5, needsReview: 2, by: "Rosa", link: "https://app/alerts" }))
-      .toBe(":envelope: Mail scanned: 5 notices, *2 to review* — Rosa — <https://app/alerts|Alerts>");
-    expect(mailScanEvent({ notices: 1, needsReview: 0, link: "https://app/alerts" }))
-      .toBe(":envelope: Mail scanned: 1 notice, all matched");
-    expect(mailScanEvent({ notices: 0, needsReview: 0, link: null })).toBeNull();
+describe("mailFiledEvent", () => {
+  it("names the client and the kind of mail — never its numbers", () => {
+    expect(mailFiledEvent({ clientName: "Ana", noticeType: "Receipt Notice", emailed: true, by: "Rosa", link }))
+      .toBe(`:envelope: Mail filed for *Ana* (Receipt Notice), client e-mailed — Rosa — <${link}|Monday>`);
+    expect(mailFiledEvent({ clientName: "Ana", noticeType: null, emailed: false, link: null }))
+      .toBe(":envelope: Mail filed for *Ana*");
   });
 });
 

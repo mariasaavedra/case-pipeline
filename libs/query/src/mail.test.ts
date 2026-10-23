@@ -14,6 +14,7 @@ import {
   extractNoticeFields,
   analyzePage,
   splitIntoDocuments,
+  asOneDocument,
   matchNotice,
   normalizeANumber,
   normalizeFormType,
@@ -164,6 +165,27 @@ describe("repairOcrText", () => {
 
   test("'lofl' under the Page label is 1 of 1", () => {
     expect(analyzePage(1, { text: "Notice Date Page\n01/31/2023 lofl", ocr: true }).pageMarker).toEqual({ index: 1, total: 1 });
+  });
+});
+
+describe("asOneDocument", () => {
+  const one = (texts: string[]) => asOneDocument(texts.map((t, i) => analyzePage(i + 1, t)));
+
+  test("every non-blank page is one document; the notice's pages give the fields", () => {
+    const { documents, separatorPages } = one([
+      "Notice of Action Receipt Number: IOE0912345678",
+      "  \n ",
+      "Notice of Action Receipt Number: MSC2290000001 Approval Notice",
+      "Please bring this notice to your appointment.",
+    ]);
+    expect(separatorPages).toEqual([2]);
+    expect(documents).toHaveLength(1);
+    expect(documents[0]!.pages).toEqual([1, 3, 4]);
+    expect(documents[0]!.fields.receiptNumbers).toEqual(["IOE0912345678", "MSC2290000001"]);
+  });
+
+  test("all blank → nothing", () => {
+    expect(one([" ", ""]).documents).toEqual([]);
   });
 });
 

@@ -1691,7 +1691,7 @@ export function fetchAuditLog(
   return apiFetch<AuditEntry[]>(`/api/admin/audit?${params.toString()}`);
 }
 
-// ---- Mail intake (prototype, read-only) ----
+// ---- Mail intake: one piece of mail per upload, read on the server, kept only in the browser ----
 export function scanMail(pdf: Blob, opts: { name: string; sample?: boolean }): Promise<MailScanResult> {
   const params = new URLSearchParams({ name: opts.name });
   if (opts.sample) params.set("sample", "1");
@@ -1723,6 +1723,37 @@ export async function fetchMailDocumentPdf(id: number): Promise<Blob> {
 
 export function fetchOpenFormsFor(profileLocalId: string): Promise<MatchedOpenForm[]> {
   return apiFetch<MatchedOpenForm[]>(`/api/mail/open-forms?profile=${encodeURIComponent(profileLocalId)}`);
+}
+
+export interface MailClient {
+  localId: string;
+  name: string;
+  email: string | null;
+  /** The profile's E-File link (its CC folder is where mail goes). */
+  eFile: string | null;
+  openForms: MatchedOpenForm[];
+}
+
+export function fetchMailClient(profileLocalId: string): Promise<MailClient> {
+  return apiFetch<MailClient>(`/api/mail/clients/${encodeURIComponent(profileLocalId)}`);
+}
+
+/** M31 "File it": after the browser saved the PDF to E-File → CC (and e-mailed the client). */
+export function fileMailDocument(
+  id: number,
+  body: {
+    profileLocalId: string;
+    openFormLocalId: string | null;
+    savedTo: { url: string; fileName: string; folder: string };
+    emailedTo: string | null;
+    note: string | null;
+  },
+): Promise<MailDocument & { note: "posted" | "queued" | "skipped" }> {
+  return apiFetch(`/api/mail/documents/${id}/file`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 export type ResolveMailBody =

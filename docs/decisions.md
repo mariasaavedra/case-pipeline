@@ -538,3 +538,17 @@ A person was a login, a free-text `paralegal_link`, an `attorney_board` and a na
 - **Not moved:** the document-settings attorneys (G-28, contracts are live). Linking them to staff by email is a follow-up.
 
 **Revisit if**: roles need to gate permissions (today `users.role` admin/user still does), or Monday stops returning deactivated users from `users(ids:)`.
+
+## 2026-10-23 — Mail: a person files each letter, and the file isn't kept
+
+The mail intake tried to split a whole day's scan into notices and match each one on its own. The split guessed wrong too often, and with no AI reader coming soon, a person reviewing every letter is the realistic flow.
+
+**Decisions**:
+- **One upload = one piece of mail.** `scanMailPages(…, { split: false })` reads all pages as one notice. The splitter stays in `libs/query/src/mail.ts` for the old scans and tests, unused by the page.
+- **Every letter gets M31**, pre-filled from what was read. The person filing it is the review, so these notices never go to Alerts → Mail to review (`needs_review = 0`).
+- **The PDF is never stored on the server.** The API reads it in memory and keeps only what was read (`mail_scans.pdf_path` NULL). The browser saves it to the client's **E-File → CC** (any spelling: CC / CCs / CC's, made as "CC" if missing) and attaches it to the e-mail. Nothing to attach on the Open Form, so its write-back is Receipt No. + Receipt Status only.
+- **E-mail from the staff member's own Outlook** (Graph `Mail.Send`, as M21), English + Spanish in one message, the letter attached up to 2.5 MB.
+- **The automatic note is a Monday update** on the profile (what came, the SharePoint link, e-mailed or not, plus the staff note), under the staff member's token, queued on an outage.
+- **Old stored scans stay** under `data/mail/` until their Alerts items are settled; nothing deletes them automatically.
+
+**Revisit if**: an AI reader becomes available (read + match could then pre-select more confidently), or staff want mail filed somewhere other than CC.
