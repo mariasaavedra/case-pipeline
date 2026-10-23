@@ -38,7 +38,9 @@ vi.mock("@case-pipeline/monday", async (orig) => ({
   fetchWorkspaceUsers: async () => [{ id: "42", name: "Ana Reyes", email: "ana@firm.com" }],
 }));
 
-const { registerContractDocumentRoutes } = await import("./contract-document.js");
+const { registerContractDocumentRoutes, contractAttorneyOptions, pickContractAttorney } = await import("./contract-document.js");
+const { usersDb } = await import("../db/users-db.js");
+const { createStaff, setRoles, addAlias } = await import("../staff/roster.js");
 
 let db: Database.Database;
 let server: Server;
@@ -153,5 +155,51 @@ describe("contract pre-fill: scope of services", () => {
     expect(data.scope.services).toBe("Prepare and file Form N-400.");
     expect(data.scope.excludedEs).toMatch(/N-336/);
     expect(data).toMatchObject({ formName: "N-400 - Naturalization", formNameEs: "Ciudadanía / naturalización (N-400)" });
+  });
+});
+
+describe("the attorney pick list", () => {
+  const DOCS = [
+    { givenName: "Rekha", familyName: "Sharma-Crawford", email: "rekha@firm.com" },
+    { givenName: "Michael", familyName: "Sharma-Crawford", email: "michael@firm.com" },
+    { givenName: "Only", familyName: "InSettings", email: "only@firm.com" },
+  ];
+  const staff = [
+    { id: 1, name: "Rekha@Sharma- com", email: "rekha@firm.com", active: true, roles: ["attorney" as const] },
+    { id: 2, name: "Caitlin Riffer", email: "caitlin@firm.com", active: true, roles: ["attorney" as const] },
+    { id: 3, name: "Michael Sharma-Crawford", email: null, active: true, roles: ["attorney" as const] },
+    { id: 4, name: "Luis Morales", email: null, active: false, roles: ["attorney" as const] },
+    { id: 5, name: "Pat Paralegal", email: "pat@firm.com", active: true, roles: ["paralegal" as const] },
+  ];
+
+  it("active roster attorneys, named as Settings → Documents names them, with an e-mail; then Settings-only", () => {
+    expect(contractAttorneyOptions(staff, DOCS)).toEqual([
+      { name: "Caitlin Riffer", email: "caitlin@firm.com", staffId: 2 },
+      { name: "Michael Sharma-Crawford", email: "michael@firm.com", staffId: 3 },
+      { name: "Only InSettings", email: "only@firm.com", staffId: null },
+      { name: "Rekha Sharma-Crawford", email: "rekha@firm.com", staffId: 1 },
+    ]);
+  });
+
+  it("the Fee K's attorney label is matched through the roster (Monday's odd names included)", () => {
+    const options = contractAttorneyOptions(staff, DOCS);
+    const resolve = (n: string) => (n === "Rekha@Sharma- com" ? { id: 1 } : null);
+    expect(pickContractAttorney("Rekha@Sharma- com, Lucy Betteridge", options, resolve)?.name).toBe("Rekha Sharma-Crawford");
+    expect(pickContractAttorney("Nobody, Caitlin Riffer", options, resolve)?.email).toBe("caitlin@firm.com");
+    expect(pickContractAttorney("Nobody", options, resolve)).toBeNull();
+    expect(pickContractAttorney(null, options, resolve)).toBeNull();
+  });
+
+  it("the pre-fill picks Rekha from her Monday label and gives her e-mail", async () => {
+    const id = createStaff(usersDb, { name: "Rekha@Sharma- com", email: "rekha@sharma-crawford.com" });
+    setRoles(usersDb, id, ["attorney"]);
+    addAlias(usersDb, id, "Rekha@Sharma- com", { ifFree: true });
+    db.prepare(
+      `INSERT INTO contracts (batch_id, local_id, monday_item_id, profile_local_id, name, raw_column_values) VALUES (1, 'c1', '555', 'p1', 'Fee K', ?)`,
+    ).run(JSON.stringify({ attorney: { label: "Rekha@Sharma- com" } }));
+    const res = await fetch(`${base}/api/contracts/c1/document-form`);
+    const { data } = (await res.json()) as { data: { attorneyName: string; attorneyEmail: string; attorneys: { name: string }[] } };
+    expect(data.attorneyEmail).toBe("rekha@sharma-crawford.com");
+    expect(data.attorneys.map((a) => a.name)).toContain(data.attorneyName);
   });
 });

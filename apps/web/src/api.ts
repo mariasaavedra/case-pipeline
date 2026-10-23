@@ -647,8 +647,10 @@ export interface ContractPrefill {
   street: string;
   cityStateZip: string;
   attorneyName: string;
-  /** From Settings → Documents; "" when the attorney isn't listed there. */
+  /** Staff roster e-mail, else Settings → Documents; "" when unknown. */
   attorneyEmail: string;
+  /** The attorney pick list: active roster attorneys with their e-mails. */
+  attorneys?: { name: string; email: string }[];
   contractFor: string[];
   /** The matter from the Fee K Type(s): clean English title + Spanish. */
   formName?: string;

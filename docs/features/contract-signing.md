@@ -117,7 +117,12 @@ add a contract.
   can be added) give `{{form_name}}` (Monday's label without "(c)", several
   joined with " + "), `{{form_name_es}}` (the type's Spanish name, else the
   English) and the scope; "Edit the title" types a matter not on the list.
-  Hearing type = Master Hearing / Individual Hearing. The address (2026-10-22) is the profile's Address, else its
+  Hearing type = Master Hearing / Individual Hearing. The attorney is picked
+  too: every active attorney on the staff roster (Settings → Staff), named as
+  Settings → Documents names them (Monday's "Rekha@Sharma- com" → Rekha
+  Sharma-Crawford), with the roster e-mail; the Fee K's attorney is
+  pre-selected through the roster's name matcher, and picking the letter's
+  signer sets Adobe's "Attorney signs first" e-mail (and back). The address (2026-10-22) is the profile's Address, else its
   Mailing address, else the Fee K's own copy (P14's "missing" flag uses the
   same order; a third of the Fee Ks since September had only a Mailing
   address). It is tidied and split by `documents/us-address.ts`
