@@ -24,6 +24,7 @@ import type { BoardColumn as QueryBoardColumn } from "@case-pipeline/query/types
 export type { CaseTimeline, TimelineEvent, TimelineEventStatus, TimelineFix, TimelineNote, TimelineTrack, TimelineKind } from "@case-pipeline/query";
 export type { AddressChangesResult, AddressChange, AddressChangePhase, AddressChangeFlag } from "@case-pipeline/query";
 export type { FoiasResult, Foia, FoiaPhase, FoiaFlag } from "@case-pipeline/query";
+export type { EFilesToOpenResult, EFileToOpen, HirePlan, HirePath, MondayChange, LedgerRow } from "@case-pipeline/query";
 export type { WorkloadResult, WorkloadPerson, WorkloadItem, WorkloadAssignment, WorkloadSource, WorkloadColumn, WorkloadLevel } from "@case-pipeline/query";
 export type { CalendarResult, CalendarEvent, CalendarCategory } from "@case-pipeline/query";
 export type { CallLogEntry, CallLogIntakeMatch, CallLogListResult } from "@case-pipeline/query";
@@ -1024,6 +1025,10 @@ export async function fetchWorkload(): Promise<import("@case-pipeline/query").Wo
 
 export async function fetchFoias(): Promise<import("@case-pipeline/query").FoiasResult> {
   return apiFetch("/api/foias");
+}
+
+export async function fetchEFilesToOpen(): Promise<import("@case-pipeline/query").EFilesToOpenResult> {
+  return apiFetch("/api/efiles-to-open");
 }
 
 export async function fetchPrescheduling(): Promise<PreschedulingResult> {

@@ -63,6 +63,7 @@ reuse or renumber a code: old requests keep pointing at the right thing.
 | P18 | Address Changes | `/address-changes` | Sidebar → Address Changes (admins only for now) | `components/AddressChangesPage.tsx` |
 | P19 | FOIAs | `/foias` | Sidebar → FOIAs (admins only for now) | `components/FoiasPage.tsx` |
 | P20 | Workload | `/workload` | Sidebar → Workload (admins only for now) | `components/WorkloadPage.tsx` |
+| P21 | E-Files to open | `/efiles-to-open` | Sidebar → E-Files to open (admins only for now) | `components/EFilesToOpenPage.tsx` |
 
 ### Global
 
@@ -173,6 +174,13 @@ by name); the board tabs switch to another attorney.
 | P19.2 | Filters + cleanup strip | Paralegal (D34); show/hide items with no results 6+ months; "Needs cleanup on Monday" chips (no results 6+ months, no Filed On date, no paralegal, profile not connected) |
 | P19.3 | List by phase | Do we need it? · Our turn · Waiting on the agency · North Pole. Row: client (→ M3), request numbers, agencies filed ✓ / still to file, since or filed date + age, inquiry date, paralegal(s) + attorney, status, Where to file link. Read-only |
 
+
+### Inside P21 E-Files to open
+
+| Code | Section | Contents |
+|---|---|---|
+| P21.1 | Header | Waiting count, a week or more, blocked, next free number (before the ledger check) |
+| P21.2 | Queue by path | New E-File · New court E-File · Already has an E-File · FOIA. Row: client (→ M3), Contract Stage, Blocked / to-check tags, Fee K Type + where it goes, hired date + days (3+ yellow, 7+ red), case number, **See plan** → M31. Phase 1: read-only |
 ### Inside P6 My Cases
 
 | Code | Name | Notes |
@@ -284,6 +292,7 @@ Codes before 2026-09-29, for old change requests: P11.1 → P11.1.1, P11.2 → P
 | M27 | Case card | client name | P6.2 / P6.3 → a row. **Open E-File** (profile's link, else the Fee K / Open Form mirror) + **Browse files here** (→ M26), or **Link E-File folder** (paste a SharePoint link → the profile's E-File on Monday, only when it has none); **Client** (→ M3) and **Monday ↗**. PS Stage (Fee K) / Status (Open Form) via D39 with a confirm; dates — Fee K: Hired, **Reminder sent**, **Evidence received**; Open Form: On Open Forms since, Hired, **Forms appointment**, **Target date**, **Forms sent** — Set / Edit / Clear, and **Today** on the ones that record something done. Two tabs: **Details** (all of the above) and **Notes** — the client's timeline as in M3 (Notes / All with emails, replies) with a box on top that posts a note on the profile. Every write is refused if Monday changed since, queued on an outage | `CaseCardModal.tsx` |
 | M28 | Send a text | "Send a text" | M2 → **Send a text** checkbox (inline, same form); M21 → **Text links to client**; P3.0 → **Text**. To (the number dialled / the client's Phone, with **Use Phone 2 instead**), English / Español (from the call's Language or the profile's Preferred Language), {{firstName}} from the profile's First Name, template from P11.3.5, **Link** when the template has `{{link}}`, the text (editable), segment count. **Edit template** / **+ New template** — anyone, everyone sees it (audited). **Send text** → RingCentral; logged on the linked client's E&A ("Text message", else Casenote). Test mode says **Send (test)** and sends nothing | `SendSmsModal.tsx`, `SmsComposer.tsx` |
 | M29 | Timeline event | the event's label (or the attention item's text) | P3.9 (or M3 → Timeline) → a marker, a story row, a Coming up item, or **Record outcome** / **Fix** / **Record decision** on a Needs attention item. What to record (for a Needs attention item); the entry's text; the Monday item with **Monday ↗** — the fields the timeline reads first (`status`, the board's milestone columns, its `edit` list in `config/timeline.yaml`), **Other fields (n)** behind a toggle, each saved on blur/pick via `PATCH /api/board-items/:localId/columns` (local copy updated at once, queued on outage). A hearing with no outcome gets one-click outcomes (ATTENDED, RECHED/ CONT/ … NOT HAPPENING, WITHDREW, VISITING IJ NO SHOW). A note box: **Reply** under an E&A entry, else a `Re: <event> (<date>) —` update on the profile. A Fee K points to the Contracts tab. **History**: every change on the item in Monday, newest first (field: old → new, when, who — staff roster names, "a Monday automation"), 8 then **Show all** | `TimelineEventPanel.tsx` |
+| M31 | Open E-File plan | Open E-File — client | P21 → **See plan**. What the hire protocol would do: blockers / things to check; case number (next free, checked live against the ledger tab in SharePoint, duplicates listed); E-File folder + subfolders; the consult folder (opened live: name, item count) and where its files go; Monday changes (old → new); the ledger row. **Open E-File** disabled until phase 2. Rules = `libs/query/src/efiles-to-open.ts` | `EFilesToOpenPage.tsx` |
 | M20 | Change consult | "Change consult" | P17.2 → **Edit**. Attorney, date, time; a new attorney moves the appointment to their board in Monday. Calendly is not changed (reminder shown) | `ConsultScheduleModal.tsx` |
 
 ## Dropdowns

@@ -28,7 +28,7 @@ import {
   handleCallLog,
   handleJailIntakes,
 } from "./handlers/handlers";
-import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getAddressChanges, getFoias, getSyncHealth, getArchivedRows, getCalendarEvents, addMondayCallCounts, getMondayCallCounts, getAlerts, getWorkload, getInactiveAssigneeAlertGroup } from "@case-pipeline/query";
+import { getAppointments, getDashboardKpis, getKpiCardDetail, getActiveCases, getPrescheduling, getPendingContracts, getCourtCases, getAddressChanges, getFoias, getEFilesToOpen, getSyncHealth, getArchivedRows, getCalendarEvents, addMondayCallCounts, getMondayCallCounts, getAlerts, getWorkload, getInactiveAssigneeAlertGroup } from "@case-pipeline/query";
 import type { Urgency, CalendarCategory } from "@case-pipeline/query";
 import { setApiToken, withMondayJob, drainMondayCallCounts, fetchPlatformUsage } from "@case-pipeline/monday";
 import { mondayFeeKIo, runFeeKAutofill } from "./fee-k-autofill.js";
@@ -484,6 +484,13 @@ app.get("/api/active-cases", (req, res) => {
 // are the query defaults (30 / 60 days since hire, 14 days after a reminder).
 app.get("/api/prescheduling", (_req, res) => {
   res.json({ data: getPrescheduling(db, { resolveStaff: makeStaffResolver(usersDb) }) });
+});
+// E-Files to open (P21, admin while it's built) — paid Fee Ks waiting for their
+// E-File, each with the plan the hire protocol would run. Reads only; the
+// ledger check happens in the browser. See docs/features/consult-to-efile.md.
+app.get("/api/efiles-to-open", requireAdmin, (_req, res) => {
+  const boardForType = feeKTypeLookup(loadFeeKTypes());
+  res.json({ data: getEFilesToOpen(db, { boardForType: (t) => boardForType(t)?.board || undefined }) });
 });
 // Contracts — Pending Fee Ks by Contract Stage, aged from the sent date (30 / 60 days).
 app.get("/api/pending-contracts", (_req, res) => {
