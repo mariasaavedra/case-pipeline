@@ -5,7 +5,7 @@
 import type { TabId } from "./components/ClientTabs";
 
 export interface Route {
-  page: "landing" | "clients" | "client-detail" | "appointments" | "reception" | "contracts" | "prescheduling" | "address-changes" | "foias" | "efiles-to-open" | "workload" | "active-cases" | "my-cases" | "calendar" | "alerts" | "call-log" | "jail-intakes" | "mail" | "court-cases" | "map" | "login" | "admin" | "settings";
+  page: "landing" | "clients" | "client-detail" | "appointments" | "reception" | "contracts" | "prescheduling" | "address-changes" | "foias" | "efiles-to-open" | "workload" | "active-cases" | "my-cases" | "calendar" | "alerts" | "call-log" | "jail-intakes" | "mail" | "court-cases" | "map" | "manual" | "login" | "admin" | "settings";
   params: Record<string, string>;
 }
 
@@ -99,6 +99,12 @@ export function matchRoute(pathname: string): Route {
   // P15 has three views over one fetch: the hearing docket, the prep pipeline and motions.
   if (path === "/court-cases" || path === "/court-cases/prep" || path === "/court-cases/motions") {
     return { page: "court-cases", params: { view: path.endsWith("/prep") ? "prep" : path.endsWith("/motions") ? "motions" : "docket" } };
+  }
+
+  // P22 the staff manual: /manual lists the chapters, /manual/<slug> opens one.
+  const manual = path.match(/^\/manual(?:\/([^/]+))?$/);
+  if (manual) {
+    return { page: "manual", params: { slug: manual[1] ? decodeURIComponent(manual[1]) : "" } };
   }
 
   if (path === "/map") {

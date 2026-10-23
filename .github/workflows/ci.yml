@@ -42,3 +42,32 @@ jobs:
       # build is the image build in build-push.yml — after merge to main.
       - name: Build
         run: npm run build
+
+  # The staff manual (apps/web/src/manual, P22) is updated in the same PR as
+  # the change staff will see. A PR that touches the web app's screens or the
+  # API's routes without touching the manual fails here, unless its
+  # description says "Manual: n/a" and why (a refactor, a test, a fix nobody
+  # sees). See "Staff manual" in CLAUDE.md.
+  manual:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Manual updated with the change
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          changed=$(git diff --name-only "$BASE"..."$HEAD")
+          screens=$(echo "$changed" | grep -E '^apps/web/src/(components|pages)/.*\.tsx$|^apps/api/src/routes/' | grep -vE '\.test\.tsx?$' || true)
+          manual=$(echo "$changed" | grep -E '^apps/web/src/(manual/chapters/|changelog\.ts)' || true)
+          if [ -z "$screens" ]; then echo "No screen or route changes."; exit 0; fi
+          if [ -n "$manual" ]; then echo "Manual updated:"; echo "$manual"; exit 0; fi
+          if printf '%s' "$BODY" | grep -qiE 'manual:[[:space:]]*n/?a'; then echo "Marked 'Manual: n/a' in the PR description."; exit 0; fi
+          echo "::error::This PR changes screens or routes but not the staff manual (apps/web/src/manual/chapters/)."
+          echo "Update the chapter for the page that changed, or add 'Manual: n/a — <why>' to the PR description."
+          echo "Changed:"; echo "$screens"
+          exit 1

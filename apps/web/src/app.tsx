@@ -33,9 +33,11 @@ const CalendarPage = lazy(() => import("./components/CalendarPage").then((m) => 
 const CallLogPage = lazy(() => import("./components/CallLogPage").then((m) => ({ default: m.CallLogPage })));
 const JailIntakesPage = lazy(() => import("./components/JailIntakesPage").then((m) => ({ default: m.JailIntakesPage })));
 const MailPage = lazy(() => import("./components/MailPage").then((m) => ({ default: m.MailPage })));
+const ManualPage = lazy(() => import("./components/ManualPage").then((m) => ({ default: m.ManualPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 import { TAB_IDS, type TabId } from "./components/ClientTabs";
 import { matchRoute, navigate } from "./router";
+import { chapterForRoute } from "./manual/manual";
 import type { Route } from "./router";
 
 /** Page codes from docs/ui-map.md. Client 360 sets its own (P3.x, per tab). */
@@ -61,6 +63,7 @@ const PAGE_CODES: Partial<Record<Route["page"], string>> = {
   foias: "P19",
   "efiles-to-open": "P21",
   workload: "P20",
+  manual: "P22",
 };
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
@@ -105,6 +108,22 @@ function UnderConstruction({ label, planned = false }: { label: string; planned?
           : "This page isn't ready yet. It will open for everyone once it is."}
       </div>
     </div>
+  );
+}
+
+// "? Help" in the top bar: the manual's chapter for this page, else its contents.
+function HelpButton({ page }: { page: Route["page"] }) {
+  const chapter = chapterForRoute(page);
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(chapter ? `/manual/${chapter.slug}` : "/manual")}
+      title={chapter ? `Manual: ${chapter.title}` : "Open the staff manual"}
+      className="text-sm"
+      style={{ color: "rgba(255,255,255,0.7)", background: "none", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontFamily: "var(--font-body)" }}
+    >
+      ? Help
+    </button>
   );
 }
 
@@ -323,6 +342,8 @@ function App() {
               {/* G2 — the top bar itself (docs/ui-map.md) */}
               <SectionCode code="G2" inline />
               <span style={{ width: 10 }} />
+              <HelpButton page={route.page} />
+              <span style={{ width: 8 }} />
               <Button type="button" size="sm" onClick={() => setShowLogCallModal(true)}>+ Log call</Button>
             </div>
           </div>
@@ -377,6 +398,7 @@ function App() {
             {route.page === "jail-intakes" && !loading && <JailIntakesPage />}
             {route.page === "mail" && !loading && (underConstruction ? <UnderConstruction label="Mail" /> : <MailPage />)}
             {route.page === "court-cases" && !loading && (underConstruction ? <UnderConstruction label="Court Cases" /> : <CourtCasesPage view={route.params.view === "prep" || route.params.view === "motions" ? route.params.view : "docket"} />)}
+            {route.page === "manual" && !loading && <ManualPage slug={route.params.slug ?? ""} />}
             {route.page === "map" && !loading && <UnderConstruction label="Map" planned={!underConstruction} />}
 
             {/* Clients page — search + filtered browse */}
