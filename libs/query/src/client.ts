@@ -177,6 +177,9 @@ export function readTextingContact(rawColumnValues: string | null | undefined): 
 export function stripNameNotes(name: string): string {
   return name
     .replace(/\[[^\]]*\]?|\([^)]*\)?/g, " ")
+    // A case-type note after a spaced dash: "Rios Rodriguez — Habeas", "-- Bond".
+    // A surname's own hyphen ("TORRES-PEREZ") has no spaces and stays.
+    .replace(/\s+(?:[—–]|--)\s.*$/, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -184,8 +187,9 @@ export function stripNameNotes(name: string): string {
 /**
  * "First Last" from the Profiles board's name columns. Staff park notes in them
  * — "Ventura Corado [A221-455-213] (Det In Core Civic)", "Pedraza (Detained At
- * Greene County Jail)" — so anything in brackets or parentheses goes, including
- * an unclosed "( det in Chase County Jail" at the end.
+ * Greene County Jail)", "Rios Rodriguez — Habeas" — so anything in brackets or
+ * parentheses goes, including an unclosed "( det in Chase County Jail" at the
+ * end, and so does everything after a spaced em/en dash or "--".
  */
 export function readDisplayName(rawColumnValues: string | null | undefined): string | null {
   const cvs = safeParseJson(rawColumnValues);
