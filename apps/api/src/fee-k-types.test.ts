@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { feeKTypeLookup, sanitizeFeeKTypes } from "./fee-k-types.js";
+import { feeKTypeLookup, sanitizeFeeKTypes, scopeFor, type FeeKTypeRow } from "./fee-k-types.js";
 import { DRAFT_FEE_K_TYPES } from "./fee-k-types-draft.js";
+
+const BLANK: FeeKTypeRow = { feeKType: "", spanish: "", board: "", feeSheetJob: "", services: "", servicesEs: "", excluded: "", excludedEs: "" };
 
 describe("sanitizeFeeKTypes", () => {
   it("keeps the Fee K Type's exact spelling, tidies the rest, drops rows with nothing set", () => {
@@ -9,7 +11,8 @@ describe("sanitizeFeeKTypes", () => {
       { feeKType: "Master (c)", spanish: "", board: "", feeSheetJob: "" },
       { spanish: "sin tipo" },
       "junk",
-    ])).toEqual([{ feeKType: "Bond MTN  (c)", spanish: "Moción de fianza", board: "Motions", feeSheetJob: "" }]);
+    ])).toEqual([{ feeKType: "Bond MTN  (c)", spanish: "Moción de fianza", board: "Motions", feeSheetJob: "",
+      services: "", servicesEs: "", excluded: "", excludedEs: "" }]);
   });
 
   it("one row per Fee K Type, any case — the first wins", () => {
@@ -28,7 +31,7 @@ describe("sanitizeFeeKTypes", () => {
 
 describe("feeKTypeLookup", () => {
   it("finds a row by Fee K Type, any case and inner spacing", () => {
-    const find = feeKTypeLookup([{ feeKType: "Bond MTN  (c)", spanish: "", board: "Motions", feeSheetJob: "" }]);
+    const find = feeKTypeLookup([{ ...BLANK, feeKType: "Bond MTN  (c)", board: "Motions" }]);
     expect(find("bond mtn (c)")?.board).toBe("Motions");
     expect(find("Master (c)")).toBeUndefined();
   });
@@ -46,5 +49,30 @@ describe("the starting draft", () => {
 
   it("only names real boards", () => {
     expect(DRAFT_FEE_K_TYPES.filter((r) => r.board && !BOARDS.includes(r.board))).toEqual([]);
+  });
+});
+
+describe("scope of services", () => {
+  it("a row with only its scope set is kept; long text is tidied, not cut at 120", () => {
+    const long = `Prepare   and file ${"x".repeat(300)}`;
+    const [row] = sanitizeFeeKTypes([{ feeKType: "N-400 - Naturalization", services: long }]);
+    expect(row!.services).toBe(`Prepare and file ${"x".repeat(300)}`);
+  });
+
+  it("joins the scope of a Fee K's types; unknown types add nothing", () => {
+    const rows = [
+      { ...BLANK, feeKType: "I-130 - Petition for Alien Relative", services: "A.", servicesEs: "A es.", excluded: "No A." },
+      { ...BLANK, feeKType: "I-765 - EAD Renewal", services: "B.", servicesEs: "B es." },
+    ];
+    expect(scopeFor(["i-130 - petition for alien relative", "I-765 - EAD Renewal", "Unknown"], rows))
+      .toEqual({ services: "A. B.", servicesEs: "A es. B es.", excluded: "No A.", excludedEs: "" });
+    expect(scopeFor([], rows)).toEqual({ services: "", servicesEs: "", excluded: "", excludedEs: "" });
+  });
+
+  it("the draft carries the approved text for the example types, on real Fee K Types", () => {
+    const withScope = DRAFT_FEE_K_TYPES.filter((r) => r.services);
+    expect(withScope.map((r) => r.feeKType)).toContain("I-485 + I-130 - Full Packet");
+    expect(withScope).toHaveLength(11);
+    for (const r of withScope) expect([r.servicesEs, r.excluded, r.excludedEs].every(Boolean)).toBe(true);
   });
 });

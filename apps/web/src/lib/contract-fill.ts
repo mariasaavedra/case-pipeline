@@ -15,6 +15,10 @@
 // AF + FF + postage (changed 2026-10-14; it was AF only). Most 2026 contracts
 // print it per fee instead, one "Surcharge Fee" line under each amount:
 // {{attorney_fee_surcharge}}, {{filing_fee_surcharge}}… = 3% of that one fee.
+// Scope of services (2026-10-23): the FORMS contract prints what its Fee K
+// Type includes / leaves out ({{services}}, {{services_excluded}}, + _es),
+// pre-filled from Settings → Firm → Fee K Types and editable per contract; the
+// court contracts carry their scope as fixed text in the Word file.
 // One contract can cover several people (a family at one Master Hearing):
 // "Contract is for more than one person" in M22, then everyone it covers. The
 // client — who signs and pays — is listed only if typed in: a relative often
@@ -71,6 +75,11 @@ export interface ContractInput {
   trialPrepDueDate: string;
   trialFee: number | null;
   trialDueDate: string;
+  /** Scope of services from the Fee K Type (Settings → Firm), editable per contract. "" prints nothing. */
+  services: string;
+  servicesEs: string;
+  servicesExcluded: string;
+  servicesExcludedEs: string;
 }
 
 /** Someone the contract covers. */
@@ -178,6 +187,10 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "trial_due_date", label: "Trial fee due", example: "January 15, 2027", value: (f) => dateEn(f.trialDueDate), required: (f) => !ymd(f.trialDueDate) },
   { tag: "trial_due_date_es", label: "Trial fee due, Spanish", example: "15 de Enero, 2027", value: (f) => dateEs(f.trialDueDate), required: (f) => !ymd(f.trialDueDate) },
   { tag: "trial_total_fee", label: "Trial prep + trial fee", example: "$7,000.00", value: (f) => money(trialTotalOf(f)), required: (f) => !positive(f.trialPrepFee) || !positive(f.trialFee) },
+  { tag: "services", label: "Services included (from the Fee K Type)", example: "Prepare and file Form I-130 with the evidence of your relationship.", value: (f) => f.services.trim() },
+  { tag: "services_es", label: "Services included, Spanish", example: "Preparar y presentar el Formulario I-130…", value: (f) => f.servicesEs.trim() },
+  { tag: "services_excluded", label: "Not included (from the Fee K Type)", example: "Adjustment of status (I-485) or consular processing…", value: (f) => f.servicesExcluded.trim() },
+  { tag: "services_excluded_es", label: "Not included, Spanish", example: "El ajuste de estatus (I-485) o el proceso consular…", value: (f) => f.servicesExcludedEs.trim() },
   { tag: "interview_fee", label: "Interview attendance fee", example: "$500.00", value: (f) => money(f.interviewFee), required: (f) => !positive(f.interviewFee) },
   { tag: "due_date", label: "Payment deadline", example: "October 12, 2026", value: (f) => dateEn(f.dueDate), required: (f) => !ymd(f.dueDate) },
   { tag: "due_date_es", label: "Payment deadline, Spanish", example: "12 de Octubre, 2026", value: (f) => dateEs(f.dueDate), required: (f) => !ymd(f.dueDate) },

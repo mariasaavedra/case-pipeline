@@ -141,3 +141,16 @@ describe("contract pre-fill: the client's address", () => {
     expect((await prefillAddress()).cityStateZip).toBe("Olathe, KS 66061");
   });
 });
+
+describe("contract pre-fill: scope of services", () => {
+  it("comes from the Fee K Type (the draft until an admin saves the table)", async () => {
+    db.prepare(
+      `INSERT INTO contracts (batch_id, local_id, monday_item_id, profile_local_id, name, raw_column_values) VALUES (1, 'c1', '555', 'p1', 'Fee K', ?)`,
+    ).run(JSON.stringify({ fee_k_type: { labels: ["N-400 - Naturalization"] } }));
+    const res = await fetch(`${base}/api/contracts/c1/document-form`);
+    const { data } = (await res.json()) as { data: { contractFor: string[]; scope: Record<string, string> } };
+    expect(data.contractFor).toEqual(["N-400 - Naturalization"]);
+    expect(data.scope.services).toBe("Prepare and file Form N-400.");
+    expect(data.scope.excludedEs).toMatch(/N-336/);
+  });
+});

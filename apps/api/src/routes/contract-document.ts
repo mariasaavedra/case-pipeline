@@ -6,7 +6,8 @@
 // this server. The API only:
 //   GET  /api/contracts/:localId/document-form — what Monday knows, to pre-fill
 //        the form: client, e-mail, address, attorney, AF / FF / PF, and the
-//        client's next hearing (type + date) from their open court case.
+//        client's next hearing (type + date) from their open court case, and
+//        the scope of services for its Fee K Type(s) (Fee K Types table).
 //   POST /api/contracts/:localId/document-generated — audit entry for a
 //        generated contract (template name + fees; no client details). M22
 //        calls it on Send for signature and on each Download, not on Preview.
@@ -32,6 +33,8 @@ import { FEE_K_ASSISTANT, makeMondayUserByLogin, peopleValue } from "../contract
 import { hearingKindOf } from "@case-pipeline/query";
 import { letterAddress, oneLineAddress } from "../documents/us-address.js";
 import { loadDocumentSettings } from "../documents/document-settings.js";
+import { feeKTypesSaved, loadFeeKTypes, scopeFor, type FeeKTypeRow } from "../fee-k-types.js";
+import { DRAFT_FEE_K_TYPES } from "../fee-k-types-draft.js";
 import type { AttorneyInfo } from "../documents/document-settings.js";
 
 interface ContractDocRow {
@@ -68,6 +71,8 @@ export interface ContractPrefill {
   hearingType: string;
   /** ISO date of the next hearing; "" when none. */
   hearingDate: string;
+  /** Scope of services for the Fee K's type(s) (Fee K Types table), "" each when none. */
+  scope: Pick<FeeKTypeRow, "services" | "servicesEs" | "excluded" | "excludedEs">;
 }
 
 const amount = (raw: unknown): number | null => {
@@ -104,6 +109,7 @@ export function contractPrefill(
   row: ContractDocRow,
   hearing: { type: string | null; date: string | null } | null,
   attorneys: Pick<AttorneyInfo, "givenName" | "familyName" | "email">[] = [],
+  feeKTypes: FeeKTypeRow[] = [],
 ): ContractPrefill {
   // First listed attorney; a people label can read "A, B".
   const attorneyName = (row.attorney ?? "").split(",").map((s) => s.trim()).find((s) => s && !s.includes("@")) ?? "";
@@ -120,6 +126,7 @@ export function contractPrefill(
     processingFee: amount(row.pf),
     hearingType: contractHearingType(hearing?.type ?? null),
     hearingDate: hearing?.date ?? "",
+    scope: scopeFor(labels(row.contractFor), feeKTypes),
   };
 }
 
@@ -198,7 +205,9 @@ export function registerContractDocumentRoutes(
            ORDER BY next_date LIMIT 1
         `).get(row.profileLocalId, today) as { type: string | null; date: string | null } | undefined) ?? null
       : null;
-    res.json({ data: contractPrefill(row, hearing, loadDocumentSettings().attorneys) });
+    // The saved table, else the draft: its scope text is approved (2026-10-23).
+    const feeKTypes = feeKTypesSaved() ? loadFeeKTypes() : DRAFT_FEE_K_TYPES;
+    res.json({ data: contractPrefill(row, hearing, loadDocumentSettings().attorneys, feeKTypes) });
   });
 
   app.post("/api/contracts/:localId/document-generated", requireAuth, async (req, res) => {
