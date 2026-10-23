@@ -913,6 +913,36 @@ export function fetchIntegrations(): Promise<IntegrationsStatus> {
 export function fetchSlackChannels(refresh = false): Promise<SlackChannelInfo[]> {
   return apiFetch<SlackChannelInfo[]>(`/api/settings/integrations/slack/channels${refresh ? "?refresh=1" : ""}`);
 }
+
+// Settings → Workflows (P11.7). Shapes = apps/api/src/workflows/report.ts.
+export type WorkflowGroup = "monday" | "payments" | "files" | "messages" | "maintenance" | "external";
+export interface WorkflowRun { at: string; status: "running" | "ok" | "failed"; summary: string | null; error: string | null }
+export interface Workflow {
+  key: string;
+  name: string;
+  when: string;
+  then: string;
+  group: WorkflowGroup;
+  kind: "scheduled" | "event" | "external";
+  schedule: { cron: string; words: string; firmTime: boolean } | null;
+  on: boolean;
+  reason: string | null;
+  doc: string | null;
+  opsEvent: string | null;
+  tracked: boolean;
+  lastRun: WorkflowRun | null;
+  failures: number;
+  recentFailures: { at: string; error: string | null }[];
+  historyError: string | null;
+}
+export interface WorkflowsReport {
+  groups: { id: WorkflowGroup; label: string }[];
+  failureWindowDays: number;
+  workflows: Workflow[];
+}
+export function fetchWorkflows(): Promise<WorkflowsReport> {
+  return apiFetch<WorkflowsReport>("/api/workflows");
+}
 export function updateNotifySettings(s: NotifySettings): Promise<NotifySettings> {
   return apiFetch<NotifySettings>("/api/settings/notify", {
     method: "PUT",

@@ -7,6 +7,7 @@ import { protect, isEncrypted } from "../crypto/secrets.js";
 import { pruneBackupSeries, premigratePattern, PREMIGRATE_KEEP } from "../backup/prune.js";
 import { createStaffTablesSql, createOffboardingTableSql } from "../staff/schema.js";
 import { createSlackQueueTableSql } from "../notify/slack-queue.js";
+import { createJobRunsTableSql } from "../workflows/runs.js";
 
 const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -442,6 +443,14 @@ const MIGRATIONS: Migration[] = [
     version: 18,
     up: () => {
       usersDb.exec(createSlackQueueTableSql);
+    },
+  },
+  {
+    // When each background job last ran and how (workflows/runs.ts), for the
+    // Workflows screen. Pruned to 14 days.
+    version: 19,
+    up: () => {
+      usersDb.exec(createJobRunsTableSql);
     },
   },
 ];

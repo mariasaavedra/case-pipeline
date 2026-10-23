@@ -117,6 +117,8 @@ import { startWebhookProcessor, createBoardKeyResolver } from "./webhooks/proces
 import { notifyOps, inBackground, postEvent } from "./notify/slack.js";
 import { runSlackQueue, recoverInterrupted } from "./notify/slack-queue.js";
 import { registerSlackQueueRoutes } from "./routes/slack-queue.js";
+import { registerWorkflowsRoutes } from "./routes/workflows.js";
+import { trackRun, recordRun, startRun, finishRun, recoverInterruptedRuns, pruneRuns } from "./workflows/runs.js";
 
 // =============================================================================
 // Database
@@ -611,6 +613,7 @@ registerCallLogRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOpt
 registerSmsRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions, forceDryRun: DB_SOURCE === "seed" });
 // Settings → Integrations (Slack + texting) — see routes/integrations.ts
 registerIntegrationRoutes(app);
+registerWorkflowsRoutes(app, { db, usersDb, live: DB_SOURCE === "live" });
 // Settings → Firm: Fee K Types lookup table (P11.3.6) — see routes/fee-k-types.ts
 registerFeeKTypeRoutes(app, { db });
 
@@ -694,12 +697,15 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`Server running at http://${HOST}:${PORT}`);
   // An empty roster (first boot after users.db v14) is filled from Monday + the boards.
   seedStaffIfEmpty(db, MONDAY_API_TOKEN);
+  // Runs cut off by the restart that brought us here (Settings → Workflows).
+  const interrupted = recoverInterruptedRuns(usersDb);
+  if (interrupted) console.warn(`[job-runs] ${interrupted} run(s) were interrupted by a restart — marked failed.`);
   // Seed too: it only posts what reception queued, and SLACK_MODE still decides.
   scheduleSlackQueue();
 
   // Client upload links → E-File → CAF. On seed data the script only plans.
   if (clientUploadsConfig()) {
-    startClientUploadFiling({ db, mondayApiToken: MONDAY_API_TOKEN, seed: DB_SOURCE === "seed" });
+    startClientUploadFiling({ db, mondayApiToken: MONDAY_API_TOKEN, seed: DB_SOURCE === "seed", runs: usersDb });
   } else {
     console.log("[uploads] Client upload links DISABLED (set CLIENT_UPLOADS=on and API_URL to enable).");
   }
@@ -809,6 +815,12 @@ function runSync(label: string, args: string[]): Promise<boolean> {
     }
     syncInFlight = label;
     console.log(`[sync] Starting ${label} sync from Monday.com…`);
+    // Full + incremental runs show on Settings → Workflows. Webhook refreshes
+    // don't: they run every minute or two and show as their webhook events.
+    const runId = label === "webhook" ? null : startRun(usersDb, `sync_${label}`);
+    const finish = (error: string | null) => {
+      if (runId !== null) finishRun(usersDb, runId, { error });
+    };
     // `npm run sync:live -- <args>` — the `--` passes flags through to the script.
     const child = spawn("npm", ["run", "sync:live", "--", ...args], {
       cwd: REPO_ROOT,
@@ -819,6 +831,7 @@ function runSync(label: string, args: string[]): Promise<boolean> {
     });
     child.on("close", (code) => {
       syncInFlight = null;
+      finish(code === 0 ? null : `exit code ${code}`);
       if (code === 0) {
         console.log(`[sync] ${label} sync complete.`);
         resolve(true);
@@ -834,6 +847,7 @@ function runSync(label: string, args: string[]): Promise<boolean> {
     });
     child.on("error", (err) => {
       syncInFlight = null;
+      finish(err.message);
       reject(err);
     });
   });
@@ -950,6 +964,7 @@ function runConsultSweep(days: string): Promise<void> {
       return;
     }
     sweepInFlight = true;
+    const runId = startRun(usersDb, "consult_sweep");
     const child = spawn("npm", ["run", "consult:sweep", "--", `--days=${days}`, "--apply"], {
       cwd: REPO_ROOT,
       stdio: "inherit",
@@ -958,11 +973,13 @@ function runConsultSweep(days: string): Promise<void> {
     });
     child.on("close", (code) => {
       sweepInFlight = false;
+      finishRun(usersDb, runId, { error: code === 0 ? null : `exit code ${code}` });
       if (code === 0) resolve();
       else reject(new Error(`consult sweep exited with code ${code}`));
     });
     child.on("error", (err) => {
       sweepInFlight = false;
+      finishRun(usersDb, runId, { error: err.message });
       reject(err);
     });
   });
@@ -992,6 +1009,7 @@ function scheduleDriveIntake() {
         return;
       }
       intakeInFlight = true;
+      const runId = startRun(usersDb, "drive_intake");
       const child = spawn("npm", ["run", "drive:intake", "--", "--apply"], {
         cwd: REPO_ROOT,
         stdio: "inherit",
@@ -1000,6 +1018,7 @@ function scheduleDriveIntake() {
       });
       child.on("close", (code) => {
         intakeInFlight = false;
+        finishRun(usersDb, runId, { error: code === 0 ? null : `exit code ${code}` });
         if (code !== 0) {
           console.error(`[drive] Intake exited with code ${code}`);
           inBackground(notifyOps("ops_drive_intake", `Drive intake failed (exit code ${code}). Client uploads aren't being copied to SharePoint until it runs again.`));
@@ -1007,6 +1026,7 @@ function scheduleDriveIntake() {
       });
       child.on("error", (err) => {
         intakeInFlight = false;
+        finishRun(usersDb, runId, { error: err.message });
         console.error("[drive] Error:", err);
       });
     },
@@ -1028,8 +1048,12 @@ function scheduleLawPaySlack() {
   }
   const cronExpr = process.env.LAWPAY_SLACK_CRON ?? "*/2 * * * *";
   cron.schedule(cronExpr, () => {
+    const startedAt = new Date();
     void runLawPaySlackJob({ db, mondayApiToken: MONDAY_API_TOKEN }).then((r) => {
       if (!r) return;
+      recordRun(usersDb, "lawpay_slack", startedAt, r.ok
+        ? { summary: `${r.payments} payment(s) read, ${r.applied.length} applied` }
+        : { error: r.error });
       if (!r.ok) {
         console.error(`[lawpay] #payments failed: ${r.error}`);
         inBackground(notifyOps("ops_lawpay_mail", `Reading LawPay payments from Slack #payments failed: ${r.error}`));
@@ -1056,8 +1080,12 @@ function scheduleLawPayMail() {
   }
   const cronExpr = process.env.LAWPAY_MAIL_CRON ?? "*/10 * * * *";
   cron.schedule(cronExpr, () => {
+    const startedAt = new Date();
     void runLawPayMailJob({ db, mondayApiToken: MONDAY_API_TOKEN }).then((r) => {
       if (!r) return;
+      recordRun(usersDb, "lawpay_mail", startedAt, r.ok
+        ? { summary: `${r.receipts} receipt(s) found, ${r.applied.length} applied` }
+        : { error: r.error });
       if (!r.ok) {
         console.error(`[lawpay] Receipts failed: ${r.error}`);
         inBackground(notifyOps("ops_lawpay_mail", `Reading LawPay receipts failed: ${r.error}`));
@@ -1103,7 +1131,7 @@ function scheduleFeeKAutofill() {
         return;
       }
       feeKInFlight = true;
-      withMondayJob("fee-k-autofill", async () => {
+      trackRun(usersDb, "fee_k_autofill", () => withMondayJob("fee-k-autofill", async () => {
         const io = await mondayFeeKIo();
         const routing = feeKTypeLookup(loadFeeKTypes());
         const r = await runFeeKAutofill({ db, since, apply: true, ...io, boardFor: (t) => routing(t)?.board || null, log: (l) => console.log(l) });
@@ -1115,10 +1143,10 @@ function scheduleFeeKAutofill() {
             metadata: { changes: w.changes },
           });
         }
-        if (r.written.length || r.failed.length) {
-          console.log(`[feek] run: ${r.written.length} filled, ${r.failed.length} failed, ${r.skipped.length} skipped of ${r.candidates}.`);
-        }
-      })
+        const summary = `${r.written.length} filled, ${r.failed.length} failed, ${r.skipped.length} skipped of ${r.candidates}`;
+        if (r.written.length || r.failed.length) console.log(`[feek] run: ${summary}.`);
+        return summary;
+      }))
         .catch((err) => {
           console.error("[feek] Error:", err);
           inBackground(notifyOps("ops_fee_k_autofill", `Fee K auto-fill failed: ${(err as Error).message}`));
@@ -1166,6 +1194,12 @@ function flushMondayCallCounts(): void {
 
 function scheduleWalCheckpoint() {
   cron.schedule("0 * * * *", () => {
+    // Settings → Workflows keeps 14 days of runs. users.db only, so no sync lock needed.
+    try {
+      pruneRuns(usersDb);
+    } catch (err) {
+      console.error("[job-runs] prune error:", err);
+    }
     // Skip while a sync holds the write lock. A TRUNCATE checkpoint needs an
     // exclusive lock and rewrites the main DB file; running it against a file the
     // sync process is actively writing was the leading suspect for the 2026-07-24
@@ -1357,7 +1391,7 @@ function scheduleBackups() {
   // poor thing to keep as the day's restore point.
   const backupCron = process.env.BACKUP_CRON ?? "30 5 * * *";
   cron.schedule(backupCron, () => {
-    runBackup().catch((err) => {
+    trackRun(usersDb, "backup", runBackup).catch((err) => {
       console.error("[backup] error:", err);
       inBackground(notifyOps("ops_backup", `The daily database backup failed: ${(err as Error).message}. Check disk space on the server.`));
     });

@@ -10,7 +10,7 @@ export interface Route {
 }
 
 const VALID_TABS = new Set<string>(["overview", "timeline", "appointments", "contracts", "active_cases", "court_cases", "documents", "relations"]);
-const SETTINGS_TABS = new Set<string>(["account", "preferences", "firm", "integrations", "staff", "admin"]);
+const SETTINGS_TABS = new Set<string>(["account", "preferences", "firm", "integrations", "workflows", "staff", "admin"]);
 
 /**
  * Match a pathname to a route definition.
