@@ -328,7 +328,22 @@ describe("getClientProfile", () => {
       JSON.stringify({ first_name: "Felipe", last_name: "Pedraza ( det in Chase County Jail" }),
     ]);
     insertProfile(db, batchId, { localId: "p3", name: "No Columns" });
+    insertProfile(db, batchId, { localId: "p4", name: "Jaime RIOS RODRIGUEZ -- Habeas" });
+    run(db, "UPDATE profiles SET raw_column_values = ? WHERE local_id = 'p4'", [
+      JSON.stringify({ first_name: "Jaime", last_name: "Rios Rodriguez — Habeas" }),
+    ]);
+    insertProfile(db, batchId, { localId: "p5", name: "Javis DAVIES" });
+    run(db, "UPDATE profiles SET raw_column_values = ? WHERE local_id = 'p5'", [
+      JSON.stringify({ first_name: "Javis", last_name: "Davies (Detained In Greene County) -- Bond" }),
+    ]);
+    insertProfile(db, batchId, { localId: "p6", name: "Hector TORRES-PEREZ" });
+    run(db, "UPDATE profiles SET raw_column_values = ? WHERE local_id = 'p6'", [
+      JSON.stringify({ first_name: "Hector", last_name: "TORRES-PEREZ" }),
+    ]);
 
+    expect(getClientProfile(db, "p4")!.displayName).toBe("Jaime Rios Rodriguez");
+    expect(getClientProfile(db, "p5")!.displayName).toBe("Javis Davies");
+    expect(getClientProfile(db, "p6")!.displayName).toBe("Hector TORRES-PEREZ");
     expect(getClientProfile(db, "p1")!.displayName).toBe("Milton Ventura Corado");
     expect(getClientProfile(db, "p2")!.displayName).toBe("Felipe Pedraza");
     expect(getClientProfile(db, "p3")!.displayName).toBeNull();
