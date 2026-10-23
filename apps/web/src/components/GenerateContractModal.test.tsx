@@ -25,6 +25,7 @@ vi.mock("../api", () => ({
   fetchContractPrefill: async () => ({
     clientName: "Ana Lopez", email: "ana@mail.com", address: "1 Main St, Kansas City, MO 64105",
     street: "1 Main St", cityStateZip: "Kansas City, MO 64105", attorneyName: "Jane Atty", attorneyEmail: "jane@firm.com",
+    attorneys: [{ name: "Jane Atty", email: "jane@firm.com" }, { name: "Lucy Betteridge", email: "lucy@firm.com" }],
     contractFor: ["Court"], attorneyFee: 5000, filingFee: null, processingFee: null, hearingType: "Master Hearing", hearingDate: "2026-11-12",
   }),
   fetchEsignStatus: async () => ({ enabled: true }),
@@ -296,5 +297,27 @@ describe("M22 case type and hearing type are picked, not typed", () => {
       formName: "I-130 - Petition for Alien Relative", formNameEs: "Petición de familiar extranjero (I-130)",
       services: "Prepare and file Form I-130.", hearingType: "Individual Hearing",
     });
+  });
+});
+
+describe("M22 attorney is picked, and brings their e-mail", () => {
+  it("picking the attorney who signs the letter sets the Adobe signer's e-mail, and the other way round", async () => {
+    mocks.tags = ["client_name", "attorney_name"];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
+    await flush();
+    const name = document.getElementById("m22-attorneyName") as HTMLSelectElement;
+    const email = document.getElementById("m22-atty-email") as HTMLSelectElement;
+    const choose = (el: HTMLSelectElement, v: string) => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(el, v);
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    expect(name.value).toBe("Jane Atty");
+    expect(email.value).toBe("jane@firm.com");
+    await act(async () => { choose(name, "Lucy Betteridge"); });
+    expect(email.value).toBe("lucy@firm.com");
+    await act(async () => { choose(email, "jane@firm.com"); });
+    expect(name.value).toBe("Jane Atty");
   });
 });

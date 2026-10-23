@@ -7,7 +7,8 @@
 //   GET  /api/contracts/:localId/document-form — what Monday knows, to pre-fill
 //        the form: client, e-mail, address, attorney, AF / FF / PF, and the
 //        client's next hearing (type + date) from their open court case, and
-//        the scope of services for its Fee K Type(s) (Fee K Types table).
+//        the scope of services for its Fee K Type(s) (Fee K Types table), and
+//        the attorney pick list (active roster attorneys + e-mails).
 //   POST /api/contracts/:localId/document-generated — audit entry for a
 //        generated contract (template name + fees; no client details). M22
 //        calls it on Send for signature and on each Download, not on Preview.
@@ -29,6 +30,7 @@ import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { feeKCaseTypeSql, getBoardColumnsFor } from "@case-pipeline/query";
 import { usersDb } from "../db/users-db.js";
+import { listStaff, makeStaffResolver, normName, splitPeople, type ResolvedStaff, type StaffMember } from "../staff/roster.js";
 import { FEE_K_ASSISTANT, makeMondayUserByLogin, peopleValue } from "../contract-info.js";
 import { hearingKindOf } from "@case-pipeline/query";
 import { letterAddress, oneLineAddress } from "../documents/us-address.js";
@@ -61,8 +63,10 @@ export interface ContractPrefill {
   street: string;
   cityStateZip: string;
   attorneyName: string;
-  /** From Settings → Documents, matched by name; "" when unknown. For Adobe Sign. */
+  /** The attorney's e-mail (staff roster, else Settings → Documents); "" when unknown. For Adobe Sign. */
   attorneyEmail: string;
+  /** Who can sign: the active attorneys on the staff roster, each with an e-mail when the roster has one. */
+  attorneys: ContractAttorney[];
   contractFor: string[];
   /** The matter for the contract from the Fee K Type(s): clean English title, and Spanish. */
   formName: string;
@@ -99,6 +103,56 @@ export function contractHearingType(mondayLabel: string | null): string {
   return kind === "mch" ? "Master Hearing" : kind === "trial" ? "Individual Hearing" : mondayLabel;
 }
 
+export interface ContractAttorney {
+  name: string;
+  email: string;
+  /** Staff roster id; null for someone only in Settings → Documents. */
+  staffId: number | null;
+}
+
+type DocumentAttorney = Pick<AttorneyInfo, "givenName" | "familyName" | "email">;
+const lower = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+
+/**
+ * The attorney pick list (M22): every active attorney on the staff roster, named
+ * as Settings → Documents names them when the e-mails match (Monday calls Rekha
+ * "Rekha@Sharma- com"), with the roster e-mail, else the Documents one; then
+ * anyone only in Settings → Documents. By name.
+ */
+export function contractAttorneyOptions(
+  staff: Pick<StaffMember, "id" | "name" | "email" | "active" | "roles">[],
+  documents: DocumentAttorney[],
+): ContractAttorney[] {
+  const docName = (a: DocumentAttorney) => `${a.givenName} ${a.familyName}`.replace(/\s+/g, " ").trim();
+  const used = new Set<DocumentAttorney>();
+  const out: ContractAttorney[] = staff.filter((s) => s.active && s.roles.includes("attorney")).map((s) => {
+    const doc = documents.find((a) => lower(a.email) !== "" && lower(a.email) === lower(s.email))
+      ?? documents.find((a) => normName(docName(a)) === normName(s.name));
+    if (doc) used.add(doc);
+    return { name: doc ? docName(doc) : s.name, email: (s.email ?? "").trim() || (doc?.email ?? "").trim(), staffId: s.id };
+  });
+  for (const a of documents) if (!used.has(a)) out.push({ name: docName(a), email: a.email.trim(), staffId: null });
+  return out.sort((x, y) => x.name.localeCompare(y.name));
+}
+
+/**
+ * The Fee K's attorney (People column text, "A, B" for two) as one of the pick
+ * list: the first that the roster's matcher (aliases included) or the list's
+ * own names recognise. Null when none does.
+ */
+export function pickContractAttorney(
+  label: string | null,
+  options: ContractAttorney[],
+  resolve: (name: string) => Pick<ResolvedStaff, "id"> | null,
+): ContractAttorney | null {
+  for (const name of splitPeople(label)) {
+    const staffId = resolve(name)?.id;
+    const hit = options.find((o) => (staffId !== undefined && o.staffId === staffId) || normName(o.name) === normName(name));
+    if (hit) return hit;
+  }
+  return null;
+}
+
 /** The attorney's e-mail from Settings → Documents, by full name. */
 export function attorneyEmailFor(name: string, attorneys: Pick<AttorneyInfo, "givenName" | "familyName" | "email">[]): string {
   const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -111,19 +165,22 @@ export function attorneyEmailFor(name: string, attorneys: Pick<AttorneyInfo, "gi
 export function contractPrefill(
   row: ContractDocRow,
   hearing: { type: string | null; date: string | null } | null,
-  attorneys: Pick<AttorneyInfo, "givenName" | "familyName" | "email">[] = [],
+  attorneys: DocumentAttorney[] = [],
   feeKTypes: FeeKTypeRow[] = [],
+  team: { options: ContractAttorney[]; resolve: (name: string) => Pick<ResolvedStaff, "id"> | null } = { options: [], resolve: () => null },
 ): ContractPrefill {
-  // First listed attorney; a people label can read "A, B".
   const titles = contractTitles(labels(row.contractFor), feeKTypes);
-  const attorneyName = (row.attorney ?? "").split(",").map((s) => s.trim()).find((s) => s && !s.includes("@")) ?? "";
+  // The Fee K's attorney as one of the pick list; else the first name that isn't an e-mail.
+  const picked = pickContractAttorney(row.attorney, team.options, team.resolve);
+  const attorneyName = picked?.name ?? splitPeople(row.attorney).find((s) => !s.includes("@")) ?? "";
   return {
     clientName: (row.clientName ?? row.itemName).trim(),
     email: row.email?.trim() ?? "",
     address: oneLineAddress(row.address),
     ...letterAddress(row.address),
     attorneyName,
-    attorneyEmail: attorneyEmailFor(attorneyName, attorneys),
+    attorneyEmail: picked?.email || attorneyEmailFor(attorneyName, attorneys),
+    attorneys: team.options,
     contractFor: labels(row.contractFor),
     formName: titles.en,
     formNameEs: titles.es,
@@ -213,7 +270,9 @@ export function registerContractDocumentRoutes(
       : null;
     // The saved table, else the draft: its scope text is approved (2026-10-23).
     const feeKTypes = feeKTypesSaved() ? loadFeeKTypes() : DRAFT_FEE_K_TYPES;
-    res.json({ data: contractPrefill(row, hearing, loadDocumentSettings().attorneys, feeKTypes) });
+    const documents = loadDocumentSettings().attorneys;
+    const team = { options: contractAttorneyOptions(listStaff(usersDb), documents), resolve: makeStaffResolver(usersDb) };
+    res.json({ data: contractPrefill(row, hearing, documents, feeKTypes, team) });
   });
 
   app.post("/api/contracts/:localId/document-generated", requireAuth, async (req, res) => {

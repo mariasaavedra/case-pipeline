@@ -164,6 +164,8 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
   const previewUrl = useRef<string | null>(null);
   const [esign, setEsign] = useState(false);
   const [attorneyEmail, setAttorneyEmail] = useState("");
+  // Who can sign (active roster attorneys + e-mails), from the pre-fill.
+  const [attorneys, setAttorneys] = useState<{ name: string; email: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [needsConsent, setNeedsConsent] = useState(false);
   const [done, setDone] = useState<string | null>(null);
@@ -206,6 +208,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     fetchContractPrefill(c.localId)
       .then((p) => {
         setAttorneyEmail(draft?.attorneyEmail ?? p.attorneyEmail ?? "");
+        setAttorneys(p.attorneys ?? []);
         setAddr({ full: p.address, street: p.street ?? p.address, cityStateZip: p.cityStateZip ?? "" });
         return p;
       })
@@ -363,6 +366,15 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
     dirty.current = true;
     setInput((f) => (f ? { ...f, ...fromFeeKTypes(picked, types?.rows ?? []) } : f));
   };
+
+  /** Pick the attorney: their name for the letter and their e-mail for Adobe Sign go together. */
+  const pickAttorney = (name: string) => {
+    const a = attorneys.find((x) => x.name === name);
+    dirty.current = true;
+    setInput((f) => (f ? { ...f, attorneyName: name } : f));
+    if (a?.email) setAttorneyEmail(a.email);
+  };
+  const attorneyByEmail = (email: string) => attorneys.find((a) => a.email.toLowerCase() === email.trim().toLowerCase());
 
   const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
   const sendReady = !!input && emailOk(attorneyEmail) && emailOk(input.email)
@@ -615,7 +627,17 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                   </Field>
                 )}
                 {text("motionNameEs", "Motion, Spanish", { placeholder: "Moción para Recalendarizar" })}
-                {text("attorneyName", "Attorney (signs the letter)")}
+                {shown.has("attorneyName") && (
+                  <Field id="m22-attorneyName" label="Attorney (signs the letter)"
+                    hint={input.attorneyName && !attorneys.some((a) => a.name === input.attorneyName) ? "Not an active attorney on the staff roster — pick one." : undefined}>
+                    <select id="m22-attorneyName" className={inputClass} style={inputStyle} value={input.attorneyName}
+                      onChange={(e) => pickAttorney(e.target.value)}>
+                      <option value="">Select…</option>
+                      {attorneys.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}
+                      {input.attorneyName && !attorneys.some((a) => a.name === input.attorneyName) && <option value={input.attorneyName}>{input.attorneyName}</option>}
+                    </select>
+                  </Field>
+                )}
                 {text("creatorInitials", "Your initials")}
                 {text("date", "Letter date", { type: "date" })}
                 {text("signByDate", "Signed contract due", { type: "date" })}
@@ -718,9 +740,20 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
             <div className="rounded-md p-3 space-y-2" style={{ border: "1px solid var(--color-border-light)" }}>
               <div className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>Send for signature (Adobe Sign)</div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field id="m22-atty-email" label="1. Attorney signs first" hint={attorneyEmail ? undefined : "Not in Settings → Documents — type it."}>
-                  <input id="m22-atty-email" type="email" className={inputClass} style={inputStyle}
-                    value={attorneyEmail} onChange={(e) => { dirty.current = true; setAttorneyEmail(e.target.value); }} />
+                <Field id="m22-atty-email" label="1. Attorney signs first"
+                  hint={!attorneyEmail ? "Pick the attorney." : attorneyByEmail(attorneyEmail) ? attorneyEmail : `${attorneyEmail} — not an attorney's e-mail on the staff roster`}>
+                  <select id="m22-atty-email" className={inputClass} style={inputStyle} value={attorneyEmail}
+                    onChange={(e) => {
+                      dirty.current = true;
+                      setAttorneyEmail(e.target.value);
+                      // The letter's signer follows, when the template names one.
+                      const a = attorneyByEmail(e.target.value);
+                      if (a) setInput((f) => (f ? { ...f, attorneyName: a.name } : f));
+                    }}>
+                    <option value="">Select…</option>
+                    {attorneys.filter((a) => a.email).map((a) => <option key={a.email} value={a.email}>{a.name}</option>)}
+                    {attorneyEmail && !attorneyByEmail(attorneyEmail) && <option value={attorneyEmail}>{attorneyEmail}</option>}
+                  </select>
                 </Field>
                 <Field id="m22-client-email" label="2. Then the client">
                   <input id="m22-client-email" type="email" className={inputClass} style={inputStyle}
