@@ -3,6 +3,11 @@
 // =============================================================================
 // Phone-first, no login, no account. Upload-only: it shows the client's first
 // name and what THEY sent during this visit, nothing from their case file.
+//
+// The Buzón checklist (docs/features/buzon.md): when staff asked for specific
+// documents, the page lists them, each with its own Photo / File buttons and
+// a ✓ once we have it. The list never says which case it is for. "Another
+// document?" below keeps the old free upload.
 // =============================================================================
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -13,7 +18,17 @@ const KIND_ORDER: KindKey[] = ["notice", "id", "evidence", "other"];
 const ACCEPT = "image/*,application/pdf,.pdf,.heic,.heif,.tif,.tiff,.doc,.docx";
 const LANG_KEY = "upload.lang";
 
+/** One document on the Buzón list, as GET /api/u/:token sends it. */
+export interface ChecklistItem {
+  id: number;
+  en: string;
+  es: string;
+  required: boolean;
+  received: boolean;
+}
+
 type Page = { s: "loading" } | { s: "dead" } | { s: "ready"; firstName: string | null };
+type T = (typeof STRINGS)[Lang];
 
 export function tokenFromPath(pathname: string): string | null {
   const m = pathname.match(/^\/u\/([A-Za-z0-9_-]{43})\/?$/);
@@ -40,9 +55,12 @@ export function UploadPage() {
   const [kind, setKind] = useState<KindKey>("notice");
   const [note, setNote] = useState("");
   const [items, setItems] = useState<QueueItem[]>([]);
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const nextId = useRef(1);
   const camera = useRef<HTMLInputElement>(null);
   const picker = useRef<HTMLInputElement>(null);
+  // The checklist document the next picked files are for (undefined = "Another document").
+  const target = useRef<number | undefined>(undefined);
   const t = STRINGS[lang];
 
   useEffect(() => {
@@ -54,7 +72,8 @@ export function UploadPage() {
     fetch(`/api/u/${token}`)
       .then(async (res) => {
         if (!res.ok) return setPage({ s: "dead" });
-        const body = (await res.json()) as { data: { firstName: string | null; language: Lang } };
+        const body = (await res.json()) as { data: { firstName: string | null; language: Lang; checklist?: ChecklistItem[] } };
+        setChecklist(body.data.checklist ?? []);
         setPage({ s: "ready", firstName: body.data.firstName });
         if (!savedLang()) setLang(body.data.language);
       })
@@ -78,8 +97,12 @@ export function UploadPage() {
     for (const item of toStart(items)) {
       update(item.id, { s: "sending", pct: 0 });
       void sendFile(token, item, (pct) => update(item.id, { s: "sending", pct })).then((r) => {
-        if (r.ok) update(item.id, { s: "done", duplicate: !!r.duplicate });
-        else {
+        if (r.ok) {
+          update(item.id, { s: "done", duplicate: !!r.duplicate });
+          if (item.itemId !== undefined && !r.duplicate) {
+            setChecklist((list) => list.map((c) => (c.id === item.itemId ? { ...c, received: true } : c)));
+          }
+        } else {
           update(item.id, { s: "error", ...errorFor(r.status, r.code) });
           if (r.status === 404) setPage({ s: "dead" });
         }
@@ -89,14 +112,23 @@ export function UploadPage() {
 
   const addFiles = (list: FileList | null) => {
     if (!list?.length) return;
+    const itemId = target.current;
     const added: QueueItem[] = Array.from(list).map((file) => {
       const bad = precheck(file);
       return {
-        id: nextId.current++, file, kind, note,
+        id: nextId.current++, file,
+        kind: itemId !== undefined ? "evidence" : kind,
+        note: itemId !== undefined ? "" : note,
+        itemId,
         state: bad ? { s: "error", error: bad, retry: false } : { s: "waiting" },
       };
     });
     setItems((all) => [...all, ...added]);
+  };
+
+  const open = (input: "camera" | "picker", itemId?: number) => {
+    target.current = itemId;
+    (input === "camera" ? camera : picker).current?.click();
   };
 
   if (page.s === "loading") {
@@ -111,15 +143,31 @@ export function UploadPage() {
     );
   }
 
+  const free = items.filter((i) => i.itemId === undefined);
   // "We received your documents" only when nothing still needs the client's attention.
-  const settled = allSettled(items) && !items.some((i) => i.state.s === "error");
-  const anyDone = items.some((i) => i.state.s === "done");
+  const settled = allSettled(free) && !free.some((i) => i.state.s === "error");
+  const anyDone = free.some((i) => i.state.s === "done");
+  const required = checklist.filter((c) => c.required);
+  const haveRequired = required.filter((c) => c.received).length;
+  const listDone = required.length > 0 && haveRequired === required.length;
+  const remove = (id: number) => setItems((all) => all.filter((i) => i.id !== id));
+  const retry = (id: number) => update(id, { s: "waiting" });
 
-  return (
-    <Shell t={t} lang={lang} onLang={chooseLang}>
-      <h1 className="font-display text-3xl text-ink">{t.title(page.firstName)}</h1>
-      <p className="mt-2 text-ink-muted">{t.intro}</p>
+  const inputs = (
+    <>
+      <input
+        ref={camera} type="file" accept="image/*" capture="environment" className="hidden" data-testid="camera"
+        onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+      />
+      <input
+        ref={picker} type="file" accept={ACCEPT} multiple className="hidden" data-testid="file-picker"
+        onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+      />
+    </>
+  );
 
+  const freeUpload = (
+    <>
       <fieldset className="mt-6">
         <legend className="font-medium text-ink">{t.kindQuestion}</legend>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -151,28 +199,20 @@ export function UploadPage() {
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <button
           type="button"
-          onClick={() => camera.current?.click()}
+          onClick={() => open("camera")}
           className="min-h-14 rounded-xl bg-navy px-4 text-lg font-medium text-white active:bg-navy-light"
         >
 <span aria-hidden className="mr-2">📷</span>{t.takePhoto}
         </button>
         <button
           type="button"
-          onClick={() => picker.current?.click()}
+          onClick={() => open("picker")}
           className="min-h-14 rounded-xl border-2 border-navy bg-card px-4 text-lg font-medium text-navy active:bg-surface-warm"
         >
 <span aria-hidden className="mr-2">📎</span>{t.chooseFiles}
         </button>
       </div>
       <p className="mt-2 text-sm text-ink-faint">{t.allowed}</p>
-      <input
-        ref={camera} type="file" accept="image/*" capture="environment" className="hidden"
-        onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
-      />
-      <input
-        ref={picker} type="file" accept={ACCEPT} multiple className="hidden" data-testid="file-picker"
-        onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
-      />
 
       {settled && anyDone && (
         <div role="status" className="mt-6 rounded-xl border border-status-green bg-status-green-bg px-4 py-4 text-status-green">
@@ -181,32 +221,124 @@ export function UploadPage() {
         </div>
       )}
 
-      {items.length > 0 && (
+      {free.length > 0 && (
         <ul className="mt-6 space-y-2" aria-live="polite">
-          {[...items].reverse().map((item) => (
-            <FileRow
-              key={item.id}
-              item={item}
-              t={t}
-              onRetry={() => update(item.id, { s: "waiting" })}
-              onRemove={() => setItems((all) => all.filter((i) => i.id !== item.id))}
-            />
+          {[...free].reverse().map((item) => (
+            <FileRow key={item.id} item={item} t={t} onRetry={() => retry(item.id)} onRemove={() => remove(item.id)} />
           ))}
         </ul>
       )}
+    </>
+  );
+
+  if (checklist.length === 0) {
+    return (
+      <Shell t={t} lang={lang} onLang={chooseLang}>
+        <h1 className="font-display text-3xl text-ink">{t.title(page.firstName)}</h1>
+        <p className="mt-2 text-ink-muted">{t.intro}</p>
+        {freeUpload}
+        {inputs}
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell t={t} lang={lang} onLang={chooseLang}>
+      <h1 className="font-display text-3xl text-ink">{t.title(page.firstName)}</h1>
+      <p className="mt-2 text-ink-muted">{t.listIntro}</p>
+
+      <section className="mt-6" aria-labelledby="list-title">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="list-title" className="font-display text-xl text-ink">{t.listTitle}</h2>
+          {required.length > 0 && <span className="shrink-0 text-sm text-ink-muted">{t.listProgress(haveRequired, required.length)}</span>}
+        </div>
+
+        {listDone && (
+          <div role="status" className="mt-3 rounded-xl border border-status-green bg-status-green-bg px-4 py-4 text-status-green">
+            <p className="text-lg font-semibold">✓ {t.listDoneTitle}</p>
+            <p className="mt-1">{t.listDoneBody}</p>
+          </div>
+        )}
+
+        <ul className="mt-3 space-y-2">
+          {checklist.map((c) => (
+            <ChecklistRow
+              key={c.id} item={c} t={t} lang={lang}
+              files={items.filter((i) => i.itemId === c.id)}
+              onPhoto={() => open("camera", c.id)}
+              onFile={() => open("picker", c.id)}
+              onRetry={retry}
+              onRemove={remove}
+            />
+          ))}
+        </ul>
+        <p className="mt-2 text-sm text-ink-faint">{t.allowed}</p>
+      </section>
+
+      <section className="mt-10 border-t border-border pt-6" aria-labelledby="other-title">
+        <h2 id="other-title" className="font-display text-xl text-ink">{t.otherTitle}</h2>
+        <p className="mt-1 text-ink-muted">{t.otherIntro}</p>
+        {freeUpload}
+      </section>
+      {inputs}
     </Shell>
   );
 }
 
-function FileRow({ item, t, onRetry, onRemove }: { item: QueueItem; t: (typeof STRINGS)[Lang]; onRetry: () => void; onRemove: () => void }) {
+function ChecklistRow({ item, t, lang, files, onPhoto, onFile, onRetry, onRemove }: {
+  item: ChecklistItem;
+  t: T;
+  lang: Lang;
+  files: QueueItem[];
+  onPhoto: () => void;
+  onFile: () => void;
+  onRetry: (id: number) => void;
+  onRemove: (id: number) => void;
+}) {
+  const label = lang === "es" ? item.es : item.en;
+  return (
+    <li className={`rounded-xl border px-4 py-3 ${item.received ? "border-status-green bg-status-green-bg" : "border-border bg-card"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-medium text-ink">{label}</p>
+          {!item.required && <p className="text-sm text-ink-muted">{t.optional}</p>}
+          {item.received && <p className="text-sm font-medium text-status-green">✓ {t.haveIt}</p>}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button" onClick={onPhoto} aria-label={`${t.photo}: ${label}`}
+            className="min-h-11 rounded-lg bg-navy px-3 text-sm font-medium text-white active:bg-navy-light"
+          >
+            <span aria-hidden className="mr-1">📷</span>{t.photo}
+          </button>
+          <button
+            type="button" onClick={onFile} aria-label={`${t.file}: ${label}`}
+            className="min-h-11 rounded-lg border-2 border-navy bg-card px-3 text-sm font-medium text-navy active:bg-surface-warm"
+          >
+            <span aria-hidden className="mr-1">📎</span>{t.file}
+          </button>
+        </div>
+      </div>
+      {files.length > 0 && (
+        <ul className="mt-2 space-y-2" aria-live="polite">
+          {files.map((f) => (
+            <FileRow key={f.id} item={f} t={t} compact onRetry={() => onRetry(f.id)} onRemove={() => onRemove(f.id)} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function FileRow({ item, t, compact, onRetry, onRemove }: { item: QueueItem; t: T; compact?: boolean; onRetry: () => void; onRemove: () => void }) {
   const st = item.state;
   return (
-    <li className="rounded-xl border border-border bg-card px-4 py-3">
+    <li className={compact ? "rounded-lg bg-card/70 px-3 py-2" : "rounded-xl border border-border bg-card px-4 py-3"}>
       <div className="flex items-baseline justify-between gap-3">
         <span className="min-w-0 truncate text-ink">{item.file.name || t.takePhoto}</span>
         <span className="shrink-0 text-sm text-ink-faint">{formatSize(item.file.size)}</span>
       </div>
-      <div className="mt-1 text-sm text-ink-muted">{t.kinds[item.kind]}</div>
+      {!compact && <div className="mt-1 text-sm text-ink-muted">{t.kinds[item.kind]}</div>}
       {st.s === "waiting" && <p className="mt-2 text-sm text-ink-muted">{t.waiting}</p>}
       {st.s === "sending" && (
         <div className="mt-2">
@@ -232,7 +364,7 @@ function FileRow({ item, t, onRetry, onRemove }: { item: QueueItem; t: (typeof S
   );
 }
 
-function Shell({ t, lang, onLang, children }: { t: (typeof STRINGS)[Lang]; lang: Lang; onLang: (l: Lang) => void; children: React.ReactNode }) {
+function Shell({ t, lang, onLang, children }: { t: T; lang: Lang; onLang: (l: Lang) => void; children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-surface font-body text-base">
       <header className="border-b border-border bg-navy px-4 py-3">

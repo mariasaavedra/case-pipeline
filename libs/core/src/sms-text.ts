@@ -69,7 +69,7 @@ export function smsSegments(body: string): SmsSegments {
 }
 
 /** Placeholder names a template may use. */
-export const SMS_PLACEHOLDERS = ["firstName", "name", "firmName", "firmPhone", "link", "links", "sender"] as const;
+export const SMS_PLACEHOLDERS = ["firstName", "name", "firmName", "firmPhone", "link", "links", "sender", "uploadLink", "missing", "stillNeeded"] as const;
 export type SmsPlaceholder = (typeof SMS_PLACEHOLDERS)[number];
 
 export interface RenderedSms {

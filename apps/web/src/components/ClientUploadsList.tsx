@@ -20,7 +20,7 @@ const KIND_LABELS: Record<ClientUpload["kind"], string> = {
 
 /** Where the file stands, in a few words. */
 export function uploadStatus(u: Pick<ClientUpload, "filed_at" | "filed_where" | "last_error">): { text: string; tone: "ok" | "wait" | "bad" } {
-  if (u.filed_at) return { text: `Filed in ${u.filed_where ?? "E-File"} → CAF`, tone: "ok" };
+  if (u.filed_at) return { text: `Filed in ${u.filed_where ?? "E-File"}`, tone: "ok" };
   if (u.last_error?.startsWith("waiting:")) {
     return { text: /profile not found/.test(u.last_error) ? "Waiting: profile not found" : "Waiting: no E-File on the profile", tone: "bad" };
   }

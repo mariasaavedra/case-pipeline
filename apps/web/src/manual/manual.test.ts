@@ -15,6 +15,7 @@ const NEEDS_CHAPTER: Record<Route["page"], boolean> = {
   "address-changes": true,
   foias: true,
   "efiles-to-open": true,
+  "client-uploads": true,
   workload: true,
   "active-cases": true,
   "my-cases": true,

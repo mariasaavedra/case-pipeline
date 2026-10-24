@@ -6,8 +6,9 @@
 // template). One link per client: a new one turns the old one off. The link is
 // shown only when it is made — the server keeps just its hash — so sending it
 // again means making a new one. Files sent through it land in the E-File → CAF
-// and show in Documents → "Received from client".
-// docs/features/client-uploads.md, API = routes/client-uploads.ts.
+// and show in Documents → "Received from client". The Buzón checklist (what
+// the page asks for, UploadChecklistSection) sits under the active link.
+// docs/features/client-uploads.md + buzon.md, API = routes/client-uploads.ts.
 // =============================================================================
 
 import { useEffect, useState } from "react";
@@ -17,6 +18,8 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { SendSmsModal, isSpanishLabel } from "./SendSmsModal";
+import { UploadChecklistSection } from "./UploadChecklistSection";
+import { BuzonClientSection } from "./BuzonClientSection";
 
 interface Props {
   profileLocalId: string;
@@ -27,6 +30,8 @@ interface Props {
   altPhones?: (string | null | undefined)[];
   /** Monday Language label: picks the page's language. */
   language?: string | null;
+  /** Opened from a consult (P17 / M18): offers the consult document lists for that appointment. */
+  consult?: { mondayId: string; label: string } | null;
   onClose: () => void;
 }
 
@@ -39,7 +44,7 @@ export function shortDate(sqliteUtc: string | null): string {
   return Number.isNaN(d.getTime()) ? sqliteUtc : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function UploadLinkModal({ profileLocalId, name, firstName, phone, altPhones, language, onClose }: Props) {
+export function UploadLinkModal({ profileLocalId, name, firstName, phone, altPhones, language, consult, onClose }: Props) {
   const [info, setInfo] = useState<{ enabled: boolean; links: UploadLinkInfo[] } | null>(null);
   const [lang, setLang] = useState<"es" | "en">(language && !isSpanishLabel(language) ? "en" : "es");
   const [created, setCreated] = useState<{ url: string; expiresAt: string; replaced: boolean } | null>(null);
@@ -107,11 +112,11 @@ export function UploadLinkModal({ profileLocalId, name, firstName, phone, altPho
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent code="M30" className="gap-0 p-0 sm:max-w-[520px]">
+      <DialogContent code="M30" className="gap-0 p-0 sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader className="gap-0.5 border-b border-border px-5 py-4 pr-12">
           <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Upload link</DialogTitle>
           <DialogDescription>
-            {name} · a private link to send us documents. They go to the E-File → CAF.
+            {name} · a private link to send us documents. They go to the E-File → CAF, or a checklist document&apos;s EVIDENCE folder.
           </DialogDescription>
         </DialogHeader>
 
@@ -177,6 +182,9 @@ export function UploadLinkModal({ profileLocalId, name, firstName, phone, altPho
                 ) : (
                   <p style={{ color: "var(--color-ink-muted)" }}>No active link for this client.</p>
                 )}
+
+                <UploadChecklistSection profileLocalId={profileLocalId} consult={consult} />
+                <BuzonClientSection profileLocalId={profileLocalId} refreshKey={info.links.length} />
 
                 <div>
                   <span style={labelStyle}>Page language</span>

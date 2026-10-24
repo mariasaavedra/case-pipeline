@@ -34,6 +34,8 @@ export const NOTIFY_EVENTS = [
   { key: "esign", kind: "events", label: "Adobe Sign updates", description: "Signed / rejected / expired / recalled contracts from Adobe Sign" },
   { key: "payment_received", kind: "events", label: "Payment received", description: "A LawPay payment matched to a Fee K (and when it's fully paid)" },
   { key: "client_upload", kind: "events", label: "Client sent documents", description: "Documents a client sent through their upload link are filed in their E-File → CAF" },
+  { key: "buzon", kind: "events", label: "Buzón", description: "A paid Fee K's Buzón went out (or couldn't be texted), every document on the list came in, a client stopped answering reminders" },
+  { key: "ops_buzon", kind: "ops", label: "Buzón job failed", description: "The Buzón's automatic start or reminders failed" },
   { key: "payment_unmatched", kind: "events", label: "Payment to match", description: "A LawPay payment the app couldn't tie to a Fee K — someone should file it" },
   { key: "ops_sync", kind: "ops", label: "Sync failed", description: "A Monday sync (nightly, daytime or webhook) exits with an error" },
   { key: "ops_write_queue", kind: "ops", label: "Monday write gave up", description: "A queued write to Monday failed every retry" },

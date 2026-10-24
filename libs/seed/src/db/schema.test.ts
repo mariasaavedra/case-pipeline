@@ -660,3 +660,45 @@ describe("v36 → v37 client upload links", () => {
     expect(names).toEqual(expect.arrayContaining(["upload_links", "client_uploads"]));
   });
 });
+
+describe("v38 → v39 Buzón checklist", () => {
+  test("a v38 database gets the checklist table and client_uploads.item_id, keeping its uploads", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+      INSERT INTO schema_version (version) VALUES (36);
+    `);
+    initializeSchema(db);
+    db.exec("UPDATE schema_version SET version = 38");
+    db.exec("ALTER TABLE client_uploads DROP COLUMN item_id");
+    const link = db.prepare(
+      "INSERT INTO upload_links (profile_local_id, token_hash, language, expires_at) VALUES ('p1', 'h1', 'es', '2030-01-01 00:00:00')",
+    ).run().lastInsertRowid;
+    db.prepare(
+      "INSERT INTO client_uploads (link_id, original_name, stored_name, size, content_type, sha256, kind) VALUES (?, 'a.pdf', 'a.pdf', 1, 'application/pdf', 's1', 'other')",
+    ).run(link);
+    initializeSchema(db);
+    expect((db.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+    expect(db.prepare("SELECT item_id FROM client_uploads").get()).toEqual({ item_id: null });
+    const item = db.prepare(
+      "INSERT INTO upload_checklist_items (profile_local_id, label_en, label_es) VALUES ('p1', 'Passport', 'Pasaporte')",
+    ).run().lastInsertRowid;
+    expect(db.prepare("SELECT status, required FROM upload_checklist_items WHERE id = ?").get(item)).toEqual({ status: "missing", required: 1 });
+  });
+
+  test("a checklist table from an earlier v39 build gets the consult columns and the Buzón tables", () => {
+    const db = new Database(":memory:");
+    initializeSchema(db);
+    db.exec(`
+      DROP INDEX idx_upload_checklist_appointment;
+      ALTER TABLE upload_checklist_items DROP COLUMN appointment_monday_id;
+      ALTER TABLE upload_checklist_items DROP COLUMN consult_list;
+      DROP TABLE buzon_texts;
+      UPDATE schema_version SET version = 38;
+    `);
+    initializeSchema(db);
+    const cols = (db.prepare("SELECT name FROM pragma_table_info('upload_checklist_items')").all() as { name: string }[]).map((c) => c.name);
+    expect(cols).toEqual(expect.arrayContaining(["appointment_monday_id", "consult_list"]));
+    expect(db.prepare("SELECT COUNT(*) AS n FROM buzon_texts").get()).toEqual({ n: 0 });
+  });
+});

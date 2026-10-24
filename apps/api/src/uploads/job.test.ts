@@ -16,6 +16,9 @@ vi.mock("../data-source/index.js", () => ({
       calls.push({ op: "update", itemId, body });
       return "u1";
     },
+    setColumnValues: async (boardId: string, itemId: string, values: unknown) => {
+      calls.push({ op: "columns", boardId, itemId, values });
+    },
   },
 }));
 vi.mock("../notify/slack.js", async (orig) => ({
@@ -104,6 +107,33 @@ describe("tellStaff", () => {
     addUpload(1, { attempts: 8, last_error: "Graph 500" });
     await tellStaff({ db, mondayApiToken: "tok" });
     expect(String(calls[0]!.text)).toContain("could not be filed after 8 tries");
+  });
+});
+
+describe("tellStaff: Buzón checklist documents (Phase 2)", () => {
+  beforeEach(() => {
+    db.prepare("INSERT INTO board_columns (board_key, monday_board_id, column_id, title, type) VALUES ('fee_ks', '8025467270', 'deal_stage', 'Contract Stage', 'status')").run();
+    db.prepare("INSERT INTO contracts (local_id, monday_item_id, profile_local_id, profile_monday_id, name, raw_column_values) VALUES ('k1', '7001', 'p1', '9001', 'Fee K', '{}')").run();
+    const item = db.prepare("INSERT INTO upload_checklist_items (profile_local_id, profile_monday_id, fee_k_local_id, fee_k_monday_id, fee_k_type, label_en, label_es, status) VALUES ('p1', '9001', 'k1', '7001', 'I-130', ?, ?, ?)");
+    item.run("Passport", "Pasaporte", "received");
+    item.run("Marriage certificate", "Acta de matrimonio", "missing");
+  });
+
+  it("stamps Evidence Received once, tells the team the count, then 'every document' once", async () => {
+    addUpload(1, { ...filed, kind: "evidence", item_id: 1, stored_name: "2026-10-24 Passport - a.jpg" });
+    await tellStaff({ db, mondayApiToken: "tok" });
+    const stamp = calls.find((c) => c.op === "columns");
+    expect(stamp).toMatchObject({ boardId: "8025467270", itemId: "7001", values: { date_mkx8stcx: { date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) } } });
+    expect(db.prepare("SELECT json_extract(raw_column_values, '$.evidence_received_date.date') AS d FROM contracts").get()).toEqual({ d: expect.any(String) });
+    expect(calls.filter((c) => c.op === "slack" && c.key === "buzon").map((c) => c.text)).toEqual([expect.stringContaining("1 of 2 on their Buzón list")]);
+    expect(calls.find((c) => c.op === "update")?.body).toContain("Filed in their E-File → EVIDENCE I-130. For their checklist: Passport.");
+
+    calls.length = 0;
+    db.prepare("UPDATE upload_checklist_items SET status = 'received' WHERE id = 2").run();
+    addUpload(1, { ...filed, kind: "evidence", item_id: 2, stored_name: "2026-10-24 Marriage certificate - b.jpg" });
+    await tellStaff({ db, mondayApiToken: "tok" });
+    expect(calls.filter((c) => c.op === "columns")).toEqual([]);
+    expect(calls.filter((c) => c.op === "slack" && c.key === "buzon").map((c) => c.text)).toEqual([expect.stringContaining("every document on their Buzón list (2)")]);
   });
 });
 

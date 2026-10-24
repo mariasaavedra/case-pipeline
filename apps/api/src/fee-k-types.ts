@@ -38,7 +38,22 @@ export interface FeeKTypeRow {
   servicesEs: string;
   excluded: string;
   excludedEs: string;
+  /**
+   * What the client is asked to send for this case type (the Buzón checklist,
+   * docs/features/buzon.md). [] = no evidence needed. Optional in the file:
+   * rows saved before 2026-10-23 have none.
+   */
+  documents?: CaseDocument[];
 }
+
+/** One document on a case type's checklist. The client sees `en` or `es`. */
+export interface CaseDocument {
+  en: string;
+  es: string;
+  required: boolean;
+}
+
+export const MAX_DOCUMENTS = 40;
 
 export const SCOPE_FIELDS = ["services", "servicesEs", "excluded", "excludedEs"] as const;
 
@@ -93,11 +108,27 @@ export function sanitizeFeeKTypes(input: unknown): FeeKTypeRow[] {
       feeKType, spanish: str(o.spanish), board: str(o.board), feeSheetJob: str(o.feeSheetJob),
       services: str(o.services, MAX_SCOPE), servicesEs: str(o.servicesEs, MAX_SCOPE),
       excluded: str(o.excluded, MAX_SCOPE), excludedEs: str(o.excludedEs, MAX_SCOPE),
+      documents: sanitizeDocuments(o.documents),
     };
-    if (!row.spanish && !row.board && !row.feeSheetJob && SCOPE_FIELDS.every((k) => !row[k])) return [];
+    if (!row.spanish && !row.board && !row.feeSheetJob && SCOPE_FIELDS.every((k) => !row[k]) && !row.documents!.length) return [];
     seen.add(key(feeKType));
     return [row];
   });
+}
+
+/**
+ * A checklist: each document needs its English name (Spanish falls back to
+ * it); the same name twice is kept once; at most MAX_DOCUMENTS.
+ */
+export function sanitizeDocuments(input: unknown): CaseDocument[] {
+  const seen = new Set<string>();
+  return (Array.isArray(input) ? input : []).flatMap((raw) => {
+    const o = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+    const en = str(o.en);
+    if (!en || seen.has(key(en))) return [];
+    seen.add(key(en));
+    return [{ en, es: str(o.es) || en, required: o.required !== false }];
+  }).slice(0, MAX_DOCUMENTS);
 }
 
 /** Fee K Type → its row (any case, any inner spacing). */

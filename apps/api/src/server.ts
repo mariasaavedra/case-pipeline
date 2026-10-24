@@ -73,6 +73,11 @@ import { registerCaseCardWriteRoutes } from "./routes/case-card-write.js";
 import { registerContractDocumentRoutes } from "./routes/contract-document.js";
 import { registerEsignPublicRoutes, registerEsignRoutes } from "./routes/esign.js";
 import { registerClientUploadPublicRoutes, registerClientUploadRoutes } from "./routes/client-uploads.js";
+import { registerUploadChecklistRoutes } from "./routes/upload-checklist.js";
+import { registerBuzonRoutes } from "./routes/buzon.js";
+import { initBuzonSettings } from "./buzon/settings.js";
+import { initConsultLists } from "./consult-lists.js";
+import { startBuzonJob } from "./buzon/job.js";
 import { startClientUploadFiling } from "./uploads/job.js";
 import { clientUploadsConfig } from "./uploads/rules.js";
 import { registerLawPayRoutes } from "./routes/lawpay.js";
@@ -236,6 +241,8 @@ initUrgencySettings(DATA_DIR);
 initDocumentSettings(DATA_DIR);
 initSmsTemplates(DATA_DIR);
 initFeeKTypes(DATA_DIR);
+initBuzonSettings(DATA_DIR);
+initConsultLists(DATA_DIR);
 initNotifySettings(DATA_DIR);
 
 /** Build the status → urgency map the Active Cases query consumes. */
@@ -606,6 +613,8 @@ registerCaseCardWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTo
 registerContractDocumentRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerEsignRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerClientUploadRoutes(app, { db });
+registerUploadChecklistRoutes(app, { db });
+registerBuzonRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, seed: DB_SOURCE === "seed" });
 registerLawPayRoutes(app, { db });
 registerDocumentRoutes(app, { db });
 
@@ -713,6 +722,8 @@ const server = app.listen(PORT, HOST, () => {
   // Client upload links → E-File → CAF. On seed data the script only plans.
   if (clientUploadsConfig()) {
     startClientUploadFiling({ db, mondayApiToken: MONDAY_API_TOKEN, seed: DB_SOURCE === "seed", runs: usersDb });
+    // The Buzón: automatic start on Paid needs action (BUZON_AUTO), reminders, thank-you texts.
+    startBuzonJob({ db, mondayApiToken: MONDAY_API_TOKEN, seed: DB_SOURCE === "seed", runs: usersDb });
   } else {
     console.log("[uploads] Client upload links DISABLED (set CLIENT_UPLOADS=on and API_URL to enable).");
   }

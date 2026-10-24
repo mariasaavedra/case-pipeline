@@ -38,8 +38,22 @@ export interface Strings {
     tooMany: string;
     dead: string;
     network: string;
+    itemGone: string;
     other: string;
   };
+  /** The Buzón checklist (docs/features/buzon.md). */
+  listIntro: string;
+  listTitle: string;
+  optional: string;
+  haveIt: string;
+  photo: string;
+  file: string;
+  sendMore: string;
+  listProgress: (done: number, total: number) => string;
+  listDoneTitle: string;
+  listDoneBody: string;
+  otherTitle: string;
+  otherIntro: string;
   loading: string;
   deadTitle: string;
   deadBody: string;
@@ -74,8 +88,21 @@ export const STRINGS: Record<Lang, Strings> = {
       tooMany: "Demasiados archivos a la vez. Espere unos minutos y vuelva a intentar.",
       dead: "Este enlace ya no sirve. Pida uno nuevo a la oficina.",
       network: "No se pudo enviar. Revise su conexión e intente otra vez.",
+      itemGone: "Este documento ya no está en su lista. Vuelva a cargar la página.",
       other: "Algo salió mal. Intente otra vez.",
     },
+    listIntro: "Estos son los documentos que necesitamos para su caso. Envíe cada uno con su botón.",
+    listTitle: "Documentos que necesitamos",
+    optional: "Si lo tiene",
+    haveIt: "Ya lo recibimos",
+    photo: "Foto",
+    file: "Archivo",
+    sendMore: "Enviar más",
+    listProgress: (d, t) => `Tenemos ${d} de ${t}`,
+    listDoneTitle: "¡Ya tenemos todo lo de la lista!",
+    listDoneBody: "Gracias. Si tiene algo más para nosotros, puede enviarlo abajo.",
+    otherTitle: "¿Otro documento?",
+    otherIntro: "Para cualquier otra cosa, como una carta que le llegó.",
     loading: "Cargando…",
     deadTitle: "Este enlace ya no sirve",
     deadBody: "Puede que haya vencido. Llame a la oficina y le enviaremos uno nuevo.",
@@ -108,8 +135,21 @@ export const STRINGS: Record<Lang, Strings> = {
       tooMany: "Too many files at once. Wait a few minutes and try again.",
       dead: "This link doesn't work any more. Ask the office for a new one.",
       network: "It didn't send. Check your connection and try again.",
+      itemGone: "This document is not on your list any more. Reload the page.",
       other: "Something went wrong. Try again.",
     },
+    listIntro: "These are the documents we need for your case. Send each one with its button.",
+    listTitle: "Documents we need",
+    optional: "If you have it",
+    haveIt: "We have it",
+    photo: "Photo",
+    file: "File",
+    sendMore: "Send more",
+    listProgress: (d, t) => `We have ${d} of ${t}`,
+    listDoneTitle: "We have everything on the list!",
+    listDoneBody: "Thank you. If you have anything else for us, you can send it below.",
+    otherTitle: "Another document?",
+    otherIntro: "For anything else, like a letter you received.",
     loading: "Loading…",
     deadTitle: "This link doesn't work any more",
     deadBody: "It may have expired. Call the office and we'll send you a new one.",

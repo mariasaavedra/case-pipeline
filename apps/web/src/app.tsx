@@ -26,6 +26,7 @@ const AddressChangesPage = lazy(() => import("./components/AddressChangesPage").
 const FoiasPage = lazy(() => import("./components/FoiasPage").then((m) => ({ default: m.FoiasPage })));
 const WorkloadPage = lazy(() => import("./components/WorkloadPage").then((m) => ({ default: m.WorkloadPage })));
 const EFilesToOpenPage = lazy(() => import("./components/EFilesToOpenPage").then((m) => ({ default: m.EFilesToOpenPage })));
+const ClientUploadsPage = lazy(() => import("./components/ClientUploadsPage").then((m) => ({ default: m.ClientUploadsPage })));
 const PreschedulingPage = lazy(() => import("./components/PreschedulingPage").then((m) => ({ default: m.PreschedulingPage })));
 const ActiveCasesPage = lazy(() => import("./components/ActiveCasesPage").then((m) => ({ default: m.ActiveCasesPage })));
 const MyCasesPage = lazy(() => import("./components/MyCasesPage").then((m) => ({ default: m.MyCasesPage })));
@@ -64,6 +65,7 @@ const PAGE_CODES: Partial<Record<Route["page"], string>> = {
   "efiles-to-open": "P21",
   workload: "P20",
   manual: "P22",
+  "client-uploads": "P23",
 };
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
@@ -384,6 +386,7 @@ function App() {
             {route.page === "prescheduling" && !loading && <PreschedulingPage />}
             {route.page === "address-changes" && !loading && (underConstruction ? <UnderConstruction label="Address Changes" /> : <AddressChangesPage />)}
             {route.page === "efiles-to-open" && !loading && (underConstruction ? <UnderConstruction label="E-Files to open" /> : <EFilesToOpenPage />)}
+            {route.page === "client-uploads" && !loading && <ClientUploadsPage />}
             {route.page === "foias" && !loading && (underConstruction ? <UnderConstruction label="FOIAs" /> : <FoiasPage />)}
             {route.page === "workload" && !loading && (underConstruction ? <UnderConstruction label="Workload" /> : <WorkloadPage />)}
             {route.page === "active-cases" && !loading && <ActiveCasesPage />}

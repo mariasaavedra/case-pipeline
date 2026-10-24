@@ -65,9 +65,9 @@ export function smsSentEvent(e: {
 }
 
 /** Never the file names or notes: clients name files after themselves and their case. */
-export function clientUploadEvent(e: { clientName: string | null; files: number; kinds: string; where: string; link: string | null }): string {
+export function clientUploadEvent(e: { clientName: string | null; files: number; kinds: string; where: string; folders?: string; link: string | null }): string {
   const text =
     `:inbox_tray: *${slackEscape(e.clientName ?? "A client")}* sent ${e.files === 1 ? "1 document" : `${e.files} documents`}` +
-    ` (${slackEscape(e.kinds)}) — filed in their ${slackEscape(e.where)} → CAF`;
+    ` (${slackEscape(e.kinds)}) — filed in their ${slackEscape(e.where)} → ${slackEscape(e.folders ?? "CAF")}`;
   return withLink(text, e.link, "Monday");
 }

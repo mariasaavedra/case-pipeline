@@ -107,7 +107,7 @@ describe("the client page", () => {
   it("shows the first name and language, nothing else", async () => {
     const { body } = await createLink("p1");
     const res = await fetch(`${base}/api/u/${tokenOf(body.data.url)}`);
-    expect(await res.json()).toEqual({ data: { firstName: "Yaucdy", language: "es" } });
+    expect(await res.json()).toEqual({ data: { firstName: "Yaucdy", language: "es", checklist: [] } });
   });
 
   it("the same 404 for made-up, revoked and expired links, and when off", async () => {
@@ -204,5 +204,26 @@ describe("staff list, extend, revoke", () => {
     });
     expect(off.status).toBe(409);
     expect(audits.filter((a) => a.action === "upload_link.revoked")).toHaveLength(1);
+  });
+});
+
+describe("review queue (P23)", () => {
+  it("every client's uploads, not reviewed first; mark reviewed (audited) and back", async () => {
+    const { body } = await createLink("p1");
+    await upload(tokenOf(body.data.url), PDF);
+    const list = await (await fetch(`${base}/api/client-uploads`)).json() as { data: { uploads: { id: number; clientName: string }[]; notReviewed: number } };
+    expect(list.data.notReviewed).toBe(1);
+    expect(list.data.uploads[0]!.clientName).toBe("Yaucdy Yoselyn QUINTANILLA CASTRO");
+    const id = list.data.uploads[0]!.id;
+    const patch = (reviewed: unknown) => fetch(`${base}/api/client-uploads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviewed }) });
+    expect((await patch("yes")).status).toBe(400);
+    expect((await patch(true)).status).toBe(200);
+    expect(db.prepare("SELECT reviewed_by_name FROM client_uploads").get()).toEqual({ reviewed_by_name: "Ana Reyes" });
+    const after = await (await fetch(`${base}/api/client-uploads`)).json() as { data: { uploads: unknown[]; notReviewed: number } };
+    expect(after.data).toMatchObject({ uploads: [], notReviewed: 0 });
+    expect((await (await fetch(`${base}/api/client-uploads?show=all`)).json() as { data: { uploads: unknown[] } }).data.uploads).toHaveLength(1);
+    expect(audits.map((a) => a.action)).toContain("client_upload.reviewed");
+    await patch(false);
+    expect(db.prepare("SELECT reviewed_at FROM client_uploads").get()).toEqual({ reviewed_at: null });
   });
 });

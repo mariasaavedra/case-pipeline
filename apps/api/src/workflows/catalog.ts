@@ -215,6 +215,21 @@ export const WORKFLOWS: WorkflowDef[] = [
     },
     history: "job_runs", opsEvent: "ops_client_uploads", doc: "docs/features/client-uploads.md",
   },
+  {
+    key: "buzon",
+    name: "Buzón",
+    when: "A Fee K reaches Paid needs action; a client still owes documents; a client's batch went quiet (checked every 5 min)",
+    then: "Put the case's document list on the client's Buzón and text the link; send reminders on the days set in Settings → Firm → Buzón; text \"we received your documents\" (when on)",
+    group: "files", kind: "scheduled",
+    schedule: cronOf("BUZON_CRON", "*/5 * * * *", true),
+    enabled: ({ env, live }) => {
+      if (!isOn(env, "CLIENT_UPLOADS") || !clientUploadsConfig(env)) return { on: false, reason: "Off — needs CLIENT_UPLOADS on and API_URL" };
+      const auto = isOn(env, "BUZON_AUTO") && /^\d{4}-\d{2}-\d{2}$/.test(env.BUZON_AUTO_SINCE?.trim() ?? "");
+      const what = auto ? "automatic start + reminders" : "reminders only — the automatic start needs BUZON_AUTO and BUZON_AUTO_SINCE";
+      return live ? { on: true, reason: auto ? undefined : what } : { on: true, reason: `Seed data: texts are dry runs (${what})` };
+    },
+    history: "job_runs", opsEvent: "ops_buzon", doc: "docs/features/buzon.md",
+  },
 
   // ── Messages ───────────────────────────────────────────────────────────────
   {
