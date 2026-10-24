@@ -552,3 +552,18 @@ The mail intake tried to split a whole day's scan into notices and match each on
 - **Old stored scans stay** under `data/mail/` until their Alerts items are settled; nothing deletes them automatically.
 
 **Revisit if**: an AI reader becomes available (read + match could then pre-select more confidently), or staff want mail filed somewhere other than CC.
+
+## 2026-10-24 — Buzón: the app texts clients on its own (with a way out)
+
+Until now every text was click-to-send (M28). The Buzón (the client upload link, `docs/features/buzon.md`) now sends texts by itself: the link when a Fee K reaches "Paid needs action", reminders while documents are missing, and an optional "we received your documents".
+
+**Decisions**:
+- **Automatic texts need three switches**: `BUZON_AUTO=on` + `BUZON_AUTO_SINCE` on the server (so turning it on never texts every old paid case), and Settings → Firm → Buzón texts. Reminders and the thank-you text are **off** until an admin turns them on; the days are theirs to set.
+- **Per client "No automatic texts"** (M30), for VAWA / U visa / T visa clients or anyone whose phone someone else may read. The app never texts them on its own; a person can still press Remind now.
+- **When the app can't text** (switched off, no US phone, texting off), the Buzón is still made and the Fee K's Paralegal + Assistant get a Monday bell + Slack saying why.
+- **Office hours only** (default 9–6 weekdays, firm time), never two Buzón texts to a client the same day.
+- **The link's token is kept encrypted** (`upload_links.token_enc`, APP_ENCRYPTION_KEY) so a reminder can resend it. The hash is still what opens it; without the key, reminders need a new link.
+- **Document names are seen by anyone holding the link**, so lists use plain, neutral words; VAWA / U / T / asylum lists ask for "the documents we talked about" rather than naming what happened.
+- **A client's notice is kept and goes to Alerts → Mail to review.** This is an exception to the 2026-10-23 mail decision (a person files each letter, no PDF on the server): a client's upload is already on the server (data/uploads), and nobody is filing it through M32, so Mail to review is where a person sees what was read.
+
+**Revisit if**: clients reply STOP or complain about reminders, or staff want the first text checked by a person before it goes.

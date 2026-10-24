@@ -101,7 +101,7 @@ export function sniffFileType(bytes: Buffer, fileName: string): FileType | null 
 // --- Names -------------------------------------------------------------------
 
 /** Characters SharePoint refuses, plus the ones that break links. Same set as the e-sign file names. */
-function cleanName(s: string): string {
+export function cleanName(s: string): string {
   return s.replace(/[\\/:*?"<>|#%&{}$!'@+`=\p{Cc}]+/gu, " ").replace(/\s+/g, " ").trim();
 }
 
@@ -109,9 +109,11 @@ function cleanName(s: string): string {
  * The name in SharePoint: `2026-10-21 Notice - IMG_4412.jpg`. The extension is
  * the one the bytes say, so a photo named "scan.pdf" lands as .jpg.
  */
-export function storedName(receivedOn: string, kind: Kind, originalName: string, type: FileType): string {
+export function storedName(receivedOn: string, kind: Kind, originalName: string, type: FileType, label?: string): string {
   const base = cleanName(originalName.replace(/\.[A-Za-z0-9]{1,5}$/, "")).slice(0, 100) || "file";
-  return `${receivedOn} ${KINDS[kind]} - ${base}.${type.ext}`;
+  // A checklist document names the file after itself: "2026-10-23 Marriage certificate - IMG_1.jpg".
+  const prefix = (label && cleanName(label).slice(0, 80)) || KINDS[kind];
+  return `${receivedOn} ${prefix} - ${base}.${type.ext}`;
 }
 
 /** "Yaucdy Yoselyn QUINTANILLA CASTRO" → "Yaucdy"; "JACOBUS VAN HEERDEN" → "Jacobus". */

@@ -46,6 +46,26 @@ export const DEFAULT_SMS_TEMPLATES: SmsTemplate[] = [
     en: "Hi {{firstName}}, this is {{firmName}}. Send us your documents here (photos, PDF or Word): {{uploadLink}}\nQuestions? Call {{firmPhone}}. Reply STOP to opt out.",
     es: "Hola {{firstName}}, le escribe {{firmName}}. Envíenos sus documentos aquí (fotos, PDF o Word): {{uploadLink}}\n¿Preguntas? Llame al {{firmPhone}}. Responda STOP para no recibir mensajes.",
   },
+  // The Buzón's own texts (docs/features/buzon.md): sent by the app — the first
+  // one when a Fee K is paid, reminders on the days set in Settings → Firm → Buzón.
+  {
+    key: "buzon_link",
+    label: "Buzón: documents for your case",
+    en: "Hi {{firstName}}, this is {{firmName}}. Thank you for your payment. To start your case, please send us these documents here: {{uploadLink}}\nQuestions? Call {{firmPhone}}. Reply STOP to opt out.",
+    es: "Hola {{firstName}}, le escribe {{firmName}}. Gracias por su pago. Para empezar su caso, envíenos estos documentos aquí: {{uploadLink}}\n¿Preguntas? Llame al {{firmPhone}}. Responda STOP para no recibir mensajes.",
+  },
+  {
+    key: "buzon_reminder",
+    label: "Buzón: reminder",
+    en: "Hi {{firstName}}, this is {{firmName}}. We still need: {{missing}}. Send them here: {{uploadLink}}\nQuestions? Call {{firmPhone}}. Reply STOP to opt out.",
+    es: "Hola {{firstName}}, le escribe {{firmName}}. Todavía necesitamos: {{missing}}. Envíelos aquí: {{uploadLink}}\n¿Preguntas? Llame al {{firmPhone}}. Responda STOP para no recibir mensajes.",
+  },
+  {
+    key: "buzon_received",
+    label: "Buzón: we received your documents",
+    en: "Hi {{firstName}}, this is {{firmName}}. We received your documents. Thank you! {{stillNeeded}}\nQuestions? Call {{firmPhone}}. Reply STOP to opt out.",
+    es: "Hola {{firstName}}, le escribe {{firmName}}. Recibimos sus documentos. ¡Gracias! {{stillNeeded}}\n¿Preguntas? Llame al {{firmPhone}}. Responda STOP para no recibir mensajes.",
+  },
 ];
 
 /**
@@ -54,7 +74,7 @@ export const DEFAULT_SMS_TEMPLATES: SmsTemplate[] = [
  * admin saved before it existed — or a deleted one — never breaks that button.
  * An admin can still reword it.
  */
-export const REQUIRED_SMS_TEMPLATES = ["upload_link"] as const;
+export const REQUIRED_SMS_TEMPLATES = ["upload_link", "buzon_link", "buzon_reminder", "buzon_received"] as const;
 
 export function withRequiredTemplates(list: SmsTemplate[]): SmsTemplate[] {
   const missing = DEFAULT_SMS_TEMPLATES.filter(

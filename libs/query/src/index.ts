@@ -2,7 +2,7 @@
 // Query Layer — Public API
 // =============================================================================
 
-export { searchClients, getClientProfile, getOpenDetentions, getClientByName, listProfiles, listProfilesFiltered, getFilterOptions } from "./client";
+export { searchClients, getClientProfile, getOpenDetentions, getClientByName, listProfiles, listProfilesFiltered, getFilterOptions, readTextingContact } from "./client";
 export type { ProfileFilterOptions, FilteredProfileResult, FilterOptions, TextingContact } from "./client";
 export { getDetention, batchGetDetentions, detentionNote, DETENTION_WINDOW_DAYS } from "./detention";
 export type { Detention, DetentionSource } from "./types";
@@ -27,6 +27,7 @@ export { searchByType } from "./search";
 export { getAlerts, getAlertsTotalCount } from "./alerts";
 export { getActiveCases } from "./active-cases";
 export { getPrescheduling } from "./prescheduling";
+export { checklistCounts } from "./upload-checklist";
 export { getMyCases, FEE_KS_BOARD_KEY, PS_STAGE_COLUMN_ID } from "./my-cases";
 export { getPendingContracts, CONTRACT_STEPS, FEE_K_COLUMN_IDS, nextContractStep } from "./pending-contracts";
 export { feeKCaseTypeSql, caseTypeColumn } from "./fee-k-case-type";

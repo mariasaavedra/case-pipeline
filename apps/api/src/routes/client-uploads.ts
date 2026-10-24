@@ -8,11 +8,15 @@
 //   GET    /api/profiles/:localId/upload-links  links (newest first) + what came in on each
 //   PATCH  /api/upload-links/:id  {days}        extend: expires `days` from now
 //   DELETE /api/upload-links/:id                revoke
+//   GET    /api/client-uploads?show=all         the review queue (P23): every client's uploads, not reviewed first
+//   PATCH  /api/client-uploads/:id {reviewed}   mark one reviewed (audited client_upload.reviewed)
 //
 // Public (no login — the token is the key; registered BEFORE the /api/
 // requireAuth catch-all):
-//   GET  /api/u/:token        {firstName, language} for the client page
-//   POST /api/u/:token/files  raw body, ?name=&kind=&note=, one file per request
+//   GET  /api/u/:token        {firstName, language, checklist} for the client page
+//                             (checklist = the Buzón's documents, docs/features/buzon.md)
+//   POST /api/u/:token/files  raw body, ?name=&kind=&note=&item=, one file per request;
+//                             item = a checklist document, marked received
 //
 // Unknown, expired and revoked links all get the same 404, so nobody can tell
 // a dead link from a made-up one. Files are kept under data/uploads/ and the
@@ -36,6 +40,8 @@ import {
   type Kind, type Language,
 } from "../uploads/rules.js";
 import { fileSoon } from "../uploads/job.js";
+import { checklistFor, markReceived, publicChecklist, type ChecklistRow } from "../uploads/checklist.js";
+import { sealToken } from "../buzon/client.js";
 
 export const UPLOADS_DIR = "uploads";
 
@@ -108,7 +114,8 @@ export function registerClientUploadPublicRoutes(app: Express, deps: { db: Datab
     const link = activeLinkByToken(db, String(req.params.token));
     if (!link) return notFound(res);
     const name = linkProfileName(db, link);
-    res.json({ data: { firstName: name ? firstNameOf(name) : null, language: link.language } });
+    const checklist = publicChecklist(checklistFor(db, { localId: link.profile_local_id, mondayId: link.profile_monday_id }));
+    res.json({ data: { firstName: name ? firstNameOf(name) : null, language: link.language, checklist } });
   });
 
   app.post(
@@ -144,7 +151,21 @@ export function registerClientUploadPublicRoutes(app: Express, deps: { db: Datab
         res.status(400).json({ error: "Unknown document kind" });
         return;
       }
-      const kind = kindRaw as Kind;
+      // A checklist document: it must be this client's and still asked for.
+      let item: ChecklistRow | undefined;
+      if (req.query.item !== undefined) {
+        const itemId = String(req.query.item);
+        item = /^\d+$/.test(itemId)
+          ? (db.prepare("SELECT * FROM upload_checklist_items WHERE id = ?").get(Number(itemId)) as ChecklistRow | undefined)
+          : undefined;
+        const mine = item && (item.profile_local_id === link.profile_local_id
+          || (!!link.profile_monday_id && item.profile_monday_id === link.profile_monday_id));
+        if (!item || !mine || item.status === "not_needed") {
+          res.status(400).json({ error: "This document is not on your list any more. Reload the page.", code: "item" });
+          return;
+        }
+      }
+      const kind = item ? "evidence" : (kindRaw as Kind);
       const note = String(req.query.note ?? "").trim().slice(0, MAX_NOTE_CHARS) || null;
       const type = sniffFileType(body, originalName);
       if (!type) {
@@ -174,9 +195,12 @@ export function registerClientUploadPublicRoutes(app: Express, deps: { db: Datab
       let id: number;
       try {
         id = Number(db.prepare(`
-          INSERT INTO client_uploads (link_id, original_name, stored_name, local_file, size, content_type, sha256, kind, note)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(link.id, originalName, storedName(firmToday(), kind, originalName, type), localFile, body.length, type.contentType, sha256, kind, note).lastInsertRowid);
+          INSERT INTO client_uploads (link_id, original_name, stored_name, local_file, size, content_type, sha256, kind, note, item_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          link.id, originalName, storedName(firmToday(), kind, originalName, type, item?.label_en), localFile,
+          body.length, type.contentType, sha256, kind, note, item?.id ?? null,
+        ).lastInsertRowid);
       } catch (err) {
         fs.rmSync(fullPath, { force: true });
         // The same file twice at once: the other request kept it.
@@ -187,12 +211,13 @@ export function registerClientUploadPublicRoutes(app: Express, deps: { db: Datab
         throw err;
       }
       db.prepare("UPDATE upload_links SET last_used_at = datetime('now') WHERE id = ?").run(link.id);
+      if (item) markReceived(db, item);
       // No file name in the audit: clients name files after themselves.
       recordAudit({
         actor: { userId: null, email: "client-upload-link" },
         action: "client_upload.received",
         targetType: "profile", targetId: link.profile_local_id, targetMondayId: link.profile_monday_id,
-        metadata: { link: link.id, upload: id, kind, size: body.length, type: type.ext },
+        metadata: { link: link.id, upload: id, kind, size: body.length, type: type.ext, ...(item ? { item: item.id } : {}) },
       });
       fileSoon();
       res.json({ data: { received: true, duplicate: false } });
@@ -236,9 +261,9 @@ export function registerClientUploadRoutes(app: Express, deps: { db: DatabaseIns
           WHERE ${who.sql} AND revoked_at IS NULL AND expires_at > datetime('now')`,
       ).run(by, ...who.args).changes;
       const inserted = db.prepare(`
-        INSERT INTO upload_links (profile_local_id, profile_monday_id, token_hash, language, created_by_oid, created_by_name, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(profile.localId, profile.mondayId, hashToken(token), language, req.user?.oid ?? null, by, expiresAt);
+        INSERT INTO upload_links (profile_local_id, profile_monday_id, token_hash, language, created_by_oid, created_by_name, expires_at, token_enc)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(profile.localId, profile.mondayId, hashToken(token), language, req.user?.oid ?? null, by, expiresAt, sealToken(token));
       return { id: Number(inserted.lastInsertRowid), replaced: revoked > 0 };
     })();
 
@@ -262,8 +287,10 @@ export function registerClientUploadRoutes(app: Express, deps: { db: DatabaseIns
     ).all(...who.args) as (LinkRow & { active: number })[];
     const uploads = links.length
       ? db.prepare(`
-          SELECT id, link_id, received_at, stored_name, size, content_type, kind, note, sharepoint_url, filed_where, filed_at, last_error
-            FROM client_uploads WHERE link_id IN (${links.map(() => "?").join(",")}) ORDER BY id DESC
+          SELECT u.id, u.link_id, u.received_at, u.stored_name, u.size, u.content_type, u.kind, u.note, u.sharepoint_url, u.filed_where, u.filed_at, u.last_error,
+                 i.label_en AS document
+            FROM client_uploads u LEFT JOIN upload_checklist_items i ON i.id = u.item_id
+           WHERE u.link_id IN (${links.map(() => "?").join(",")}) ORDER BY u.id DESC
         `).all(...links.map((l) => l.id)) as { link_id: number }[]
       : [];
     res.json({
@@ -277,6 +304,53 @@ export function registerClientUploadRoutes(app: Express, deps: { db: DatabaseIns
         })),
       },
     });
+  });
+
+  // The review queue (P23, docs/features/buzon.md Phase 3): everything clients
+  // sent, every client, newest first; "Reviewed" when someone has looked.
+  app.get("/api/client-uploads", requireAuth, (req, res) => {
+    const all = req.query.show === "all";
+    const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+    const rows = db.prepare(`
+      SELECT u.id, u.received_at AS receivedAt, u.stored_name AS storedName, u.kind, u.note, u.size, u.content_type AS contentType,
+             u.sharepoint_url AS sharepointUrl, u.filed_where AS filedWhere, u.filed_at AS filedAt, u.last_error AS lastError,
+             u.reviewed_at AS reviewedAt, u.reviewed_by_name AS reviewedBy, u.mail_document_id AS mailDocumentId, u.combined_into AS combinedInto,
+             i.label_en AS document,
+             COALESCE(pm.local_id, pl.local_id) AS clientLocalId, COALESCE(pm.name, pl.name) AS clientName
+        FROM client_uploads u
+        JOIN upload_links l ON l.id = u.link_id
+        LEFT JOIN upload_checklist_items i ON i.id = u.item_id
+        LEFT JOIN profiles pm ON pm.monday_item_id = l.profile_monday_id AND pm.deleted_at IS NULL
+        LEFT JOIN profiles pl ON pl.local_id = l.profile_local_id AND pl.deleted_at IS NULL
+       ${all ? "" : "WHERE u.reviewed_at IS NULL"}
+       ORDER BY u.id DESC LIMIT ?
+    `).all(limit);
+    const waiting = (db.prepare("SELECT COUNT(*) AS n FROM client_uploads WHERE reviewed_at IS NULL").get() as { n: number }).n;
+    res.json({ data: { uploads: rows, notReviewed: waiting } });
+  });
+
+  app.patch("/api/client-uploads/:id", requireAuth, (req, res) => {
+    const id = String(req.params.id);
+    const row = /^\d+$/.test(id)
+      ? (db.prepare("SELECT u.id, l.profile_local_id, l.profile_monday_id FROM client_uploads u JOIN upload_links l ON l.id = u.link_id WHERE u.id = ?").get(Number(id)) as
+          { id: number; profile_local_id: string; profile_monday_id: string | null } | undefined)
+      : undefined;
+    if (!row) {
+      res.status(404).json({ error: "Upload not found" });
+      return;
+    }
+    const reviewed = (req.body ?? {}).reviewed;
+    if (typeof reviewed !== "boolean") {
+      res.status(400).json({ error: "reviewed must be true or false" });
+      return;
+    }
+    const by = req.user?.name ? String(req.user.name) : null;
+    db.prepare(`UPDATE client_uploads SET reviewed_at = ${reviewed ? "datetime('now')" : "NULL"}, reviewed_by_name = ? WHERE id = ?`)
+      .run(reviewed ? by : null, row.id);
+    auditFromReq(req, reviewed ? "client_upload.reviewed" : "client_upload.unreviewed", {
+      targetType: "profile", targetId: row.profile_local_id, targetMondayId: row.profile_monday_id, metadata: { upload: row.id },
+    });
+    res.json({ data: { id: row.id, reviewed } });
   });
 
   function linkById(id: string): LinkRow | undefined {

@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { SectionCode } from "./ScreenCode";
 import { FormChip, ListSection, Tag, formatDue, waitFg } from "./caseBoardParts";
 import { CaseCardModal, type CaseCard } from "./CaseCardModal";
+import { ChecklistCount } from "./UploadChecklistSection";
 
 const NORTH_POLE = "Send to North Pole";
 const NO_STAGE = "No stage";
@@ -127,6 +128,7 @@ function PreschedulingRow({ c, showPeople, onOpen }: { c: MyPreschedulingCase; s
       <div className="text-xs leading-5 min-w-0" style={{ color: c.notCooperating ? "var(--urgency-overdue)" : "var(--color-ink-muted)" }}>
         {c.reminderSentOn ? `Reminder ${formatDue(c.reminderSentOn)}` : "No reminder yet"}
         {c.evidenceReceivedOn && <span style={{ color: "var(--color-ink-faint)" }}> · Evidence {formatDue(c.evidenceReceivedOn)}</span>}
+        {c.documents && <ChecklistCount documents={c.documents} />}
       </div>
       <div className="md:text-right"><EFileLink url={c.eFile} /></div>
     </li>
