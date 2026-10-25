@@ -552,3 +552,16 @@ The mail intake tried to split a whole day's scan into notices and match each on
 - **Old stored scans stay** under `data/mail/` until their Alerts items are settled; nothing deletes them automatically.
 
 **Revisit if**: an AI reader becomes available (read + match could then pre-select more confidently), or staff want mail filed somewhere other than CC.
+
+---
+
+## 2026-10-25 — Write queue: newest write wins, delivery is at-least-once
+
+**Context**: The Oct 24 audit found that a write queued during a rate limit could retry after the same column had been changed again, putting the older value back in Monday while the dashboard still showed the newer one.
+
+**Decision**:
+- **A newer write to a column supersedes queued ones.** Enqueuing a `change_column` / `change_column_json` marks older `pending` rows for the same item + column `superseded`; so does a successful direct write through `dataSource` (`onDirectColumnWrite`, registered in `server.ts`). A row already `syncing` is not touched — that window is one Monday call.
+- **Delivery stays at-least-once.** A crash after Monday accepts a call but before the row is marked `synced` sends it again on restart (`reconcileInFlightWrites`), so a note or E&A entry can appear twice. Accepted: a duplicate is visible and easy to delete; a lost write is neither.
+- **Bookkeeping after a Monday success never fails the op.** The `create_item` reconcile and the `client_updates` id attach each catch their own errors, so a local DB error can't send a write that already landed back for a retry.
+
+**Revisit if**: duplicate notes after restarts show up in practice (then store an idempotency marker per op), or a write type needs the in-flight window closed.
