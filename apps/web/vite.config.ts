@@ -20,6 +20,14 @@ function clientUploadPage(): Plugin {
   };
 }
 
+/**
+ * The Content-Security-Policy nginx sends in production (security-headers.conf —
+ * keep the two the same). `vite preview` sends it too, so a production build can
+ * be checked for violations locally. Not on the dev server: Vite injects inline
+ * scripts there (React refresh) that this policy would block.
+ */
+const CSP_POLICY = "script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
+
 export default defineConfig({
   // Build stamp — baked at image build time (Dockerfile.web passes BUILD_SHA /
   // BUILD_DATE from the CI commit). Lets the running page report exactly which
@@ -44,6 +52,11 @@ export default defineConfig({
       // something else on the machine. Default is unchanged.
       "/api": process.env.API_PROXY_TARGET ?? "http://127.0.0.1:3000",
     },
+  },
+  preview: {
+    port: 5173,
+    proxy: { "/api": process.env.API_PROXY_TARGET ?? "http://127.0.0.1:3000" },
+    headers: { "Content-Security-Policy": CSP_POLICY, "X-Content-Type-Options": "nosniff" },
   },
   build: {
     outDir: "dist",

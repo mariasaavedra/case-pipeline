@@ -24,6 +24,7 @@
     "sync:live": "tsx --env-file-if-exists=.env scripts/sync/index.ts",
     "webhooks:setup": "tsx --env-file-if-exists=.env scripts/setup-webhooks.ts",
     "backup:live": "tsx scripts/backup-db.ts --db=live",
+    "backup:offsite": "tsx --env-file-if-exists=.env scripts/backup-offsite.ts",
     "health": "tsx scripts/health.ts --db=live",
     "stats": "tsx scripts/export-stats.ts",
     "stats:live": "tsx scripts/export-stats.ts --db=live",

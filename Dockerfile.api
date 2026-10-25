@@ -49,4 +49,13 @@ ENV HOST=0.0.0.0
 ENV PORT=3000
 EXPOSE 3000
 
+# Run as the image's unprivileged `node` user (uid 1000), not root: a bug in a
+# route that handles uploads should not get root inside the container. The
+# source stays root-owned and read-only to it; only what the API writes is
+# its own — data/ (the host bind mount, which must be owned by uid 1000:
+# `sudo chown -R 1000:1000 data` on the server, once) and output/ (CSV
+# reports from the drive intake).
+RUN mkdir -p /app/data /app/output && chown node:node /app/data /app/output
+USER node
+
 CMD ["npx", "tsx", "apps/api/src/server.ts"]

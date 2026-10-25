@@ -278,6 +278,8 @@ function adapt(handler: Handler) {
 // =============================================================================
 
 const app = express();
+// No "X-Powered-By: Express" telling every caller what to probe for.
+app.disable("x-powered-by");
 app.use(express.json());
 
 // Auth — unauthenticated entry point (validates token + upserts user)
@@ -1285,7 +1287,11 @@ async function waitForSyncToSettle(): Promise<void> {
   );
 }
 
+/** Both of the last run's copies verified AND encrypted — the only kind that goes off-site. */
+let lastBackupVerifiedEncrypted = false;
+
 async function runBackup(): Promise<void> {
+  lastBackupVerifiedEncrypted = false;
   const backupDir = path.join(DATA_DIR, "backups");
   fs.mkdirSync(backupDir, { recursive: true });
   // Before the stamp, so the filename reflects when the copy was actually taken.
@@ -1340,6 +1346,7 @@ async function runBackup(): Promise<void> {
     if (!key) {
       console.warn("[backup] BACKUP_ENCRYPTION_KEY not set — backups written UNENCRYPTED.");
     }
+    lastBackupVerifiedEncrypted = !!key && decisions[DB_SOURCE] === true && decisions.users === true;
   } finally {
     // Prune even when the write above failed. Retention used to be the last
     // statement in this function, so a failure — a full disk, most obviously —
@@ -1405,11 +1412,44 @@ function scheduleBackups() {
   // still produce a consistent file, but of a half-synced database, which is a
   // poor thing to keep as the day's restore point.
   const backupCron = process.env.BACKUP_CRON ?? "30 5 * * *";
+  const offsite = process.env.BACKUP_OFFSITE === "on";
   cron.schedule(backupCron, () => {
-    trackRun(usersDb, "backup", runBackup).catch((err) => {
-      console.error("[backup] error:", err);
-      inBackground(notifyOps("ops_backup", `The daily database backup failed: ${(err as Error).message}. Check disk space on the server.`));
-    });
+    trackRun(usersDb, "backup", runBackup)
+      .then(() => {
+        if (offsite && lastBackupVerifiedEncrypted) {
+          runBackupOffsite().catch((err) => {
+            console.error("[offsite] error:", err);
+            inBackground(notifyOps("ops_backup", `Copying today's backup to SharePoint failed: ${(err as Error).message}. The copy on the server is fine; see the API log.`));
+          });
+        } else if (offsite) {
+          console.warn("[offsite] skipped — today's backup was not verified and encrypted.");
+        }
+      })
+      .catch((err) => {
+        console.error("[backup] error:", err);
+        inBackground(notifyOps("ops_backup", `The daily database backup failed: ${(err as Error).message}. Check disk space on the server.`));
+      });
   }, { timezone: FIRM_TIMEZONE });
-  console.log(`[backup] Daily backup scheduled — cron "${backupCron}" (${FIRM_TIMEZONE}).`);
+  console.log(
+    `[backup] Daily backup scheduled — cron "${backupCron}" (${FIRM_TIMEZONE})` +
+      (offsite ? ", then copied to SharePoint (BACKUP_OFFSITE=on)." : ". Off-site copy DISABLED (set BACKUP_OFFSITE=on)."),
+  );
+}
+
+/**
+ * The newest encrypted backups → SharePoint (scripts/backup-offsite.ts). Its
+ * own process, like the consult sweep: the upload streams a ~900 MB file and
+ * must not share the API's memory or event loop for the minutes it takes.
+ */
+function runBackupOffsite(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("npm", ["run", "backup:offsite", "--", "--apply"], {
+      cwd: REPO_ROOT,
+      stdio: "inherit",
+      env: process.env,
+      shell: true,
+    });
+    child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`backup:offsite exited with code ${code}`))));
+    child.on("error", reject);
+  });
 }

@@ -10,6 +10,7 @@
 // Nothing here deletes or moves anything. There is deliberately no such helper.
 // =============================================================================
 
+import fs from "node:fs";
 import { graphFetch, GraphError, type GraphAuth } from "./graph-client.js";
 
 export interface DriveItem {
@@ -357,6 +358,54 @@ export async function uploadFile(
       throw await uploadError(res);
     }
     if (end === content.length) return (await res.json()) as DriveItem;
+  }
+  throw new Error(`Upload of ${name} ended without a final response`);
+}
+
+/**
+ * Upload a file from disk through an upload session, one chunk in memory at a
+ * time. For files too big to hold whole: a live.db backup is ~900 MB and the
+ * server has 1 GB of RAM, which rules out uploadFile's Buffer. `ranges` are
+ * the [start, end) chunks (scripts/lib/offsite-backups.ts chunkRanges).
+ */
+export async function uploadFileFromPath(
+  auth: GraphAuth,
+  driveId: string,
+  parentItemId: string,
+  name: string,
+  filePath: string,
+  ranges: Array<[number, number]>,
+  conflictBehavior: "fail" | "replace" | "rename",
+): Promise<DriveItem> {
+  const size = fs.statSync(filePath).size;
+  const session = await graphFetch<{ uploadUrl: string }>(
+    auth,
+    `/drives/${driveId}/items/${parentItemId}:/${encodeURIComponent(name)}:/createUploadSession`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": conflictBehavior } }),
+    },
+  );
+  const fd = fs.openSync(filePath, "r");
+  try {
+    for (const [start, end] of ranges) {
+      const buf = Buffer.alloc(end - start);
+      fs.readSync(fd, buf, 0, buf.length, start);
+      // The upload URL is pre-authorised: sending a bearer token to it is an error.
+      const res = await fetch(session.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Length": String(buf.length), "Content-Range": `bytes ${start}-${end - 1}/${size}` },
+        body: new Uint8Array(buf),
+      });
+      if (!res.ok) {
+        await fetch(session.uploadUrl, { method: "DELETE" }).catch(() => undefined);
+        throw await uploadError(res);
+      }
+      if (end === size) return (await res.json()) as DriveItem;
+    }
+  } finally {
+    fs.closeSync(fd);
   }
   throw new Error(`Upload of ${name} ended without a final response`);
 }
