@@ -5,7 +5,53 @@
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
 
-export const SCHEMA_VERSION = 38;
+export const SCHEMA_VERSION = 39;
+
+/**
+ * The Buzón's automatic side (v39, docs/features/buzon.md). Shared by a fresh
+ * schema and the v38 → v39 migration. Local-only — NOT rebuilt by sync.
+ */
+const BUZON_TABLES_SQL = `
+-- One row per Fee K the Buzón has handled: started on "Paid needs action"
+-- (Phase 2), or a list added by hand. Also remembers the "all received" bell.
+CREATE TABLE IF NOT EXISTS buzon_fee_ks (
+    fee_k_monday_id        TEXT PRIMARY KEY,
+    fee_k_local_id         TEXT,
+    profile_local_id       TEXT,
+    profile_monday_id      TEXT,
+    started_at             TEXT NOT NULL DEFAULT (datetime('now')),
+    result                 TEXT NOT NULL,          -- texted | not_texted | no_list | no_profile | manual
+    reason                 TEXT,                   -- why it was not texted
+    link_id                INTEGER,
+    evidence_stamped_at    TEXT,                   -- Fee K "Evidence Received" written
+    complete_at            TEXT                    -- every required document in: told staff once
+);
+-- Every text the Buzón sends on its own or from "Remind now" (the text itself
+-- is in users.db sms_messages).
+CREATE TABLE IF NOT EXISTS buzon_texts (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_local_id       TEXT NOT NULL,
+    profile_monday_id      TEXT,
+    link_id                INTEGER,
+    kind                   TEXT NOT NULL,          -- link | reminder | received | remind_now | gave_up
+    sent_at                TEXT NOT NULL DEFAULT (datetime('now')),
+    status                 TEXT NOT NULL,          -- sent | dry_run | failed | skipped
+    error                  TEXT,
+    by_name                TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_buzon_texts_profile ON buzon_texts(profile_local_id);
+CREATE INDEX IF NOT EXISTS idx_buzon_texts_profile_monday ON buzon_texts(profile_monday_id);
+-- Per client: no automatic texts (VAWA / U visa / anyone whose phone someone
+-- else may read), and their own reminder plan. Keyed by Monday id, else "local:<id>".
+CREATE TABLE IF NOT EXISTS buzon_client_settings (
+    profile_key            TEXT PRIMARY KEY,
+    no_auto_texts          INTEGER NOT NULL DEFAULT 0,
+    reminders              TEXT,                   -- NULL = firm default | off | custom
+    reminder_days          TEXT,                   -- JSON [3, 7, 14] when custom
+    updated_by_name        TEXT,
+    updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`;
 
 const SCHEMA_SQL = `
 -- =============================================================================
@@ -564,7 +610,8 @@ CREATE TABLE IF NOT EXISTS upload_links (
     expires_at             TEXT NOT NULL,          -- UTC, datetime('now') format
     revoked_at             TEXT,
     revoked_by_name        TEXT,
-    last_used_at           TEXT
+    last_used_at           TEXT,
+    token_enc              TEXT                    -- v39: the token, encrypted (APP_ENCRYPTION_KEY), so reminders can resend the link
 );
 CREATE INDEX IF NOT EXISTS idx_upload_links_profile ON upload_links(profile_local_id);
 CREATE INDEX IF NOT EXISTS idx_upload_links_profile_monday ON upload_links(profile_monday_id);
@@ -587,9 +634,46 @@ CREATE TABLE IF NOT EXISTS client_uploads (
     notified_at            TEXT,                   -- Monday update + Slack
     attempts               INTEGER NOT NULL DEFAULT 0,
     last_error             TEXT,
+    item_id                INTEGER,                -- v39: the checklist document it was sent for, else NULL
+    thanked_at             TEXT,                   -- v39: the client's "we received your documents" text went (or was skipped)
+    reviewed_at            TEXT,                   -- v39: a staff member looked at it (review queue)
+    reviewed_by_name       TEXT,
+    mail_document_id       INTEGER,                -- v39: sent on to mail review (a USCIS / court notice)
+    combined_into          INTEGER,                -- v39: joined into another upload's PDF (several photos of one document)
     UNIQUE (link_id, sha256)
 );
 CREATE INDEX IF NOT EXISTS idx_client_uploads_unfiled ON client_uploads(filed_at);
+
+-- Buzón checklist (v39): the documents a client is asked to send, copied from
+-- their Fee K's Fee K Type (Settings → Firm → Fee K Types) or added by staff.
+-- Per CLIENT, not per link, so a new link shows the same list. Items with a
+-- Fee K Type file to "EVIDENCE <type>" in the E-File. Local-only — NOT rebuilt
+-- by sync. routes/upload-checklist.ts, docs/features/buzon.md.
+CREATE TABLE IF NOT EXISTS upload_checklist_items (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_local_id       TEXT NOT NULL,
+    profile_monday_id      TEXT,                   -- stable across a re-sync
+    fee_k_local_id         TEXT,
+    fee_k_monday_id        TEXT,
+    fee_k_type             TEXT,                   -- the Fee K Type whose list it came from; NULL = added by hand, no case
+    appointment_monday_id  TEXT,                   -- a consult's document (Phase 5): files go to Consult File → CONSULT
+    consult_list           TEXT,                   -- the consult list (Settings) it came from
+    label_en               TEXT NOT NULL,
+    label_es               TEXT NOT NULL,
+    required               INTEGER NOT NULL DEFAULT 1,
+    status                 TEXT NOT NULL DEFAULT 'missing',  -- missing | received | not_needed
+    position               INTEGER NOT NULL DEFAULT 0,
+    received_at            TEXT,                   -- first file for it
+    added_by_name          TEXT,
+    updated_by_name        TEXT,
+    created_at             TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_upload_checklist_profile ON upload_checklist_items(profile_local_id);
+CREATE INDEX IF NOT EXISTS idx_upload_checklist_profile_monday ON upload_checklist_items(profile_monday_id);
+CREATE INDEX IF NOT EXISTS idx_upload_checklist_fee_k ON upload_checklist_items(fee_k_monday_id);
+CREATE INDEX IF NOT EXISTS idx_upload_checklist_appointment ON upload_checklist_items(appointment_monday_id);
+${BUZON_TABLES_SQL}
 
 -- Releases from detention (v38): one row per "Released?" (M17). A client's
 -- name keeps its "(Det. at CoreCivic)" after release, so the detained rule
@@ -1767,6 +1851,52 @@ export function initializeSchema(db: Database): void {
         );
         CREATE INDEX IF NOT EXISTS idx_detention_releases_profile ON detention_releases(profile_monday_id);
       `);
+    }
+
+    // Migration v38 → v39: the Buzón checklist. New table + client_uploads.item_id.
+    if (fromVersion < 39) {
+      const hasItem = db
+        .prepare("SELECT COUNT(*) AS cnt FROM pragma_table_info('client_uploads') WHERE name = 'item_id'")
+        .get() as { cnt: number };
+      if (!hasItem.cnt) db.exec("ALTER TABLE client_uploads ADD COLUMN item_id INTEGER");
+      const addColumn = (table: string, column: string, type: string) => {
+        const has = db.prepare(`SELECT COUNT(*) AS cnt FROM pragma_table_info('${table}') WHERE name = ?`).get(column) as { cnt: number };
+        if (!has.cnt) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+      };
+      for (const c of ["thanked_at", "reviewed_at", "reviewed_by_name"]) addColumn("client_uploads", c, "TEXT");
+      addColumn("client_uploads", "mail_document_id", "INTEGER");
+      addColumn("client_uploads", "combined_into", "INTEGER");
+      addColumn("upload_links", "token_enc", "TEXT");
+      db.exec(BUZON_TABLES_SQL);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS upload_checklist_items (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_local_id       TEXT NOT NULL,
+            profile_monday_id      TEXT,
+            fee_k_local_id         TEXT,
+            fee_k_monday_id        TEXT,
+            fee_k_type             TEXT,
+            appointment_monday_id  TEXT,
+            consult_list           TEXT,
+            label_en               TEXT NOT NULL,
+            label_es               TEXT NOT NULL,
+            required               INTEGER NOT NULL DEFAULT 1,
+            status                 TEXT NOT NULL DEFAULT 'missing',
+            position               INTEGER NOT NULL DEFAULT 0,
+            received_at            TEXT,
+            added_by_name          TEXT,
+            updated_by_name        TEXT,
+            created_at             TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_upload_checklist_profile ON upload_checklist_items(profile_local_id);
+        CREATE INDEX IF NOT EXISTS idx_upload_checklist_profile_monday ON upload_checklist_items(profile_monday_id);
+        CREATE INDEX IF NOT EXISTS idx_upload_checklist_fee_k ON upload_checklist_items(fee_k_monday_id);
+      `);
+      // A table made by an earlier build of v39 lacks the consult columns.
+      addColumn("upload_checklist_items", "appointment_monday_id", "TEXT");
+      addColumn("upload_checklist_items", "consult_list", "TEXT");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_upload_checklist_appointment ON upload_checklist_items(appointment_monday_id)");
     }
 
     db.exec(`UPDATE schema_version SET version = ${SCHEMA_VERSION}`);

@@ -11,6 +11,7 @@ import { detentionTitle } from "../lib/detention";
 import { ConsultScheduleModal } from "./ConsultScheduleModal";
 import { ConsultLinkModal } from "./ConsultLinkModal";
 import { NewAppointmentModal } from "./NewAppointmentModal";
+import { UploadLinkModal } from "./UploadLinkModal";
 import { Button } from "./ui/button";
 
 // =============================================================================
@@ -77,7 +78,8 @@ function preppedOn(at: string): string {
 // Consult list (P17.2)
 // =============================================================================
 
-function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit, onLink }: {
+function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit, onLink, onBuzon }: {
+  onBuzon?: (c: ReceptionConsult) => void;
   c: ReceptionConsult;
   attorneyActive: boolean;
   onAttorney: (name: string) => void;
@@ -179,6 +181,13 @@ function ConsultRow({ c, attorneyActive, onAttorney, onPrep, onFocus, onEdit, on
           <Button type="button" size="sm" variant="outline" onClick={() => onFocus(c)} title="Notes, documents and details without leaving the page">
             Focus
           </Button>
+          {onBuzon && (
+            <Button type="button" size="sm" variant="outline" onClick={() => onBuzon(c)}
+              disabled={!c.profile || !c.mondayItemId}
+              title={c.profile ? "Ask the client for documents before the consult (Buzón)" : "Link the consult to a profile first"}>
+              Buzón
+            </Button>
+          )}
           <Button type="button" size="sm" variant={prepped ? "outline" : "default"} onClick={() => onPrep(c)}>
             {prepped ? "Prep again" : "Prep"}
           </Button>
@@ -219,6 +228,8 @@ export function ReceptionPage() {
   const [attorney, setAttorney] = useState<string | null>(null);
   const [notPreppedOnly, setNotPreppedOnly] = useState(false);
   const [prepping, setPrepping] = useState<ReceptionConsult | null>(null);
+  // P17 → Buzón on a consult: M30 with that consult's document lists (docs/features/buzon.md, Phase 5).
+  const [buzon, setBuzon] = useState<ReceptionConsult | null>(null);
   const [editing, setEditing] = useState<ReceptionConsult | null>(null);
   const [booking, setBooking] = useState(false);
   const [linking, setLinking] = useState<ReceptionConsult | null>(null);
@@ -372,6 +383,7 @@ export function ReceptionPage() {
                     onFocus={openFocus}
                     onEdit={setEditing}
                     onLink={setLinking}
+                    onBuzon={setBuzon}
                   />
                 ))}
               </ListSection>
@@ -386,6 +398,18 @@ export function ReceptionPage() {
         <div role="alert" className="text-sm rounded p-3 mt-3" style={{ color: "var(--urgency-overdue)", background: "var(--urgency-overdue-bg)" }}>
           {focusError}
         </div>
+      )}
+
+      {buzon?.profile && buzon.mondayItemId && (
+        <UploadLinkModal
+          profileLocalId={buzon.profile.localId}
+          name={buzon.profile.name}
+          phone={buzon.profile.phone ?? buzon.phone}
+          altPhones={[buzon.phone]}
+          language={buzon.language}
+          consult={{ mondayId: buzon.mondayItemId, label: buzon.name }}
+          onClose={() => setBuzon(null)}
+        />
       )}
 
       {prepping && (

@@ -182,5 +182,5 @@ const SCOPE: Record<string, [string, string, string, string]> = {
 
 export const DRAFT_FEE_K_TYPES: FeeKTypeRow[] = rows.map(([feeKType, spanish, board, feeSheetJob]) => {
   const [services = "", servicesEs = "", excluded = "", excludedEs = ""] = SCOPE[feeKType] ?? [];
-  return { feeKType, spanish, board, feeSheetJob, services, servicesEs, excluded, excludedEs };
+  return { feeKType, spanish, board, feeSheetJob, services, servicesEs, excluded, excludedEs, documents: [] };
 });

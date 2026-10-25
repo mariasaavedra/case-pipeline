@@ -43,6 +43,7 @@ import {
   fileKind, prepStamp, isHttpUrl, detaineeReason, summaryLine, layoutFor, firstName, type RowState, type Layout,
 } from "../lib/my-day";
 import { DateInput } from "./ui/date-input";
+import { ConsultBuzonItems } from "./UploadChecklistSection";
 
 // =============================================================================
 // URL + remembered board
@@ -456,6 +457,12 @@ function ClientPanel({ entry, tab, setTab }: { entry: MyDayEntry; tab: Tab; setT
               {entry.clientWrote && <p style={{ margin: "8px 0 0", fontSize: 14, fontStyle: "italic" }}>Client wrote: “{entry.clientWrote}”</p>}
               {!entry.clientWrote && entry.description && <p style={{ margin: "8px 0 0", fontSize: 14 }}>{entry.description}</p>}
             </div>
+          )}
+
+          {entry.profile && entry.mondayItemId && (
+            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              <ConsultBuzonItems profileLocalId={entry.profile.localId} appointmentMondayId={entry.mondayItemId} />
+            </ul>
           )}
 
           <div className="flex flex-col gap-2">

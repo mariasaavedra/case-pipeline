@@ -25,6 +25,8 @@ export interface QueueItem {
   file: File;
   kind: KindKey;
   note: string;
+  /** The checklist document it is sent for (the Buzón list), else undefined. */
+  itemId?: number;
   state: ItemState;
 }
 
@@ -48,6 +50,7 @@ export function errorFor(status: number, code?: string): { error: ErrorKey; retr
   if (status === 413) return code === "link_full" ? { error: "linkFull", retry: false } : { error: "tooBig", retry: false };
   if (status === 415) return { error: "type", retry: false };
   if (status === 429) return { error: "tooMany", retry: true };
+  if (status === 400 && code === "item") return { error: "itemGone", retry: false };
   return { error: "other", retry: status >= 500 || status === 400 };
 }
 
@@ -62,9 +65,10 @@ export interface UploadOutcome {
   code?: string;
 }
 
-export function uploadUrl(token: string, item: Pick<QueueItem, "file" | "kind" | "note">): string {
+export function uploadUrl(token: string, item: Pick<QueueItem, "file" | "kind" | "note" | "itemId">): string {
   const q = new URLSearchParams({ name: item.file.name || "photo.jpg", kind: item.kind });
   if (item.note.trim()) q.set("note", item.note.trim());
+  if (item.itemId !== undefined) q.set("item", String(item.itemId));
   return `/api/u/${encodeURIComponent(token)}/files?${q}`;
 }
 

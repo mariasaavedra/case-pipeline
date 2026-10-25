@@ -15,7 +15,8 @@ import { spawn } from "node:child_process";
 import cron from "node-cron";
 import type BetterSqlite3 from "better-sqlite3";
 type DatabaseInstance = BetterSqlite3.Database;
-import { getBoardColumnsFor } from "@case-pipeline/query";
+import { checklistCounts, getBoardColumnsFor } from "@case-pipeline/query";
+import { tellFeeKTeam } from "../buzon/team.js";
 import { REPO_ROOT } from "../paths.js";
 import { FIRM_TIMEZONE } from "../firm.js";
 import { dataSource } from "../data-source/index.js";
@@ -24,7 +25,7 @@ import { enqueueWrite } from "../write-queue/processor.js";
 import { mondayItemUrl, notifyEvent, notifyOps } from "../notify/slack.js";
 import { clientUploadEvent } from "../notify/events.js";
 import { recordRun } from "../workflows/runs.js";
-import { MAX_ATTEMPTS, QUIET_MINUTES, WAITING_ALERT_HOURS, kindSummary, uploadNoteHtml, type FiledFile } from "./filing.js";
+import { MAX_ATTEMPTS, QUIET_MINUTES, WAITING_ALERT_HOURS, folderFor, kindSummary, uploadNoteHtml, type FiledFile } from "./filing.js";
 
 export interface FilingResult {
   ok: boolean;
@@ -133,6 +134,62 @@ interface FiledRow {
   filed_where: string;
   profile_local_id: string;
   profile_monday_id: string | null;
+  fee_k_type: string | null;
+  fee_k_monday_id: string | null;
+  document: string | null;
+}
+
+/** The Fee Ks "Evidence Received" date column (config/boards.yaml evidence_received_date). */
+export const EVIDENCE_RECEIVED_COLUMN = "date_mkx8stcx";
+
+/**
+ * Checklist documents for a Fee K were filed (docs/features/buzon.md, Phase 2):
+ * its Evidence Received date is set once (when empty — never moved), its
+ * Paralegal + Assistant get a bell with the count, and once every required
+ * document is in, one more "all received" bell + Slack.
+ */
+async function evidenceArrived(d: Pick<FilingDeps, "db" | "mondayApiToken">, feeKMondayIds: string[], clientName: string | null): Promise<void> {
+  const { db } = d;
+  const boardId = getBoardColumnsFor(db, "fee_ks")?.mondayBoardId ?? null;
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TIMEZONE });
+  for (const feeK of [...new Set(feeKMondayIds)]) {
+    const c = db.prepare(`
+      SELECT local_id AS localId, profile_local_id AS profileLocalId, profile_monday_id AS profileMondayId,
+             json_extract(raw_column_values, '$.evidence_received_date.date') AS evidence
+        FROM contracts WHERE monday_item_id = ? AND deleted_at IS NULL
+    `).get(feeK) as { localId: string; profileLocalId: string; profileMondayId: string | null; evidence: string | null } | undefined;
+    if (!c) continue;
+    db.prepare(`INSERT OR IGNORE INTO buzon_fee_ks (fee_k_monday_id, fee_k_local_id, profile_local_id, profile_monday_id, result) VALUES (?, ?, ?, ?, 'manual')`)
+      .run(feeK, c.localId, c.profileLocalId, c.profileMondayId);
+    const state = db.prepare("SELECT evidence_stamped_at, complete_at FROM buzon_fee_ks WHERE fee_k_monday_id = ?").get(feeK) as
+      { evidence_stamped_at: string | null; complete_at: string | null };
+
+    if (!state.evidence_stamped_at && !c.evidence && boardId) {
+      const value = { date: today };
+      try {
+        if (!d.mondayApiToken) throw new Error("MONDAY_API_TOKEN is not set");
+        await dataSource.setColumnValues(boardId, feeK, { [EVIDENCE_RECEIVED_COLUMN]: value }, d.mondayApiToken);
+      } catch (err) {
+        console.error("[uploads] Evidence Received failed; queueing:", err);
+        enqueueWrite(db, { opType: "change_column_json", targetTable: "contracts", targetLocalId: c.localId, mondayItemId: feeK, authorOid: null, payload: { boardId, columnId: EVIDENCE_RECEIVED_COLUMN, value } });
+      }
+      db.prepare("UPDATE contracts SET raw_column_values = json_set(COALESCE(raw_column_values, '{}'), '$.evidence_received_date', json(?)) WHERE local_id = ?")
+        .run(JSON.stringify(value), c.localId);
+    }
+    if (!state.evidence_stamped_at) db.prepare("UPDATE buzon_fee_ks SET evidence_stamped_at = datetime('now') WHERE fee_k_monday_id = ?").run(feeK);
+
+    const counts = checklistCounts(db, [c.localId]).get(c.localId);
+    const name = clientName ?? "The client";
+    if (!counts) continue;
+    if (counts.received >= counts.total && !state.complete_at) {
+      db.prepare("UPDATE buzon_fee_ks SET complete_at = datetime('now') WHERE fee_k_monday_id = ?").run(feeK);
+      await tellFeeKTeam(db, d.mondayApiToken, feeK, `✅ ${name} sent every document on the list (${counts.total}).`,
+        { text: `${name} sent every document on their Buzón list (${counts.total}).`, profileMondayId: c.profileMondayId });
+    } else if (counts.received < counts.total) {
+      await tellFeeKTeam(db, d.mondayApiToken, feeK, `📤 ${name} sent documents: ${counts.received} of ${counts.total} received.`,
+        { text: `${name} sent documents: ${counts.received} of ${counts.total} on their Buzón list.`, profileMondayId: c.profileMondayId });
+    }
+  }
 }
 
 function clientName(db: DatabaseInstance, mondayId: string | null, localId: string): string | null {
@@ -145,8 +202,10 @@ function clientName(db: DatabaseInstance, mondayId: string | null, localId: stri
 export async function tellStaff(d: Pick<FilingDeps, "db" | "mondayApiToken">): Promise<void> {
   const { db } = d;
   const filed = db.prepare(`
-    SELECT u.id, u.link_id, u.stored_name, u.kind, u.note, u.sharepoint_url, u.filed_where, l.profile_local_id, l.profile_monday_id
+    SELECT u.id, u.link_id, u.stored_name, u.kind, u.note, u.sharepoint_url, u.filed_where, l.profile_local_id, l.profile_monday_id,
+           i.fee_k_type, i.fee_k_monday_id, i.label_en AS document
       FROM client_uploads u JOIN upload_links l ON l.id = u.link_id
+      LEFT JOIN upload_checklist_items i ON i.id = u.item_id
      WHERE u.filed_at IS NOT NULL AND u.notified_at IS NULL
      ORDER BY u.id
   `).all() as FiledRow[];
@@ -160,6 +219,7 @@ export async function tellStaff(d: Pick<FilingDeps, "db" | "mondayApiToken">): P
     const first = rows[0]!;
     const files: FiledFile[] = rows.map((r) => ({
       storedName: r.stored_name, kind: r.kind, note: r.note, sharepointUrl: r.sharepoint_url, filedWhere: r.filed_where,
+      folder: folderFor(r.fee_k_type), document: r.document,
     }));
     if (first.profile_monday_id) {
       const body = uploadNoteHtml(files);
@@ -176,10 +236,12 @@ export async function tellStaff(d: Pick<FilingDeps, "db" | "mondayApiToken">): P
       files: rows.length,
       kinds: kindSummary(rows.map((r) => r.kind)),
       where: first.filed_where,
+      folders: [...new Set(files.map((f) => f.folder ?? "CAF"))].join(", "),
       link: mondayItemUrl(profilesBoard, first.profile_monday_id),
     }));
     // Stamped after the post, so a crash in between tells staff twice, never zero times.
     db.transaction(() => rows.forEach((r) => stamp.run(r.id)))();
+    await evidenceArrived(d, rows.filter((r) => r.fee_k_monday_id).map((r) => r.fee_k_monday_id!), clientName(db, first.profile_monday_id, first.profile_local_id));
   }
 
   const stuck = db.prepare(`

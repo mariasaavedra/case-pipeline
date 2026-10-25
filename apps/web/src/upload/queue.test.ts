@@ -32,6 +32,7 @@ describe("errorFor", () => {
     expect(errorFor(413, "link_full")).toEqual({ error: "linkFull", retry: false });
     expect(errorFor(415, "type")).toEqual({ error: "type", retry: false });
     expect(errorFor(429)).toEqual({ error: "tooMany", retry: true });
+    expect(errorFor(400, "item")).toEqual({ error: "itemGone", retry: false });
     expect(errorFor(502)).toEqual({ error: "other", retry: true });
   });
   it("every error has words in both languages", () => {
@@ -58,6 +59,12 @@ describe("uploadUrl", () => {
       .toBe(`/api/u/${token}/files?name=aviso+1.pdf&kind=notice`);
     expect(uploadUrl(token, { file: { name: "" } as File, kind: "id", note: "llegó hoy" }))
       .toBe(`/api/u/${token}/files?name=photo.jpg&kind=id&note=lleg%C3%B3+hoy`);
+  });
+
+  it("a checklist document adds its item id", () => {
+    const token = "a".repeat(43);
+    expect(uploadUrl(token, { file: { name: "p.jpg" } as File, kind: "evidence", note: "", itemId: 12 }))
+      .toBe(`/api/u/${token}/files?name=p.jpg&kind=evidence&item=12`);
   });
 });
 

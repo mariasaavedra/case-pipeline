@@ -1,12 +1,36 @@
 // =============================================================================
-// Client uploads → the client's E-File → CAF: the rules (no I/O)
+// Client uploads → the client's E-File → CAF (or a checklist document's
+// EVIDENCE <case type>, docs/features/buzon.md): the rules (no I/O)
 // =============================================================================
 // Shared by the filing script (scripts/client-uploads.ts, which uploads) and
 // the API job (uploads/job.ts, which tells staff). docs/features/client-uploads.md.
 // =============================================================================
 
+import { cleanName } from "./rules.js";
+
 /** The E-File subfolder client uploads go in (decided 2026-10-21). */
 export const CAF_FOLDER = "CAF";
+
+/**
+ * A Buzón checklist document's folder: "EVIDENCE <its Fee K Type>" (decided
+ * 2026-10-23), Monday's "(c)" court marker out, SharePoint-safe.
+ */
+export function evidenceFolder(feeKType: string): string {
+  const type = cleanName(feeKType.replace(/\(c\)/gi, "")).slice(0, 90).trim();
+  return type ? `EVIDENCE ${type}` : "EVIDENCE";
+}
+
+/** A consult's documents (Phase 5): Consult File → CONSULT, where Drive intake puts consult uploads. */
+export const CONSULT_FOLDER = "CONSULT";
+
+/**
+ * Where an upload goes inside the client folder: a consult document's CONSULT,
+ * else its case's EVIDENCE folder, else CAF.
+ */
+export function folderFor(feeKType: string | null | undefined, appointmentMondayId?: string | null): string {
+  if (appointmentMondayId) return CONSULT_FOLDER;
+  return feeKType ? evidenceFolder(feeKType) : CAF_FOLDER;
+}
 
 /** Minutes after a link's last file before its batch is filed: a client sending 8 photos is one batch. */
 export const QUIET_MINUTES = 10;
@@ -24,9 +48,15 @@ interface Child {
   size?: number;
 }
 
+/** An existing folder of that name (CAF, EVIDENCE …), any capitalisation and spacing. */
+export function pickFolder<T extends Child>(children: T[], name: string): T | null {
+  const want = name.replace(/\s+/g, " ").trim().toLowerCase();
+  return children.find((c) => c.folder && c.name.replace(/\s+/g, " ").trim().toLowerCase() === want) ?? null;
+}
+
 /** An existing CAF folder, any capitalisation. */
 export function pickCafFolder<T extends Child>(children: T[]): T | null {
-  return children.find((c) => c.folder && c.name.trim().toLowerCase() === CAF_FOLDER.toLowerCase()) ?? null;
+  return pickFolder(children, CAF_FOLDER);
 }
 
 /**
@@ -63,6 +93,10 @@ export interface FiledFile {
   note: string | null;
   sharepointUrl: string;
   filedWhere: string;
+  /** The folder inside the client folder (CAF, EVIDENCE …). Missing = CAF. */
+  folder?: string;
+  /** The checklist document it was sent for, if any. */
+  document?: string | null;
 }
 
 function escapeHtml(s: string): string {
@@ -72,11 +106,14 @@ function escapeHtml(s: string): string {
 /** The Monday update on the client's profile: what came in, each file linked. Notes are the client's own words. */
 export function uploadNoteHtml(files: FiledFile[]): string {
   const where = files[0]?.filedWhere ?? "E-File";
+  const folders = [...new Set(files.map((f) => f.folder ?? CAF_FOLDER))];
   const items = files
     .map((f) => {
       const note = f.note ? ` — “${escapeHtml(f.note)}”` : "";
       return `<li><a href="${escapeHtml(f.sharepointUrl)}">${escapeHtml(f.storedName)}</a>${note}</li>`;
     })
     .join("");
-  return `<p>📤 The client sent ${files.length === 1 ? "1 document" : `${files.length} documents`} through their upload link (${kindSummary(files.map((f) => f.kind))}). Filed in their ${escapeHtml(where)} → ${CAF_FOLDER}.</p><ul>${items}</ul>`;
+  const documents = [...new Set(files.map((f) => f.document).filter((d): d is string => !!d))];
+  const forList = documents.length ? ` For their checklist: ${escapeHtml(documents.join(", "))}.` : "";
+  return `<p>📤 The client sent ${files.length === 1 ? "1 document" : `${files.length} documents`} through their upload link (${kindSummary(files.map((f) => f.kind))}). Filed in their ${escapeHtml(where)} → ${folders.map(escapeHtml).join(", ")}.${forList}</p><ul>${items}</ul>`;
 }
