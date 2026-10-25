@@ -27,6 +27,35 @@ describe("renderNoteHtml — sanitizing", () => {
   it("removes embedded <style> blocks", () => {
     expect(renderNoteHtml(`<style>body{display:none}</style><p>ok</p>`).main).toBe("<p>ok</p>");
   });
+
+  it("loads e-mail images lazily and without a Referer", () => {
+    const { main } = renderNoteHtml(`<p>Logo</p><img src="https://sender.example/logo.png">`);
+    expect(main).toContain('referrerpolicy="no-referrer"');
+    expect(main).toContain('loading="lazy"');
+  });
+
+  // The tree is cut and re-serialized after the first pass; markup that parses
+  // differently the second time (mutation XSS) must not survive either string.
+  it("leaves nothing executable in either half after a quote split", () => {
+    const payloads = [
+      `<svg><p><style><img src=x onerror=alert(1)></style></p></svg>`,
+      `<math><mtext><table><mglyph><style><img src=x onerror=alert(2)></style></mglyph></table></mtext></math>`,
+      `<noscript><p title="</noscript><img src=x onerror=alert(3)>"></p></noscript>`,
+      `<form><math><mtext></form><form><mglyph><svg><mtext><style><path id="</style><img onerror=alert(4) src>">`,
+    ];
+    for (const p of payloads) {
+      const r = renderNoteHtml(`<p>New ${p}</p><div class="gmail_quote"><p>From: x</p>${p}</div>`, { splitQuoted: true });
+      for (const half of [r.main, r.quoted ?? ""]) {
+        const doc = document.createElement("div");
+        doc.innerHTML = half;
+        const handlers = Array.from(doc.querySelectorAll("*"))
+          .flatMap((el) => Array.from(el.attributes, (a) => a.name))
+          .filter((n) => /^on/i.test(n));
+        expect(handlers).toEqual([]);
+        expect(doc.querySelector("script")).toBeNull();
+      }
+    }
+  });
 });
 
 describe("renderNoteHtml — quoted history", () => {

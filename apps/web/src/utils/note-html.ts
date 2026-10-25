@@ -49,15 +49,33 @@ function ensureHooks(): void {
       node.setAttribute("target", "_blank");
       node.setAttribute("rel", "noopener noreferrer");
     }
+    // Images in an e-mail load from the sender's server: no Referer telling it
+    // which dashboard page opened the message, and only when scrolled to.
+    if (node.tagName === "IMG") {
+      node.setAttribute("referrerpolicy", "no-referrer");
+      node.setAttribute("loading", "lazy");
+    }
   });
 }
 
+const PURIFY_CONFIG = {
+  FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select", "video", "audio"],
+};
+
 function sanitize(html: string): DocumentFragment {
   ensureHooks();
-  return DOMPurify.sanitize(html, {
-    RETURN_DOM_FRAGMENT: true,
-    FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select", "video", "audio"],
-  });
+  return DOMPurify.sanitize(html, { ...PURIFY_CONFIG, RETURN_DOM_FRAGMENT: true });
+}
+
+/**
+ * The strings that reach innerHTML are sanitized again. Between the first pass
+ * and here the tree is cut with a Range and re-serialized, and markup that was
+ * inert in one tree can parse into something else once it is read back
+ * (mutation XSS) — DOMPurify's own guidance is to sanitize the final string.
+ */
+function sanitizeFinal(html: string): string {
+  ensureHooks();
+  return DOMPurify.sanitize(html, PURIFY_CONFIG).trim();
 }
 
 /** First element that begins the quoted history, in document order. */
@@ -103,12 +121,12 @@ export function renderNoteHtml(html: string, opts: { splitQuoted?: boolean } = {
       const range = document.createRange();
       range.setStartBefore(start);
       range.setEndAfter(root.lastChild!);
-      const tail = serialize(range.extractContents());
+      const tail = sanitizeFinal(serialize(range.extractContents()));
       if (!isBlank(tail)) quoted = tail;
     }
   }
 
-  const main = serialize(root);
+  const main = sanitizeFinal(serialize(root));
   // A reply that is only quoted text (e.g. a bare forward) keeps it visible.
   if (isBlank(main) && quoted) return { main: quoted, quoted: null };
   return { main, quoted };

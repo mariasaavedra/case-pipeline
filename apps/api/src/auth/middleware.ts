@@ -13,6 +13,13 @@ declare global {
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // Already checked on this request: route modules add requireAuth again after
+  // the /api/ catch-all in server.ts, which verified the JWT and read users.db
+  // twice per request.
+  if (req.user) {
+    next();
+    return;
+  }
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) {
     res.status(401).json({ error: "Unauthorized" });

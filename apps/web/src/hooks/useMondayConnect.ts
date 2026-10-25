@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { getAzureToken } from "../api";
+import { startMondayConnect } from "../api";
 
 /**
- * Starts the personal Monday.com OAuth connection. A full-page navigation,
- * because the consent screen lives on monday.com — so the Azure token rides in
- * the query string (a navigation can't set headers). `returnTo` is the app path
- * Monday sends the user back to; the API only accepts same-origin paths.
+ * Starts the personal Monday.com OAuth connection. The API is asked first, with
+ * the normal bearer token, for the consent URL — that call also sets a cookie
+ * tying the flow to this browser — then the page navigates to monday.com.
+ * `returnTo` is the app path Monday sends the user back to; the API only
+ * accepts same-origin paths.
  */
 export function useMondayConnect() {
   const [connecting, setConnecting] = useState(false);
@@ -14,13 +15,9 @@ export function useMondayConnect() {
   function connect(returnTo?: string) {
     setConnecting(true);
     setError(null);
-    getAzureToken()
-      .then((token) => {
-        const qs = new URLSearchParams();
-        if (token) qs.set("az_token", token);
-        if (returnTo) qs.set("return_to", returnTo);
-        const query = qs.toString();
-        window.location.href = `/api/auth/monday${query ? `?${query}` : ""}`;
+    startMondayConnect(returnTo)
+      .then((url) => {
+        window.location.href = url;
       })
       .catch((err: unknown) => {
         setConnecting(false);

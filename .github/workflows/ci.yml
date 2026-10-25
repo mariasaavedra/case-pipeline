@@ -21,6 +21,12 @@ jobs:
 
       - run: npm ci
 
+      # Known-vulnerable runtime dependencies fail the build instead of piling
+      # up: by the 2026-10-24 audit there were 23 (3 critical). Dev-only tools
+      # (xlsx for `npm run stats`, which has no fix) are left out by --omit=dev.
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Preflight
         run: npm run preflight
 

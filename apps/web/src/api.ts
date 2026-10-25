@@ -1144,9 +1144,14 @@ export async function fetchMondayStatus(): Promise<MondayConnectionStatus> {
   return apiFetch<MondayConnectionStatus>("/api/auth/monday/status");
 }
 
-export async function getAzureToken(): Promise<string | null> {
-  if (!_tokenGetter) return null;
-  return _tokenGetter();
+/** The Monday consent URL for the signed-in user. Also sets the cookie the callback checks. */
+export async function startMondayConnect(returnTo?: string): Promise<string> {
+  const { url } = await apiFetch<{ url: string }>("/api/auth/monday/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ returnTo }),
+  });
+  return url;
 }
 
 // =============================================================================
