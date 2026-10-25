@@ -86,6 +86,7 @@ See `.env.example` for the full list. Key variables:
 | `LAWPAY_SLACK` | No | `on` reads LawPay payments from the "Payment Bot" posts in Slack #payments (`LAWPAY_SLACK_CHANNEL`, default C0922BS65LM) every 2 min with `SLACK_BOT_TOKEN` and updates the Fee Ks. Check first: `npm run lawpay:slack` (read-only). See `docs/features/lawpay-payments.md` |
 | `BUZON_AUTO` | No | `on` (+ required `BUZON_AUTO_SINCE=YYYY-MM-DD`, with `CLIENT_UPLOADS=on`): a Fee K reaching "Paid needs action" since that date gets its Fee K Type's document list on the client's Buzón and the link texted (unless the client is set to no automatic texts — then staff are told). Reminders / "we received" texts are switched in Settings → Firm → Buzón texts; resending a link needs `APP_ENCRYPTION_KEY`. Job every 5 min (`BUZON_CRON`). See `docs/features/buzon.md` |
 | `LAWPAY_MAIL` | No | `on` reads LawPay receipt e-mails forwarded to importantdocuments@ every 10 min (`LAWPAY_MAIL_CRON`) and updates the Fee Ks. Needs `npm run lawpay:mail -- --login` once (adds Mail.Read). See `docs/features/lawpay-payments.md` |
+| `BACKUP_OFFSITE` | No | `on` copies each verified, encrypted daily backup (`live-…db.enc` + `users-…db.enc`) to SharePoint (`BACKUP_OFFSITE_SITE`, `BACKUP_OFFSITE_PATH`, keep `BACKUP_OFFSITE_KEEP` = 7) with the consult sweep's Graph sign-in. Check first: `npm run backup:offsite` (dry run). Both encryption keys belong in the password manager. See `docs/backups.md` |
 
 tsx/Node loads `.env` automatically via `--env-file` flag in the sync command. For other scripts, ensure `.env` is present at the repo root.
 
@@ -282,6 +283,7 @@ Run with `tsx scripts/<name>.ts`:
 |---|---|
 | `check-env.ts` | Validate `.env` (duplicate keys, placeholder values, token shape, localhost URLs in a production build, invalid cron). `npm run check:env`. Same code the API runs at startup — **run it on a server before deploying**, because from 2026-08-07 the API refuses to boot on a config error. `ENV_CHECK=warn` downgrades errors to warnings as an emergency override. Never prints values. |
 | `health.ts` | One-shot health check (integrity, schema, sync state, counts, disk, backups). `npm run health`; exits non-zero on a hard failure. |
+| `backup-offsite.ts` | Newest encrypted daily backups (`data/backups/live-…db.enc`, `users-…db.enc`) → a SharePoint folder, streamed in 10 MiB chunks; prunes to `BACKUP_OFFSITE_KEEP` per series; refuses anything not `.db.enc`. `npm run backup:offsite` is a dry run; `-- --apply` uploads. Run by the API after each daily backup when `BACKUP_OFFSITE=on`. Rules = `scripts/lib/offsite-backups.ts`; restore = `docs/backups.md` |
 | `export-stats.ts` | Print DB statistics (row counts per table). `--db=live` uses `live.db`. |
 | `snapshot.ts` | Fetch all 19 boards from Monday.com → `data/monday-snapshot.md` + `.json`. |
 | `sample-real-data.ts` | Pull sample profile + linked item data from Monday.com → `data/samples/`. |
