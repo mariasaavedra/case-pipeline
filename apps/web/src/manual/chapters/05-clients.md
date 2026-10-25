@@ -5,7 +5,7 @@ order: 10
 summary: Find a client, read their notes, files and timeline, and act on their case.
 routes: clients, client-detail
 code: P2 · P3
-updated: 2026-10-23
+updated: 2026-10-24
 ---
 
 ## Find a client
@@ -51,7 +51,7 @@ To answer a note, press **Reply** under it.
 
 ## Client upload links
 
-A private link the client opens on their phone to send us photos and documents. Files land in their **E-File → CAF** folder (else their consult folder), and a note on their Monday profile lists what came in.
+The **Buzón** is a private link the client opens on their phone to send us photos and documents. Files land in their **E-File → CAF** folder (else their consult folder), and a note on their Monday profile lists what came in.
 
 1. On the client page, press **Upload link**.
 2. Pick the language for the client's page.
@@ -59,6 +59,34 @@ A private link the client opens on their phone to send us photos and documents. 
 4. Files they send show under **Documents → Received from client**.
 
 The client can only *send* files. They never see what's in their folder. Making a new link turns the old one off. You can extend or turn off a link from the same popup.
+
+### Ask for specific documents
+
+In the same popup, **Documents to ask for** is the client's checklist. Their page then lists each document with its own **Photo** and **File** buttons, and a ✓ once we have it.
+
+- **+ Add the … list** copies the documents a case type needs (set by an admin in Settings → Firm → Fee K Types → **Documents…**).
+- **+ Ask for one more document** adds one by hand. Pick its case so it files with that case's evidence.
+- **Already have it** takes a document off the client's page. **Ask again** puts it back (a blurry photo, say).
+- Files sent for a checklist document go to **E-File → EVIDENCE *case type*** (for example `EVIDENCE I-130 - Petition for Alien Relative`). Everything else still goes to **CAF**.
+- The list belongs to the client, not the link: a new link shows the same list.
+- Prescheduling and My Cases cards show **📤 4 of 6 documents**.
+
+Anyone with the link can see the names of the documents on the list (never the case type or the files). Keep the names plain.
+
+### Texts the Buzón sends on its own
+
+When a case is paid (Fee K → **Paid needs action**), the app can put that case type's list on the client's Buzón and text them the link. Depending on Settings, it also sends reminders while documents are missing, and a "we received your documents" text.
+
+In the same popup, under **Texts**:
+
+- **No automatic texts for this client** stops all of these. Use it for VAWA, U visa or T visa clients, or anyone whose phone someone else may read.
+- **Reminders:** the firm's days, **Off for this client**, or **Their own days** (for example `2, 5`).
+- **Remind now** texts the reminder right away, with what is still missing.
+- The list underneath shows every Buzón text sent to this client.
+
+If the app couldn't text a client (no phone, switched off), the case's paralegal and assistant get a Monday notification saying why. Send the link yourself from here.
+
+When documents arrive, the Fee K's **Evidence Received** date is filled (if empty), and its paralegal and assistant are notified. Several photos of one document go to SharePoint as one PDF, and iPhone photos as JPG.
 
 ## Released from detention
 

@@ -6,7 +6,7 @@ summary: The consult list — prep each consult, link clients, book and move app
 routes: reception
 code: P17
 for: reception
-updated: 2026-10-23
+updated: 2026-10-24
 ---
 
 **Receptionists** in the sidebar lists the consults on every attorney's board, today by default. Pick **Today**, **Tomorrow** or **Next 7 days**, an attorney, or **Not prepped** to see what's left.
@@ -60,3 +60,11 @@ A message more than 60 minutes late is marked failed instead of posted.
 ## Focus view
 
 **Focus** opens the client's notes and documents in a popup, for a quick look during a call.
+
+## Ask for documents before a consult (Buzón)
+
+1. On the consult, press **Buzón**. It needs a linked profile; link a "No profile" consult first.
+2. Under **Documents to ask for**, check the consult is the right one, then press a list, for example **+ Consult – family petition**.
+3. Press **Make link**, then **Text it to the client**.
+
+The client's page lists each document with its own Photo and File buttons. What they send goes to their **Consult File → CONSULT**. The prep (M18) and the attorney's My Day show which documents came in. The lists themselves are in Settings → Firm → Consult document lists.

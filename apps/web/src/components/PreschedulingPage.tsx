@@ -17,6 +17,7 @@ import {
   waitFg,
 } from "./caseBoardParts";
 import { staffLabel } from "../lib/staff-label";
+import { ChecklistCount } from "./UploadChecklistSection";
 
 // =============================================================================
 // P13 Prescheduling
@@ -113,6 +114,7 @@ function CaseRow({ c, filter, onPerson }: { c: PreschedulingCase; filter: Filter
         {c.evidenceReceivedOn && (
           <div style={{ color: "var(--color-ink-faint)" }}>Evidence {formatDue(c.evidenceReceivedOn)}</div>
         )}
+        {c.documents && <ChecklistCount documents={c.documents} />}
       </div>
 
       {/* People */}

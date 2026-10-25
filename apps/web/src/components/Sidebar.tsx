@@ -217,6 +217,17 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    id: "client-uploads",
+    label: "Client uploads",
+    path: "/client-uploads",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M3 11v4a1 1 0 001 1h12a1 1 0 001-1v-4" />
+        <path d="M10 3v9M6.5 6.5L10 3l3.5 3.5" />
+      </svg>
+    ),
+  },
+  {
     id: "foias",
     label: "FOIAs",
     path: "/foias",

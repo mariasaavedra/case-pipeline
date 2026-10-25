@@ -552,3 +552,31 @@ The mail intake tried to split a whole day's scan into notices and match each on
 - **Old stored scans stay** under `data/mail/` until their Alerts items are settled; nothing deletes them automatically.
 
 **Revisit if**: an AI reader becomes available (read + match could then pre-select more confidently), or staff want mail filed somewhere other than CC.
+
+## 2026-10-24 — Buzón: the app texts clients on its own (with a way out)
+
+Until now every text was click-to-send (M28). The Buzón (the client upload link, `docs/features/buzon.md`) now sends texts by itself: the link when a Fee K reaches "Paid needs action", reminders while documents are missing, and an optional "we received your documents".
+
+**Decisions**:
+- **Automatic texts need three switches**: `BUZON_AUTO=on` + `BUZON_AUTO_SINCE` on the server (so turning it on never texts every old paid case), and Settings → Firm → Buzón texts. Reminders and the thank-you text are **off** until an admin turns them on; the days are theirs to set.
+- **Per client "No automatic texts"** (M30), for VAWA / U visa / T visa clients or anyone whose phone someone else may read. The app never texts them on its own; a person can still press Remind now.
+- **When the app can't text** (switched off, no US phone, texting off), the Buzón is still made and the Fee K's Paralegal + Assistant get a Monday bell + Slack saying why.
+- **Office hours only** (default 9–6 weekdays, firm time), never two Buzón texts to a client the same day.
+- **The link's token is kept encrypted** (`upload_links.token_enc`, APP_ENCRYPTION_KEY) so a reminder can resend it. The hash is still what opens it; without the key, reminders need a new link.
+- **Document names are seen by anyone holding the link**, so lists use plain, neutral words; VAWA / U / T / asylum lists ask for "the documents we talked about" rather than naming what happened.
+- **A client's notice is kept and goes to Alerts → Mail to review.** This is an exception to the 2026-10-23 mail decision (a person files each letter, no PDF on the server): a client's upload is already on the server (data/uploads), and nobody is filing it through M32, so Mail to review is where a person sees what was read.
+
+**Revisit if**: clients reply STOP or complain about reminders, or staff want the first text checked by a person before it goes.
+
+---
+
+## 2026-10-25 — Write queue: newest write wins, delivery is at-least-once
+
+**Context**: The Oct 24 audit found that a write queued during a rate limit could retry after the same column had been changed again, putting the older value back in Monday while the dashboard still showed the newer one.
+
+**Decision**:
+- **A newer write to a column supersedes queued ones.** Enqueuing a `change_column` / `change_column_json` marks older `pending` rows for the same item + column `superseded`; so does a successful direct write through `dataSource` (`onDirectColumnWrite`, registered in `server.ts`). A row already `syncing` is not touched — that window is one Monday call.
+- **Delivery stays at-least-once.** A crash after Monday accepts a call but before the row is marked `synced` sends it again on restart (`reconcileInFlightWrites`), so a note or E&A entry can appear twice. Accepted: a duplicate is visible and easy to delete; a lost write is neither.
+- **Bookkeeping after a Monday success never fails the op.** The `create_item` reconcile and the `client_updates` id attach each catch their own errors, so a local DB error can't send a write that already landed back for a retry.
+
+**Revisit if**: duplicate notes after restarts show up in practice (then store an idempotency marker per op), or a write type needs the in-flight window closed.

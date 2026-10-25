@@ -12,7 +12,8 @@ import { spawn } from "node:child_process";
 import cron from "node-cron";
 import { initializeSchema, getSchemaVersion, SCHEMA_VERSION } from "@case-pipeline/seed/db/schema";
 import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
-import { startWriteQueueProcessor } from "./write-queue/processor.js";
+import { startWriteQueueProcessor, supersedeQueuedColumnWrites } from "./write-queue/processor.js";
+import { onDirectColumnWrite } from "./data-source/index.js";
 import { refreshBoardSchema } from "./schema-refresh.js";
 import {
   handleListClients,
@@ -73,6 +74,11 @@ import { registerCaseCardWriteRoutes } from "./routes/case-card-write.js";
 import { registerContractDocumentRoutes } from "./routes/contract-document.js";
 import { registerEsignPublicRoutes, registerEsignRoutes } from "./routes/esign.js";
 import { registerClientUploadPublicRoutes, registerClientUploadRoutes } from "./routes/client-uploads.js";
+import { registerUploadChecklistRoutes } from "./routes/upload-checklist.js";
+import { registerBuzonRoutes } from "./routes/buzon.js";
+import { initBuzonSettings } from "./buzon/settings.js";
+import { initConsultLists } from "./consult-lists.js";
+import { startBuzonJob } from "./buzon/job.js";
 import { startClientUploadFiling } from "./uploads/job.js";
 import { clientUploadsConfig } from "./uploads/rules.js";
 import { registerLawPayRoutes } from "./routes/lawpay.js";
@@ -224,6 +230,10 @@ if (MONDAY_API_TOKEN) {
 // Bound once to the shared token; see write-token.ts.
 const writeTokenOptions = makeWriteTokenOptions(MONDAY_API_TOKEN);
 
+// A direct write to a column makes any queued write to it stale: retire them,
+// or their retry puts the older value back in Monday (write-queue/processor.ts).
+onDirectColumnWrite((itemId, columnIds) => supersedeQueuedColumnWrites(db, itemId, columnIds));
+
 console.log(`Database loaded (DB_SOURCE=${DB_SOURCE}): ${DB_PATH}`);
 
 // =============================================================================
@@ -236,6 +246,8 @@ initUrgencySettings(DATA_DIR);
 initDocumentSettings(DATA_DIR);
 initSmsTemplates(DATA_DIR);
 initFeeKTypes(DATA_DIR);
+initBuzonSettings(DATA_DIR);
+initConsultLists(DATA_DIR);
 initNotifySettings(DATA_DIR);
 
 /** Build the status → urgency map the Active Cases query consumes. */
@@ -273,6 +285,8 @@ function adapt(handler: Handler) {
 // =============================================================================
 
 const app = express();
+// No "X-Powered-By: Express" telling every caller what to probe for.
+app.disable("x-powered-by");
 app.use(express.json());
 
 // Auth — unauthenticated entry point (validates token + upserts user)
@@ -606,6 +620,8 @@ registerCaseCardWriteRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTo
 registerContractDocumentRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerEsignRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeTokenOptions });
 registerClientUploadRoutes(app, { db });
+registerUploadChecklistRoutes(app, { db });
+registerBuzonRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, seed: DB_SOURCE === "seed" });
 registerLawPayRoutes(app, { db });
 registerDocumentRoutes(app, { db });
 
@@ -713,6 +729,8 @@ const server = app.listen(PORT, HOST, () => {
   // Client upload links → E-File → CAF. On seed data the script only plans.
   if (clientUploadsConfig()) {
     startClientUploadFiling({ db, mondayApiToken: MONDAY_API_TOKEN, seed: DB_SOURCE === "seed", runs: usersDb });
+    // The Buzón: automatic start on Paid needs action (BUZON_AUTO), reminders, thank-you texts.
+    startBuzonJob({ db, mondayApiToken: MONDAY_API_TOKEN, seed: DB_SOURCE === "seed", runs: usersDb });
   } else {
     console.log("[uploads] Client upload links DISABLED (set CLIENT_UPLOADS=on and API_URL to enable).");
   }
@@ -894,16 +912,19 @@ function scheduleNightlySync() {
   const fullCron = process.env.SYNC_FULL_CRON ?? "0 1 * * *";
   const incrementalCron = process.env.SYNC_INCREMENTAL_CRON ?? "0 7-19/2 * * *";
 
+  // In the firm's zone, like every other job: read as UTC (the container's
+  // clock), "07:00–19:00" ran 02:00–14:00 Central and left the afternoon with
+  // no column refresh but the webhooks'.
   cron.schedule(fullCron, () => {
     runSync("full", ["--full"]).catch((err) => console.error("[sync] Error:", err));
-  });
+  }, { timezone: FIRM_TIMEZONE });
   cron.schedule(incrementalCron, () => {
     runSync("incremental", ["--skip-timeline"]).catch((err) => console.error("[sync] Error:", err));
-  });
+  }, { timezone: FIRM_TIMEZONE });
 
   console.log(
     `[sync] Scheduled: full "${fullCron}" (deletions + emails/activities), ` +
-      `incremental "${incrementalCron}" (columns only). Overlapping runs are skipped.`,
+      `incremental "${incrementalCron}" (columns only), ${FIRM_TIMEZONE}. Overlapping runs are skipped.`,
   );
 }
 
@@ -1277,7 +1298,11 @@ async function waitForSyncToSettle(): Promise<void> {
   );
 }
 
+/** Both of the last run's copies verified AND encrypted — the only kind that goes off-site. */
+let lastBackupVerifiedEncrypted = false;
+
 async function runBackup(): Promise<void> {
+  lastBackupVerifiedEncrypted = false;
   const backupDir = path.join(DATA_DIR, "backups");
   fs.mkdirSync(backupDir, { recursive: true });
   // Before the stamp, so the filename reflects when the copy was actually taken.
@@ -1332,6 +1357,7 @@ async function runBackup(): Promise<void> {
     if (!key) {
       console.warn("[backup] BACKUP_ENCRYPTION_KEY not set — backups written UNENCRYPTED.");
     }
+    lastBackupVerifiedEncrypted = !!key && decisions[DB_SOURCE] === true && decisions.users === true;
   } finally {
     // Prune even when the write above failed. Retention used to be the last
     // statement in this function, so a failure — a full disk, most obviously —
@@ -1392,16 +1418,49 @@ function pruneBackups(backupDir: string, decisions: PruneDecisions): void {
 }
 
 function scheduleBackups() {
-  // Daily online backup at 05:30 — after the 01:00 full sync has settled. It
+  // Daily online backup at 05:30 firm time — after the 01:00 full sync has settled. It
   // used to be 02:30, which now lands mid-sync: the online backup API would
   // still produce a consistent file, but of a half-synced database, which is a
   // poor thing to keep as the day's restore point.
   const backupCron = process.env.BACKUP_CRON ?? "30 5 * * *";
+  const offsite = process.env.BACKUP_OFFSITE === "on";
   cron.schedule(backupCron, () => {
-    trackRun(usersDb, "backup", runBackup).catch((err) => {
-      console.error("[backup] error:", err);
-      inBackground(notifyOps("ops_backup", `The daily database backup failed: ${(err as Error).message}. Check disk space on the server.`));
+    trackRun(usersDb, "backup", runBackup)
+      .then(() => {
+        if (offsite && lastBackupVerifiedEncrypted) {
+          runBackupOffsite().catch((err) => {
+            console.error("[offsite] error:", err);
+            inBackground(notifyOps("ops_backup", `Copying today's backup to SharePoint failed: ${(err as Error).message}. The copy on the server is fine; see the API log.`));
+          });
+        } else if (offsite) {
+          console.warn("[offsite] skipped — today's backup was not verified and encrypted.");
+        }
+      })
+      .catch((err) => {
+        console.error("[backup] error:", err);
+        inBackground(notifyOps("ops_backup", `The daily database backup failed: ${(err as Error).message}. Check disk space on the server.`));
+      });
+  }, { timezone: FIRM_TIMEZONE });
+  console.log(
+    `[backup] Daily backup scheduled — cron "${backupCron}" (${FIRM_TIMEZONE})` +
+      (offsite ? ", then copied to SharePoint (BACKUP_OFFSITE=on)." : ". Off-site copy DISABLED (set BACKUP_OFFSITE=on)."),
+  );
+}
+
+/**
+ * The newest encrypted backups → SharePoint (scripts/backup-offsite.ts). Its
+ * own process, like the consult sweep: the upload streams a ~900 MB file and
+ * must not share the API's memory or event loop for the minutes it takes.
+ */
+function runBackupOffsite(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("npm", ["run", "backup:offsite", "--", "--apply"], {
+      cwd: REPO_ROOT,
+      stdio: "inherit",
+      env: process.env,
+      shell: true,
     });
+    child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`backup:offsite exited with code ${code}`))));
+    child.on("error", reject);
   });
-  console.log(`[backup] Daily backup scheduled — cron "${backupCron}".`);
 }

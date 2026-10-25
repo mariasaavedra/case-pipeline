@@ -805,7 +805,7 @@ export interface SmsConfig {
   templates: SmsTemplate[];
   firm: { firmName: string; firmPhone: string };
 }
-export type SmsContext = "call_log" | "payment_links" | "client" | "upload_link";
+export type SmsContext = "call_log" | "payment_links" | "client" | "upload_link" | "buzon";
 export interface SendSmsInput {
   to: string;
   body: string;
@@ -871,6 +871,13 @@ export interface FeeKTypeRow {
   servicesEs: string;
   excluded: string;
   excludedEs: string;
+  /** What the client is asked to send (the Buzón checklist); [] or missing = no evidence needed. */
+  documents?: CaseDocument[];
+}
+export interface CaseDocument {
+  en: string;
+  es: string;
+  required: boolean;
 }
 export interface FeeKTypesTable {
   rows: FeeKTypeRow[];
@@ -880,6 +887,8 @@ export interface FeeKTypesTable {
   boards: string[];
   /** No admin has saved yet: rows are the starting draft, used for nothing until saved. */
   draft: boolean;
+  /** Suggested Buzón document lists per Fee K Type, to review before saving. */
+  suggestedDocuments?: Record<string, CaseDocument[]>;
 }
 export function fetchFeeKTypes(): Promise<FeeKTypesTable> {
   return apiFetch<FeeKTypesTable>("/api/settings/fee-k-types");
@@ -1480,6 +1489,8 @@ export interface ClientUpload {
   filed_where: string | null;
   filed_at: string | null;
   last_error: string | null;
+  /** The Buzón checklist document it was sent for, if any. */
+  document?: string | null;
 }
 
 export interface UploadLinkInfo {
@@ -1521,6 +1532,188 @@ export function extendUploadLink(id: number, days = 30): Promise<{ id: number; e
 
 export function revokeUploadLink(id: number): Promise<{ id: number; revoked: boolean }> {
   return apiFetch(`/api/upload-links/${id}`, { method: "DELETE" });
+}
+
+// ---- Buzón checklist (M30, docs/features/buzon.md) — routes/upload-checklist.ts ----
+
+export interface ChecklistItemInfo {
+  id: number;
+  labelEn: string;
+  labelEs: string;
+  required: boolean;
+  status: "missing" | "received" | "not_needed";
+  feeKLocalId: string | null;
+  feeKType: string | null;
+  /** A consult's document (Phase 5): the appointment and the consult list it came from. */
+  appointmentMondayId?: string | null;
+  consultList?: string | null;
+  /** Where its files go: "EVIDENCE <type>", "Consult File → CONSULT", else CAF. */
+  folder: string;
+  receivedAt: string | null;
+  files: number;
+  addedBy: string | null;
+}
+
+export interface ChecklistFeeK {
+  localId: string;
+  name: string;
+  feeKTypes: string[];
+  contractStage: string | null;
+  /** How many documents its Fee K Type(s) ask for (Settings → Firm → Fee K Types). */
+  documents: number;
+  /** Its list is already on the checklist. */
+  added: boolean;
+}
+
+export interface UploadChecklist {
+  items: ChecklistItemInfo[];
+  feeKs: ChecklistFeeK[];
+  /** The client's consults (newest first) and the consult lists already added to each. */
+  consults?: { mondayId: string; name: string; date: string | null; lists: string[] }[];
+}
+
+// Settings → Firm → Consult document lists (P11.3.8) — routes/upload-checklist.ts
+export interface ConsultList {
+  key: string;
+  name: string;
+  documents: CaseDocument[];
+}
+export function fetchConsultLists(): Promise<{ lists: ConsultList[]; draft: boolean }> {
+  return apiFetch("/api/settings/consult-lists");
+}
+export function updateConsultLists(lists: ConsultList[]): Promise<{ lists: ConsultList[]; draft: boolean }> {
+  return apiFetch("/api/settings/consult-lists", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lists }) });
+}
+export function addConsultChecklist(profileLocalId: string, listKey: string, appointmentMondayId: string): Promise<UploadChecklist & { added: number }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/upload-checklist/consult`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listKey, appointmentMondayId }),
+  });
+}
+
+const checklistPath = (profileLocalId: string) => `/api/profiles/${encodeURIComponent(profileLocalId)}/upload-checklist`;
+
+export function fetchUploadChecklist(profileLocalId: string): Promise<UploadChecklist> {
+  return apiFetch(checklistPath(profileLocalId));
+}
+
+/** Copy a Fee K's document list (from its Fee K Type) onto the client's checklist. */
+export function addFeeKChecklist(profileLocalId: string, feeKLocalId: string): Promise<UploadChecklist & { added: number }> {
+  return apiFetch(checklistPath(profileLocalId), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ feeKLocalId }),
+  });
+}
+
+export function addChecklistItem(
+  profileLocalId: string,
+  input: { labelEn: string; labelEs?: string; required?: boolean; feeKLocalId?: string },
+): Promise<UploadChecklist & { id: number }> {
+  return apiFetch(`${checklistPath(profileLocalId)}/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateChecklistItem(id: number, input: { status?: "missing" | "not_needed"; required?: boolean }): Promise<UploadChecklist> {
+  return apiFetch(`/api/upload-checklist/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function removeChecklistItem(id: number): Promise<UploadChecklist> {
+  return apiFetch(`/api/upload-checklist/${id}`, { method: "DELETE" });
+}
+
+// ---- P23 Client uploads review queue — routes/client-uploads.ts ----
+
+export interface QueuedUpload {
+  id: number;
+  receivedAt: string;
+  storedName: string;
+  kind: ClientUpload["kind"];
+  note: string | null;
+  size: number;
+  contentType: string;
+  sharepointUrl: string | null;
+  filedWhere: string | null;
+  filedAt: string | null;
+  lastError: string | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  /** Sent on to Alerts → Mail to review (0 = could not be read). */
+  mailDocumentId: number | null;
+  /** Joined into another upload's PDF (several photos of one document). */
+  combinedInto: number | null;
+  document: string | null;
+  clientLocalId: string | null;
+  clientName: string | null;
+}
+export function fetchClientUploadQueue(all = false): Promise<{ uploads: QueuedUpload[]; notReviewed: number }> {
+  return apiFetch(`/api/client-uploads${all ? "?show=all" : ""}`);
+}
+export function markUploadReviewed(id: number, reviewed: boolean): Promise<{ id: number; reviewed: boolean }> {
+  return apiFetch(`/api/client-uploads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviewed }) });
+}
+
+// ---- Buzón texts: firm settings + one client (docs/features/buzon.md) — routes/buzon.ts ----
+
+export interface BuzonSettings {
+  autoText: boolean;
+  reminders: { on: boolean; days: number[]; fromHour: number; toHour: number; weekdaysOnly: boolean };
+  receivedText: boolean;
+}
+export interface BuzonSettingsInfo {
+  settings: BuzonSettings;
+  /** BUZON_AUTO on the server: the date paid Fee Ks count from; null = the automatic start is off. */
+  autoStart: { since: string } | null;
+  smsMode: "off" | "dry-run" | "on";
+}
+export function fetchBuzonSettings(): Promise<BuzonSettingsInfo> {
+  return apiFetch("/api/settings/buzon");
+}
+export function updateBuzonSettings(settings: BuzonSettings): Promise<BuzonSettingsInfo> {
+  return apiFetch("/api/settings/buzon", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
+}
+
+export interface ClientBuzonSettings {
+  noAutoTexts: boolean;
+  reminders: null | "off" | "custom";
+  days: number[] | null;
+}
+export interface BuzonText {
+  kind: "link" | "reminder" | "received" | "remind_now" | "gave_up";
+  sentAt: string;
+  status: "sent" | "dry_run" | "failed" | "skipped";
+  error: string | null;
+  byName: string | null;
+}
+export interface ClientBuzon {
+  client: { name: string; hasPhone: boolean; language: "es" | "en" };
+  settings: ClientBuzonSettings;
+  firmReminders: BuzonSettings["reminders"];
+  /** The reminder days that apply to this client; null = none. */
+  reminderDays: number[] | null;
+  nextReminder: string | null;
+  canRemind: boolean;
+  /** Still missing, in the client's language. */
+  missing: string[];
+  texts: BuzonText[];
+}
+const buzonPath = (profileLocalId: string) => `/api/profiles/${encodeURIComponent(profileLocalId)}/buzon`;
+export function fetchClientBuzon(profileLocalId: string): Promise<ClientBuzon> {
+  return apiFetch(buzonPath(profileLocalId));
+}
+export function updateClientBuzon(profileLocalId: string, s: ClientBuzonSettings): Promise<ClientBuzon> {
+  return apiFetch(buzonPath(profileLocalId), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(s) });
+}
+export function remindNow(profileLocalId: string): Promise<ClientBuzon & { status: string }> {
+  return apiFetch(`${buzonPath(profileLocalId)}/remind`, { method: "POST" });
 }
 
 // ---- Watchlist ----

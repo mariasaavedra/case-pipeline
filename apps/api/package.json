@@ -15,6 +15,7 @@
     "@tesseract.js-data/eng": "^1.0.0",
     "better-sqlite3": "^11.10.0",
     "express": "^5.1.0",
+    "heic-convert": "2.1.0",
     "jose": "^6.2.3",
     "node-cron": "^4.5.0",
     "pdf-lib": "^1.17.1",
