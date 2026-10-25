@@ -17,6 +17,7 @@ import { auditFromReq } from "../audit/log.js";
 import { caseTypeColumn, getBoardColumnsFor } from "@case-pipeline/query";
 import { feeKTypesSaved, loadFeeKTypes, saveFeeKTypes } from "../fee-k-types.js";
 import { DRAFT_FEE_K_TYPES } from "../fee-k-types-draft.js";
+import { SUGGESTED_DOCUMENTS } from "../fee-k-type-documents-draft.js";
 
 /** The Fee K's "It will go to…" status column (config/boards.yaml, by_id). */
 export const IT_WILL_GO_TO_COLUMN = "status__1";
@@ -35,7 +36,7 @@ export function registerFeeKTypeRoutes(app: Express, deps: { db: DatabaseInstanc
 
   app.get("/api/settings/fee-k-types", requireAuth, (_req, res) => {
     const saved = feeKTypesSaved();
-    res.json({ data: { rows: saved ? loadFeeKTypes() : DRAFT_FEE_K_TYPES, draft: !saved, ...feeKTypeOptions(db) } });
+    res.json({ data: { rows: saved ? loadFeeKTypes() : DRAFT_FEE_K_TYPES, draft: !saved, suggestedDocuments: SUGGESTED_DOCUMENTS, ...feeKTypeOptions(db) } });
   });
 
   app.put("/api/settings/fee-k-types", requireAuth, requireAdmin, (req, res) => {
@@ -46,7 +47,7 @@ export function registerFeeKTypeRoutes(app: Express, deps: { db: DatabaseInstanc
         targetId: "fee-k-types",
         metadata: { rows: saved.length },
       });
-      res.json({ data: { rows: saved, draft: false, ...feeKTypeOptions(db) } });
+      res.json({ data: { rows: saved, draft: false, suggestedDocuments: SUGGESTED_DOCUMENTS, ...feeKTypeOptions(db) } });
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }

@@ -10,6 +10,8 @@ import { UrgencySettingsSection } from "../components/UrgencySettingsSection";
 import { DocumentSettingsSection } from "../components/DocumentSettingsSection";
 import { SmsTemplatesSection } from "../components/SmsTemplatesSection";
 import { FeeKTypesSection } from "../components/FeeKTypesSection";
+import { BuzonSettingsSection } from "../components/BuzonSettingsSection";
+import { ConsultListsSection } from "../components/ConsultListsSection";
 import { IntegrationsSection } from "../components/IntegrationsSection";
 import { WorkflowsSection } from "../components/WorkflowsSection";
 import { SyncHealthSection } from "../components/SyncHealthSection";
@@ -962,6 +964,8 @@ export function SettingsPage({ tab }: { tab: string }) {
               <DocumentSettingsSection />
               <SmsTemplatesSection />
               <FeeKTypesSection />
+              <BuzonSettingsSection />
+              <ConsultListsSection />
             </>
           )}
 

@@ -62,6 +62,7 @@ import { MenuCode } from "./ScreenCode";
 import { downloadDriveFile, findOrCreateClientFolder, folderNameOf, getGraphToken, GraphConsentRequiredError, type ClientFolderKind } from "../sharepoint/graph";
 import { normalizeSharePointUrl } from "../sharepoint/parseLink";
 import { SlackMessageEditor, slackWarning, type SlackMessageValue } from "./SlackMessageEditor";
+import { ConsultBuzonItems } from "./UploadChecklistSection";
 
 const FOLDER_KINDS: ClientFolderKind[] = ["e_file", "consult_file"];
 const FOLDER_LABEL: Record<ClientFolderKind, string> = { e_file: "E-File folder", consult_file: "Consult folder" };
@@ -741,6 +742,9 @@ export function ConsultPrepModal({ consult, facilities, onFocus, onClose, onSave
                         📤 Client's Google Drive uploads
                       </a>
                     </li>
+                  )}
+                  {profile && consult.mondayItemId && (
+                    <ConsultBuzonItems profileLocalId={profile.localId} appointmentMondayId={consult.mondayItemId} />
                   )}
                   {picked.map((f) => (
                     <li key={f.url} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: "var(--font-body)" }}>

@@ -5,15 +5,18 @@ import { sanitizeSmsTemplates, withRequiredTemplates, DEFAULT_SMS_TEMPLATES } fr
 describe("withRequiredTemplates", () => {
   it("a saved list without the Upload link template gets it back; a reworded one is kept", () => {
     const saved = [{ key: "consult_link", label: "Consult", en: "Book: {{link}}", es: "" }];
-    expect(withRequiredTemplates(saved).map((t) => t.key)).toEqual(["consult_link", "upload_link"]);
-    const reworded = [{ key: "upload_link", label: "Docs", en: "Send: {{uploadLink}}", es: "" }];
+    expect(withRequiredTemplates(saved).map((t) => t.key)).toEqual(["consult_link", "upload_link", "buzon_link", "buzon_reminder", "buzon_received"]);
+    const reworded = DEFAULT_SMS_TEMPLATES.filter((t) => t.key !== "consult_link" && t.key !== "payment_links")
+      .map((t) => (t.key === "upload_link" ? { ...t, label: "Docs", en: "Send: {{uploadLink}}", es: "" } : t));
     expect(withRequiredTemplates(reworded)).toEqual(reworded);
   });
-  it("the upload link texts carry the link and opt-out words", () => {
-    const t = DEFAULT_SMS_TEMPLATES.find((x) => x.key === "upload_link")!;
-    for (const text of [t.en, t.es]) {
-      expect(text).toContain("{{uploadLink}}");
-      expect(text).toMatch(/STOP/);
+  it("the upload link and Buzón texts carry the link (where they need it) and opt-out words", () => {
+    for (const key of ["upload_link", "buzon_link", "buzon_reminder", "buzon_received"]) {
+      const t = DEFAULT_SMS_TEMPLATES.find((x) => x.key === key)!;
+      for (const text of [t.en, t.es]) {
+        if (key !== "buzon_received") expect(text, key).toContain("{{uploadLink}}");
+        expect(text, key).toMatch(/STOP/);
+      }
     }
   });
   it("upload_link is a send context", () => {

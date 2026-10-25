@@ -1,5 +1,7 @@
 # Client Uploads (upload link)
 
+> Now called the **Buzón**. The document checklist and what comes next: `docs/features/buzon.md`.
+
 **Status:** Steps 1–4 built (links, public upload, filing to E-File → CAF + Monday/Slack, client page, staff popup M30 + Received from client); step 5 (trial) to do · **Last updated:** 2026-10-21
 
 ---

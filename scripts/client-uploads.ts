@@ -10,9 +10,15 @@
 // Started by the API (apps/api/src/uploads/job.ts) after a batch goes quiet
 // and every 15 min as a sweep. Files wait in data/uploads/ (client_uploads,
 // schema v37). Destination: the profile's E-File link, else its Consult File
-// link (pickLink, as Drive intake and esign:efile), → its CAF folder, created
-// when missing. Never creates the client folder itself: no link = "waiting",
+// link (pickLink, as Drive intake and esign:efile), → its CAF folder, or for a
+// Buzón checklist document its case's "EVIDENCE <Fee K Type>" folder
+// (docs/features/buzon.md), created when missing. Never creates the client folder itself: no link = "waiting",
 // tried again on the next run.
+//
+// A consult's checklist documents (Phase 5) go to the Consult File (else the
+// E-File) → CONSULT. iPhone photos (HEIC) go up as JPG, and several photos for
+// one checklist document in one batch go up as one PDF (Phase 3,
+// apps/api/src/uploads/convert.ts); each row still gets the SharePoint link.
 //
 // Each file's filing is stamped on its row (filed_at …) so a retry only redoes
 // what failed; a file already in CAF with the same name and size counts as
@@ -28,7 +34,8 @@ import { graphAuthFromEnv } from "./sharepoint/auth.js";
 import { GraphError, graphFetch, type GraphAuth } from "./sharepoint/graph-client.js";
 import { listChildren, uploadFile, type DriveItem } from "./sharepoint/folders.js";
 import { openClientFolder, pickLink } from "./drive/destination.js";
-import { CAF_FOLDER, MAX_ATTEMPTS, QUIET_MINUTES, alreadyFiled, pickCafFolder } from "../apps/api/src/uploads/filing.js";
+import { MAX_ATTEMPTS, QUIET_MINUTES, alreadyFiled, folderFor, pickFolder } from "../apps/api/src/uploads/filing.js";
+import { imagesToPdf, openable, toUnits, type FileBytes, type Unit } from "../apps/api/src/uploads/convert.js";
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=");
 
@@ -41,6 +48,13 @@ interface Row {
   content_type: string;
   profile_local_id: string;
   profile_monday_id: string | null;
+  item_id: number | null;
+  /** The checklist document's Fee K Type → EVIDENCE <type>; NULL → CAF. */
+  fee_k_type: string | null;
+  /** A consult's document → Consult File → CONSULT. */
+  appointment_monday_id: string | null;
+  /** That appointment's own consult folder link, if any. */
+  appt_consult: string | null;
 }
 
 interface Result {
@@ -78,8 +92,12 @@ async function main() {
 
   // A link's batch is ready once nothing new has come in on it for `quiet` minutes.
   const rows = db.prepare(`
-    SELECT u.id, u.link_id, u.stored_name, u.local_file, u.size, u.content_type, l.profile_local_id, l.profile_monday_id
+    SELECT u.id, u.link_id, u.item_id, u.stored_name, u.local_file, u.size, u.content_type, l.profile_local_id, l.profile_monday_id,
+           i.fee_k_type, i.appointment_monday_id,
+           (SELECT json_extract(b.column_values, '$.consult_sharepoint') FROM board_items b
+             WHERE b.monday_item_id = i.appointment_monday_id AND b.deleted_at IS NULL LIMIT 1) AS appt_consult
       FROM client_uploads u JOIN upload_links l ON l.id = u.link_id
+      LEFT JOIN upload_checklist_items i ON i.id = u.item_id
      WHERE u.filed_at IS NULL AND u.local_file IS NOT NULL AND u.attempts < ?
        AND NOT EXISTS (SELECT 1 FROM client_uploads n WHERE n.link_id = u.link_id AND n.received_at > datetime('now', ?))
      ORDER BY u.id
@@ -115,58 +133,86 @@ async function main() {
       FROM profiles WHERE deleted_at IS NULL AND (monday_item_id = ? OR (? IS NULL AND local_id = ?))
      LIMIT 1`);
 
+  const stampCombined = dry ? null : db.prepare("UPDATE client_uploads SET combined_into = ? WHERE id = ?");
+
   let auth: GraphAuth | null = null;
-  for (const [key, files] of byProfile) {
+  clients: for (const [key, files] of byProfile) {
     const first = files[0]!;
-    const ids = files.map((f) => f.id);
     const links = profileLinks.get(first.profile_monday_id, first.profile_monday_id, first.profile_local_id) as
       { eFile: string | null; consultFile: string | null } | undefined;
-    const link = links ? pickLink({ eFile: links.eFile, consultFile: links.consultFile, apptConsult: null }) : null;
-    if (!link) {
+
+    // Each file's client folder: a consult's document prefers the consult folder, the rest the E-File.
+    const byDest = new Map<string, { link: { url: string; label: string }; rows: Row[] }>();
+    const nowhere: Row[] = [];
+    for (const f of files) {
+      const link = !links ? null : f.appointment_monday_id
+        ? pickLink({ eFile: null, consultFile: links.consultFile, apptConsult: f.appt_consult }) ?? pickLink({ eFile: links.eFile, consultFile: null, apptConsult: null })
+        : pickLink({ eFile: links.eFile, consultFile: links.consultFile, apptConsult: null });
+      if (!link) nowhere.push(f);
+      else byDest.set(link.url, { link, rows: [...(byDest.get(link.url)?.rows ?? []), f] });
+    }
+    if (nowhere.length) {
       const reason = links ? "waiting: no E-File or Consult File link on the profile" : "waiting: profile not found";
-      for (const id of ids) stampWaiting?.run(reason, id);
-      result.waiting.push({ profile: key, files: files.length, reason });
-      continue;
+      for (const f of nowhere) stampWaiting?.run(reason, f.id);
+      result.waiting.push({ profile: key, files: nowhere.length, reason });
     }
 
-    try {
-      auth ??= graphAuthFromEnv();
-      const client = await openClientFolder(auth, link.url);
-      if (!client.ok) {
-        fail(ids, client.reason.replace(/^Link/, `${link.label} link`));
-        continue;
-      }
-      const { driveId, item } = client;
-      let caf = pickCafFolder(await listChildren(auth, driveId, item.id));
-      if (dry) {
-        for (const f of files) {
-          result.plan!.push({ upload: f.id, where: link.label, folder: `${item.name}/${caf?.name ?? `${CAF_FOLDER} (would be created)`}`, name: f.stored_name });
-        }
-        continue;
-      }
-      caf ??= await createCaf(auth, driveId, item.id);
-      const inCaf = await listChildren(auth, driveId, caf.id);
-
-      for (const f of files) {
-        const file = path.join(uploadDir, f.local_file);
-        if (!fs.existsSync(file)) {
-          fail([f.id], "the file is missing from data/uploads");
+    for (const { link, rows: destRows } of byDest.values()) {
+      const ids = destRows.map((f) => f.id);
+      try {
+        auth ??= graphAuthFromEnv();
+        const client = await openClientFolder(auth, link.url);
+        if (!client.ok) {
+          fail(ids, client.reason.replace(/^Link/, `${link.label} link`));
           continue;
         }
-        try {
-          const existing = alreadyFiled(inCaf, f.stored_name, f.size);
-          const up = existing ?? (await uploadFile(auth, driveId, caf.id, f.stored_name, fs.readFileSync(file), f.content_type, "rename"));
-          stampFiled!.run(up.id, up.webUrl, link.label, f.id);
-          if (existing) result.already++;
-          else result.filed++;
-        } catch (err) {
-          fail([f.id], err instanceof Error ? err.message.slice(0, 200) : "upload failed");
+        const { driveId, item } = client;
+        const top = await listChildren(auth, driveId, item.id);
+        // CAF, EVIDENCE <case type> or CONSULT: one lookup per folder.
+        const byFolder = new Map<string, Row[]>();
+        for (const f of destRows) {
+          const name = folderFor(f.fee_k_type, f.appointment_monday_id);
+          byFolder.set(name, [...(byFolder.get(name) ?? []), f]);
         }
+
+        for (const [name, inIt] of byFolder) {
+          const units = toUnits(inIt);
+          if (dry) {
+            const found = pickFolder(top, name);
+            for (const u of units) {
+              for (const f of u.rows) result.plan!.push({ upload: f.id, where: link.label, folder: `${item.name}/${found?.name ?? `${name} (would be created)`}`, name: u.name });
+            }
+            continue;
+          }
+          const folder = pickFolder(top, name) ?? (await createFolder(auth, driveId, item.id, name));
+          const inFolder = await listChildren(auth, driveId, folder.id);
+          for (const u of units) {
+            const unitIds = u.rows.map((f) => f.id);
+            const missing = u.rows.find((f) => !fs.existsSync(path.join(uploadDir, f.local_file)));
+            if (missing) {
+              fail(unitIds, "the file is missing from data/uploads");
+              continue;
+            }
+            try {
+              const file = await unitFile(u, uploadDir);
+              const existing = alreadyFiled(inFolder, file.name, file.bytes.length);
+              const up = existing ?? (await uploadFile(auth, driveId, folder.id, file.name, file.bytes, file.contentType, "rename"));
+              for (const f of u.rows) {
+                stampFiled!.run(up.id, up.webUrl, link.label, f.id);
+                if (f !== u.rows[0]) stampCombined!.run(u.rows[0]!.id, f.id);
+              }
+              if (existing) result.already += u.rows.length;
+              else result.filed += u.rows.length;
+            } catch (err) {
+              fail(unitIds, err instanceof Error ? err.message.slice(0, 200) : "upload failed");
+            }
+          }
+        }
+      } catch (err) {
+        // Sign-in lapsed, Graph down: nothing for this client was filed. The next run retries.
+        fail(ids, err instanceof Error ? err.message.slice(0, 200) : "error");
+        if (err instanceof GraphError && err.status === 401) break clients;
       }
-    } catch (err) {
-      // Sign-in lapsed, Graph down: nothing for this client was filed. The next run retries.
-      fail(ids, err instanceof Error ? err.message.slice(0, 200) : "error");
-      if (err instanceof GraphError && err.status === 401) break;
     }
   }
 
@@ -174,17 +220,25 @@ async function main() {
   done(result);
 }
 
-/** CAF under the client folder; one made by someone else meanwhile is reused. */
-async function createCaf(auth: GraphAuth, driveId: string, parentId: string): Promise<DriveItem> {
+/** The bytes that go up: one file as it is (HEIC → JPG), or the photos as one PDF. */
+async function unitFile(u: Unit<Row>, uploadDir: string): Promise<FileBytes> {
+  const files = await Promise.all(u.rows.map((f) =>
+    openable({ bytes: fs.readFileSync(path.join(uploadDir, f.local_file)), contentType: f.content_type, name: f.stored_name })));
+  if (files.length === 1) return { ...files[0]!, name: u.name };
+  return { bytes: await imagesToPdf(files), contentType: "application/pdf", name: u.name };
+}
+
+/** CAF / EVIDENCE … under the client folder; one made by someone else meanwhile is reused. */
+async function createFolder(auth: GraphAuth, driveId: string, parentId: string, name: string): Promise<DriveItem> {
   try {
     return await graphFetch<DriveItem>(auth, `/drives/${driveId}/items/${parentId}/children`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: CAF_FOLDER, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+      body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
     });
   } catch (err) {
     if (err instanceof GraphError && err.status === 409) {
-      const existing = pickCafFolder(await listChildren(auth, driveId, parentId));
+      const existing = pickFolder(await listChildren(auth, driveId, parentId), name);
       if (existing) return existing;
     }
     throw err;

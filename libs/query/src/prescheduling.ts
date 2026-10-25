@@ -10,6 +10,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 import { makeStaffNames, type StaffResolver } from "./staff-names";
 import { feeKCaseTypeSql } from "./fee-k-case-type";
+import { checklistCounts } from "./upload-checklist";
 type Database = BetterSqlite3.Database;
 
 // =============================================================================
@@ -48,6 +49,8 @@ export interface PreschedulingCase {
   /** Parked with a future return date. */
   snoozed: boolean;
   northPoleUntil: string | null;
+  /** The Buzón checklist for this Fee K: required documents received / asked for. Null = no checklist. */
+  documents: { received: number; total: number } | null;
 }
 
 export interface PreschedulingResult {
@@ -186,6 +189,7 @@ export function getPrescheduling(db: Database, options: PreschedulingOptions = {
     WHERE c.group_title = ? AND c.deleted_at IS NULL
   `).all(PAID_FEE_KS_GROUP) as RawRow[];
 
+  const docs = checklistCounts(db, rows.map((r) => r.localId));
   const cases: PreschedulingCase[] = rows.map((r) => {
     const daysWaiting = r.hireDate ? daysBetween(r.hireDate, today) : null;
     const waitLevel: WaitLevel =
@@ -216,6 +220,7 @@ export function getPrescheduling(db: Database, options: PreschedulingOptions = {
       parked,
       snoozed: parked && r.northPoleUntil !== null && r.northPoleUntil > today,
       northPoleUntil: parked ? r.northPoleUntil : null,
+      documents: docs.get(r.localId) ?? null,
     };
   });
 

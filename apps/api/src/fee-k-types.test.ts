@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { contractTitles, feeKTypeLookup, sanitizeFeeKTypes, scopeFor, type FeeKTypeRow } from "./fee-k-types.js";
+import { contractTitles, sanitizeDocuments, feeKTypeLookup, sanitizeFeeKTypes, scopeFor, type FeeKTypeRow } from "./fee-k-types.js";
 import { DRAFT_FEE_K_TYPES } from "./fee-k-types-draft.js";
+import { SUGGESTED_DOCUMENTS } from "./fee-k-type-documents-draft.js";
 
-const BLANK: FeeKTypeRow = { feeKType: "", spanish: "", board: "", feeSheetJob: "", services: "", servicesEs: "", excluded: "", excludedEs: "" };
+const BLANK: FeeKTypeRow = { feeKType: "", spanish: "", board: "", feeSheetJob: "", services: "", servicesEs: "", excluded: "", excludedEs: "", documents: [] };
 
 describe("sanitizeFeeKTypes", () => {
   it("keeps the Fee K Type's exact spelling, tidies the rest, drops rows with nothing set", () => {
@@ -12,7 +13,7 @@ describe("sanitizeFeeKTypes", () => {
       { spanish: "sin tipo" },
       "junk",
     ])).toEqual([{ feeKType: "Bond MTN  (c)", spanish: "Moción de fianza", board: "Motions", feeSheetJob: "",
-      services: "", servicesEs: "", excluded: "", excludedEs: "" }]);
+      services: "", servicesEs: "", excluded: "", excludedEs: "", documents: [] }]);
   });
 
   it("one row per Fee K Type, any case — the first wins", () => {
@@ -83,5 +84,43 @@ describe("contractTitles", () => {
     expect(contractTitles(["Master (c)", "I-765 - EAD Renewal"], rows))
       .toEqual({ en: "Master + I-765 - EAD Renewal", es: "Audiencia preliminar (master) + I-765 - EAD Renewal" });
     expect(contractTitles([], rows)).toEqual({ en: "", es: "" });
+  });
+});
+
+describe("suggested document lists", () => {
+  it("every suggestion is for a real Fee K Type, in both languages, and survives the sanitizer", () => {
+    const types = new Set(DRAFT_FEE_K_TYPES.map((r) => r.feeKType));
+    for (const [type, docs] of Object.entries(SUGGESTED_DOCUMENTS)) {
+      expect(types.has(type), type).toBe(true);
+      expect(docs.length, type).toBeGreaterThan(0);
+      expect(docs.every((d) => d.en && d.es && d.es !== d.en), type).toBe(true);
+      expect(sanitizeDocuments(docs), type).toEqual(docs);
+    }
+  });
+
+  it("protected case types never name what happened", () => {
+    for (const type of ["I-360 - VAWA", "I-914 - TVisa", "I-589 - Affirmative Asylum", "I-485 - UVisa AOS", "I-918B - UVisa Certification Request"]) {
+      const text = JSON.stringify(SUGGESTED_DOCUMENTS[type]).toLowerCase();
+      expect(text, type).not.toMatch(/abus|crime|crimen|delito|persecu|víctima|victim|traffick|trata|violen/);
+    }
+  });
+});
+
+describe("document checklist", () => {
+  it("keeps a row that only has documents; Spanish falls back to English; required by default", () => {
+    const [row] = sanitizeFeeKTypes([{ feeKType: "I-130 - Petition for Alien Relative", documents: [
+      { en: " Marriage  certificate ", es: "Acta de matrimonio" },
+      { en: "Passport", required: false },
+    ] }]);
+    expect(row!.documents).toEqual([
+      { en: "Marriage certificate", es: "Acta de matrimonio", required: true },
+      { en: "Passport", es: "Passport", required: false },
+    ]);
+  });
+
+  it("drops nameless and repeated documents, caps the list", () => {
+    expect(sanitizeDocuments([{ en: "" }, { es: "Solo" }, { en: "ID" }, { en: "id" }, "junk"])).toEqual([{ en: "ID", es: "ID", required: true }]);
+    expect(sanitizeDocuments(Array.from({ length: 60 }, (_, i) => ({ en: `Doc ${i}` })))).toHaveLength(40);
+    expect(sanitizeDocuments(undefined)).toEqual([]);
   });
 });

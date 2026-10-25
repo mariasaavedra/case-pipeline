@@ -63,6 +63,7 @@ vi.mock("../StatusOptionsProvider", () => ({
   }),
 }));
 vi.mock("./UpdatesTimeline", () => ({ UpdatesTimeline: () => <div>timeline</div> }));
+vi.mock("./UploadChecklistSection", () => ({ ConsultBuzonItems: () => null }));
 vi.mock("./CaseTimelineTab", () => ({ CaseTimelineTab: ({ profileLocalId }: { profileLocalId: string }) => <div>case timeline {profileLocalId}</div> }));
 vi.mock("./DocumentsTab", () => ({ DocumentsTab: () => <div>sharepoint browser</div> }));
 const resolveFileLink = vi.fn();

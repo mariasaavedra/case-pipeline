@@ -346,6 +346,7 @@ const ROUTE_PATHS: Record<string, string> = {
   "address-changes": "/address-changes",
   foias: "/foias",
   "efiles-to-open": "/efiles-to-open",
+  "client-uploads": "/client-uploads",
   workload: "/workload",
   settings: "/settings",
 };

@@ -47,6 +47,7 @@ import { feeKCaseTypeSql, getBoardColumnsFor } from "@case-pipeline/query";
 import { createNotification, fetchBoardStructure } from "@case-pipeline/monday";
 import { notifyEvent, slackEscape, withLink } from "../notify/slack.js";
 import { makeMondayUserByLogin } from "../contract-info.js";
+import { buzonFeeKPaid } from "../buzon/job.js";
 import {
   FEE_WORDS, feeKIdFromReference, isFullyPaid, normalizeReference, parseReference, personName,
   type FeeType, type IssuedLink, type LawPayPayment,
@@ -224,6 +225,8 @@ export async function applyLawPayEvent(deps: LawPayDeps, eventId: number, paymen
         await dataSource.moveItem(boardId, groupId, row.mondayId, token);
         db.prepare("UPDATE contracts SET group_title = ? WHERE local_id = ?").run(PAID_GROUP, row.localId);
         movedNote = `✅ Fully paid: Contract Stage → ${PAID_STAGE}, moved to ${PAID_GROUP}.`;
+        // The Buzón starts now rather than when Monday's webhook echoes the stage back.
+        buzonFeeKPaid(row.mondayId);
       } catch (err) {
         console.error("[lawpay] move to Paid Fee Ks failed:", err);
         movedNote = `✅ Fully paid: Contract Stage → ${PAID_STAGE}. Moving it to ${PAID_GROUP} failed — please move it by hand.`;

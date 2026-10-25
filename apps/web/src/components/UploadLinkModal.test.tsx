@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import type { SmsConfig, UploadLinkInfo } from "../api";
+import type { ClientBuzon, SmsConfig, UploadChecklist, UploadLinkInfo } from "../api";
 
 const URL_ = "https://app.example.com/u/" + "x".repeat(43);
 const mocks = vi.hoisted(() => ({
@@ -19,6 +19,12 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   extend: vi.fn(),
   revoke: vi.fn(),
+  checklist: { items: [], feeKs: [] } as UploadChecklist,
+  addFeeK: vi.fn(),
+  updateItem: vi.fn(),
+  buzon: null as unknown as ClientBuzon,
+  updateBuzon: vi.fn(),
+  remind: vi.fn(),
 }));
 
 vi.mock("../api", () => ({
@@ -26,6 +32,16 @@ vi.mock("../api", () => ({
   createUploadLink: mocks.create,
   extendUploadLink: mocks.extend,
   revokeUploadLink: mocks.revoke,
+  fetchUploadChecklist: async () => mocks.checklist,
+  addFeeKChecklist: mocks.addFeeK,
+  addChecklistItem: vi.fn(),
+  updateChecklistItem: mocks.updateItem,
+  removeChecklistItem: vi.fn(),
+  addConsultChecklist: vi.fn(),
+  fetchConsultLists: async () => ({ lists: [], draft: true }),
+  fetchClientBuzon: async () => mocks.buzon,
+  updateClientBuzon: mocks.updateBuzon,
+  remindNow: mocks.remind,
   fetchSmsConfig: async (): Promise<SmsConfig> => ({
     mode: "dry-run",
     fromNumber: "(816) 994-2300",
@@ -69,6 +85,17 @@ async function open(props: Partial<Parameters<typeof UploadLinkModal>[0]> = {}) 
 beforeEach(() => {
   document.body.innerHTML = "";
   mocks.links = [];
+  mocks.checklist = { items: [], feeKs: [] };
+  mocks.addFeeK.mockReset();
+  mocks.updateItem.mockReset();
+  mocks.buzon = {
+    client: { name: "Itzel MARTINEZ", hasPhone: true, language: "es" },
+    settings: { noAutoTexts: false, reminders: null, days: null },
+    firmReminders: { on: true, days: [3, 7, 14], fromHour: 9, toHour: 18, weekdaysOnly: true },
+    reminderDays: [3, 7, 14], nextReminder: null, canRemind: true, missing: [], texts: [],
+  };
+  mocks.updateBuzon.mockReset().mockImplementation(async (_p: string, s: ClientBuzon["settings"]) => ({ ...mocks.buzon, settings: s }));
+  mocks.remind.mockReset();
   mocks.create.mockReset().mockResolvedValue({ id: 8, url: URL_, expiresAt: "2026-11-20 15:00:00", replaced: false });
   mocks.extend.mockReset().mockResolvedValue({ id: 7, expiresAt: "2026-12-01 00:00:00" });
   mocks.revoke.mockReset().mockResolvedValue({ id: 7, revoked: true });
@@ -128,6 +155,40 @@ describe("UploadLinkModal", () => {
   });
 });
 
+describe("Buzón checklist in M30", () => {
+  const item = (over: Partial<UploadChecklist["items"][number]> = {}): UploadChecklist["items"][number] => ({
+    id: 1, labelEn: "Passport", labelEs: "Pasaporte", required: true, status: "missing", feeKLocalId: "k1",
+    feeKType: "I-130", folder: "EVIDENCE I-130", receivedAt: null, files: 0, addedBy: "Ana Reyes", ...over,
+  });
+
+  it("offers a Fee K's list and adds it", async () => {
+    mocks.checklist = { items: [], feeKs: [{ localId: "k1", name: "Fee K", feeKTypes: ["I-130"], contractStage: null, documents: 3, added: false }] };
+    mocks.addFeeK.mockResolvedValue({ added: 1, items: [item()], feeKs: [{ ...mocks.checklist.feeKs[0]!, added: true }] });
+    await open();
+    await click(button("+ Add the I-130 list (3 documents)"));
+    expect(mocks.addFeeK).toHaveBeenCalledWith("p1", "k1");
+    expect(document.body.textContent).toContain("Passport");
+    expect(document.body.textContent).toContain("0 of 1 received");
+    expect(button("+ Add the I-130 list (3 documents)")).toBeUndefined();
+  });
+
+  it("shows where each stands; Already have it / Ask again call the API", async () => {
+    mocks.checklist = { feeKs: [], items: [
+      item(),
+      item({ id: 2, labelEn: "Marriage certificate", status: "received", receivedAt: "2026-10-23 15:00:00", files: 2 }),
+    ] };
+    mocks.updateItem.mockResolvedValue(mocks.checklist);
+    await open();
+    expect(document.body.textContent).toContain("1 of 2 received");
+    expect(document.body.textContent).toContain("✓ Received Oct 23 · 2 files");
+    expect(document.body.textContent).toContain("→ EVIDENCE I-130");
+    await click(button("Already have it"));
+    expect(mocks.updateItem).toHaveBeenCalledWith(1, { status: "not_needed" });
+    await click(button("Ask again"));
+    expect(mocks.updateItem).toHaveBeenCalledWith(2, { status: "missing" });
+  });
+});
+
 describe("Received from client", () => {
   it("lists every link's files, newest first, linked once filed", async () => {
     mocks.links = [
@@ -144,7 +205,7 @@ describe("Received from client", () => {
     const rows = Array.from(document.querySelectorAll("li")).map((li) => li.textContent);
     expect(rows[0]).toContain("2026-10-21 Notice - b.pdf");
     expect(rows[0]).toContain("“llegó el lunes”");
-    expect(rows[1]).toContain("Filed in E-File → CAF");
+    expect(rows[1]).toContain("Filed in E-File");
     expect((document.querySelector("a") as HTMLAnchorElement).href).toBe("https://sp/a");
   });
 
@@ -157,9 +218,29 @@ describe("Received from client", () => {
   });
 
   it("status words", () => {
-    expect(uploadStatus({ filed_at: "x", filed_where: "Consult File", last_error: null })).toEqual({ text: "Filed in Consult File → CAF", tone: "ok" });
+    expect(uploadStatus({ filed_at: "x", filed_where: "Consult File", last_error: null })).toEqual({ text: "Filed in Consult File", tone: "ok" });
     expect(uploadStatus({ filed_at: null, filed_where: null, last_error: "waiting: no E-File or Consult File link on the profile" }).text).toBe("Waiting: no E-File on the profile");
     expect(uploadStatus({ filed_at: null, filed_where: null, last_error: "Graph 500" })).toEqual({ text: "Not filed yet: Graph 500", tone: "bad" });
     expect(uploadStatus({ filed_at: null, filed_where: null, last_error: null }).tone).toBe("wait");
+  });
+});
+
+describe("Buzón texts in M30", () => {
+  it("no automatic texts saves for this client; Remind now shows when something is missing and asks first", async () => {
+    mocks.links = [activeLink()];
+    mocks.buzon = { ...mocks.buzon, missing: ["Pasaporte"], texts: [{ kind: "link", sentAt: "2026-10-23 15:00:00", status: "sent", error: null, byName: null }] };
+    mocks.remind.mockResolvedValue({ ...mocks.buzon, status: "sent" });
+    await open();
+    expect(document.body.textContent).toContain("Link (automatic) · sent");
+    const box = Array.from(document.querySelectorAll("label")).find((l) => l.textContent?.includes("No automatic texts"))!.querySelector("input")!;
+    await click(box);
+    expect(mocks.updateBuzon).toHaveBeenCalledWith("p1", { noAutoTexts: true, reminders: null, days: null });
+    expect(document.body.textContent).toContain("The app won't text the link, reminders");
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    await click(button("Remind now"));
+    expect(mocks.remind).not.toHaveBeenCalled();
+    await click(button("Remind now"));
+    expect(mocks.remind).toHaveBeenCalledWith("p1");
+    expect(document.body.textContent).toContain("Reminder sent.");
   });
 });
