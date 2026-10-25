@@ -28,7 +28,8 @@ vi.mock("@case-pipeline/monday", async (importOriginal) => ({
 }));
 
 import { AuthError, MondayApiError } from "@case-pipeline/monday";
-import { enqueueWrite, drainWriteQueue } from "./processor";
+import { enqueueWrite, drainWriteQueue, supersedeQueuedColumnWrites } from "./processor";
+import { mondayDataSource, onDirectColumnWrite } from "../data-source/index.js";
 import fs from "node:fs";
 import path from "node:path";
 import { DATA_DIR } from "../paths.js";
@@ -585,5 +586,99 @@ describe("add_file (scanned-mail notices)", () => {
     expect(queueRow(db)).toMatchObject({ status: "failed" });
     expect(queueRow(db).last_error).toMatch(/escapes the data directory/);
     expect(db.prepare("SELECT writeback_state AS s FROM mail_documents").get()).toEqual({ s: "partial" });
+  });
+});
+
+// A queued write that retries after the same column was changed again would
+// put the older value back in Monday (audit 2026-10-24, H1).
+describe("newer column writes supersede queued ones", () => {
+  beforeEach(() => {
+    changeSimpleColumnValueMock.mockReset();
+    changeColumnValueMock.mockReset();
+    createItemMock.mockReset();
+    onDirectColumnWrite(null);
+  });
+
+  const statuses = (db: DatabaseInstance) =>
+    db.prepare("SELECT status FROM write_queue ORDER BY id").all().map((r) => (r as { status: string }).status);
+
+  it("sends only the newest of two queued writes to the same column", async () => {
+    const db = freshDb();
+    changeSimpleColumnValueMock.mockResolvedValue(undefined);
+    enqueueWrite(db, { opType: "change_column", mondayItemId: "55", payload: { boardId: "b", columnId: "status", value: "Drafting" } });
+    enqueueWrite(db, { opType: "change_column", mondayItemId: "55", payload: { boardId: "b", columnId: "status", value: "Filed" } });
+
+    expect(await drainWriteQueue(db, { token: "tok" })).toBe(1);
+    expect(changeSimpleColumnValueMock).toHaveBeenCalledTimes(1);
+    expect(changeSimpleColumnValueMock).toHaveBeenCalledWith("b", "55", "status", "Filed", "tok");
+    expect(statuses(db)).toEqual(["superseded", "synced"]);
+    db.close();
+  });
+
+  it("never sends a queued write once a direct write set that column", async () => {
+    const db = freshDb();
+    onDirectColumnWrite((itemId, cols) => supersedeQueuedColumnWrites(db, itemId, cols));
+    changeSimpleColumnValueMock.mockResolvedValue(undefined);
+    enqueueWrite(db, { opType: "change_column", mondayItemId: "55", payload: { boardId: "b", columnId: "status", value: "Drafting" } });
+
+    await mondayDataSource.setColumnValue("b", "55", "status", "Filed", "tok");
+    changeSimpleColumnValueMock.mockClear();
+
+    expect(await drainWriteQueue(db, { token: "tok" })).toBe(0);
+    expect(changeSimpleColumnValueMock).not.toHaveBeenCalled();
+    expect(statuses(db)).toEqual(["superseded"]);
+    db.close();
+  });
+
+  it("leaves other columns and other items alone", async () => {
+    const db = freshDb();
+    enqueueWrite(db, { opType: "change_column", mondayItemId: "55", payload: { boardId: "b", columnId: "date4", value: "2026-11-01" } });
+    enqueueWrite(db, { opType: "change_column_json", mondayItemId: "66", payload: { boardId: "b", columnId: "status", value: { label: "Filed" } } });
+
+    expect(supersedeQueuedColumnWrites(db, "55", ["status"])).toBe(0);
+    expect(statuses(db)).toEqual(["pending", "pending"]);
+    db.close();
+  });
+
+  it("settles a superseded mail write-back step instead of leaving it waiting", () => {
+    const db = freshDb();
+    db.prepare("INSERT INTO mail_scans (file_name, total_pages) VALUES ('m.pdf', 1)").run();
+    db.prepare(
+      `INSERT INTO mail_documents (scan_id, pages, split_reason, fields, match, status, message, review_state, writeback_state, writeback_steps)
+       VALUES (1, '[1]', 'first_page', '{}', '{}', 'matched', 'x', 'assigned', 'queued', ?)`,
+    ).run(JSON.stringify([{ kind: "receipt_no", columnTitle: "Receipt No.", value: "IOE1", result: "queued" }]));
+    enqueueWrite(db, {
+      opType: "change_column",
+      mondayItemId: "999",
+      payload: { boardId: "b", columnId: "text_receipt", value: "IOE1", mailDocumentId: 1, mailStepKind: "receipt_no" },
+    });
+    supersedeQueuedColumnWrites(db, "999", ["text_receipt"]);
+    expect(statuses(db)).toEqual(["superseded"]);
+    expect(db.prepare("SELECT writeback_state AS s FROM mail_documents").get()).toEqual({ s: "done" });
+    db.close();
+  });
+
+  // Monday already made the item: a local error attaching its id must not send
+  // the op back for a retry that creates it a second time (audit M5).
+  it("keeps a create_item synced when attaching the new id locally fails", async () => {
+    const db = freshDb();
+    createItemMock.mockResolvedValue("new-item-9");
+    db.prepare(
+      `INSERT INTO board_items (local_id, monday_item_id, board_key, name, column_values, sync_status)
+       VALUES ('bi-1', NULL, 'call_log', 'Placeholder', '{}', 'pending')`,
+    ).run();
+    db.exec(`CREATE TRIGGER no_update BEFORE UPDATE ON board_items BEGIN SELECT RAISE(ABORT, 'database is locked'); END`);
+    enqueueWrite(db, {
+      opType: "create_item",
+      targetTable: "board_items",
+      targetLocalId: "bi-1",
+      payload: { boardId: "b", itemName: "Call", columnValues: {} },
+    });
+
+    expect(await drainWriteQueue(db, { token: "tok" })).toBe(1);
+    await drainWriteQueue(db, { token: "tok" });
+    expect(createItemMock).toHaveBeenCalledTimes(1);
+    expect(statuses(db)).toEqual(["synced"]);
+    db.close();
   });
 });

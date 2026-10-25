@@ -67,29 +67,80 @@ export type TokenResolver = (authorOid: string) => string | null;
 /** Flags a personal token Monday refused, so the UI can ask them to reconnect. */
 export type TokenRejectionReporter = (authorOid: string, reason: string) => void;
 
+const COLUMN_OPS = new Set<string>(["change_column", "change_column_json"]);
+
+/**
+ * Retire queued column writes a newer write has made stale. Without this, a
+ * write queued during a rate limit retried AFTER the same column was changed
+ * again (directly, or by a later queued write) and put the older value back
+ * in Monday — while the local mirror kept showing the newer one.
+ *
+ * Only 'pending' rows: a row already 'syncing' is mid-call to Monday and may
+ * still land after the newer write. That window is one Monday round trip.
+ * Returns how many rows were superseded.
+ */
+export function supersedeQueuedColumnWrites(
+  db: Database,
+  mondayItemId: string,
+  columnIds: string[],
+  exceptId?: number,
+): number {
+  if (!mondayItemId || columnIds.length === 0) return 0;
+  const rows = db
+    .prepare(
+      `SELECT id, payload FROM write_queue
+        WHERE status = 'pending' AND monday_item_id = ? AND id <> ?
+          AND op_type IN ('change_column', 'change_column_json')
+          AND json_extract(payload, '$.columnId') IN (${columnIds.map(() => "?").join(",")})`,
+    )
+    .all(mondayItemId, exceptId ?? -1, ...columnIds) as { id: number; payload: string }[];
+  if (rows.length === 0) return 0;
+  const now = new Date().toISOString();
+  const mark = db.prepare(
+    `UPDATE write_queue SET status = 'superseded', last_error = 'superseded by a newer write', updated_at = ?
+      WHERE id = ? AND status = 'pending'`,
+  );
+  for (const row of rows) {
+    if (mark.run(now, row.id).changes > 0) {
+      // A scanned notice's step was not lost: the column holds a newer value.
+      settleMailStep(db, row as QueueRow, "done", "superseded by a newer write");
+    }
+  }
+  return rows.length;
+}
+
 /** Append a write-back op to the durable queue. Returns the new row id. */
 export function enqueueWrite(db: Database, input: EnqueueInput): number {
   const now = new Date().toISOString();
-  const res = db
-    .prepare(
-      `INSERT INTO write_queue
-         (op_type, target_table, target_local_id, monday_item_id, author_oid, payload,
-          status, attempts, max_attempts, next_attempt_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?)`,
-    )
-    .run(
-      input.opType,
-      input.targetTable ?? null,
-      input.targetLocalId ?? null,
-      input.mondayItemId ?? null,
-      input.authorOid ?? null,
-      JSON.stringify(input.payload),
-      input.maxAttempts ?? 5,
-      now,
-      now,
-      now,
-    );
-  return Number(res.lastInsertRowid);
+  const insert = db.transaction(() => {
+    const res = db
+      .prepare(
+        `INSERT INTO write_queue
+           (op_type, target_table, target_local_id, monday_item_id, author_oid, payload,
+            status, attempts, max_attempts, next_attempt_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.opType,
+        input.targetTable ?? null,
+        input.targetLocalId ?? null,
+        input.mondayItemId ?? null,
+        input.authorOid ?? null,
+        JSON.stringify(input.payload),
+        input.maxAttempts ?? 5,
+        now,
+        now,
+        now,
+      );
+    const id = Number(res.lastInsertRowid);
+    // The newest queued write to a column is the one Monday should end up with.
+    const columnId = input.payload.columnId;
+    if (COLUMN_OPS.has(input.opType) && input.mondayItemId && typeof columnId === "string" && columnId) {
+      supersedeQueuedColumnWrites(db, input.mondayItemId, [columnId], id);
+    }
+    return id;
+  });
+  return insert();
 }
 
 interface QueueRow {
@@ -108,6 +159,11 @@ interface QueueRow {
  * Reset rows orphaned in 'syncing' back to 'pending'. A crash between marking a
  * row 'syncing' and resolving its dispatch would otherwise strand it forever
  * (the drainer only selects 'pending'). Run once at startup before scheduling.
+ *
+ * This makes delivery at-least-once: a crash after Monday accepted the call
+ * but before the row was marked 'synced' sends it again on restart, so a note
+ * or E&A entry can appear twice. Accepted (docs/decisions.md, 2026-10-25) —
+ * a duplicate note is visible and easy to delete; a lost one is not.
  */
 export function reconcileInFlightWrites(db: Database): number {
   const res = db
@@ -312,11 +368,17 @@ export async function drainWriteQueue(
         // unconditionally would stomp that row's own monday_item_id.
         if (row.op_type === "create_item" && outcome.result && row.target_table && row.target_local_id) {
           if (RECONCILABLE_TABLES.has(row.target_table)) {
-            const res = db
-              .prepare(`UPDATE ${row.target_table} SET monday_item_id = ?, sync_status = 'synced' WHERE local_id = ? AND monday_item_id IS NULL`)
-              .run(outcome.result, row.target_local_id);
-            if (res.changes === 0) {
-              console.warn(`[write-queue] op ${row.id}: target row already has a monday_item_id, skipped reconciliation`);
+            // Never let this throw: the item already exists in Monday, and an
+            // error here would send the op back for a retry that creates it twice.
+            try {
+              const res = db
+                .prepare(`UPDATE ${row.target_table} SET monday_item_id = ?, sync_status = 'synced' WHERE local_id = ? AND monday_item_id IS NULL`)
+                .run(outcome.result, row.target_local_id);
+              if (res.changes === 0) {
+                console.warn(`[write-queue] op ${row.id}: target row already has a monday_item_id, skipped reconciliation`);
+              }
+            } catch (err) {
+              console.warn(`[write-queue] op ${row.id}: could not attach item ${outcome.result} to ${row.target_table} ${row.target_local_id}:`, err);
             }
           } else if (row.target_table !== "profiles") { // context only — see RECONCILABLE_TABLES
             console.warn(`[write-queue] op ${row.id}: unrecognized target_table "${row.target_table}", skipped reconciliation`);
