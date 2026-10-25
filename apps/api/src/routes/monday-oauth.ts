@@ -2,17 +2,24 @@
 // Monday.com OAuth — per-user token exchange
 // =============================================================================
 // Flow:
-//   1. GET /api/auth/monday         → redirect to Monday.com consent screen
-//   2. GET /api/auth/monday/callback → exchange code, store token, redirect to frontend
-//   3. GET /api/auth/monday/status   → { connected, mondayName } for current user
+//   1. POST /api/auth/monday/start   → (signed in) sets a nonce cookie, returns the consent URL
+//   2. GET  /api/auth/monday/callback → exchange code, store token, redirect to frontend
+//   3. GET  /api/auth/monday/status   → { connected, mondayName } for current user
+//
+// Until 2026-10-25 step 1 was a GET carrying the Azure token as ?az_token=
+// (a navigation can't send headers), which put a live bearer token in access
+// logs and browser history. And the signed state named an account without
+// being tied to the browser, so a consent link started by one person could be
+// forwarded and approved by another — saving the second person's Monday token
+// on the first person's account. Now the browser that starts the flow holds a
+// nonce cookie whose hash the state carries, and the callback requires both.
 // =============================================================================
 
 import type { Request, Response } from "express";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { usersDb } from "../db/users-db.js";
 import { protect, reveal } from "../crypto/secrets.js";
 import { requireAuth } from "../auth/middleware.js";
-import { validateToken } from "../auth/validate-token.js";
 import type { Router } from "express";
 
 const CLIENT_ID     = process.env.MONDAY_CLIENT_ID ?? "";
@@ -25,10 +32,36 @@ const REDIRECT_URI  = `${API_URL}/api/auth/monday/callback`;
 
 // ---------------------------------------------------------------------------
 // State parameter — stateless HMAC so we avoid a session table
-// State = `${azure_oid}:${ts}:${returnTo}` signed with CLIENT_SECRET.
-// returnTo is URI-encoded so it never contains the ":" separator; states
-// issued before it existed have no third part and fall back to /settings.
+// State = `${azure_oid}:${ts}:${returnTo}:${sha256(nonce)}` signed with
+// CLIENT_SECRET. returnTo is URI-encoded so it never contains the ":"
+// separator. The nonce itself only ever lives in the starting browser's cookie.
 // ---------------------------------------------------------------------------
+
+/** The cookie that ties a consent flow to the browser that started it. */
+export const NONCE_COOKIE = "mo_nonce";
+const STATE_TTL_MS = 10 * 60 * 1000;
+
+const hashNonce = (nonce: string) => createHash("sha256").update(nonce).digest("hex");
+
+function safeEqual(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+
+/** One cookie's value from a raw Cookie header, or null. */
+export function readCookie(header: string | undefined, name: string): string | null {
+  for (const part of (header ?? "").split(";")) {
+    const eq = part.indexOf("=");
+    if (eq > 0 && part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
+  }
+  return null;
+}
+
+function nonceCookie(value: string, maxAgeSec: number): string {
+  const secure = API_URL.startsWith("https:") ? "; Secure" : "";
+  return `${NONCE_COOKIE}=${value}; Path=/api/auth/monday; Max-Age=${maxAgeSec}; HttpOnly; SameSite=Lax${secure}`;
+}
 
 const DEFAULT_RETURN = "/settings";
 
@@ -40,23 +73,32 @@ export function safeReturnPath(raw: unknown): string {
   return raw;
 }
 
-function signState(azureOid: string, returnTo: string): string {
-  const payload = `${azureOid}:${Date.now()}:${encodeURIComponent(returnTo)}`;
-  const sig = createHmac("sha256", CLIENT_SECRET).update(payload).digest("hex");
+export function signState(azureOid: string, returnTo: string, nonce: string, secret = CLIENT_SECRET): string {
+  const payload = `${azureOid}:${Date.now()}:${encodeURIComponent(returnTo)}:${hashNonce(nonce)}`;
+  const sig = createHmac("sha256", secret).update(payload).digest("hex");
   return Buffer.from(`${payload}:${sig}`).toString("base64url");
 }
 
-function verifyState(state: string): { azureOid: string; returnTo: string } | null {
+/**
+ * The state's account and return path, when its signature is good, it is under
+ * 10 minutes old and `nonce` (the starting browser's cookie) matches it.
+ */
+export function verifyState(
+  state: string,
+  nonce: string | null,
+  secret = CLIENT_SECRET,
+): { azureOid: string; returnTo: string } | null {
   try {
+    if (!secret || !nonce) return null;
     const decoded = Buffer.from(state, "base64url").toString();
     const lastColon = decoded.lastIndexOf(":");
     const payload = decoded.slice(0, lastColon);
     const sig = decoded.slice(lastColon + 1);
-    const expected = createHmac("sha256", CLIENT_SECRET).update(payload).digest("hex");
-    if (sig !== expected) return null;
-    const [azureOid = "", tsRaw = "0", returnRaw] = payload.split(":");
-    // Expire after 10 minutes
-    if (Date.now() - parseInt(tsRaw, 10) > 10 * 60 * 1000) return null;
+    const expected = createHmac("sha256", secret).update(payload).digest("hex");
+    if (!safeEqual(sig, expected)) return null;
+    const [azureOid = "", tsRaw = "0", returnRaw, nonceHash] = payload.split(":");
+    if (!azureOid || !nonceHash || !safeEqual(nonceHash, hashNonce(nonce))) return null;
+    if (Date.now() - parseInt(tsRaw, 10) > STATE_TTL_MS) return null;
     return { azureOid, returnTo: safeReturnPath(returnRaw ? decodeURIComponent(returnRaw) : undefined) };
   } catch {
     return null;
@@ -74,8 +116,8 @@ function frontendUrl(path: string, status: string): string {
 // Route handlers
 // ---------------------------------------------------------------------------
 
-function buildOAuthUrl(azureOid: string, returnTo: string): string {
-  const state = signState(azureOid, returnTo);
+function buildOAuthUrl(azureOid: string, returnTo: string, nonce: string): string {
+  const state = signState(azureOid, returnTo, nonce);
   // Build manually to avoid encoding colons in scope (me:read not me%3Aread).
   // boards:write is required for change_simple_column_value (status write-back);
   // updates:write covers posting notes. Users must re-connect Monday to grant a
@@ -84,38 +126,36 @@ function buildOAuthUrl(azureOid: string, returnTo: string): string {
   return `https://auth.monday.com/oauth2/authorize?${params.toString()}&scope=me:read%20updates:write%20boards:write`;
 }
 
-async function handleRedirect(req: Request, res: Response): Promise<void> {
+/** POST /api/auth/monday/start — signed in; the browser then navigates to `url`. */
+function handleStart(req: Request, res: Response): void {
   if (!CLIENT_ID || !CLIENT_SECRET) {
-    res.status(503).send("Monday.com OAuth not configured (MONDAY_CLIENT_ID / MONDAY_CLIENT_SECRET missing)");
+    res.status(503).json({ error: "Monday.com OAuth not configured (MONDAY_CLIENT_ID / MONDAY_CLIENT_SECRET missing)" });
     return;
   }
+  const azureOid = req.user?.oid ?? "";
+  const nonce = randomBytes(32).toString("base64url");
+  const returnTo = safeReturnPath((req.body as { returnTo?: unknown } | undefined)?.returnTo);
+  res.setHeader("Set-Cookie", nonceCookie(nonce, STATE_TTL_MS / 1000));
+  res.json({ data: { url: buildOAuthUrl(azureOid, returnTo, nonce) } });
+}
 
-  // Accept Azure AD token via query param (browser navigation can't set headers)
-  let azureOid = req.user?.oid ?? req.user?.preferred_username ?? "";
-  if (!azureOid) {
-    const azToken = req.query.az_token as string | undefined;
-    if (azToken) {
-      try {
-        const claims = await validateToken(azToken);
-        azureOid = claims.oid ?? claims.preferred_username ?? "";
-      } catch {
-        // invalid token — proceed with empty OID (anonymous connect)
-      }
-    }
-  }
-
-  res.redirect(buildOAuthUrl(azureOid, safeReturnPath(req.query.return_to)));
+/** The old GET entry point (?az_token=), for a stale tab or bookmark: start over from Settings. */
+function handleOutdatedRedirect(_req: Request, res: Response): void {
+  res.redirect(`${FRONTEND_URL}/settings?monday=error&reason=outdated`);
 }
 
 async function handleCallback(req: Request, res: Response): Promise<void> {
   const { code, state, error } = req.query as Record<string, string>;
+  // Single use, whatever happens next.
+  const nonce = readCookie(req.headers.cookie, NONCE_COOKIE);
+  res.setHeader("Set-Cookie", nonceCookie("", 0));
 
   if (error) {
     res.redirect(`${FRONTEND_URL}/settings?monday=error&reason=${encodeURIComponent(error)}`);
     return;
   }
 
-  const verified = verifyState(state ?? "");
+  const verified = verifyState(state ?? "", nonce);
   if (!verified) {
     res.redirect(`${FRONTEND_URL}/settings?monday=error&reason=invalid_state`);
     return;
@@ -217,8 +257,9 @@ function handleStatus(req: Request, res: Response): void {
 // ---------------------------------------------------------------------------
 
 export function registerMondayOAuth(router: Router): void {
-  router.get("/api/auth/monday", handleRedirect);           // no requireAuth — browser navigation can't send headers
-  router.get("/api/auth/monday/callback", handleCallback);  // no requireAuth — browser redirect from Monday.com
+  router.post("/api/auth/monday/start", requireAuth, handleStart);
+  router.get("/api/auth/monday", handleOutdatedRedirect);   // the old ?az_token= entry point
+  router.get("/api/auth/monday/callback", handleCallback);  // no requireAuth — browser redirect from Monday.com; the nonce cookie + signed state stand in
   router.get("/api/auth/monday/status", requireAuth, handleStatus);
 }
 
