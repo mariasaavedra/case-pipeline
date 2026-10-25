@@ -12,7 +12,8 @@ import { spawn } from "node:child_process";
 import cron from "node-cron";
 import { initializeSchema, getSchemaVersion, SCHEMA_VERSION } from "@case-pipeline/seed/db/schema";
 import { openDatabase, isDatabaseHealthy } from "@case-pipeline/seed/db/connection";
-import { startWriteQueueProcessor } from "./write-queue/processor.js";
+import { startWriteQueueProcessor, supersedeQueuedColumnWrites } from "./write-queue/processor.js";
+import { onDirectColumnWrite } from "./data-source/index.js";
 import { refreshBoardSchema } from "./schema-refresh.js";
 import {
   handleListClients,
@@ -223,6 +224,10 @@ if (MONDAY_API_TOKEN) {
 
 // Bound once to the shared token; see write-token.ts.
 const writeTokenOptions = makeWriteTokenOptions(MONDAY_API_TOKEN);
+
+// A direct write to a column makes any queued write to it stale: retire them,
+// or their retry puts the older value back in Monday (write-queue/processor.ts).
+onDirectColumnWrite((itemId, columnIds) => supersedeQueuedColumnWrites(db, itemId, columnIds));
 
 console.log(`Database loaded (DB_SOURCE=${DB_SOURCE}): ${DB_PATH}`);
 
@@ -894,16 +899,19 @@ function scheduleNightlySync() {
   const fullCron = process.env.SYNC_FULL_CRON ?? "0 1 * * *";
   const incrementalCron = process.env.SYNC_INCREMENTAL_CRON ?? "0 7-19/2 * * *";
 
+  // In the firm's zone, like every other job: read as UTC (the container's
+  // clock), "07:00–19:00" ran 02:00–14:00 Central and left the afternoon with
+  // no column refresh but the webhooks'.
   cron.schedule(fullCron, () => {
     runSync("full", ["--full"]).catch((err) => console.error("[sync] Error:", err));
-  });
+  }, { timezone: FIRM_TIMEZONE });
   cron.schedule(incrementalCron, () => {
     runSync("incremental", ["--skip-timeline"]).catch((err) => console.error("[sync] Error:", err));
-  });
+  }, { timezone: FIRM_TIMEZONE });
 
   console.log(
     `[sync] Scheduled: full "${fullCron}" (deletions + emails/activities), ` +
-      `incremental "${incrementalCron}" (columns only). Overlapping runs are skipped.`,
+      `incremental "${incrementalCron}" (columns only), ${FIRM_TIMEZONE}. Overlapping runs are skipped.`,
   );
 }
 
@@ -1392,7 +1400,7 @@ function pruneBackups(backupDir: string, decisions: PruneDecisions): void {
 }
 
 function scheduleBackups() {
-  // Daily online backup at 05:30 — after the 01:00 full sync has settled. It
+  // Daily online backup at 05:30 firm time — after the 01:00 full sync has settled. It
   // used to be 02:30, which now lands mid-sync: the online backup API would
   // still produce a consistent file, but of a half-synced database, which is a
   // poor thing to keep as the day's restore point.
@@ -1402,6 +1410,6 @@ function scheduleBackups() {
       console.error("[backup] error:", err);
       inBackground(notifyOps("ops_backup", `The daily database backup failed: ${(err as Error).message}. Check disk space on the server.`));
     });
-  });
-  console.log(`[backup] Daily backup scheduled — cron "${backupCron}".`);
+  }, { timezone: FIRM_TIMEZONE });
+  console.log(`[backup] Daily backup scheduled — cron "${backupCron}" (${FIRM_TIMEZONE}).`);
 }

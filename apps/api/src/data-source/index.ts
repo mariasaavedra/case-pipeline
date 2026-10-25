@@ -46,21 +46,47 @@ export interface DataSource {
   getColumnText(itemId: string, columnId: string): Promise<string>;
 }
 
+/** Told which columns of an item a direct write just set, after it succeeded. */
+export type ColumnWriteListener = (itemId: string, columnIds: string[]) => void;
+
+let columnWriteListener: ColumnWriteListener | null = null;
+
+/**
+ * Register the one listener for successful direct column writes. server.ts uses
+ * it to retire queued writes to the same columns, which would otherwise retry
+ * later and put the older value back (write-queue/processor.ts).
+ */
+export function onDirectColumnWrite(listener: ColumnWriteListener | null): void {
+  columnWriteListener = listener;
+}
+
+function columnsWritten(itemId: string, columnIds: string[]): void {
+  // The Monday write already landed; bookkeeping must never fail the request.
+  try {
+    columnWriteListener?.(itemId, columnIds);
+  } catch (err) {
+    console.warn(`[data-source] column-write listener failed for item ${itemId}:`, err);
+  }
+}
+
 /** Backed by Monday.com — the current, only implementation. */
 export const mondayDataSource: DataSource = {
   postUpdate: (itemId, body, token, parentId, mentions) => createUpdate(itemId, body, token, parentId, mentions),
   pinUpdate: (updateId, itemId, token) => pinUpdateToTop(updateId, itemId, token),
   setColumnValue: async (boardId, itemId, columnId, value, token) => {
     await changeSimpleColumnValue(boardId, itemId, columnId, value, token);
+    columnsWritten(itemId, [columnId]);
   },
   setColumnValueJson: async (boardId, itemId, columnId, value, token) => {
     await changeColumnValue(boardId, itemId, columnId, value, token);
+    columnsWritten(itemId, [columnId]);
   },
   createItem: (boardId, itemName, columnValues, token, groupId, createLabelsIfMissing) =>
     mondayCreateItem(boardId, itemName, columnValues, token, groupId, createLabelsIfMissing),
   createTimelineItem: (input, token) => mondayCreateTimelineItem(input, token),
   setColumnValues: async (boardId, itemId, columnValues, token, createLabelsIfMissing) => {
     await changeMultipleColumnValues(boardId, itemId, columnValues, token, createLabelsIfMissing);
+    columnsWritten(itemId, Object.keys(columnValues));
   },
   moveItem: async (boardId, groupId, itemId, token) => {
     await moveItemToBoard(boardId, groupId, itemId, token);
