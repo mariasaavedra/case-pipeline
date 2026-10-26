@@ -54,11 +54,11 @@ describe("TargetDatesPage", () => {
     expect(text).not.toContain("Client nodate");
     expect(text).toContain("2 parked at the North Pole not shown");
 
-    const later = [...el.querySelectorAll("button")].find((b) => b.textContent?.includes("Later") && b.getAttribute("aria-expanded") !== null)!;
+    const later = Array.from(el.querySelectorAll("button")).find((b) => b.textContent?.includes("Later") && b.getAttribute("aria-expanded") !== null)!;
     await act(async () => later.click());
     expect(el.textContent).toContain("Client far");
 
-    const lucy = [...el.querySelectorAll("button")].find((b) => b.textContent === "Lucy B")!;
+    const lucy = Array.from(el.querySelectorAll("button")).find((b) => b.textContent === "Lucy B")!;
     await act(async () => lucy.click());
     expect(el.textContent).not.toContain("Client late");
     expect(el.textContent).toContain("Client far");
