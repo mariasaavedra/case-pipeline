@@ -247,6 +247,21 @@ export const WORKFLOWS: WorkflowDef[] = [
     history: "slack_queue", doc: "docs/features/reception.md",
   },
   {
+    key: "target_dates_digest",
+    name: "Target dates digest",
+    when: "Weekdays at 8 AM",
+    then: "Send each admin a Slack DM with the Open Forms whose target date is overdue or due within 7 days (P24)",
+    group: "messages", kind: "scheduled",
+    schedule: cronOf("TARGET_DATES_DIGEST_CRON", "0 8 * * 1-5", true),
+    enabled: ({ env, live }) => {
+      if (!live) return LIVE_ONLY;
+      const mode = slackMode(env);
+      if (mode === "off") return { on: false, reason: "Off — SLACK_MODE is off" };
+      return mode === "dry-run" ? { on: true, reason: "Dry run — logged, not posted" } : { on: true };
+    },
+    history: "job_runs", doc: "docs/features/target-dates.md",
+  },
+  {
     key: "slack_events",
     name: "Slack notifications",
     when: "A contract is signed, a payment arrives, a client sends documents, mail is filed…",
@@ -309,7 +324,9 @@ export function describeCron(cron: string): string {
   const parts = cron.trim().split(/\s+/);
   if (parts.length !== 5) return cron;
   const [min, hour, dom, mon, dow] = parts as [string, string, string, string, string];
-  if (dom !== "*" || mon !== "*" || dow !== "*") return cron;
+  if (dom !== "*" || mon !== "*") return cron;
+  if (dow === "1-5") return NUM.test(min) && NUM.test(hour) ? `Weekdays at ${clock(Number(hour), Number(min))}` : cron;
+  if (dow !== "*") return cron;
 
   const range = /^(\d+)-(\d+)(?:\/(\d+))?$/.exec(hour);
   const hours = range ? `, ${clock(Number(range[1]))}–${clock(Number(range[2]))}` : "";

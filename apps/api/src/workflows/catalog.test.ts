@@ -19,10 +19,12 @@ describe("describeCron", () => {
     ["0 7-19/2 * * *", "Every 2 hours, 7 am–7 pm"],
     ["30 7-19/2 * * *", "Every 2 hours, 7:30 am–7:30 pm"],
     ["0 8-18/3 * * *", "Every 3 hours, 8 am–5 pm"],
+    ["0 8 * * 1-5", "Weekdays at 8 am"],
   ])("%s → %s", (cron, words) => expect(describeCron(cron)).toBe(words));
 
   it("shows anything it doesn't know as the cron itself", () => {
-    expect(describeCron("0 9 * * 1-5")).toBe("0 9 * * 1-5");
+    expect(describeCron("0 9 * * 1-3")).toBe("0 9 * * 1-3");
+    expect(describeCron("*/5 * * * 1-5")).toBe("*/5 * * * 1-5");
     expect(describeCron("nonsense")).toBe("nonsense");
   });
 });

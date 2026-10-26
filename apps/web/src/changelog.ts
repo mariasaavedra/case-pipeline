@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-26",
+    title: "Target dates are set by an admin",
+    items: [
+      "On an Open Form's case card (My Cases), the Target date can now only be changed by an admin.",
+      "Need more time on a case? Ask the attorney for an extension, then let an admin know — they move the date, and a note on the Open Form says who granted it.",
+    ],
+  },
+  {
+    date: "2026-10-26",
     title: "Upload link: choose what to ask for",
     items: [
       "In a client's Upload link popup, “Ask for” now offers Evidence for a case, Consult documents, or Other.",

@@ -22,6 +22,8 @@ export interface NotifyEventDef {
   label: string;
   /** One line for the settings page: when it posts. */
   description: string;
+  /** Sent as direct messages to people, not to a channel (no channel picker). */
+  dm?: boolean;
 }
 
 export const NOTIFY_EVENTS = [
@@ -36,6 +38,7 @@ export const NOTIFY_EVENTS = [
   { key: "client_upload", kind: "events", label: "Client sent documents", description: "Documents a client sent through their upload link are filed in their E-File → CAF" },
   { key: "buzon", kind: "events", label: "Buzón", description: "A paid Fee K's Buzón went out (or couldn't be texted), every document on the list came in, a client stopped answering reminders" },
   { key: "ops_buzon", kind: "ops", label: "Buzón job failed", description: "The Buzón's automatic start or reminders failed" },
+  { key: "target_dates_digest", kind: "events", label: "Target dates digest", description: "Weekdays at 8 AM: a direct message to each admin with the target dates overdue or due this week (P24). Goes to the admins' Slack ids in the staff roster", dm: true },
   { key: "payment_unmatched", kind: "events", label: "Payment to match", description: "A LawPay payment the app couldn't tie to a Fee K — someone should file it" },
   { key: "ops_sync", kind: "ops", label: "Sync failed", description: "A Monday sync (nightly, daytime or webhook) exits with an error" },
   { key: "ops_write_queue", kind: "ops", label: "Monday write gave up", description: "A queued write to Monday failed every retry" },
