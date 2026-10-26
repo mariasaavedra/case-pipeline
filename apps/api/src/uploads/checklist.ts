@@ -183,6 +183,41 @@ export function addFeeKList(
 }
 
 /**
+ * M30 → Evidence → a case type: that one type's list, for any type (decided
+ * 2026-10-26). Tied to the client's newest Fee K of that type when they have
+ * one (so its Evidence Received + bells work), else to no Fee K — the files
+ * still go to EVIDENCE <type>. A document this type already has for the client
+ * is skipped. Returns how many were added, or null for a type with no list.
+ */
+export function addCaseTypeList(
+  db: DatabaseInstance,
+  p: ClientKey,
+  feeKType: string,
+  table: FeeKTypeRow[],
+  by: string | null,
+): { added: number; feeK: ClientFeeK | null } | null {
+  const row = feeKTypeLookup(table)(feeKType);
+  if (!row?.documents?.length) return null;
+  const feeK = clientFeeKs(db, p).find((k) => k.feeKTypes.some((t) => norm(t) === norm(row.feeKType))) ?? null;
+  const existing = checklistFor(db, p);
+  const have = new Set(existing.filter((r) => r.fee_k_type && norm(r.fee_k_type) === norm(row.feeKType)).map((r) => norm(r.label_en)));
+  let position = existing.reduce((m, r) => Math.max(m, r.position), 0);
+  const room = MAX_ITEMS_PER_CLIENT - existing.length;
+  const fresh = row.documents.filter((d) => !have.has(norm(d.en)) && (have.add(norm(d.en)), true)).slice(0, Math.max(0, room));
+  const ins = db.prepare(`
+    INSERT INTO upload_checklist_items
+      (profile_local_id, profile_monday_id, fee_k_local_id, fee_k_monday_id, fee_k_type, label_en, label_es, required, position, added_by_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  db.transaction(() => {
+    for (const d of fresh) {
+      ins.run(p.localId, p.mondayId, feeK?.localId ?? null, feeK?.mondayId ?? null, row.feeKType, d.en, d.es || d.en, d.required ? 1 : 0, ++position, by);
+    }
+  })();
+  return { added: fresh.length, feeK };
+}
+
+/**
  * Copy a consult list (Settings → Firm → Consult document lists) onto the
  * client's checklist for one appointment (Phase 5). A document already asked
  * for this appointment is skipped. Returns how many were added.

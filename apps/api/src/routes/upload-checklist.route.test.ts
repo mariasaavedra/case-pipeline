@@ -119,6 +119,20 @@ describe("staff checklist", () => {
     expect(audits.map((a) => a.action)).toEqual(["upload_checklist.case_added", "upload_checklist.case_added"]);
   });
 
+  it("Evidence → any case type: tied to the client's Fee K of that type when there is one, else to none; once", async () => {
+    const view = await call<View & { data: { caseTypes: { feeKType: string; theirs: boolean; added: boolean }[] } }>("/api/profiles/p2/upload-checklist");
+    expect(view.body.data.caseTypes.map((t) => [t.feeKType, t.theirs])).toEqual([["I-130 - Petition for Alien Relative", true], ["Bond MTN  (c)", false]]);
+    const theirs = await call<View>("/api/profiles/p2/upload-checklist/case-type", json("POST", { feeKType: "I-130 - Petition for Alien Relative" }));
+    expect(theirs.status).toBe(201);
+    expect(db.prepare("SELECT DISTINCT fee_k_monday_id FROM upload_checklist_items WHERE profile_local_id = 'p2'").all()).toEqual([{ fee_k_monday_id: "7003" }]);
+    const other = await call<View>("/api/profiles/p2/upload-checklist/case-type", json("POST", { feeKType: "bond mtn (c)" }));
+    expect(other.body.data.added).toBe(1);
+    expect(other.body.data.items.find((i) => i.folder === "EVIDENCE Bond MTN")).toBeTruthy();
+    expect(db.prepare("SELECT fee_k_monday_id FROM upload_checklist_items WHERE fee_k_type = 'Bond MTN  (c)'").get()).toEqual({ fee_k_monday_id: null });
+    expect((await call<View>("/api/profiles/p2/upload-checklist/case-type", json("POST", { feeKType: "Bond MTN  (c)" }))).body.data.added).toBe(0);
+    expect((await call("/api/profiles/p2/upload-checklist/case-type", json("POST", { feeKType: "FOIA" }))).status).toBe(400);
+  });
+
   it("refuses another client's Fee K and a case type with no list", async () => {
     expect((await call("/api/profiles/p1/upload-checklist", json("POST", { feeKLocalId: "k3" }))).status).toBe(404);
     db.prepare("UPDATE contracts SET raw_column_values = ? WHERE local_id = 'k2'").run(JSON.stringify({ fee_k_type: { labels: ["FOIA"] } }));

@@ -5,7 +5,7 @@ order: 10
 summary: Find a client, read their notes, files and timeline, and act on their case.
 routes: clients, client-detail
 code: P2 · P3
-updated: 2026-10-24
+updated: 2026-10-26
 ---
 
 ## Find a client
@@ -64,7 +64,14 @@ The client can only *send* files. They never see what's in their folder. Making 
 
 In the same popup, **Documents to ask for** is the client's checklist. Their page then lists each document with its own **Photo** and **File** buttons, and a ✓ once we have it.
 
-- **+ Add the … list** copies the documents a case type needs (set by an admin in Settings → Firm → Fee K Types → **Documents…**).
+Use **Ask for** to choose what you need:
+
+1. **Evidence for a case:** pick the **Type of case** (any type with a document list; the client's own cases come first, marked *their case*), then **Add list**. Files go to **E-File → EVIDENCE *case type***.
+2. **Consult documents:** pick the consult and a consult list, then **Add list**. Files go to the **Consult File → CONSULT**.
+3. **Other / whatever they want to send:** no list. The client's page always lets them send anything; those files go to **E-File → CAF**.
+
+The document lists are set by an admin in Settings → Firm → Fee K Types → **Documents…** and Settings → Firm → Consult document lists.
+
 - **+ Ask for one more document** adds one by hand. Pick its case so it files with that case's evidence.
 - **Already have it** takes a document off the client's page. **Ask again** puts it back (a blurry photo, say).
 - Files sent for a checklist document go to **E-File → EVIDENCE *case type*** (for example `EVIDENCE I-130 - Petition for Alien Relative`). Everything else still goes to **CAF**.
