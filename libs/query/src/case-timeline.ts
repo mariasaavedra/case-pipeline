@@ -611,7 +611,24 @@ function correctHearings(events: TimelineEvent[], calendaringNames: string[]): v
       e.detail = (e.detail ? `${e.detail} · ` : "") + "after the case was closed";
     }
   }
+
+  // HEARING NOTES the same day = the hearing went ahead, whatever Calendaring still
+  // says. The note joins the hearing (its text in the detail, its id for a reply).
+  for (let i = events.length - 1; i >= 0; i--) {
+    const note = events[i]!;
+    if (note.source !== HEARING_NOTES_SOURCE) continue;
+    const hearing = events.find(
+      (e) => e.kind === "hearing" && e.track === "court" && e.date === note.date && e.status !== "cancelled" && e.status !== "upcoming" && !e.updateLocalId,
+    );
+    if (!hearing) continue;
+    if (hearing.status === "unknown") hearing.status = "done";
+    hearing.detail = (hearing.detail ? `${hearing.detail} · ` : "") + `Hearing notes: ${note.detail ?? ""}`;
+    hearing.updateLocalId = note.updateLocalId;
+    events.splice(i, 1);
+  }
 }
+
+const HEARING_NOTES_SOURCE = "E&A · HEARING NOTES";
 
 function notesPerMonth(db: Database, profileLocalId: string, timeZone?: string): { month: string; count: number }[] {
   const rows = db

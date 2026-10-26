@@ -400,6 +400,31 @@ describe("what the event panel (M29) needs", () => {
     expect(find(build(db), "Filing deadline before trial hearing")?.status).toBe("met");
   });
 
+  test("HEARING NOTES the same day: the hearing went ahead, and the note shows on it", () => {
+    const db = freshDb();
+    const hearing = item(db, "calendaring", "[9/30/26] IN PERSON MASTER: Ana S. RIVERA LOPEZ", {
+      type: { label: "Master" }, hearing_date_calendaring: d("2026-09-30"),
+    }, { status: "Added on Cal" });
+    const entry = activity(db, "2026-09-30T20:00:00Z", "HEARING NOTES", "9/30/26 MCH IJ Smith, Indv set 03/22/2027");
+    const t = build(db);
+    expect(find(t, "Master hearing", "2026-09-30")).toMatchObject({
+      status: "done", itemLocalId: hearing, updateLocalId: entry, detail: expect.stringContaining("Hearing notes: 9/30/26 MCH IJ Smith"),
+    });
+    expect(find(t, "Hearing notes", "2026-09-30")).toBeUndefined();
+    expect(t.summary.attention).toEqual([]);
+  });
+
+  test("HEARING NOTES on another day leave the hearing without an outcome", () => {
+    const db = freshDb();
+    item(db, "calendaring", "[9/30/26] IN PERSON MASTER: Ana S. RIVERA LOPEZ", {
+      type: { label: "Master" }, hearing_date_calendaring: d("2026-09-30"),
+    }, { status: "Added on Cal" });
+    activity(db, "2026-10-02T20:00:00Z", "HEARING NOTES", "10/2/26 bond hearing notes");
+    const t = build(db);
+    expect(find(t, "Master hearing", "2026-09-30")?.status).toBe("unknown");
+    expect(find(t, "Hearing notes", "2026-10-02")).toBeDefined();
+  });
+
   test("an E&A event carries its entry's id (for a reply); a board event its item's", () => {
     const db = freshDb();
     const entry = activity(db, "2026-06-03T20:00:00Z", "HEARING NOTES", "6-3-2026 Indiv. Hearing, client present");
