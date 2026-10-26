@@ -6,7 +6,7 @@ summary: The whole case on one page — what happened, what needs attention, wha
 routes:
 code: P3.9 · M29
 for: paralegal, attorney
-updated: 2026-10-23
+updated: 2026-10-26
 ---
 
 Open a client, then the **Timeline** tab. It's also a tab in the client popup and on Appointments.
@@ -14,7 +14,7 @@ Open a client, then the **Timeline** tab. It's also a tab in the client popup an
 ## Read the top
 
 - **Where it stands:** the case in one or two lines.
-- **Needs attention:** things to fix — a hearing with no outcome, a missed deadline, a motion still waiting on the judge.
+- **Needs attention:** things to fix — a hearing with no outcome, a missed deadline, a motion still waiting on the judge. A hearing with **HEARING NOTES** logged the same day counts as attended, and the notes show on the hearing.
 - **Coming up:** the next hearings, deadlines and appointments.
 
 ## The chart
