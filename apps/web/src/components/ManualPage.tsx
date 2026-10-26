@@ -27,7 +27,7 @@ import {
 } from "../manual/manual";
 
 const AUDIENCE_KEY = "manual-audience";
-const EDIT_BASE = "https://github.com/mariasaavedra/case-pipeline/edit/main/apps/web/src/manual/chapters/";
+const EDIT_BASE = "https://github.com/sharma-crawford/case-pipeline/edit/main/apps/web/src/manual/chapters/";
 
 const AUDIENCE_LABEL: Record<Audience, string> = {
   reception: "Reception",
