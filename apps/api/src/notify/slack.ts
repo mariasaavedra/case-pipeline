@@ -156,6 +156,24 @@ export function createSlackNotifier(deps: SlackDeps = {}) {
     return send(r.channel, r.kind, text);
   }
 
+  /**
+   * A direct message from the bot to each Slack member id (U…/W…), for an
+   * event that goes to people rather than a channel (the target dates digest).
+   * Its on/off switch is the event's; its channel setting is ignored.
+   */
+  async function dmEvent(key: NotifyEventKey, userIds: string[], text: string): Promise<{ sent: number; errors: string[] }> {
+    const r = route(key);
+    if (!r) return { sent: 0, errors: ["turned off in Settings → Integrations"] };
+    let sent = 0;
+    const errors: string[] = [];
+    for (const id of new Set(userIds.filter((u) => SLACK_USER_ID_RE.test(u)))) {
+      const res = await send(id, r.kind, text);
+      if (res.ok) sent++;
+      else errors.push(res.error);
+    }
+    return { sent, errors };
+  }
+
   /** Whether an event would post right now, and where — for screens that warn before queueing. */
   function eventStatus(key: NotifyEventKey): { mode: SlackMode; enabled: boolean; channel: string | null } {
     const r = route(key);
@@ -184,14 +202,18 @@ export function createSlackNotifier(deps: SlackDeps = {}) {
     return send(channel, "events", text, true);
   }
 
-  return { postSlack, notifyOps, notifyEvent, postEvent, eventStatus, sendTest };
+  return { postSlack, notifyOps, notifyEvent, postEvent, dmEvent, eventStatus, sendTest };
 }
+
+/** A Slack member id (the staff roster's slack_user_id). */
+export const SLACK_USER_ID_RE = /^[UW][A-Z0-9]{8,}$/;
 
 const shared = createSlackNotifier();
 export const postSlack = shared.postSlack;
 export const notifyOps = shared.notifyOps;
 export const notifyEvent = shared.notifyEvent;
 export const postEvent = shared.postEvent;
+export const dmEvent = shared.dmEvent;
 export const slackEventStatus = shared.eventStatus;
 export const sendSlackTest = shared.sendTest;
 

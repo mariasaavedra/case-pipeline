@@ -25,6 +25,7 @@ const CourtCasesPage = lazy(() => import("./components/CourtCasesPage").then((m)
 const AddressChangesPage = lazy(() => import("./components/AddressChangesPage").then((m) => ({ default: m.AddressChangesPage })));
 const FoiasPage = lazy(() => import("./components/FoiasPage").then((m) => ({ default: m.FoiasPage })));
 const WorkloadPage = lazy(() => import("./components/WorkloadPage").then((m) => ({ default: m.WorkloadPage })));
+const TargetDatesPage = lazy(() => import("./components/TargetDatesPage").then((m) => ({ default: m.TargetDatesPage })));
 const EFilesToOpenPage = lazy(() => import("./components/EFilesToOpenPage").then((m) => ({ default: m.EFilesToOpenPage })));
 const ClientUploadsPage = lazy(() => import("./components/ClientUploadsPage").then((m) => ({ default: m.ClientUploadsPage })));
 const PreschedulingPage = lazy(() => import("./components/PreschedulingPage").then((m) => ({ default: m.PreschedulingPage })));
@@ -66,6 +67,7 @@ const PAGE_CODES: Partial<Record<Route["page"], string>> = {
   workload: "P20",
   manual: "P22",
   "client-uploads": "P23",
+  "target-dates": "P24",
 };
 import { getClient } from "./api";
 import type { ClientCaseSummary } from "./api";
@@ -389,6 +391,7 @@ function App() {
             {route.page === "client-uploads" && !loading && <ClientUploadsPage />}
             {route.page === "foias" && !loading && (underConstruction ? <UnderConstruction label="FOIAs" /> : <FoiasPage />)}
             {route.page === "workload" && !loading && (underConstruction ? <UnderConstruction label="Workload" /> : <WorkloadPage />)}
+            {route.page === "target-dates" && !loading && (user?.role === "admin" ? <TargetDatesPage /> : <UnderConstruction label="Target Dates" />)}
             {route.page === "active-cases" && !loading && <ActiveCasesPage />}
             {route.page === "my-cases" && !loading && <MyCasesPage />}
             {route.page === "calendar" && !loading && <CalendarPage />}

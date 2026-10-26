@@ -98,6 +98,8 @@ import { registerAppointmentWriteRoutes } from "./routes/appointment-write.js";
 import { registerReceptionRoutes } from "./routes/reception.js";
 import { registerMyDayRoutes } from "./routes/my-day.js";
 import { registerCaseTimelineRoutes } from "./routes/case-timeline.js";
+import { registerTargetDatesRoutes } from "./routes/target-dates.js";
+import { runTargetDatesDigest } from "./notify/target-dates-digest.js";
 import { registerConsultScheduleRoutes } from "./routes/consult-schedule.js";
 import { registerConsultLinkRoutes } from "./routes/consult-link.js";
 import { registerJailIntakeWriteRoutes } from "./routes/jail-intake-write.js";
@@ -591,6 +593,7 @@ app.get("/api/clients/:localId/updates", adapt((req, d) => {
 }));
 app.get("/api/clients/:localId/relationships", adapt(handleClientRelationships));
 registerCaseTimelineRoutes(app, { db, usersDb });
+registerTargetDatesRoutes(app, { db, usersDb });
 app.get("/api/board-items/:localId", adapt(handleBoardItemDetail));
 app.get("/api/call-log", adapt((req, d) => handleCallLog(req, d, makeStaffResolver(usersDb))));
 app.get("/api/jail-intakes", adapt(handleJailIntakes));
@@ -742,6 +745,7 @@ const server = app.listen(PORT, HOST, () => {
     scheduleLawPaySlack();
     scheduleLawPayMail();
     scheduleFeeKAutofill();
+    scheduleTargetDatesDigest();
     scheduleWalCheckpoint();
     // Write this process's Monday call counts to monday_api_calls every minute.
     setInterval(flushMondayCallCounts, 60_000).unref();
@@ -1209,6 +1213,21 @@ function scheduleSlackQueue() {
       .finally(() => { slackQueueInFlight = false; });
   });
   console.log("[slack-queue] Scheduled — every minute.");
+}
+
+/**
+ * Target dates digest (P24): weekdays 8 AM firm time, a Slack DM to each admin
+ * with the Open Forms overdue or due within 7 days. On/off in Settings →
+ * Integrations; recipients = admins with a Slack id in the staff roster.
+ */
+function scheduleTargetDatesDigest() {
+  const digestCron = process.env.TARGET_DATES_DIGEST_CRON?.trim() || "0 8 * * 1-5";
+  cron.schedule(digestCron, () => {
+    trackRun(usersDb, "target_dates_digest", () => runTargetDatesDigest(db, usersDb))
+      .then((summary) => console.log(`[target-dates] digest: ${summary}`))
+      .catch((err) => console.error("[target-dates] digest failed:", err));
+  }, { timezone: FIRM_TIMEZONE });
+  console.log(`[target-dates] Digest scheduled — cron "${digestCron}" (${FIRM_TIMEZONE}).`);
 }
 
 /** Monday calls made in this process since the last flush → monday_api_calls. */

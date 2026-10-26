@@ -903,7 +903,7 @@ export function updateFeeKTypes(rows: FeeKTypeRow[]): Promise<FeeKTypesTable> {
 
 // Settings → Integrations (P11.5) — routes/integrations.ts
 export type SlackChannelKind = "events" | "ops" | "alerts";
-export interface NotifyEventDef { key: string; kind: SlackChannelKind; label: string; description: string }
+export interface NotifyEventDef { key: string; kind: SlackChannelKind; label: string; description: string; dm?: boolean }
 export interface NotifyEventSetting { enabled: boolean; channel: string | null }
 export interface NotifySettings { events: Record<string, NotifyEventSetting>; opsRepeatMinutes: number }
 export interface IntegrationsStatus {
@@ -1062,6 +1062,30 @@ export async function fetchAddressChanges(): Promise<import("@case-pipeline/quer
 /** Open work per person (admin-only) — apps/api/src/server.ts, libs/query/src/workload.ts. */
 export async function fetchWorkload(): Promise<import("@case-pipeline/query").WorkloadResult> {
   return apiFetch("/api/workload");
+}
+
+/** P24: a target date case, with who changed the date last (staff roster) and whether it was an admin. */
+export type TargetDateCaseView = Omit<import("@case-pipeline/query").TargetDateCase, "lastChange"> & {
+  lastChange: (import("@case-pipeline/query").TargetDateChange & { by: string | null; byAdmin: boolean | null }) | null;
+};
+export type TargetDatesView = Omit<import("@case-pipeline/query").TargetDatesResult, "cases"> & { cases: TargetDateCaseView[] };
+
+export async function fetchTargetDates(): Promise<TargetDatesView> {
+  return apiFetch("/api/target-dates");
+}
+
+/** P24 Move date (admin): the Open Form's target date, plus an update on it saying who granted the extension. */
+export function moveTargetDate(
+  localId: string,
+  value: string,
+  from: string | null,
+  extension: { grantedBy?: string; reason?: string },
+): Promise<{ localId: string; field: string; value: string | null; pending: boolean }> {
+  return apiFetch(`/api/open-forms/${encodeURIComponent(localId)}/case-field`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ field: "target_date", value, from, extension }),
+  });
 }
 
 export async function fetchFoias(): Promise<import("@case-pipeline/query").FoiasResult> {

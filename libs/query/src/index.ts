@@ -40,6 +40,8 @@ export { getCourtMotions, getMotionWriteSchema, motionDateFieldFor, phaseOf as m
 export type { CourtMotion, MotionAge, MotionFlag, MotionPhase } from "./court-motions";
 export { getAddressChanges } from "./address-changes";
 export { getFoias } from "./foias";
+export { getTargetDates, bucketFor, daysBetween, TARGET_BUCKETS, TARGET_DATE_COLUMN_ID } from "./target-dates";
+export type { TargetDatesResult, TargetDateCase, TargetDateChange, TargetBucket, TargetDatesOptions } from "./target-dates";
 export { getEFilesToOpen } from "./efiles-to-open";
 export { getWorkload, buildWorkload, collectWorkloadItems, getInactiveAssigneeAlertGroup, WORKLOAD_SOURCES, PRIMARY_COLUMN } from "./workload";
 export type { WorkloadResult, WorkloadPerson, WorkloadItem, WorkloadAssignment, WorkloadSource, WorkloadColumn, WorkloadLevel, StaffResolver, WorkloadOptions } from "./workload";

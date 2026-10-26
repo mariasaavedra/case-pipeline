@@ -10,7 +10,10 @@
 //
 // Status values must be one of the board's synced labels; dates are
 // YYYY-MM-DD or "" (clears). "Reminder sent" and "Evidence received" can't be
-// in the future. `from` is what the card showed: if Monday has something else
+// in the future. The Open Form's Target date is an internal goal only an
+// admin sets (403 for anyone else); with `extension` ({ grantedBy?, reason? },
+// from the Target Dates page) a move also posts an update on the Open Form
+// saying who granted it and why. `from` is what the card showed: if Monday has something else
 // now, the write is refused (409) with the current value. Same rails as every
 // write-back — personal token first, durable queue on outage, optimistic local
 // update, audit. Plan = planCaseFieldWrite (unit-tested).
@@ -25,7 +28,7 @@
 import type { Express, Request } from "express";
 import type BetterSqlite3 from "better-sqlite3";
 type DatabaseInstance = BetterSqlite3.Database;
-import { requireAuth } from "../auth/middleware.js";
+import { requireAuth, isAdminRequest } from "../auth/middleware.js";
 import { dataSource } from "../data-source/index.js";
 import { withTokenFallback } from "../write-auth.js";
 import type { WriteTokenOptions } from "../write-token.js";
@@ -43,6 +46,8 @@ interface FieldDef {
   label: string;
   /** A date that records something that happened: never in the future. */
   past?: boolean;
+  /** Only an admin may change it. */
+  adminOnly?: boolean;
 }
 
 /** Field key (= synced column key) → its Monday column. by_id in config/boards.yaml. */
@@ -54,7 +59,7 @@ export const CASE_FIELDS: Record<CaseKind, Record<string, FieldDef>> = {
   },
   open_form: {
     status: { columnId: "project_status", type: "status", label: "Status" },
-    target_date: { columnId: "date_mkkws221", type: "date", label: "Target date" },
+    target_date: { columnId: "date_mkkws221", type: "date", label: "Target date", adminOnly: true },
     forms_appt_date: { columnId: "date_mkkwqnd4", type: "date", label: "Forms appointment" },
     forms_sent_date: { columnId: "date_mknhv4v7", type: "date", label: "Forms sent", past: true },
   },
@@ -96,10 +101,12 @@ export function planCaseFieldWrite(
   item: CaseFieldItem | null | undefined,
   schema: BoardColumns | null,
   today: string,
+  isAdmin = false,
 ): CaseFieldPlanResult {
   const field = typeof body.field === "string" ? body.field : "";
   const def = CASE_FIELDS[kind][field];
   if (!def) return { rejection: { status: 400, error: `Unknown field "${field}"`, allowed: Object.keys(CASE_FIELDS[kind]) } };
+  if (def.adminOnly && !isAdmin) return { rejection: { status: 403, error: `Only an admin can change the ${def.label}` } };
   if (!item) return { rejection: { status: 404, error: "Case not found" } };
   if (!item.mondayItemId) {
     return { rejection: { status: 400, error: "This case has not synced to Monday yet — try again after the next sync" } };
@@ -130,6 +137,35 @@ export function planCaseFieldWrite(
   }
 
   return { plan: { field, def, mondayItemId: item.mondayItemId, mondayBoardId: schema.mondayBoardId, from: item.current, to } };
+}
+
+/** "2026-11-03" → "Nov 3, 2026". */
+function longDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
+
+/**
+ * The update a moved target date posts on the Open Form, when the move came
+ * with `extension` (the Target Dates page). Null = no update: not a target
+ * date, no extension, or the date was cleared.
+ */
+export function targetDateNote(
+  plan: Pick<CaseFieldPlan, "field" | "from" | "to">,
+  extension: unknown,
+  by: string | null,
+): string | null {
+  if (plan.field !== "target_date" || !plan.to) return null;
+  if (!extension || typeof extension !== "object") return null;
+  const e = extension as { grantedBy?: unknown; reason?: unknown };
+  const grantedBy = norm(e.grantedBy)?.slice(0, 80) ?? null;
+  const reason = norm(e.reason)?.slice(0, 500) ?? null;
+  const move = plan.from ? `Target date moved ${longDate(plan.from)} → ${longDate(plan.to)}` : `Target date set to ${longDate(plan.to)}`;
+  return [
+    `${move}${grantedBy ? ` — extension granted by ${grantedBy}` : ""}.`,
+    reason ? `Reason: ${reason}` : null,
+    by ? `(${by}, from the app)` : null,
+  ].filter(Boolean).join("\n");
 }
 
 // -----------------------------------------------------------------------------
@@ -228,7 +264,7 @@ export function registerCaseCardWriteRoutes(app: Express, deps: CaseCardWriteDep
       return;
     }
     const localId = String(req.params.localId);
-    const body = (req.body ?? {}) as { field?: unknown; value?: unknown; from?: unknown };
+    const body = (req.body ?? {}) as { field?: unknown; value?: unknown; from?: unknown; extension?: unknown };
     const field = typeof body.field === "string" ? body.field : "";
     const boardKey = BOARD_KEYS[kind];
     // Status labels: the board's synced status definition is the authority for
@@ -236,7 +272,7 @@ export function registerCaseCardWriteRoutes(app: Express, deps: CaseCardWriteDep
     // options for Fee Ks, whose "main" status is Contract Stage.
     let schema = getBoardColumnsFor(db, boardKey);
     if (schema && kind === "open_form" && field === "status") schema = withStatusOptions(schema, getBoardStatusOptionsFor(db, boardKey));
-    const planned = planCaseFieldWrite(kind, body, readItem(db, kind, localId, field), schema, firmToday());
+    const planned = planCaseFieldWrite(kind, body, readItem(db, kind, localId, field), schema, firmToday(), isAdminRequest(req));
     if ("rejection" in planned) {
       const { status, ...rest } = planned.rejection;
       res.status(status).json(rest);
@@ -268,6 +304,20 @@ export function registerCaseCardWriteRoutes(app: Express, deps: CaseCardWriteDep
       audit({ queued: true });
     }
     applyLocal(db, kind, localId, plan);
+
+    // An extension says so on the Open Form, where the paralegal sees it.
+    const note = targetDateNote(plan, body.extension, req.user?.name ?? null);
+    if (note) {
+      try {
+        await withTokenFallback((token) => dataSource.postUpdate(mondayItemId, note, token), writeTokenOptions(req));
+      } catch (err) {
+        console.error("[write-back] target date note failed; queueing for retry:", err);
+        enqueueWrite(db, {
+          opType: "create_update", targetTable: "board_items", targetLocalId: localId,
+          mondayItemId, authorOid: req.user?.oid ?? null, payload: { body: note },
+        });
+      }
+    }
     res.status(pending ? 202 : 200).json({ data: { localId, field, value: to, pending } });
   };
 

@@ -210,7 +210,9 @@ export function IntegrationsSection() {
                         <div className="text-xs" style={{ color: "var(--color-ink-faint)" }}>{e.description}</div>
                       </td>
                       <td className="py-2 align-top text-right">
-                        {channelSelect(s.channel, e.kind, (v) => setEvent(e.key, { channel: v }), `Channel for ${e.label}`)}
+                        {e.dm
+                          ? <span className="text-xs" style={{ color: "var(--color-ink-muted)" }}>Direct message</span>
+                          : channelSelect(s.channel, e.kind, (v) => setEvent(e.key, { channel: v }), `Channel for ${e.label}`)}
                       </td>
                     </tr>
                   );

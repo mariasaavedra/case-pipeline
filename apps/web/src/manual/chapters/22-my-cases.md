@@ -6,7 +6,7 @@ summary: A paralegal's own Prescheduling and Open Forms cases, with the case car
 routes: my-cases
 code: P6 · M27
 for: paralegal
-updated: 2026-10-23
+updated: 2026-10-26
 ---
 
 **My Cases** shows **your** cases: your Paid Fee Ks (Prescheduling) and your Open Forms. Use **Whose cases** to look at another paralegal's, or **Everyone**.
@@ -19,7 +19,7 @@ Click a row to open the **case card**:
 
 1. **Open E-File** opens the client's folder; **Browse files here** shows it in place. No link yet? **Link E-File folder** and paste the SharePoint link.
 2. Change the **PS Stage** (Fee K) or **Status** (Open Form). It asks to confirm.
-3. Set the dates. Fee K: **Reminder sent**, **Evidence received**. Open Form: **Forms appointment**, **Target date**, **Forms sent**. **Today** fills in today's date.
+3. Set the dates. Fee K: **Reminder sent**, **Evidence received**. Open Form: **Forms appointment**, **Forms sent**. **Today** fills in today's date. The **Target date** is shown but only an admin changes it. Need more time? Ask the attorney for an extension, then tell an admin.
 4. The **Notes** tab shows the client's notes, with a box to add one.
 
 Every change goes to Monday. If someone changed it in Monday since you opened the card, the app asks you to reload first.

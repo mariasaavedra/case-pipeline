@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { BoardColumns } from "@case-pipeline/query";
-import { planCaseFieldWrite, planEFileWrite, type CaseFieldItem } from "./case-card-write";
+import { planCaseFieldWrite, planEFileWrite, targetDateNote, type CaseFieldItem } from "./case-card-write";
 
 const TODAY = "2026-10-14";
 
@@ -84,10 +84,49 @@ describe("planCaseFieldWrite", () => {
   it("refuses an item that hasn't synced to Monday, and a missing column", () => {
     expect(planCaseFieldWrite("fee_k", { field: "ps_stage", value: "Need Evidence" }, { mondayItemId: null, current: null }, FEE_SCHEMA, TODAY))
       .toMatchObject({ rejection: { status: 400 } });
-    expect(planCaseFieldWrite("open_form", { field: "target_date", value: "2026-11-02" }, item(), FORM_SCHEMA, TODAY))
+    expect(planCaseFieldWrite("open_form", { field: "target_date", value: "2026-11-02" }, item(), FORM_SCHEMA, TODAY, true))
       .toMatchObject({ rejection: { status: 409 } });
     expect(planCaseFieldWrite("fee_k", { field: "ps_stage", value: "Need Evidence" }, null, FEE_SCHEMA, TODAY))
       .toMatchObject({ rejection: { status: 404 } });
+  });
+});
+
+describe("target date (admin only)", () => {
+  const WITH_TARGET: BoardColumns = {
+    ...FORM_SCHEMA,
+    columns: [...FORM_SCHEMA.columns, { columnId: "date_mkkws221", title: "Target Date", type: "date", options: [], position: 2 }] as BoardColumns["columns"],
+  };
+
+  it("refuses anyone but an admin, before anything else", () => {
+    expect(planCaseFieldWrite("open_form", { field: "target_date", value: "2026-11-02", from: null }, item(), WITH_TARGET, TODAY))
+      .toMatchObject({ rejection: { status: 403 } });
+    expect(planCaseFieldWrite("open_form", { field: "target_date", value: "2026-11-02", from: null }, item(), WITH_TARGET, TODAY, true))
+      .toMatchObject({ plan: { to: "2026-11-02", def: { columnId: "date_mkkws221" } } });
+  });
+
+  it("leaves the other fields open to everyone", () => {
+    expect(planCaseFieldWrite("open_form", { field: "forms_appt_date", value: "2026-11-02", from: null }, item(), WITH_TARGET, TODAY))
+      .toMatchObject({ plan: { to: "2026-11-02" } });
+  });
+});
+
+describe("targetDateNote", () => {
+  const moved = { field: "target_date", from: "2026-11-03", to: "2026-11-17" };
+
+  it("says who granted the extension and why", () => {
+    expect(targetDateNote(moved, { grantedBy: "LB", reason: "Waiting on birth certificate" }, "Rafael"))
+      .toBe("Target date moved Nov 3, 2026 → Nov 17, 2026 — extension granted by LB.\nReason: Waiting on birth certificate\n(Rafael, from the app)");
+  });
+
+  it("posts a plain move when nothing is filled in, and a first date as 'set'", () => {
+    expect(targetDateNote(moved, {}, null)).toBe("Target date moved Nov 3, 2026 → Nov 17, 2026.");
+    expect(targetDateNote({ ...moved, from: null }, {}, null)).toBe("Target date set to Nov 17, 2026.");
+  });
+
+  it("posts nothing without an extension, for a cleared date, or another field", () => {
+    expect(targetDateNote(moved, undefined, "Rafael")).toBeNull();
+    expect(targetDateNote({ ...moved, to: null }, {}, "Rafael")).toBeNull();
+    expect(targetDateNote({ ...moved, field: "forms_appt_date" }, {}, "Rafael")).toBeNull();
   });
 });
 

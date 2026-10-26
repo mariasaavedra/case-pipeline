@@ -39,6 +39,7 @@ import { FormChip, Tag, formatDue, waitFg } from "./caseBoardParts";
 import { openClientPeek } from "../router";
 import { MONDAY_FEE_KS_BOARD_ID, MONDAY_OPEN_FORMS_BOARD_ID, mondayItemUrl } from "../config";
 import { DateInput } from "./ui/date-input";
+import { useAuth } from "../auth/useAuth";
 
 export type CaseCard =
   | { kind: "fee_k"; c: MyPreschedulingCase }
@@ -78,7 +79,7 @@ function relative(iso: string): string {
   return days > 0 ? `in ${days}d` : `${-days}d ago`;
 }
 
-function datesOf(card: CaseCard, values: Record<string, string | null>): DateField[] {
+function datesOf(card: CaseCard, values: Record<string, string | null>, isAdmin: boolean): DateField[] {
   const v = (key: string, fallback: string | null) => (key in values ? values[key]! : fallback);
   if (card.kind === "fee_k") {
     const c = card.c;
@@ -94,7 +95,8 @@ function datesOf(card: CaseCard, values: Record<string, string | null>): DateFie
     { key: "on_open_forms_since", label: "On Open Forms since", value: c.onOpenFormsSince, editable: false },
     ...(c.hireDate ? [{ key: "hire_date", label: "Hired", value: c.hireDate, editable: false }] : []),
     { key: "forms_appt_date", label: "Forms appointment", value: v("forms_appt_date", c.formsApptDate), editable: true },
-    { key: "target_date", label: "Target date", value: v("target_date", c.targetDate), editable: true },
+    // The target date is the admin's internal goal (P24); staff ask for an extension.
+    { key: "target_date", label: "Target date", value: v("target_date", c.targetDate), editable: isAdmin },
     { key: "forms_sent_date", label: "Forms sent", value: v("forms_sent_date", c.formsSentDate), editable: true, past: true },
   ];
 }
@@ -171,6 +173,7 @@ function DateRow({ f, busy, onSave }: { f: DateField; busy: boolean; onSave: (va
 
 export function CaseCardModal({ card, statuses, onChanged, onClose }: Props) {
   const { kind, c } = card;
+  const isAdmin = useAuth().user?.role === "admin";
   const statusField = kind === "fee_k" ? "ps_stage" : "status";
   const statusLabel = kind === "fee_k" ? "PS Stage" : "Status";
   const initialStatus = kind === "fee_k" ? card.c.psStage : card.c.status;
@@ -410,7 +413,7 @@ export function CaseCardModal({ card, statuses, onChanged, onClose }: Props) {
 
             {/* Dates */}
             <Section title="Dates">
-              {datesOf(card, values).map((f) => (
+              {datesOf(card, values, isAdmin).map((f) => (
                 <DateRow key={`${f.key}:${f.value ?? ""}`} f={f} busy={busy === f.key}
                   onSave={(value) => write(f.key, f.label, value, f.value, true)} />
               ))}

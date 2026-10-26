@@ -39,6 +39,8 @@ interface NavItem {
   path: string;
   icon: React.ReactNode;
   disabled?: boolean;
+  /** Never shown to anyone but an admin (not "under construction" — admin work). */
+  adminOnly?: boolean;
 }
 
 /** Pages still being built: admins use them, everyone else sees them greyed
@@ -249,6 +251,19 @@ const NAV_ITEMS: NavItem[] = [
         <circle cx="6" cy="5.5" r="2" />
         <path d="M2.5 12c0-1.9 1.6-3.5 3.5-3.5S9.5 10.1 9.5 12" />
         <path d="M11.5 16.5h6M11.5 13h4M11.5 9.5h2" />
+      </svg>
+    ),
+  },
+  {
+    id: "target-dates",
+    label: "Target Dates",
+    path: "/target-dates",
+    adminOnly: true,
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="10" cy="10" r="7" />
+        <circle cx="10" cy="10" r="3.5" />
+        <circle cx="10" cy="10" r="0.75" fill="currentColor" />
       </svg>
     ),
   },
@@ -510,7 +525,7 @@ export function Sidebar({ mobileOpen, onMobileClose, user, onLogout }: Props) {
 
   // What the sidebar shows: hidden pages dropped, folders with nothing left
   // dropped. The icon rail has no room for folder names, so it lists pages flat.
-  const visible = (item: NavItem) => !saved.hidden.includes(item.id);
+  const visible = (item: NavItem) => !saved.hidden.includes(item.id) && (isAdmin || !item.adminOnly);
   const shownTree = arrangeTree(NAV_ITEMS, saved).flatMap((e): NavEntry<NavItem>[] => {
     if (e.kind === "page") return visible(e.item) ? [e] : [];
     const items = e.items.filter(visible);

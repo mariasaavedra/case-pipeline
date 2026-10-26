@@ -17,6 +17,7 @@ const NEEDS_CHAPTER: Record<Route["page"], boolean> = {
   "efiles-to-open": true,
   "client-uploads": true,
   workload: true,
+  "target-dates": true,
   "active-cases": true,
   "my-cases": true,
   calendar: true,
