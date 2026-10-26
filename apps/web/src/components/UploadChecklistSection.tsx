@@ -1,8 +1,10 @@
 // =============================================================================
 // UploadChecklistSection — the Buzón checklist inside M30 (docs/features/buzon.md)
 // =============================================================================
-// What the client's Buzón page asks them to send. Staff add a Fee K's list (from
-// its Fee K Type, Settings → Firm → Fee K Types) or one document by hand, mark
+// What the client's Buzón page asks them to send. "Ask for" (2026-10-26):
+// Evidence → pick any case type with a list (Settings → Firm → Fee K Types),
+// Consult → pick the appointment + a consult list, Other → no list (the page
+// always takes anything). Staff can also add one document by hand, mark
 // one "Already have it" (the client stops seeing it), ask again for one that
 // came in unreadable, or remove one nothing was sent for. The list belongs to
 // the client, not the link: a new link shows the same list.
@@ -11,13 +13,15 @@
 
 import { useEffect, useState } from "react";
 import {
-  addChecklistItem, addConsultChecklist, addFeeKChecklist, fetchConsultLists, fetchUploadChecklist, removeChecklistItem, updateChecklistItem,
+  addCaseTypeChecklist, addChecklistItem, addConsultChecklist, fetchConsultLists, fetchUploadChecklist, removeChecklistItem, updateChecklistItem,
   type ChecklistItemInfo, type ConsultList, type UploadChecklist,
 } from "../api";
 import { Button } from "./ui/button";
 import { shortDate } from "./UploadLinkModal";
 
 const inputStyle = { border: "1px solid var(--color-border-light)", background: "var(--color-surface)", color: "var(--color-ink)" } as const;
+
+type Ask = "" | "evidence" | "consult" | "other";
 
 /**
  * In the consult prep (M18): the documents the client was asked to send for
@@ -72,6 +76,10 @@ export function UploadChecklistSection({ profileLocalId, consult }: {
   const [list, setList] = useState<UploadChecklist | null>(null);
   const [consultLists, setConsultLists] = useState<ConsultList[]>([]);
   const [pickedConsult, setPickedConsult] = useState<string>(consult?.mondayId ?? "");
+  // What to ask for (decided 2026-10-26): Evidence → a case type's list, Consult → a consult list, Other → no list.
+  const [ask, setAsk] = useState<Ask>(consult ? "consult" : "");
+  const [caseType, setCaseType] = useState("");
+  const [consultKey, setConsultKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -102,7 +110,7 @@ export function UploadChecklistSection({ profileLocalId, consult }: {
 
   const asked = list.items.filter((i) => i.required && i.status !== "not_needed");
   const have = asked.filter((i) => i.status === "received").length;
-  const offer = list.feeKs.filter((k) => k.documents > 0 && !k.added);
+  const types = list.caseTypes ?? [];
 
   const addOne = () =>
     run(async () => {
@@ -164,33 +172,76 @@ export function UploadChecklistSection({ profileLocalId, consult }: {
         </ul>
       )}
 
-      {offer.map((k) => (
-        <Button key={k.localId} type="button" size="sm" variant="outline" disabled={busy} onClick={() => run(() => addFeeKChecklist(profileLocalId, k.localId))}>
-          + Add the {k.feeKTypes.join(" + ") || k.name} list ({k.documents} document{k.documents === 1 ? "" : "s"})
-        </Button>
-      ))}
-      {consultLists.length > 0 && (list.consults?.length ?? 0) > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span style={{ color: "var(--color-ink-muted)" }}>For the consult</span>
-          <select className="rounded px-1 py-1 text-xs" style={inputStyle} value={pickedConsult} aria-label="Which consult"
-            onChange={(e) => setPickedConsult(e.target.value)}>
-            {list.consults!.map((c) => <option key={c.mondayId} value={c.mondayId}>{c.date ? `${c.date} · ` : ""}{c.name}</option>)}
+      <div className="space-y-2 rounded-md px-3 py-2" style={{ background: "var(--color-surface-warm)", border: "1px solid var(--color-border-light)" }}>
+        <label className="flex flex-wrap items-center gap-2 text-xs">
+          <span style={{ color: "var(--color-ink-muted)" }}>Ask for</span>
+          <select className="rounded px-1 py-1 text-xs" style={inputStyle} value={ask} aria-label="Ask for"
+            onChange={(e) => setAsk(e.target.value as Ask)}>
+            <option value="">Choose…</option>
+            <option value="evidence">Evidence for a case</option>
+            <option value="consult">Consult documents</option>
+            <option value="other">Other / whatever they want to send</option>
           </select>
-          {consultLists
-            .filter((l) => !list.consults!.find((c) => c.mondayId === pickedConsult)?.lists.includes(l.key))
-            .map((l) => (
-              <Button key={l.key} type="button" size="sm" variant="outline" disabled={busy || !pickedConsult}
-                onClick={() => run(() => addConsultChecklist(profileLocalId, l.key, pickedConsult))}>
-                + {l.name} ({l.documents.length})
+        </label>
+
+        {ask === "evidence" && (
+          types.length === 0 ? (
+            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
+              No case type has a document list yet (Settings → Firm → Fee K Types → Documents…).
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <select className="rounded px-1 py-1 text-xs" style={{ ...inputStyle, maxWidth: 320 }} value={caseType} aria-label="Type of case"
+                onChange={(e) => setCaseType(e.target.value)}>
+                <option value="">Type of case…</option>
+                {types.map((t) => (
+                  <option key={t.feeKType} value={t.feeKType} disabled={t.added}>
+                    {t.feeKType}{t.theirs ? " · their case" : ""} ({t.documents}){t.added ? " · already added" : ""}
+                  </option>
+                ))}
+              </select>
+              <Button type="button" size="sm" disabled={busy || !caseType} onClick={() => run(() => addCaseTypeChecklist(profileLocalId, caseType).then((r) => { setCaseType(""); return r; }))}>
+                Add list
               </Button>
-            ))}
-        </div>
-      )}
-      {list.feeKs.length > 0 && list.feeKs.every((k) => k.documents === 0) && (
-        <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
-          This client's case types have no document list yet (Settings → Firm → Fee K Types → Documents…).
-        </p>
-      )}
+              <span className="w-full" style={{ color: "var(--color-ink-faint)" }}>Files go to E-File → EVIDENCE &lt;case type&gt;.</span>
+            </div>
+          )
+        )}
+
+        {ask === "consult" && (
+          !(list.consults?.length) ? (
+            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>This client has no consult on the attorney boards.</p>
+          ) : consultLists.length === 0 ? (
+            <p className="text-xs" style={{ color: "var(--color-ink-faint)" }}>No consult document lists (Settings → Firm → Consult document lists).</p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <select className="rounded px-1 py-1 text-xs" style={inputStyle} value={pickedConsult} aria-label="Which consult"
+                onChange={(e) => setPickedConsult(e.target.value)}>
+                {list.consults!.map((c) => <option key={c.mondayId} value={c.mondayId}>{c.date ? `${c.date} · ` : ""}{c.name}</option>)}
+              </select>
+              <select className="rounded px-1 py-1 text-xs" style={inputStyle} value={consultKey} aria-label="Consult list"
+                onChange={(e) => setConsultKey(e.target.value)}>
+                <option value="">Consult list…</option>
+                {consultLists.map((l) => {
+                  const added = !!list.consults!.find((c) => c.mondayId === pickedConsult)?.lists.includes(l.key);
+                  return <option key={l.key} value={l.key} disabled={added}>{l.name} ({l.documents.length}){added ? " · already added" : ""}</option>;
+                })}
+              </select>
+              <Button type="button" size="sm" disabled={busy || !pickedConsult || !consultKey}
+                onClick={() => run(() => addConsultChecklist(profileLocalId, consultKey, pickedConsult).then((r) => { setConsultKey(""); return r; }))}>
+                Add list
+              </Button>
+              <span className="w-full" style={{ color: "var(--color-ink-faint)" }}>Files go to the Consult File → CONSULT.</span>
+            </div>
+          )
+        )}
+
+        {ask === "other" && (
+          <p className="text-xs" style={{ color: "var(--color-ink-muted)" }}>
+            No list needed: the client&apos;s page always lets them send anything they want to share. Those files go to E-File → CAF.
+          </p>
+        )}
+      </div>
 
       {adding ? (
         <div className="space-y-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--color-border-light)" }}>

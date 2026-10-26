@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import type { ClientBuzon, SmsConfig, UploadChecklist, UploadLinkInfo } from "../api";
+import type { ClientBuzon, ConsultList, SmsConfig, UploadChecklist, UploadLinkInfo } from "../api";
 
 const URL_ = "https://app.example.com/u/" + "x".repeat(43);
 const mocks = vi.hoisted(() => ({
@@ -21,6 +21,9 @@ const mocks = vi.hoisted(() => ({
   revoke: vi.fn(),
   checklist: { items: [], feeKs: [] } as UploadChecklist,
   addFeeK: vi.fn(),
+  addCaseType: vi.fn(),
+  addConsult: vi.fn(),
+  consultLists: [] as ConsultList[],
   updateItem: vi.fn(),
   buzon: null as unknown as ClientBuzon,
   updateBuzon: vi.fn(),
@@ -37,8 +40,9 @@ vi.mock("../api", () => ({
   addChecklistItem: vi.fn(),
   updateChecklistItem: mocks.updateItem,
   removeChecklistItem: vi.fn(),
-  addConsultChecklist: vi.fn(),
-  fetchConsultLists: async () => ({ lists: [], draft: true }),
+  addConsultChecklist: mocks.addConsult,
+  addCaseTypeChecklist: mocks.addCaseType,
+  fetchConsultLists: async () => ({ lists: mocks.consultLists, draft: true }),
   fetchClientBuzon: async () => mocks.buzon,
   updateClientBuzon: mocks.updateBuzon,
   remindNow: mocks.remind,
@@ -87,6 +91,9 @@ beforeEach(() => {
   mocks.links = [];
   mocks.checklist = { items: [], feeKs: [] };
   mocks.addFeeK.mockReset();
+  mocks.addCaseType.mockReset();
+  mocks.addConsult.mockReset();
+  mocks.consultLists = [];
   mocks.updateItem.mockReset();
   mocks.buzon = {
     client: { name: "Itzel MARTINEZ", hasPhone: true, language: "es" },
@@ -161,15 +168,44 @@ describe("Buzón checklist in M30", () => {
     feeKType: "I-130", folder: "EVIDENCE I-130", receivedAt: null, files: 0, addedBy: "Ana Reyes", ...over,
   });
 
-  it("offers a Fee K's list and adds it", async () => {
-    mocks.checklist = { items: [], feeKs: [{ localId: "k1", name: "Fee K", feeKTypes: ["I-130"], contractStage: null, documents: 3, added: false }] };
-    mocks.addFeeK.mockResolvedValue({ added: 1, items: [item()], feeKs: [{ ...mocks.checklist.feeKs[0]!, added: true }] });
+  const pick = async (label: string, value: string) => {
+    const el = document.querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement;
+    expect(el).toBeTruthy();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(el, value);
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flush();
+  };
+
+  it("Ask for → Evidence → a case type: any type with a list, the client's own first; added ones can't be picked again", async () => {
+    mocks.checklist = { items: [], feeKs: [], caseTypes: [
+      { feeKType: "I-130", documents: 3, theirs: true, added: false },
+      { feeKType: "N-400", documents: 5, theirs: false, added: false },
+    ] };
+    mocks.addCaseType.mockResolvedValue({ added: 1, items: [item()], feeKs: [], caseTypes: [{ feeKType: "I-130", documents: 3, theirs: true, added: true }] });
     await open();
-    await click(button("+ Add the I-130 list (3 documents)"));
-    expect(mocks.addFeeK).toHaveBeenCalledWith("p1", "k1");
-    expect(document.body.textContent).toContain("Passport");
+    await pick("Ask for", "evidence");
+    const options = Array.from(document.querySelectorAll('select[aria-label="Type of case"] option')).map((o) => o.textContent);
+    expect(options).toEqual(["Type of case…", "I-130 · their case (3)", "N-400 (5)"]);
+    await pick("Type of case", "N-400");
+    await click(button("Add list"));
+    expect(mocks.addCaseType).toHaveBeenCalledWith("p1", "N-400");
     expect(document.body.textContent).toContain("0 of 1 received");
-    expect(button("+ Add the I-130 list (3 documents)")).toBeUndefined();
+    expect(document.querySelector('select[aria-label="Type of case"] option[value="I-130"]')?.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("Ask for → Consult → the appointment and a consult list; Other needs no list", async () => {
+    mocks.checklist = { items: [], feeKs: [], consults: [{ mondayId: "5001", name: "Consult", date: "2026-10-30", lists: [] }] };
+    mocks.consultLists = [{ key: "family", name: "Consult – family petition", documents: [{ en: "ID", es: "ID", required: true }] }];
+    mocks.addConsult.mockResolvedValue({ ...mocks.checklist, added: 1, items: [item({ appointmentMondayId: "5001", folder: "Consult File → CONSULT" })] });
+    await open();
+    await pick("Ask for", "consult");
+    await pick("Consult list", "family");
+    await click(button("Add list"));
+    expect(mocks.addConsult).toHaveBeenCalledWith("p1", "family", "5001");
+    await pick("Ask for", "other");
+    expect(document.body.textContent).toContain("No list needed");
   });
 
   it("shows where each stands; Already have it / Ask again call the API", async () => {

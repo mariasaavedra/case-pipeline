@@ -1570,6 +1570,17 @@ export interface UploadChecklist {
   feeKs: ChecklistFeeK[];
   /** The client's consults (newest first) and the consult lists already added to each. */
   consults?: { mondayId: string; name: string; date: string | null; lists: string[] }[];
+  /** M30 → Evidence: every case type with a document list, the client's own first. */
+  caseTypes?: { feeKType: string; documents: number; theirs: boolean; added: boolean }[];
+}
+
+/** M30 → Evidence → a case type: its document list (any type; tied to the client's Fee K of that type if any). */
+export function addCaseTypeChecklist(profileLocalId: string, feeKType: string): Promise<UploadChecklist & { added: number }> {
+  return apiFetch(`/api/profiles/${encodeURIComponent(profileLocalId)}/upload-checklist/case-type`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ feeKType }),
+  });
 }
 
 // Settings → Firm → Consult document lists (P11.3.8) — routes/upload-checklist.ts

@@ -5,6 +5,7 @@
 //   GET    /api/profiles/:localId/upload-checklist         items + the client's Fee Ks and
 //                                                           how many documents each one's type asks for
 //   POST   /api/profiles/:localId/upload-checklist         {feeKLocalId} → copy that Fee K's list in
+//   POST   /api/profiles/:localId/upload-checklist/case-type {feeKType} → that case type's list (any type; M30 → Evidence)
 //   POST   /api/profiles/:localId/upload-checklist/items   {labelEn, labelEs?, required?, feeKLocalId?} one by hand
 //   PATCH  /api/upload-checklist/:id                       {status?: missing | not_needed, required?}
 //   DELETE /api/upload-checklist/:id                       only while nothing was sent for it (else 409: mark it not needed)
@@ -19,7 +20,7 @@ import { requireAuth } from "../auth/middleware.js";
 import { auditFromReq } from "../audit/log.js";
 import { loadFeeKTypes, type FeeKTypeRow } from "../fee-k-types.js";
 import {
-  MAX_ITEMS_PER_CLIENT, addConsultList, addFeeKList, checklistFor, clientConsults, clientFeeKs, documentsForFeeK, evidenceFolder,
+  MAX_ITEMS_PER_CLIENT, addCaseTypeList, addConsultList, addFeeKList, checklistFor, clientConsults, clientFeeKs, documentsForFeeK, evidenceFolder,
   type ChecklistRow, type ClientKey,
 } from "../uploads/checklist.js";
 import { CAF_FOLDER, CONSULT_FOLDER } from "../uploads/filing.js";
@@ -59,6 +60,20 @@ export function checklistView(db: DatabaseInstance, p: ClientKey, table: FeeKTyp
       files: fileCount.get(r.id) ?? 0,
       addedBy: r.added_by_name,
     })),
+    // M30 → Evidence: every case type with a document list; the client's own first.
+    caseTypes: (() => {
+      const own = new Set(clientFeeKs(db, p).flatMap((k) => k.feeKTypes.map((t) => t.replace(/\s+/g, " ").trim().toLowerCase())));
+      const key = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
+      return table
+        .filter((t) => t.documents?.length)
+        .map((t) => ({
+          feeKType: t.feeKType,
+          documents: t.documents!.length,
+          theirs: own.has(key(t.feeKType)),
+          added: rows.some((r) => r.fee_k_type && key(r.fee_k_type) === key(t.feeKType)),
+        }))
+        .sort((a, b) => Number(b.theirs) - Number(a.theirs) || a.feeKType.localeCompare(b.feeKType));
+    })(),
     feeKs: clientFeeKs(db, p).map((k) => ({
       localId: k.localId,
       name: k.name,
@@ -85,6 +100,26 @@ export function registerUploadChecklistRoutes(app: Express, deps: { db: Database
       return;
     }
     res.json({ data: checklistView(db, p, table()) });
+  });
+
+  // M30 → Evidence → a case type (any type with a list, not only the client's own).
+  app.post("/api/profiles/:localId/upload-checklist/case-type", requireAuth, (req, res) => {
+    const p = profileOf(db, String(req.params.localId));
+    if (!p) {
+      res.status(404).json({ error: "Client not found" });
+      return;
+    }
+    const rows = table();
+    const r = addCaseTypeList(db, p, String((req.body ?? {}).feeKType ?? ""), rows, req.user?.name ? String(req.user.name) : null);
+    if (!r) {
+      res.status(400).json({ error: "This case type has no document list. Add one in Settings → Firm → Fee K Types." });
+      return;
+    }
+    auditFromReq(req, "upload_checklist.case_type_added", {
+      targetType: "profile", targetId: p.localId, targetMondayId: p.mondayId,
+      metadata: { feeKType: String(req.body.feeKType), feeK: r.feeK ? r.feeK.mondayId ?? r.feeK.localId : null, added: r.added },
+    });
+    res.status(201).json({ data: { added: r.added, ...checklistView(db, p, rows) } });
   });
 
   app.post("/api/profiles/:localId/upload-checklist", requireAuth, (req, res) => {

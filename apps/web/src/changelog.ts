@@ -14,6 +14,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-26",
+    title: "Upload link: choose what to ask for",
+    items: [
+      "In a client's Upload link popup, “Ask for” now offers Evidence for a case, Consult documents, or Other.",
+      "Evidence lets you pick any type of case with a document list — the client's own cases come first.",
+      "Consult documents: pick the consult and a consult list. Other: no list, the client can send anything they want.",
+    ],
+  },
+  {
     date: "2026-10-23",
     title: "A manual for the app",
     items: [
