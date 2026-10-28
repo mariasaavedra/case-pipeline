@@ -30,7 +30,7 @@ import { loadConfig } from "@case-pipeline/config";
 import { mapItemToTemplateVars, validateTemplateVars, renderDocxTemplate } from "@case-pipeline/template";
 import { parseNoteBody } from "./note-write.js";
 import { planReply } from "./note-replies.js";
-import { addLocalDropdownLabel, caseTypeColumn, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
+import { addLocalDropdownLabel, caseTypeColumn, findCaseTypeOption, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
 import { usersDb } from "../db/users-db.js";
 import {
   FEE_K_ATTORNEY, applyProfileContactLocally, cleanContact, makeMondayUserResolver,
@@ -392,7 +392,7 @@ export function registerProfileWriteRoutes(app: Express, deps: ProfileWriteDeps)
       return;
     }
     // A "new" one that only differs in case is the existing label.
-    const existing = caseTypeCol.options.find((o) => o.label.toLowerCase() === caseType.toLowerCase());
+    const existing = findCaseTypeOption(caseTypeCol.options, caseType);
     if (existing) caseType = existing.label;
     const newLabel = caseTypeCol.options.length > 0 && !existing;
     if (newLabel && body.newCaseType !== true) {
