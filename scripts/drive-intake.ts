@@ -44,7 +44,7 @@ import { matchUpload, WINDOW_DAYS, type AppointmentRow, type MatchResult } from 
 import { resolveDestination, type ClientLinks, type Destination } from "./drive/destination.js";
 import { columnDecision, driveFolderUrl, newestPerAppointment } from "./drive/folder-links.js";
 import { graphAuthFromEnv } from "./sharepoint/auth.js";
-import { listChildren, uploadFile } from "./sharepoint/folders.js";
+import { listChildren, safeFileName, uploadFile } from "./sharepoint/folders.js";
 import type { GraphAuth } from "./sharepoint/graph-client.js";
 
 const arg = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -130,7 +130,8 @@ async function copyToSharePoint(
   bytes: Buffer,
 ): Promise<{ url: string; note?: string }> {
   const folder = dest.folder!;
-  const existing = (await listChildren(auth, dest.driveId, folder.id)).find((c) => c.name === file.name && c.file);
+  const name = safeFileName(file.name);
+  const existing = (await listChildren(auth, dest.driveId, folder.id)).find((c) => c.name === name && c.file);
   if (existing && existing.size === bytes.length) {
     return { url: existing.webUrl, note: "already in SharePoint" };
   }
@@ -139,7 +140,7 @@ async function copyToSharePoint(
     auth,
     dest.driveId,
     folder.id,
-    file.name,
+    name,
     bytes,
     file.mimeType || "application/octet-stream",
     existing ? "rename" : "fail",

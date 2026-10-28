@@ -62,6 +62,21 @@ export function validateFolderName(name: string): string | null {
   return null;
 }
 
+/**
+ * A name we don't choose (a client's upload, e.g. macOS "Scanned Oct 26, 2026
+ * at 6:44:55 PM.pdf") made acceptable to SharePoint: each refused character
+ * becomes "-", and a trailing period or leading "~$" is dropped. Graph answers
+ * a ":" with a misleading "JSON Content-Type header" error, not a 400 naming it.
+ */
+export function safeFileName(name: string): string {
+  const cleaned = name
+    .replace(new RegExp(ILLEGAL_CHARS.source, "g"), "-")
+    .trim()
+    .replace(/^~\$/, "")
+    .replace(/[.\s]+$/, "");
+  return cleaned || "file";
+}
+
 /** Percent-encode each segment but keep the separators (mirrors graph.ts). */
 function encodePath(path: string): string {
   return path.split("/").filter(Boolean).map(encodeURIComponent).join("/");
