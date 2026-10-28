@@ -9,7 +9,8 @@ function c(o: Partial<TargetDateCaseView> & { localId: string }): TargetDateCase
     clientName: `Client ${o.localId}`, clientLocalId: null, formName: "I-130", status: "Needs Forms Appt", targetDate: "2026-10-30",
     urgency: "soon", daysUntilTarget: 4, dateUrgency: "soon", statusUrgency: "none", isCourtCase: false, assignees: ["Mayra Ruiz"],
     priority: null, forms: ["I130"], attorney: "Lucy Betteridge", urgent: false, northPoleUntil: null, snoozed: false, parked: false,
-    mondayItemId: "m1", bucket: "week", daysLeft: 4, moves: 0, lastChange: null, ...o,
+    mondayItemId: "m1", eFile: null, eFileOnProfile: false, formsApptDate: null, formsSentDate: null, hireDate: null, onOpenFormsSince: null,
+    bucket: "week", daysLeft: 4, moves: 0, lastChange: null, ...o,
   };
 }
 
@@ -25,9 +26,16 @@ const view: TargetDatesView = {
   counts: { overdue: 1, week: 1, twoWeeks: 0, later: 1, none: 1 },
   paralegals: ["Lucy B", "Mayra Ruiz"],
   snoozedCount: 2,
+  openFormStatuses: [{ index: 0, label: "Needs Forms Appt", color: "#fdab3d", border: "#fdab3d" }, { index: 1, label: "Forms Appt Set", color: "#00c875", border: "#00c875" }],
 };
 
 const moveTargetDate = vi.fn(() => Promise.resolve({ localId: "late", field: "target_date", value: "2026-11-02", pending: false }));
+
+vi.mock("./CaseCardModal", () => ({
+  CaseCardModal: ({ card, statuses }: { card: { kind: string; c: { clientName: string } }; statuses: { label: string }[] }) => (
+    <div data-testid="m27">{`M27 ${card.kind} ${card.c.clientName} · ${statuses.map((s) => s.label).join("|")}`}</div>
+  ),
+}));
 
 vi.mock("../api", () => ({
   fetchTargetDates: () => Promise.resolve(view),
@@ -63,5 +71,32 @@ describe("TargetDatesPage", () => {
     expect(el.textContent).not.toContain("Client late");
     expect(el.textContent).toContain("Client far");
     root.unmount();
+  });
+
+  it("opens the Open Form's case card (M27) from the client's name, with the board's statuses", async () => {
+    const { TargetDatesPage } = await import("./TargetDatesPage");
+    const el = document.createElement("div");
+    const root = createRoot(el);
+    await act(async () => root.render(<TargetDatesPage />));
+    const name = Array.from(el.querySelectorAll("button")).find((b) => b.textContent === "Client soon")!;
+    await act(async () => name.click());
+    expect(el.querySelector("[data-testid=m27]")?.textContent).toBe("M27 open_form Client soon · Needs Forms Appt|Forms Appt Set");
+    root.unmount();
+  });
+
+  it("M33 offers +1/+2/+3/+5 days and a calendar", async () => {
+    const { TargetDatesPage } = await import("./TargetDatesPage");
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const root = createRoot(el);
+    await act(async () => root.render(<TargetDatesPage />));
+    const move = Array.from(el.querySelectorAll("button")).find((b) => b.textContent === "Move date")!;
+    await act(async () => move.click());
+    const dialog = document.body;
+    const presets = Array.from(dialog.querySelectorAll("button")).map((b) => b.textContent).filter((t) => /^\+\d+d$/.test(t ?? ""));
+    expect(presets).toEqual(["+1d", "+2d", "+3d", "+5d"]);
+    expect(dialog.querySelector("[aria-label='Next month']")).not.toBeNull();
+    root.unmount();
+    el.remove();
   });
 });

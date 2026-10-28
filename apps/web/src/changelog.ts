@@ -14,6 +14,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-28",
+    title: "Target Dates: edit a case from the list",
+    items: [
+      "On Target Dates, click a client's name to open the case card: change the Open Form's status, forms appointment or forms sent date there.",
+      "Move date now shows a calendar to click the new day on, with quick +1, +2, +3 and +5 day buttons.",
+    ],
+  },
+  {
     date: "2026-10-26",
     title: "Target dates are set by an admin",
     items: [

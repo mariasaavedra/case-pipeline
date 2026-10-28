@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchTargetDates, fetchStaff, moveTargetDate } from "../api";
 import type { TargetDatesView, TargetDateCaseView, StaffMember } from "../api";
 import type { TargetBucket } from "@case-pipeline/query";
-import { ClientLink } from "./ClientPeek";
+import { CaseCardModal } from "./CaseCardModal";
 import { SectionCode } from "./ScreenCode";
 import { FormChip, ListSection, PersonChip, Tag, formatDue } from "./caseBoardParts";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { DateInput } from "./ui/date-input";
+import { MonthCalendar } from "./ui/month-calendar";
 import { MONDAY_OPEN_FORMS_BOARD_ID, mondayItemUrl } from "../config";
 
 // =============================================================================
@@ -21,7 +22,8 @@ import { MONDAY_OPEN_FORMS_BOARD_ID, mondayItemUrl } from "../config";
 // and flags a change made by someone other than an admin (Monday lets anyone
 // edit the column). Admin-only. API = GET /api/target-dates
 // (libs/query/src/target-dates.ts); the weekday 8 AM Slack DM is
-// apps/api/src/notify/target-dates-digest.ts.
+// apps/api/src/notify/target-dates-digest.ts. The client's name opens the
+// Open Form's case card (M27, as on P6): status, forms appointment, notes.
 
 const BUCKETS: { id: TargetBucket; title: string; note: string; tone: string | null }[] = [
   { id: "overdue", title: "Overdue", note: "Past the target date", tone: "overdue" },
@@ -61,6 +63,7 @@ export function TargetDatesPage() {
   const [paralegal, setParalegal] = useState(ALL);
   const [open, setOpen] = useState<Set<TargetBucket>>(OPEN_BY_DEFAULT);
   const [moving, setMoving] = useState<TargetDateCaseView | null>(null);
+  const [card, setCard] = useState<TargetDateCaseView | null>(null);
   const [attorneys, setAttorneys] = useState<string[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -158,12 +161,21 @@ export function TargetDatesPage() {
                 note={b.note}
                 tone={b.tone}
               >
-                {isOpen && list.map((c) => <Row key={c.localId} c={c} onMove={() => setMoving(c)} />)}
+                {isOpen && list.map((c) => <Row key={c.localId} c={c} onOpen={() => setCard(c)} onMove={() => setMoving(c)} />)}
               </ListSection>
             </div>
           );
         })}
       </div>
+
+      {card && (
+        <CaseCardModal
+          card={{ kind: "open_form", c: card }}
+          statuses={data.openFormStatuses}
+          onChanged={load}
+          onClose={() => setCard(null)}
+        />
+      )}
 
       {moving && (
         <MoveDateDialog
@@ -181,7 +193,7 @@ export function TargetDatesPage() {
   );
 }
 
-function Row({ c, onMove }: { c: TargetDateCaseView; onMove: () => void }) {
+function Row({ c, onOpen, onMove }: { c: TargetDateCaseView; onOpen: () => void; onMove: () => void }) {
   const tone = c.bucket === "overdue" ? "overdue" : c.bucket === "week" ? "critical" : c.bucket === "twoWeeks" ? "soon" : null;
   const edge = tone ? `var(--urgency-${tone})` : "transparent";
   const changedByOther = c.lastChange?.byAdmin === false;
@@ -192,13 +204,10 @@ function Row({ c, onMove }: { c: TargetDateCaseView; onMove: () => void }) {
       style={{ borderTop: "1px solid var(--color-border-light)", boxShadow: `inset 3px 0 0 ${edge}` }}
     >
       <div className="min-w-0">
-        {c.clientLocalId ? (
-          <ClientLink clientId={c.clientLocalId} className="font-medium hover:underline truncate block" style={{ color: "var(--color-ink)" }}>
-            {c.clientName}
-          </ClientLink>
-        ) : (
-          <span className="font-medium truncate block" style={{ color: "var(--color-ink)" }}>{c.clientName}</span>
-        )}
+        <button type="button" onClick={onOpen} title="Status, forms appointment, notes"
+          className="font-medium hover:underline truncate block max-w-full text-left" style={{ color: "var(--color-ink)" }}>
+          {c.clientName}
+        </button>
         <div className="flex items-center gap-1 mt-0.5 flex-wrap">
           {c.forms.map((f) => <FormChip key={f} label={f} />)}
           {c.isCourtCase && <Tag color="court">Court</Tag>}
@@ -259,7 +268,8 @@ function MoveDateDialog({
   onClose: () => void;
   onSaved: (text: string) => void;
 }) {
-  const base = c.targetDate && c.targetDate > firmToday() ? c.targetDate : firmToday();
+  const today = firmToday();
+  const base = c.targetDate && c.targetDate > today ? c.targetDate : today;
   const [date, setDate] = useState("");
   const [grantedBy, setGrantedBy] = useState(c.targetDate ? c.attorney ?? "" : "");
   const [reason, setReason] = useState("");
@@ -295,14 +305,18 @@ function MoveDateDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3 text-sm">
-          <label className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1.5">
             <span style={{ color: "var(--color-ink-muted)" }}>New target date</span>
-            <DateInput value={date} onChange={(e) => setDate(e.target.value)} min={firmToday()} aria-label="New target date" autoFocus />
-          </label>
-          <div className="flex gap-1.5">
-            {[7, 14, 30].map((d) => (
-              <Button key={d} size="sm" variant="outline" type="button" onClick={() => setDate(addDays(base, d))}>+{d} days</Button>
-            ))}
+            <MonthCalendar value={date} onChange={setDate} today={today} min={today} marked={c.targetDate} markedLabel="Current target date" />
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <DateInput value={date} onChange={(e) => setDate(e.target.value)} min={today} aria-label="New target date" />
+              {[1, 2, 3, 5].map((d) => (
+                <Button key={d} size="xs" variant="outline" type="button" onClick={() => setDate(addDays(base, d))}
+                  title={`${d} day${d === 1 ? "" : "s"} after ${base === c.targetDate ? "the current target date" : "today"}`}>
+                  +{d}d
+                </Button>
+              ))}
+            </div>
           </div>
 
           {isMove && (

@@ -126,6 +126,54 @@ function profileEFiles(db: Database, ids: string[]): Map<string, string> {
   return out;
 }
 
+/** The client's own E-File when the profile has one, else the item's mirror. */
+function eFileOf(onProfile: Map<string, string>, clientLocalId: string | null, mirror: string | null) {
+  const own = clientLocalId ? onProfile.get(clientLocalId) ?? null : null;
+  return { eFile: own ?? mirror, eFileOnProfile: own !== null };
+}
+
+function dateOf(cv: Record<string, unknown> | undefined, key: string): string | null {
+  const v = cv?.[key];
+  if (v && typeof v === "object" && "date" in v) return textOf((v as { date: unknown }).date);
+  return null;
+}
+
+/**
+ * What getActiveCases doesn't carry, for the M27 case card: the card's dates
+ * and the E-File (profile, else the item's own mirror). Also P24's rows.
+ */
+export function withOpenFormDetails<T extends ActiveCase>(db: Database, forms: T[]): (T & Omit<MyOpenForm, keyof ActiveCase>)[] {
+  const extras = new Map<string, Record<string, unknown> & { mondayItemId: string | null }>();
+  if (forms.length > 0) {
+    const rows = db
+      .prepare(
+        `SELECT local_id AS id, monday_item_id AS mondayItemId, column_values AS cv
+           FROM board_items WHERE local_id IN (${forms.map(() => "?").join(",")})`,
+      )
+      .all(...forms.map((f) => f.localId)) as { id: string; mondayItemId: string | null; cv: string | null }[];
+    for (const r of rows) extras.set(r.id, { ...parseJson(r.cv), mondayItemId: r.mondayItemId });
+  }
+  const onProfile = profileEFiles(db, [...new Set(forms.map((c) => c.clientLocalId).filter((id): id is string => !!id))]);
+  return forms.map((c) => {
+    const cv = extras.get(c.localId);
+    const since = typeof cv?.on_open_forms_since === "string" ? cv.on_open_forms_since.slice(0, 10) : null;
+    return {
+      ...c,
+      mondayItemId: cv?.mondayItemId ?? null,
+      ...eFileOf(onProfile, c.clientLocalId, firstLink(textOf(cv?.e_file))),
+      formsApptDate: dateOf(cv, "forms_appt_date"),
+      formsSentDate: dateOf(cv, "forms_sent_date"),
+      hireDate: dateOf(cv, "hire_date"),
+      onOpenFormsSince: since,
+    };
+  });
+}
+
+/** Open Forms Status labels with colors (blank labels out). */
+export function getOpenFormStatuses(db: Database): StatusColumnOption[] {
+  return (getBoardStatusOptionsFor(db, OPEN_FORMS_BOARD_KEY)?.options ?? []).filter((o) => o.label?.trim());
+}
+
 // =============================================================================
 // Query
 // =============================================================================
@@ -153,17 +201,6 @@ export function getMyCases(db: Database, options: MyCasesOptions): MyCasesData {
   const forms = active.cases.filter((c) => mine(c.assignees)).filter((c) => keep(c.snoozed));
   const fees = presched.cases.filter((c) => mine(c.paralegals)).filter((c) => keep(c.snoozed));
 
-  // What getActiveCases doesn't carry: dates for the card, the item's own E-File mirror.
-  const formExtras = new Map<string, Record<string, unknown> & { mondayItemId: string | null }>();
-  if (forms.length > 0) {
-    const rows = db
-      .prepare(
-        `SELECT local_id AS id, monday_item_id AS mondayItemId, column_values AS cv
-           FROM board_items WHERE local_id IN (${forms.map(() => "?").join(",")})`,
-      )
-      .all(...forms.map((f) => f.localId)) as { id: string; mondayItemId: string | null; cv: string | null }[];
-    for (const r of rows) formExtras.set(r.id, { ...parseJson(r.cv), mondayItemId: r.mondayItemId });
-  }
   const feeMirrors = new Map<string, string | null>();
   if (fees.length > 0) {
     const rows = db
@@ -175,38 +212,14 @@ export function getMyCases(db: Database, options: MyCasesOptions): MyCasesData {
     for (const r of rows) feeMirrors.set(r.id, firstLink(textOf(r.eFile)));
   }
 
-  const profileIds = [...new Set([...forms, ...fees].map((c) => c.clientLocalId).filter((id): id is string => !!id))];
-  const onProfile = profileEFiles(db, profileIds);
-  const eFileOf = (clientLocalId: string | null, mirror: string | null) => {
-    const own = clientLocalId ? onProfile.get(clientLocalId) ?? null : null;
-    return { eFile: own ?? mirror, eFileOnProfile: own !== null };
-  };
-  const dateOf = (cv: Record<string, unknown> | undefined, key: string): string | null => {
-    const v = cv?.[key];
-    if (v && typeof v === "object" && "date" in v) return textOf((v as { date: unknown }).date);
-    return null;
-  };
-
-  const openForms: MyOpenForm[] = forms.map((c) => {
-    const cv = formExtras.get(c.localId);
-    const since = typeof cv?.on_open_forms_since === "string" ? cv.on_open_forms_since.slice(0, 10) : null;
-    return {
-      ...c,
-      mondayItemId: cv?.mondayItemId ?? null,
-      ...eFileOf(c.clientLocalId, firstLink(textOf(cv?.e_file))),
-      formsApptDate: dateOf(cv, "forms_appt_date"),
-      formsSentDate: dateOf(cv, "forms_sent_date"),
-      hireDate: dateOf(cv, "hire_date"),
-      onOpenFormsSince: since,
-    };
-  });
+  const onProfile = profileEFiles(db, fees.map((c) => c.clientLocalId).filter((id): id is string => !!id));
+  const openForms = withOpenFormDetails(db, forms);
   const prescheduling: MyPreschedulingCase[] = fees.map((c) => ({
     ...c,
-    ...eFileOf(c.clientLocalId, feeMirrors.get(c.localId) ?? null),
+    ...eFileOf(onProfile, c.clientLocalId, feeMirrors.get(c.localId) ?? null),
   }));
 
   const psStages = getBoardColumnsFor(db, FEE_KS_BOARD_KEY)?.columns.find((col) => col.columnId === PS_STAGE_COLUMN_ID)?.options ?? [];
-  const openFormStatuses = getBoardStatusOptionsFor(db, OPEN_FORMS_BOARD_KEY)?.options ?? [];
 
   return {
     paralegals,
@@ -214,7 +227,7 @@ export function getMyCases(db: Database, options: MyCasesOptions): MyCasesData {
     openForms,
     // Workflow order (as on P13), not Monday's label order; new labels after, North Pole last.
     psStages: psStages.filter((o) => o.label?.trim()).sort((a, b) => stageRank(a.label) - stageRank(b.label)),
-    openFormStatuses: openFormStatuses.filter((o) => o.label?.trim()),
+    openFormStatuses: getOpenFormStatuses(db),
     snoozedCount,
     stageOrder: presched.stages,
     thresholds: presched.thresholds,
