@@ -39,7 +39,7 @@ import { currentUser } from "../db/user-context.js";
 import { usersDb } from "../db/users-db.js";
 import { normName, staffForUser } from "../staff/roster.js";
 import { getAppointments, getBoardColumnsFor } from "@case-pipeline/query";
-import { caseTypeColumn, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
+import { caseTypeColumn, findCaseTypeOption, MAX_CASE_TYPE_LABEL } from "./contract-fees.js";
 import type { ClientCaseSummary, ClientUpdate, Detention, ProfileSummary } from "@case-pipeline/query";
 import type { CreateTimelineItemInput } from "@case-pipeline/monday";
 import { FIRM_TIMEZONE } from "../firm.js";
@@ -379,7 +379,7 @@ export function registerMyDayRoutes(app: Express, deps: MyDayDeps): void {
     if (fees) {
       const feeKs = getBoardColumnsFor(db, "fee_ks");
       const col = feeKs ? caseTypeColumn(feeKs) : undefined;
-      const existing = col?.options.find((o) => o.label.toLowerCase() === fees.caseType.toLowerCase());
+      const existing = col ? findCaseTypeOption(col.options, fees.caseType) : undefined;
       if (existing) {
         fees.caseType = existing.label;
         fees.newCaseType = false;

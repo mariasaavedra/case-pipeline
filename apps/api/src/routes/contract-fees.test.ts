@@ -110,4 +110,14 @@ describe("planContractFees", () => {
     expect("plan" in r && r.plan.values).toEqual({ dropdown_mm89vqtc: { labels: ["U Visa"] } });
     expect("plan" in r && r.plan.newLabel).toBeUndefined();
   });
+
+  it("matches a Monday label with a double space and writes Monday's exact label", () => {
+    const schema: BoardColumns = {
+      ...SCHEMA,
+      columns: SCHEMA.columns.map((c) => c.columnId === "dropdown_mm89vqtc" ? { ...c, options: [{ label: "Bond MTN  (c)" }] } : c) as BoardColumns["columns"],
+    };
+    const r = plan({ caseType: "Bond MTN  (c)" }, row(), schema);
+    expect("plan" in r && r.plan.values).toEqual({ dropdown_mm89vqtc: { labels: ["Bond MTN  (c)"] } });
+    expect("plan" in r && r.plan.newLabel).toBeUndefined();
+  });
 });

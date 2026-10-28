@@ -31,7 +31,7 @@ import { withTokenFallback } from "../write-auth.js";
 import type { WriteTokenOptions } from "../write-token.js";
 import { enqueueWrite } from "../write-queue/processor.js";
 import { auditFromReq } from "../audit/log.js";
-import { caseTypeColumn, feeKCaseTypeSql, getBoardColumnsFor } from "@case-pipeline/query";
+import { caseTypeColumn, feeKCaseTypeSql, findCaseTypeOption, getBoardColumnsFor } from "@case-pipeline/query";
 import { usersDb } from "../db/users-db.js";
 import {
   FEE_K_ATTORNEY, applyProfileContactLocally, cleanContact, contractAttorneys, makeMondayUserResolver,
@@ -111,7 +111,7 @@ const sameLabels = (a: string[], b: string[]) => a.length === b.length && a.ever
 // The case-type dropdown the app writes is "Fee K Type" (curated, one label,
 // required by Monday since 2026-10). Older Fee Ks may only have "Contract
 // for…", which readers fall back to (feeKCaseTypeSql).
-export { caseTypeColumn };
+export { caseTypeColumn, findCaseTypeOption };
 
 export function planContractFees(
   body: { fees?: unknown; caseType?: unknown; newCaseType?: unknown; from?: unknown },
@@ -143,7 +143,7 @@ export function planContractFees(
   }
   // A "new" case type that only differs in case from an existing one is that one.
   const typeCol = schema ? caseTypeColumn(schema) : undefined;
-  const existing = caseType && typeCol?.options.find((o) => o.label.toLowerCase() === caseType!.toLowerCase());
+  const existing = caseType && typeCol ? findCaseTypeOption(typeCol.options, caseType) : undefined;
   if (existing) caseType = existing.label;
   const typeChanged = caseType !== undefined && !sameLabels([caseType], currentType);
   if (Object.keys(to).length === 0 && !typeChanged) {
