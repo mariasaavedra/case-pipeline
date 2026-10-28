@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { validateFolderName, ensureFolderPath, ensureFolder, isUnmodifiedBy } from "./folders.js";
+import { safeFileName, validateFolderName, ensureFolderPath, ensureFolder, isUnmodifiedBy } from "./folders.js";
 import { staticAuth } from "./graph-client.js";
 
 const config = staticAuth("test-token");
@@ -29,6 +29,25 @@ describe("validateFolderName", () => {
     expect(validateFolderName("Filings.")).not.toBeNull();
     expect(validateFolderName("..")).not.toBeNull();
     expect(validateFolderName("   ")).not.toBeNull();
+  });
+});
+
+describe("safeFileName", () => {
+  it("swaps the characters SharePoint refuses for a dash", () => {
+    // The real upload that stopped the Drive intake on 2026-10-28.
+    expect(safeFileName("Scanned Oct 26, 2026 at 6:44:55 PM.pdf")).toBe("Scanned Oct 26, 2026 at 6-44-55 PM.pdf");
+    expect(safeFileName('a"b*c<d>e?f/g\\h|i.jpg')).toBe("a-b-c-d-e-f-g-h-i.jpg");
+  });
+
+  it("leaves an acceptable name alone", () => {
+    expect(safeFileName("Pasaporte (1).pdf")).toBe("Pasaporte (1).pdf");
+    expect(validateFolderName(safeFileName("Scanned 6:44:55 PM.pdf"))).toBeNull();
+  });
+
+  it("drops a trailing period, a leading ~$ and never returns empty", () => {
+    expect(safeFileName("notes. ")).toBe("notes");
+    expect(safeFileName("~$draft.docx")).toBe("draft.docx");
+    expect(safeFileName("...")).toBe("file");
   });
 });
 
