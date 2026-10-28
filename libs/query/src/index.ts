@@ -30,7 +30,7 @@ export { getPrescheduling } from "./prescheduling";
 export { checklistCounts } from "./upload-checklist";
 export { getMyCases, FEE_KS_BOARD_KEY, PS_STAGE_COLUMN_ID } from "./my-cases";
 export { getPendingContracts, CONTRACT_STEPS, FEE_K_COLUMN_IDS, nextContractStep } from "./pending-contracts";
-export { feeKCaseTypeSql, caseTypeColumn } from "./fee-k-case-type";
+export { feeKCaseTypeSql, caseTypeColumn, findCaseTypeOption } from "./fee-k-case-type";
 export { getCourtCases, hearingKindOf, ACTIVE_COURT_CASE_GROUP, PREP_STAGE_COLUMN_TITLE } from "./court-cases";
 export { getCaseTimeline, boardConfigFor, ATTENTION_LOOKBACK_DAYS } from "./case-timeline";
 export type { CaseTimeline, CaseTimelineOptions, TimelineEvent, TimelineEventStatus, TimelineFix, TimelineNote, TimelineTrack, TimelineKind } from "./case-timeline";

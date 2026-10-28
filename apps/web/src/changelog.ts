@@ -14,6 +14,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-28",
+    title: "Fix: some case types refused a new contract",
+    items: [
+      "Creating or editing a contract with certain case types (like “Bond MTN (c)”) stopped with “caseType is not a valid option”. Those case types now work.",
+    ],
+  },
+  {
     date: "2026-10-26",
     title: "Target dates are set by an admin",
     items: [
