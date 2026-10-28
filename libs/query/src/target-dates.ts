@@ -14,8 +14,10 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 type Database = BetterSqlite3.Database;
-import { getActiveCases, type ActiveCase } from "./active-cases";
+import { getActiveCases } from "./active-cases";
 import { batchGetItemHistory, dateMoves } from "./item-history";
+import { getOpenFormStatuses, withOpenFormDetails, type MyOpenForm } from "./my-cases";
+import type { StatusColumnOption } from "./types";
 
 // =============================================================================
 // Types
@@ -38,8 +40,8 @@ export interface TargetDateChange {
   to: string | null;
 }
 
-export interface TargetDateCase extends ActiveCase {
-  mondayItemId: string | null;
+/** P5's case + what the M27 case card needs (E-File, forms dates), so a row opens it. */
+export interface TargetDateCase extends MyOpenForm {
   bucket: TargetBucket;
   /** Days from `today` to the target date (negative = overdue), null when none. */
   daysLeft: number | null;
@@ -57,6 +59,8 @@ export interface TargetDatesResult {
   paralegals: string[];
   /** Parked at the North Pole with a future return date — not listed. */
   snoozedCount: number;
+  /** Open Forms Status labels with colors, for the case card's status picker. */
+  openFormStatuses: StatusColumnOption[];
 }
 
 export interface TargetDatesOptions {
@@ -90,24 +94,16 @@ export function getTargetDates(db: Database, options: TargetDatesOptions = {}): 
   const today = options.today ?? new Date().toISOString().slice(0, 10);
   const active = getActiveCases(db);
 
-  const ids = new Map<string, string | null>();
-  if (active.cases.length > 0) {
-    const rows = db
-      .prepare(`SELECT local_id AS id, monday_item_id AS mondayItemId FROM board_items WHERE local_id IN (${active.cases.map(() => "?").join(",")})`)
-      .all(...active.cases.map((c) => c.localId)) as { id: string; mondayItemId: string | null }[];
-    for (const r of rows) ids.set(r.id, r.mondayItemId);
-  }
-  const history = batchGetItemHistory(db, [...ids.values()].filter((id): id is string => !!id));
+  const detailed = withOpenFormDetails(db, active.cases);
+  const history = batchGetItemHistory(db, detailed.map((c) => c.mondayItemId).filter((id): id is string => !!id));
 
-  const cases: TargetDateCase[] = active.cases.map((c) => {
-    const mondayItemId = ids.get(c.localId) ?? null;
-    const changes = (mondayItemId && history.get(mondayItemId)) || [];
+  const cases: TargetDateCase[] = detailed.map((c) => {
+    const changes = (c.mondayItemId && history.get(c.mondayItemId)) || [];
     const own = changes.filter((h) => h.columnId === TARGET_DATE_COLUMN_ID);
     const last = own[own.length - 1];
     const daysLeft = c.targetDate ? daysBetween(today, c.targetDate) : null;
     return {
       ...c,
-      mondayItemId,
       daysLeft,
       bucket: bucketFor(daysLeft),
       moves: dateMoves(changes, TARGET_DATE_COLUMN_ID, options.timeZone).length,
@@ -132,5 +128,5 @@ export function getTargetDates(db: Database, options: TargetDatesOptions = {}): 
   for (const n of cases.flatMap((c) => c.assignees)) if (!byLower.has(n.toLowerCase())) byLower.set(n.toLowerCase(), n);
   const paralegals = [...byLower.values()].sort((a, b) => a.localeCompare(b));
 
-  return { today, cases, counts, paralegals, snoozedCount: active.snoozedCount };
+  return { today, cases, counts, paralegals, snoozedCount: active.snoozedCount, openFormStatuses: getOpenFormStatuses(db) };
 }

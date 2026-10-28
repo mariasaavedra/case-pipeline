@@ -16,7 +16,8 @@ function c(over: Partial<TargetDateCase>): TargetDateCase {
     localId: "x", clientName: "Ana LOPEZ", clientLocalId: null, formName: "I-130 Ana", status: null, targetDate: "2026-10-30",
     urgency: "soon", daysUntilTarget: 4, dateUrgency: "soon", statusUrgency: "none", isCourtCase: false, assignees: ["Mayra Ruiz"],
     priority: null, forms: ["I130"], attorney: null, urgent: false, northPoleUntil: null, snoozed: false, parked: false,
-    mondayItemId: "1", bucket: "week", daysLeft: 4, moves: 0, lastChange: null, ...over,
+    mondayItemId: "1", eFile: null, eFileOnProfile: false, formsApptDate: null, formsSentDate: null, hireDate: null, onOpenFormsSince: null,
+    bucket: "week", daysLeft: 4, moves: 0, lastChange: null, ...over,
   };
 }
 const counts = (o: Partial<Record<TargetBucket, number>> = {}) => ({ overdue: 0, week: 0, twoWeeks: 0, later: 0, none: 0, ...o });
