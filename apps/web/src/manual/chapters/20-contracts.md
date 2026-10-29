@@ -6,7 +6,7 @@ summary: From a new Fee K to a signed, paid contract — generate, sign, send pa
 routes: contracts
 code: P14
 for: billing, attorney
-updated: 2026-10-23
+updated: 2026-10-29
 ---
 
 **Contracts** lists every pending Fee K, grouped by **Contract Stage** in its Monday colour. The colour of the age shows how long it has waited (30 and 60 days). Click an attorney to see only theirs. **Missing info** at the top shows contracts that lack a case type, AF, attorney, e-mail or address.
@@ -53,6 +53,16 @@ Either:
 4. **Mark sent** sets *Payment Link Sent On*. A live text marks it sent for you.
 
 When the client pays, the app reads LawPay's receipt, adds a note to the Fee K, tells whoever sent the links, and — when every fee is paid — moves it to **Paid Fee Ks** with stage *Paid needs action*.
+
+### Split a payment
+
+If the client's bank won't let them pay a fee all at once (a daily limit):
+
+1. Click **Split** next to the fee. It becomes 2 equal payments; pick up to 4 in **Split into**.
+2. Type an amount in one part and the others fill in the rest. The parts must add up to the fee; until they do, no links go out.
+3. Send the links as usual. Each part gets its own link, labelled *Attorney fee (1 of 2)*, and the e-mail tells the client they can pay one link per day.
+
+The Fee K stays at *Payment link sent* until every part is paid. Each payment adds a note saying how many are still to come. **Don't split** goes back to one link. If Monday's Payment Method says *SPLIT PAYMENTS*, the attorney fee opens already split in two.
 
 ## Fix a contract
 

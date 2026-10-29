@@ -10,7 +10,7 @@
 # (.github/workflows/build-push.yml) on every push to main.
 #
 # Deploy on the server:
-#   git pull && docker compose pull && docker compose up -d
+#   ./deploy.sh   (pull, up -d, wait for health, check the live sha, prune)
 #
 # Build images LOCALLY (rarely needed) with the build overlay:
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml build
@@ -48,7 +48,13 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      # The api takes 40 s–2 min to answer after a restart (more with a
+      # migration). With a 20 s start period it was marked unhealthy first and
+      # compose refused to start web, so most deploys needed a second up -d.
+      # Failures in the start period don't count; start_interval checks every
+      # 5 s meanwhile so web starts as soon as the api is ready.
+      start_period: 300s
+      start_interval: 5s
     stop_grace_period: 15s
     restart: unless-stopped
 

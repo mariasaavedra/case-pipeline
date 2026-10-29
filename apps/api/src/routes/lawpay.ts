@@ -49,7 +49,7 @@ import { notifyEvent, slackEscape, withLink } from "../notify/slack.js";
 import { makeMondayUserByLogin } from "../contract-info.js";
 import { buzonFeeKPaid } from "../buzon/job.js";
 import {
-  FEE_WORDS, feeKIdFromReference, isFullyPaid, normalizeReference, parseReference, personName,
+  FEE_WORDS, feeKIdFromReference, isFullyPaid, normalizeReference, paidFees, parseReference, partsLeft, personName,
   type FeeType, type IssuedLink, type LawPayPayment,
 } from "../lawpay/events.js";
 import type { LawPayReceipt } from "../lawpay/email.js";
@@ -196,17 +196,21 @@ export async function applyLawPayEvent(deps: LawPayDeps, eventId: number, paymen
 
   // Fully paid? Against the links handed out for this Fee K, else its Monday fees.
   const issued = usersDb.prepare(
-    "SELECT fee_type AS fee, amount, paid_at AS paidAt FROM payment_links WHERE contract_local_id = ? AND channel NOT LIKE 'matched-by-%'",
+    "SELECT fee_type AS fee, amount, paid_at AS paidAt, created_at AS createdAt FROM payment_links WHERE contract_local_id = ? AND channel NOT LIKE 'matched-by-%'",
   ).all(row.localId) as IssuedLink[];
-  const paidFees = new Set((usersDb.prepare(
-    "SELECT DISTINCT fee_type AS f FROM payment_links WHERE contract_local_id = ? AND paid_at IS NOT NULL",
-  ).all(row.localId) as { f: FeeType }[]).map((r) => r.f));
-  const full = isFullyPaid(issued, { AF: amountOf(row.af), FF: amountOf(row.ff), PF: amountOf(row.pf) }, paidFees);
+  const paidRefs = (usersDb.prepare(
+    "SELECT reference FROM payment_links WHERE contract_local_id = ? AND paid_at IS NOT NULL",
+  ).all(row.localId) as { reference: string }[]).map((r) => r.reference);
+  const full = isFullyPaid(issued, { AF: amountOf(row.af), FF: amountOf(row.ff), PF: amountOf(row.pf) }, paidFees(paidRefs));
+  // A split fee: which part this was and how many are left.
+  const left = partsLeft(ref, paidRefs);
+  const partWords = ref.part ? ` (part ${ref.part.n} of ${ref.part.of})` : "";
 
   const boardId = getBoardColumnsFor(db, "fee_ks")?.mondayBoardId ?? null;
   const lines = [
-    `💵 LawPay payment received: ${FEE_WORDS[ref.fee]} ${usd.format(payment.amount)}${payment.method ? ` (${payment.method})` : ""}. Reference: ${payment.reference}.`,
+    `💵 LawPay payment received: ${FEE_WORDS[ref.fee]}${partWords} ${usd.format(payment.amount)}${payment.method ? ` (${payment.method})` : ""}. Reference: ${payment.reference}.`,
   ];
+  if (left) lines.push(`${left === 1 ? "1 payment" : `${left} payments`} of the ${FEE_WORDS[ref.fee].toLowerCase()} still to come.`);
   let movedNote = "";
   if (full && row.mondayId && boardId) {
     if (PAYMENT_STAGES.has((row.stage ?? "").trim())) {
@@ -250,7 +254,7 @@ export async function applyLawPayEvent(deps: LawPayDeps, eventId: number, paymen
   const types = (() => { try { return (JSON.parse(row.contractFor ?? "[]") as string[]).join(", "); } catch { return ""; } })();
   const link2 = boardId && row.mondayId ? `${MONDAY_ACCOUNT_URL}/boards/${boardId}/pulses/${row.mondayId}` : null;
   await notifyEvent("payment_received", withLink(
-    `:moneybag: *${slackEscape(row.clientName)}* paid ${FEE_WORDS[ref.fee].toLowerCase()} ${usd.format(payment.amount)}${types ? ` (${slackEscape(types)})` : ""}` +
+    `:moneybag: *${slackEscape(row.clientName)}* paid ${FEE_WORDS[ref.fee].toLowerCase()}${partWords} ${usd.format(payment.amount)}${types ? ` (${slackEscape(types)})` : ""}` +
       (full ? " — *fully paid*, moved to Paid Fee Ks" : ""),
     link2, "Fee K",
   ));
@@ -262,7 +266,7 @@ export async function applyLawPayEvent(deps: LawPayDeps, eventId: number, paymen
   if (issuer && row.mondayId) {
     try {
       const me = await makeMondayUserByLogin(token, usersDb)(issuer.email ?? "", issuer.name ?? "");
-      if (me) await createNotification(String(me.id), row.mondayId, `💵 ${row.clientName} paid ${FEE_WORDS[ref.fee].toLowerCase()} ${usd.format(payment.amount)}${full ? " — fully paid" : ""}.`, token);
+      if (me) await createNotification(String(me.id), row.mondayId, `💵 ${row.clientName} paid ${FEE_WORDS[ref.fee].toLowerCase()}${partWords} ${usd.format(payment.amount)}${full ? " — fully paid" : ""}.`, token);
     } catch (err) {
       console.error("[lawpay] Monday notification failed:", err);
     }

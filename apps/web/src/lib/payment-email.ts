@@ -12,7 +12,7 @@
 // =============================================================================
 
 import { SURCHARGE_RATE } from "./contract-fill";
-import { lawPayLink, type FeeType } from "./lawpay";
+import { lawPayLink, type FeePart, type FeeType } from "./lawpay";
 
 export type PayMethod = "credit" | "debit" | "cash";
 
@@ -40,18 +40,41 @@ export interface PaymentLine {
   fee: FeeType;
   amount: number;
   link: string;
+  /** Set when the fee is split into several payments. */
+  part?: FeePart;
 }
 
-/** The links for these fees (in dollars, before surcharge). Cash = none. */
-export function paymentLines(description: string, fees: Partial<Record<FeeType, number | null>>, method: PayMethod): PaymentLine[] {
+/**
+ * The links for these fees (in dollars, before surcharge). Cash = none. A fee
+ * in `splits` (its parts, adding up to the fee) gets one link per part, each
+ * with its own 3% by credit card.
+ */
+export function paymentLines(
+  description: string,
+  fees: Partial<Record<FeeType, number | null>>,
+  method: PayMethod,
+  splits: Partial<Record<FeeType, number[]>> = {},
+): PaymentLine[] {
   if (method === "cash") return [];
   return ORDER.flatMap((fee) => {
     const base = fees[fee];
     if (base === null || base === undefined || !(base > 0)) return [];
-    const amount = chargeFor(base, method);
-    const link = lawPayLink(description, fee, amount);
-    return link ? [{ fee, amount, link }] : [];
+    const parts = splits[fee];
+    const pieces = parts && parts.length > 1
+      ? parts.map((p, i) => ({ base: p, part: { n: i + 1, of: parts.length } as FeePart | undefined }))
+      : [{ base, part: undefined }];
+    return pieces.flatMap(({ base: b, part }) => {
+      const amount = chargeFor(b, method);
+      const link = lawPayLink(description, fee, amount, part);
+      return link ? [{ fee, amount, link, ...(part ? { part } : {}) }] : [];
+    });
   });
+}
+
+/** "Attorney's fee (1 of 2)" / "Honorarios de abogado (1 de 2)". */
+export function lineLabel(l: Pick<PaymentLine, "fee" | "part">, lang: "en" | "es"): string {
+  const words = FEE_WORDS[l.fee][lang];
+  return l.part ? `${words} (${l.part.n} ${lang === "en" ? "of" : "de"} ${l.part.of})` : words;
 }
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -75,6 +98,7 @@ export function paymentEmail(opts: {
 }): PaymentEmail {
   const { clientName, matter, lines, method, senderName } = opts;
   const credit = method === "credit";
+  const split = lines.some((l) => l.part);
   const subject = `Payment links / Enlaces de pago — ${clientName}${matter ? ` — ${matter}` : ""}`;
 
   const en = {
@@ -82,6 +106,7 @@ export function paymentEmail(opts: {
     intro: "Thank you for signing your contract with Sharma-Crawford Attorneys at Law. You can pay with the secure links below:",
     pay: "Pay",
     surcharge: "includes the 3% credit card surcharge",
+    split: "Your payment is split into parts. If your bank limits how much you can pay in one day, pay one link per day.",
     outro: `If you have any questions, reply to this e-mail or call us at ${FIRM_PHONE}.`,
   };
   const es = {
@@ -89,6 +114,7 @@ export function paymentEmail(opts: {
     intro: "Gracias por firmar su contrato con Sharma-Crawford Attorneys at Law. Puede pagar con los enlaces seguros a continuación:",
     pay: "Pagar",
     surcharge: "incluye el recargo del 3% por tarjeta de crédito",
+    split: "Su pago está dividido en partes. Si su banco limita cuánto puede pagar en un día, pague un enlace por día.",
     outro: `Si tiene alguna pregunta, responda a este correo o llámenos al ${FIRM_PHONE}.`,
   };
 
@@ -96,9 +122,10 @@ export function paymentEmail(opts: {
     <p>${esc(t.hello)}</p>
     <p>${esc(t.intro)}</p>
     <ul>${lines.map((l) => `
-      <li><strong>${esc(FEE_WORDS[l.fee][lang])}: ${usd.format(l.amount)}</strong>${credit ? ` <span style="color:#555">(${esc(t.surcharge)})</span>` : ""}
+      <li><strong>${esc(lineLabel(l, lang))}: ${usd.format(l.amount)}</strong>${credit ? ` <span style="color:#555">(${esc(t.surcharge)})</span>` : ""}
         — <a href="${esc(l.link)}">${esc(t.pay)}</a></li>`).join("")}
-    </ul>
+    </ul>${split ? `
+    <p>${esc(t.split)}</p>` : ""}
     <p>${esc(t.outro)}</p>`;
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111">
     ${htmlBlock(en, "en")}
@@ -108,7 +135,7 @@ export function paymentEmail(opts: {
   </div>`;
 
   const textBlock = (t: typeof en, lang: "en" | "es") =>
-    [t.hello, "", t.intro, ...lines.map((l) => `• ${FEE_WORDS[l.fee][lang]}: ${usd.format(l.amount)}${credit ? ` (${t.surcharge})` : ""} — ${l.link}`), "", t.outro].join("\n");
+    [t.hello, "", t.intro, ...lines.map((l) => `• ${lineLabel(l, lang)}: ${usd.format(l.amount)}${credit ? ` (${t.surcharge})` : ""} — ${l.link}`), ...(split ? ["", t.split] : []), "", t.outro].join("\n");
   const text = [textBlock(en, "en"), "", "———", "", textBlock(es, "es"), "", senderName, "Sharma-Crawford Attorneys at Law", FIRM_PHONE].join("\n");
 
   return { subject, html, text };

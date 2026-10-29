@@ -4,50 +4,88 @@
 # =============================================================================
 # The server never builds. GitHub Actions builds the API + web images and
 # pushes them to GHCR on every push to main (.github/workflows/build-push.yml).
-# This script just fetches the latest code + images and restarts the stack.
+# This script fetches the latest code + images, restarts the stack, and proves
+# the new build is the one answering.
 #
 # Usage (on the server):
 #   cd ~/case-pipeline-new && ./deploy.sh
 #
 # Safe to re-run. Data in ./data (live.db, users.db) is a bind mount and is
-# never touched by a deploy.
+# never touched by a deploy. No sudo: the deploy user is in the docker group.
 # =============================================================================
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# Two deploys at once leave the api half-recreated ("removal of container … is
+# already in progress", 2026-10-23). Hold a lock for the whole run.
+exec 9>/tmp/case-pipeline-deploy.lock
+if ! flock -n 9; then
+  echo "✗ Another deploy is running. Wait for it to finish, then re-run."
+  exit 1
+fi
+
 echo "▶ Pulling latest code…"
-git pull origin main
+git pull -q origin main
+want="$(git rev-parse HEAD)"
+echo "  main is at ${want:0:7}"
 
 echo "▶ Pulling prebuilt images from GHCR…"
-sudo docker compose pull
+docker compose pull -q
 
+# Health = the api answering /health from inside its own container.
+api_version() {
+  docker compose exec -T api node -e \
+    "fetch('http://127.0.0.1:3000/health').then(r=>r.json()).then(j=>console.log(j.version)).catch(()=>process.exit(1))" \
+    2>/dev/null
+}
+both_running() {
+  local running
+  running="$(docker compose ps --status running --services 2>/dev/null)"
+  grep -qx api <<<"$running" && grep -qx web <<<"$running"
+}
+
+# web waits for the api to be healthy; the api can take ~2 min after a restart
+# (longer with a migration). If compose gives up on web anyway, a second up -d
+# starts it once the api is healthy — the manual fix every deploy needed before
+# the healthcheck got its longer start_period.
 echo "▶ Restarting stack…"
-sudo docker compose up -d
-
-# Reclaim the previous images' layers. Each deploy pulls fresh api+web images and
-# the old ones go dangling; on a 24 GB disk a few deploys' worth quietly fills it
-# (which starves the nightly sync of the room it needs — see nightly 2026-07-27).
-# -f = no prompt; only untagged images not used by a running container are removed.
-echo "▶ Reclaiming old image layers…"
-sudo docker image prune -f
-
-echo "▶ Waiting for API to report healthy…"
-for i in $(seq 1 30); do
-  status="$(sudo docker compose ps --format '{{.Name}} {{.Status}}' | grep api-1 || true)"
-  if echo "$status" | grep -qi healthy; then
-    echo "✓ API healthy: $status"
-    break
-  fi
-  sleep 2
-  if [ "$i" -eq 30 ]; then
-    echo "⚠ API did not report healthy in 60s. Recent logs:"
-    sudo docker compose logs --tail=30 api
-    exit 1
-  fi
+for attempt in 1 2 3; do
+  docker compose up -d || echo "  up -d attempt $attempt did not finish cleanly"
+  for _ in $(seq 1 60); do # up to 5 min
+    if both_running && api_version >/dev/null; then break 2; fi
+    sleep 5
+  done
+  echo "  not healthy yet, retrying up -d…"
 done
 
-echo "▶ Current status:"
-sudo docker compose ps --format 'table {{.Name}}\t{{.Status}}'
+if ! both_running; then
+  echo "✗ Stack is not fully up:"
+  docker compose ps
+  docker compose logs --tail=40 api
+  exit 1
+fi
 
+live="$(api_version || true)"
+if [ "$live" != "$want" ]; then
+  echo "⚠ The api reports ${live:0:7}, but main is at ${want:0:7}."
+  echo "  The image for ${want:0:7} is probably still building: check the"
+  echo "  'Build & Push Images' run on GitHub, then re-run ./deploy.sh."
+  exit 1
+fi
+echo "✓ Live: ${live:0:7}"
+
+# Each deploy leaves the previous images' layers dangling (~1.45 GB). A full
+# disk caused the July 2026 corruption, so reclaim and report every time.
+echo "▶ Reclaiming old image layers…"
+docker image prune -f | tail -1
+
+used="$(df --output=pcent / | tail -1 | tr -dc '0-9')"
+if [ "$used" -ge 80 ]; then
+  echo "⚠ Disk ${used}% full — look at data/backups and docker images before the next deploy."
+else
+  echo "  Disk ${used}% full"
+fi
+
+docker compose ps --format 'table {{.Name}}\t{{.Status}}'
 echo "✓ Deploy complete."
