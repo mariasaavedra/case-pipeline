@@ -56,6 +56,9 @@ const body = [
   ...PERSON_FIELDS.map((f) => para(run(`{{${f.tag}}}`, { mono: true }), run(` \u2014 ${f.label.replace(/ \(inside the loop\)/, "")}, e.g. ${f.example}`))),
   para(run("To name everyone in a sentence instead, use "), run("{{people_names}}", { mono: true }), run(" (in the table above).")),
   para(""),
+  para(run("Pro hac vice motion (Habeas)", { bold: true, size: 28 })),
+  para(run("Put the clause between "), run("{{#pro_hac_vice}}", { mono: true }), run(" and "), run("{{/pro_hac_vice}}", { mono: true }), run(" (each on its own line). It prints only when staff tick “Includes a pro hac vice motion”; inside it use "), run("{{pro_hac_vice_district}}", { mono: true }), run(" and "), run("{{pro_hac_vice_fee}}", { mono: true }), run(" (in the table above). The fee is in "), run("{{surcharge}}", { mono: true }), run(" and "), run("{{total_fee}}", { mono: true }), run(" only when ticked.")),
+  para(""),
   para(run("Need a field that isn't listed? Ask for it to be added to the dashboard first — an unknown field blocks the template.", { size: 20 })),
 ].join("");
 

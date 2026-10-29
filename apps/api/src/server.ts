@@ -121,6 +121,8 @@ import { registerMondayOAuth, getUserMondayToken, markMondayTokenRejected } from
 import { makeWriteTokenOptions } from "./write-token.js";
 import { checkEnvironment, reportEnvironment } from "./config/env-check.js";
 import { registerMondayWebhook, webhookSecret } from "./webhooks/receiver.js";
+import { registerRingCentralWebhook } from "./phone/call-events.js";
+import { schedulingTextListener } from "./phone/scheduling-text.js";
 import { startWebhookProcessor, createBoardKeyResolver } from "./webhooks/processor.js";
 import { notifyOps, inBackground, postEvent } from "./notify/slack.js";
 import { runSlackQueue, recoverInterrupted } from "./notify/slack-queue.js";
@@ -309,6 +311,11 @@ registerEsignPublicRoutes(app, { db, mondayApiToken: MONDAY_API_TOKEN, writeToke
 // Client upload links (CLIENT_UPLOADS=on): the client page's lookup + file
 // upload. The link's random token is the key, no login.
 registerClientUploadPublicRoutes(app, { db });
+
+// RingCentral call events (RC_WEBHOOK_SECRET): every call in the account, from
+// the subscription `npm run rc:subscribe` makes. Secret URL, no login. Today's
+// listener: IVR "press 1" → the scheduling link by text.
+registerRingCentralWebhook(app, schedulingTextListener({ db, mondayApiToken: MONDAY_API_TOKEN, seed: DB_SOURCE === "seed" }));
 
 // Admin — requireAdmin gates the role once here, so a future admin route can't
 // forget the check.

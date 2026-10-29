@@ -5,7 +5,7 @@ import { sanitizeSmsTemplates, withRequiredTemplates, DEFAULT_SMS_TEMPLATES } fr
 describe("withRequiredTemplates", () => {
   it("a saved list without the Upload link template gets it back; a reworded one is kept", () => {
     const saved = [{ key: "consult_link", label: "Consult", en: "Book: {{link}}", es: "" }];
-    expect(withRequiredTemplates(saved).map((t) => t.key)).toEqual(["consult_link", "upload_link", "buzon_link", "buzon_reminder", "buzon_received"]);
+    expect(withRequiredTemplates(saved).map((t) => t.key)).toEqual(["consult_link", "upload_link", "buzon_link", "buzon_reminder", "buzon_received", "ivr_scheduling_link"]);
     const reworded = DEFAULT_SMS_TEMPLATES.filter((t) => t.key !== "consult_link" && t.key !== "payment_links")
       .map((t) => (t.key === "upload_link" ? { ...t, label: "Docs", en: "Send: {{uploadLink}}", es: "" } : t));
     expect(withRequiredTemplates(reworded)).toEqual(reworded);
@@ -17,6 +17,15 @@ describe("withRequiredTemplates", () => {
         if (key !== "buzon_received") expect(text, key).toContain("{{uploadLink}}");
         expect(text, key).toMatch(/STOP/);
       }
+    }
+  });
+  it("the phone menu text has the link written in and needs no first name", () => {
+    const t = DEFAULT_SMS_TEMPLATES.find((x) => x.key === "ivr_scheduling_link")!;
+    for (const text of [t.en, t.es]) {
+      expect(text).not.toContain("{{firstName}}");
+      expect(text).not.toContain("{{link}}");
+      expect(text).toContain("https://sharma-crawford.com/schedule-a-consultation/");
+      expect(text).toMatch(/STOP/);
     }
   });
   it("upload_link is a send context", () => {

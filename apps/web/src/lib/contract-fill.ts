@@ -26,6 +26,11 @@
 // loop, {{#people}}{{person_name}} A# {{person_a_number}}{{/people}}, wrapped in
 // {{#has_people}}…{{/has_people}} so a one-person contract prints as before;
 // or names them in a sentence with {{people_names}}. One fee, one signer.
+// Pro hac vice (2026-10-29, Habeas): when the attorney must be admitted in the
+// federal district, M22's "Includes a pro hac vice motion" box turns on the
+// {{#pro_hac_vice}}…{{/pro_hac_vice}} clause, with {{pro_hac_vice_district}}
+// and {{pro_hac_vice_fee}}. Rekha sets the fee with the attorney. It is paid
+// into Operating with the AF, so it is in the surcharge and the total.
 // =============================================================================
 
 import PizZip from "pizzip";
@@ -84,6 +89,11 @@ export interface ContractInput {
   servicesEs: string;
   servicesExcluded: string;
   servicesExcludedEs: string;
+  /** HABEAS: "Includes a pro hac vice motion" — the fee and district count only when ticked. */
+  proHacVice: boolean;
+  proHacViceFee: number | null;
+  /** The federal district, e.g. "Western District of Missouri". */
+  proHacViceDistrict: string;
 }
 
 /** Someone the contract covers. */
@@ -123,9 +133,11 @@ export const money = (n: number | null) => (n === null || !Number.isFinite(n) ? 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** 3% of the fees it applies to: AF + FF + postage. */
 export const surchargeFor = (...fees: (number | null)[]) => round2(fees.reduce<number>((s, f) => s + (f ?? 0), 0) * SURCHARGE_RATE);
-export const surchargeOf = (f: ContractInput) => f.surcharge ?? surchargeFor(f.attorneyFee, f.filingFee, f.postageFee);
+/** The pro hac vice fee, when the contract includes the motion (0 otherwise). */
+export const proHacViceFeeOf = (f: ContractInput) => (f.proHacVice ? f.proHacViceFee ?? 0 : 0);
+export const surchargeOf = (f: ContractInput) => f.surcharge ?? surchargeFor(f.attorneyFee, f.filingFee, f.postageFee, proHacViceFeeOf(f));
 export const totalOf = (f: ContractInput) =>
-  round2((f.attorneyFee ?? 0) + (f.filingFee ?? 0) + (f.postageFee ?? 0) + surchargeOf(f));
+  round2((f.attorneyFee ?? 0) + (f.filingFee ?? 0) + (f.postageFee ?? 0) + proHacViceFeeOf(f) + surchargeOf(f));
 
 /** "N/A" for a fee that doesn't apply (null), else the amount. */
 const moneyOrNA = (n: number | null) => (n === null ? "N/A" : money(n));
@@ -165,8 +177,8 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "attorney_fee", label: "Attorney fee (AF)", example: "$5,000.00", value: (f) => money(f.attorneyFee), required: (f) => !positive(f.attorneyFee) },
   { tag: "filing_fee", label: "Filing fee (FF)", example: "$675.00", value: (f) => money(f.filingFee ?? 0) },
   { tag: "postage_fee", label: "Postage fee (N/A when empty)", example: "$100.00", value: (f) => (f.postageFee === null ? "N/A" : money(f.postageFee)) },
-  { tag: "surcharge", label: "Surcharge (3% of AF + FF + postage unless changed)", example: "$150.00", value: (f) => money(surchargeOf(f)) },
-  { tag: "total_fee", label: "Total (AF + FF + postage + surcharge)", example: "$5,925.00", value: (f) => money(totalOf(f)) },
+  { tag: "surcharge", label: "Surcharge (3% of AF + FF + postage + pro hac vice unless changed)", example: "$150.00", value: (f) => money(surchargeOf(f)) },
+  { tag: "total_fee", label: "Total (AF + FF + postage + pro hac vice + surcharge)", example: "$5,925.00", value: (f) => money(totalOf(f)) },
   { tag: "attorney_fee_surcharge", label: "Surcharge on the attorney fee (3%)", example: "$150.00", value: (f) => money(surchargeFor(f.attorneyFee)), required: (f) => !positive(f.attorneyFee) },
   { tag: "filing_fee_surcharge", label: "Surcharge on the filing fee (3%)", example: "$20.25", value: (f) => money(surchargeFor(f.filingFee)) },
   { tag: "postage_fee_surcharge", label: "Surcharge on postage (3%, N/A when no postage)", example: "$3.00", value: (f) => (f.postageFee === null ? "N/A" : money(surchargeFor(f.postageFee))) },
@@ -180,6 +192,9 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "motion_fee_surcharge", label: "Surcharge on the motion fee (3%)", example: "$45.00", value: (f) => money(surchargeFor(f.motionFee)), required: (f) => !positive(f.motionFee) },
   { tag: "hearing_fee", label: "Attorney fee for the hearing", example: "$1,000.00", value: (f) => money(f.hearingFee), required: (f) => !positive(f.hearingFee) },
   { tag: "hearing_fee_surcharge", label: "Surcharge on the hearing fee (3%)", example: "$30.00", value: (f) => money(surchargeFor(f.hearingFee)), required: (f) => !positive(f.hearingFee) },
+  { tag: "pro_hac_vice_fee", label: "Pro hac vice fee (when the box is ticked)", example: "$500.00", value: (f) => money(proHacViceFeeOf(f)), required: (f) => f.proHacVice && !positive(f.proHacViceFee) },
+  { tag: "pro_hac_vice_fee_surcharge", label: "Surcharge on the pro hac vice fee (3%)", example: "$15.00", value: (f) => money(surchargeFor(proHacViceFeeOf(f))), required: (f) => f.proHacVice && !positive(f.proHacViceFee) },
+  { tag: "pro_hac_vice_district", label: "Federal district for the pro hac vice motion", example: "Western District of Missouri", value: (f) => (f.proHacVice ? f.proHacViceDistrict.trim() : ""), required: (f) => f.proHacVice && !has(f.proHacViceDistrict) },
   { tag: "people_names", label: "Everyone on the contract, in a sentence", example: "Ana LOPEZ, Juan LOPEZ and Maria LOPEZ", value: (f) => joinNames(namesOf(f), "and"), required: (f) => !has(f.clientName) },
   { tag: "people_names_es", label: "Everyone on the contract, Spanish", example: "Ana LOPEZ, Juan LOPEZ y Maria LOPEZ", value: (f) => joinNames(namesOf(f), "y"), required: (f) => !has(f.clientName) },
   { tag: "people_count", label: "How many people", example: "3", value: (f) => String(namesOf(f).length) },
@@ -252,6 +267,9 @@ export const PERSON_FIELDS: ContractField[] = [
   { tag: "person_dob_es", label: "Person's date of birth, Spanish (inside the loop)", example: "4 de Marzo, 1990", value: () => "" },
 ];
 const PERSON_TAGS = new Set(PERSON_FIELDS.map((f) => f.tag));
+
+/** {{#pro_hac_vice}} … {{/pro_hac_vice}}: printed only when "Includes a pro hac vice motion" is ticked. */
+export const PRO_HAC_VICE_SECTION = "pro_hac_vice";
 
 /** One row of the people loop per person. */
 export function peopleRows(f: ContractInput): Record<string, string>[] {
@@ -341,8 +359,8 @@ export function inspectContractTemplate(file: ArrayBuffer): TemplateCheck {
       },
     });
     return {
-      tags: [...CONTRACT_FIELDS.map((f) => f.tag), PEOPLE_SECTION, PEOPLE_LOOP, ...PERSON_TAGS].filter((t) => found.has(t)),
-      unknown: [...found].filter((t) => !BY_TAG.has(t) && t !== PEOPLE_SECTION && t !== PEOPLE_LOOP && !PERSON_TAGS.has(t) && !isAdobeSignTag(t)),
+      tags: [...CONTRACT_FIELDS.map((f) => f.tag), PEOPLE_SECTION, PEOPLE_LOOP, ...PERSON_TAGS, PRO_HAC_VICE_SECTION].filter((t) => found.has(t)),
+      unknown: [...found].filter((t) => !BY_TAG.has(t) && t !== PEOPLE_SECTION && t !== PEOPLE_LOOP && !PERSON_TAGS.has(t) && t !== PRO_HAC_VICE_SECTION && !isAdobeSignTag(t)),
       signTags: [...found].filter(isAdobeSignTag),
       errors: [],
     };
@@ -357,6 +375,10 @@ export function inspectContractTemplate(file: ArrayBuffer): TemplateCheck {
 /** The template lists or names the people a contract covers (M22 shows the People box). */
 export const usesPeople = (check: TemplateCheck) =>
   check.tags.some((t) => t === PEOPLE_LOOP || t === PEOPLE_SECTION || t.startsWith("people_"));
+
+/** The template has the optional pro hac vice clause (M22 shows its box). */
+export const usesProHacVice = (check: TemplateCheck) =>
+  check.tags.some((t) => t === PRO_HAC_VICE_SECTION || t.startsWith("pro_hac_vice_"));
 
 /** What stops this template from being filled with this input. Empty = OK. */
 export function contractProblems(check: TemplateCheck, input: ContractInput): string[] {
@@ -415,7 +437,7 @@ function withoutTagHighlight(file: ArrayBuffer): PizZip {
 
 /** Fill a template. Call contractProblems first. */
 export function fillContractTemplate(file: ArrayBuffer, input: ContractInput): Blob {
-  const values: Record<string, unknown> = { ...contractValues(input), [PEOPLE_LOOP]: peopleRows(input), [PEOPLE_SECTION]: peopleOf(input).length > 0 };
+  const values: Record<string, unknown> = { ...contractValues(input), [PEOPLE_LOOP]: peopleRows(input), [PEOPLE_SECTION]: peopleOf(input).length > 0, [PRO_HAC_VICE_SECTION]: input.proHacVice };
   const doc = new Docxtemplater(withoutTagHighlight(file), {
     ...OPTIONS,
     // Adobe Sign tags print back as they were typed (spaces included: they set the field's width).

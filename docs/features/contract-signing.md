@@ -93,7 +93,14 @@ add a contract.
   `{{motion_name_es}}` (a pick list in M22 fills both: `MOTIONS`), and the
   motion's FF is `{{filing_fee}}`; that contract's file is named after the motion; Court
   Application adds the DHS `{{bio_fee}}`; Trial's "signed contract by" date is
-  `{{sign_by_date}}` (payment = `{{due_date}}`).
+  `{{sign_by_date}}` (payment = `{{due_date}}`). Habeas (2026-10-29) has an
+  optional pro hac vice clause, `{{#pro_hac_vice}}…{{/pro_hac_vice}}` with
+  `{{pro_hac_vice_district}}` and `{{pro_hac_vice_fee}}` (+ `_surcharge`):
+  M22's "Includes a pro hac vice motion" box turns it on. The fee (set by
+  Rekha with the attorney) is paid into Operating with the AF, so it counts in
+  `{{surcharge}}` / `{{total_fee}}`; M22 shows what the Fee K's AF on Monday
+  (= the AF payment link) should be and flags a mismatch. Nothing is written
+  to Monday.
 - Scope of services (2026-10-23, approved by Michael + Rekha): every contract
   gets "Scope of Services / Alcance de los Servicios" — section 1 with its own
   initials (Rafael, same day: the old sections are 2–13, initials and Adobe

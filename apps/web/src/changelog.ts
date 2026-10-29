@@ -24,6 +24,14 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: "2026-10-29",
+    title: "Habeas contracts: optional pro hac vice motion",
+    items: [
+      "Generate contract on a Habeas Fee K now has an Includes a pro hac vice motion box. Tick it to add the clause with the federal district and the fee.",
+      "The pro hac vice fee is part of the 3% card surcharge and the total. It is paid into Operating with the attorney fee, and the popup warns you when the AF on Monday doesn't include it yet.",
+    ],
+  },
+  {
+    date: "2026-10-29",
     title: "Payment links: split a fee into parts",
     items: [
       "For a client whose bank won't take the whole amount at once: click Split next to a fee in Payment links to send it as 2 to 4 links. Type one part and the others fill in the rest.",
