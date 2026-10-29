@@ -25,7 +25,7 @@
 // them too (a relative often signs for someone detained); one fee. A Trial template asks for the prep and
 // the trial fee separately, each with its own deadline. A template with the
 // {{#pro_hac_vice}} clause (Habeas) gets "Includes a pro hac vice motion":
-// ticked, the district and the fee; the fee is paid into Operating with the AF,
+// ticked, the district, the fee and the court's filing fee; both are paid into Operating with the AF,
 // so the form says what the Fee K's AF on Monday (= the payment link) should be.
 // "Notes · Timeline · Documents" opens the client's case (M3, ClientCaseModal)
 // stacked over this form, so checking what was quoted or what is on file never
@@ -144,6 +144,7 @@ const INPUTS_FOR: Record<string, (keyof ContractInput)[]> = {
   trial_total_fee: ["trialPrepFee", "trialFee"],
   pro_hac_vice: ["proHacVice"], pro_hac_vice_fee: ["proHacVice", "proHacViceFee"],
   pro_hac_vice_fee_surcharge: ["proHacVice", "proHacViceFee"], pro_hac_vice_district: ["proHacVice", "proHacViceDistrict"],
+  pro_hac_vice_filing_fee: ["proHacVice", "proHacViceFilingFee"], pro_hac_vice_filing_fee_surcharge: ["proHacVice", "proHacViceFilingFee"],
   services: ["services"], services_es: ["servicesEs"], services_excluded: ["servicesExcluded"], services_excluded_es: ["servicesExcludedEs"],
   sign_by_date: ["signByDate"], sign_by_date_es: ["signByDate"],
   due_date: ["dueDate"], due_date_es: ["dueDate"], due_date_short: ["dueDate"],
@@ -237,7 +238,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         dueDate: "", signByDate: "", attorneyName: p.attorneyName, creatorInitials: initialsOf(user?.name ?? ""),
         multiplePeople: false, people: [],
         trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
-        proHacVice: false, proHacViceFee: null, proHacViceDistrict: "",
+        proHacVice: false, proHacViceFee: null, proHacViceFilingFee: null, proHacViceDistrict: "",
         // The Fee K Type's scope of services (Settings → Firm → Fee K Types).
         services: p.scope?.services ?? "", servicesEs: p.scope?.servicesEs ?? "",
         servicesExcluded: p.scope?.excluded ?? "", servicesExcludedEs: p.scope?.excludedEs ?? "",
@@ -726,10 +727,11 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                             </Field>
                           )}
                           {amount("proHacViceFee", "Pro hac vice fee $", "As agreed with the attorney")}
+                          {amount("proHacViceFilingFee", "Court filing fee $", "Set by the court")}
                         </div>
-                        {input.proHacViceFee !== null && input.proHacViceFee > 0 && (
+                        {proHacViceFeeOf(input) > 0 && (
                           <p className="text-xs rounded p-2" style={mondayAf === operating ? { color: "var(--color-ink-faint)" } : { background: "var(--color-amber-light)", color: "var(--color-ink)" }}>
-                            Paid into Operating with the attorney fee: the AF payment link should be <strong>{money(operating)}</strong> (+ 3% by card).
+                            Both are paid into Operating with the attorney fee: the AF payment link should be <strong>{money(operating)}</strong> (+ 3% by card).
                             {mondayAf !== operating && <> The Fee K&apos;s AF on Monday is {mondayAf === null ? "empty" : money(mondayAf)} — change it with <strong>Edit contract…</strong> (Contracts) before sending the payment links.</>}
                           </p>
                         )}
