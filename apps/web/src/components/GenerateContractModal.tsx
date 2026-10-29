@@ -23,7 +23,10 @@
 // for more than one person" box: ticked, everyone the contract covers is
 // listed. The client signs and pays but is listed only when the contract is for
 // them too (a relative often signs for someone detained); one fee. A Trial template asks for the prep and
-// the trial fee separately, each with its own deadline.
+// the trial fee separately, each with its own deadline. A template with the
+// {{#pro_hac_vice}} clause (Habeas) gets "Includes a pro hac vice motion":
+// ticked, the district and the fee; the fee is paid into Operating with the AF,
+// so the form says what the Fee K's AF on Monday (= the payment link) should be.
 // "Notes · Timeline · Documents" opens the client's case (M3, ClientCaseModal)
 // stacked over this form, so checking what was quoted or what is on file never
 // throws away a half-filled contract.
@@ -43,6 +46,7 @@ import {
 } from "../sharepoint/graph";
 import {
   contractProblems, fillContractTemplate, inspectContractTemplate, surchargeOf, totalOf, money, halfOf, contractDocumentName, MOTIONS, motionEs, contractTitle, fromFeeKTypes, trialTotalOf,
+  proHacViceFeeOf,
   type ContractInput, type ContractPerson, type FeeKTypeText, type TemplateCheck,
 } from "../lib/contract-fill";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -70,8 +74,13 @@ const baseName = (file: string) => file.replace(/\.docx$/i, "");
 /** How the COURT templates name a hearing (the API maps Monday's hearing types to these). */
 const HEARING_TYPES = ["Master Hearing", "Individual Hearing"];
 const NO_PERSON: ContractPerson = { name: "", aNumber: "", dob: "" };
-/** The AF recorded with the generation: a Trial contract's is prep + trial. */
-const afOf = (f: ContractInput) => f.attorneyFee ?? (f.trialPrepFee !== null || f.trialFee !== null ? trialTotalOf(f) : null);
+/** The AF recorded with the generation: a Trial contract's is prep + trial; a pro hac vice fee is added (both go to Operating). */
+const afOf = (f: ContractInput) => {
+  const af = f.attorneyFee ?? (f.trialPrepFee !== null || f.trialFee !== null ? trialTotalOf(f) : null);
+  return f.proHacVice && af !== null ? af + proHacViceFeeOf(f) : af;
+};
+/** Federal districts the firm files habeas petitions in most; any other can be typed. */
+const DISTRICTS = ["Western District of Missouri", "Eastern District of Missouri", "District of Kansas"];
 
 // ── Draft kept per Fee K, in this browser only ───────────────────────────────
 interface Draft { input: ContractInput; templateId: string | null; attorneyEmail: string; savedAt: string }
@@ -133,6 +142,8 @@ const INPUTS_FOR: Record<string, (keyof ContractInput)[]> = {
   trial_fee: ["trialFee"], trial_fee_surcharge: ["trialFee"],
   trial_due_date: ["trialDueDate"], trial_due_date_es: ["trialDueDate"],
   trial_total_fee: ["trialPrepFee", "trialFee"],
+  pro_hac_vice: ["proHacVice"], pro_hac_vice_fee: ["proHacVice", "proHacViceFee"],
+  pro_hac_vice_fee_surcharge: ["proHacVice", "proHacViceFee"], pro_hac_vice_district: ["proHacVice", "proHacViceDistrict"],
   services: ["services"], services_es: ["servicesEs"], services_excluded: ["servicesExcluded"], services_excluded_es: ["servicesExcludedEs"],
   sign_by_date: ["signByDate"], sign_by_date_es: ["signByDate"],
   due_date: ["dueDate"], due_date_es: ["dueDate"], due_date_short: ["dueDate"],
@@ -226,6 +237,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
         dueDate: "", signByDate: "", attorneyName: p.attorneyName, creatorInitials: initialsOf(user?.name ?? ""),
         multiplePeople: false, people: [],
         trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
+        proHacVice: false, proHacViceFee: null, proHacViceDistrict: "",
         // The Fee K Type's scope of services (Settings → Firm → Fee K Types).
         services: p.scope?.services ?? "", servicesEs: p.scope?.servicesEs ?? "",
         servicesExcluded: p.scope?.excluded ?? "", servicesExcludedEs: p.scope?.excludedEs ?? "",
@@ -693,6 +705,39 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                   </div>
                 );
               })()}
+              {shown.has("proHacVice") && (() => {
+                // Paid into Operating with the AF: the AF link is Monday's AF, so it should include the fee.
+                const operating = (input.attorneyFee ?? 0) + proHacViceFeeOf(input);
+                const mondayAf = prefill.current?.input.attorneyFee ?? null;
+                return (
+                  <div className="rounded-md p-3 space-y-2" style={{ border: "1px solid var(--color-border-light)" }}>
+                    <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--color-ink)" }}>
+                      <input type="checkbox" checked={input.proHacVice} onChange={(e) => set("proHacVice", e.target.checked)} />
+                      Includes a pro hac vice motion
+                    </label>
+                    {input.proHacVice && (
+                      <>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {shown.has("proHacViceDistrict") && (
+                            <Field id="m22-proHacViceDistrict" label="Federal district" hint="Pick one, or type another.">
+                              <input id="m22-proHacViceDistrict" list="m22-districts" placeholder="Western District of Missouri" className={inputClass} style={inputStyle}
+                                value={input.proHacViceDistrict} onChange={(e) => set("proHacViceDistrict", e.target.value)} />
+                              <datalist id="m22-districts">{DISTRICTS.map((d) => <option key={d} value={d} />)}</datalist>
+                            </Field>
+                          )}
+                          {amount("proHacViceFee", "Pro hac vice fee $", "As agreed with the attorney")}
+                        </div>
+                        {input.proHacViceFee !== null && input.proHacViceFee > 0 && (
+                          <p className="text-xs rounded p-2" style={mondayAf === operating ? { color: "var(--color-ink-faint)" } : { background: "var(--color-amber-light)", color: "var(--color-ink)" }}>
+                            Paid into Operating with the attorney fee: the AF payment link should be <strong>{money(operating)}</strong> (+ 3% by card).
+                            {mondayAf !== operating && <> The Fee K&apos;s AF on Monday is {mondayAf === null ? "empty" : money(mondayAf)} — change it with <strong>Edit contract…</strong> (Contracts) before sending the payment links.</>}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
               {(shown.has("services") || shown.has("servicesExcluded")) && (
                 <div className="rounded-md p-3 space-y-3" style={{ border: "1px solid var(--color-border-light)" }}>
                   <div className="text-sm font-semibold" style={{ color: "var(--color-ink)" }}>Scope of services</div>
@@ -720,7 +765,7 @@ export function GenerateContractModal({ contract: c, onClose, onSent }: Props) {
                 {amount("postageFee", "Postage $", "Empty prints N/A", "N/A")}
                 {amount("interviewFee", "Interview fee $")}
                 {amount("bioFee", "DHS bio fee $", "Empty prints N/A", "N/A")}
-                {amount("surcharge", "Surcharge $", input.surcharge === null ? `3% of AF + FF + postage = ${money(surchargeOf(input))}` : undefined, money(surchargeOf(input)))}
+                {amount("surcharge", "Surcharge $", input.surcharge === null ? `3% of AF + FF + postage${input.proHacVice ? " + pro hac vice" : ""} = ${money(surchargeOf(input))}` : undefined, money(surchargeOf(input)))}
               </div>
               {file.check.tags.includes("trial_total_fee") && (
                 <p className="text-sm" style={{ color: "var(--color-ink)" }}>Trial prep + trial: <strong className="tabular-nums">{money(trialTotalOf(input))}</strong></p>
