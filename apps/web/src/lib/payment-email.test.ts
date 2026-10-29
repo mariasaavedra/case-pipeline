@@ -44,6 +44,15 @@ describe("paymentEmail", () => {
     expect(m.html).toContain("Ana &lt;b&gt;");
     expect(m.subject).toBe("Payment links / Enlaces de pago — Ana <b>");
   });
+  it("a split fee: one line per part, each with its 3%, and the one-link-a-day tip", () => {
+    const split = paymentLines("Ana", { AF: 4000, FF: 1175 }, "credit", { AF: [1500, 2500] });
+    expect(split.map((l) => [l.fee, l.part?.n ?? null, l.amount])).toEqual([["AF", 1, 1545], ["AF", 2, 2575], ["FF", null, 1210.25]]);
+    const m = paymentEmail({ clientName: "Ana", matter: "", lines: split, method: "credit", senderName: "X" });
+    expect(m.text).toContain("Attorney's fee (1 of 2): $1,545.00");
+    expect(m.text).toContain("Honorarios de abogado (2 de 2): $2,575.00");
+    expect(m.text).toContain("pay one link per day");
+    expect(mail.text).not.toContain("pay one link per day");
+  });
 });
 
 describe("the Fee K code in references", () => {
