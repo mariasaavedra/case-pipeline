@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-29",
+    title: "Fee K Types: where a case goes, and whether it needs Prescheduling",
+    items: [
+      "Waivers now go to Waivers (they stay in Prescheduling), and address changes go to Address Changes, in \"It will go to…\" on new Fee Ks.",
+      "Each Fee K Type has a Prescheduling first box in Settings → Firm → Fee K Types. It's ticked for every case where the client sends documents; when in doubt, leave it ticked.",
+      "E-Files to open shows whether the case goes through Prescheduling.",
+    ],
+  },
+  {
+    date: "2026-10-29",
     title: "Habeas contracts: optional pro hac vice motion",
     items: [
       "Generate contract on a Habeas Fee K now has an Includes a pro hac vice motion box. Tick it to add the clause with the federal district and the fee.",

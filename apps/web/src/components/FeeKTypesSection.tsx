@@ -25,7 +25,7 @@ import { settingsSectionTitle } from "./settingsStyles";
 
 const inputStyle = { backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border-light)", color: "var(--color-ink)", fontFamily: "var(--font-body)" } as const;
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-const EMPTY = { spanish: "", board: "", feeSheetJob: "", services: "", servicesEs: "", excluded: "", excludedEs: "", documents: [] as CaseDocument[] };
+const EMPTY = { spanish: "", board: "", feeSheetJob: "", prescheduling: true, services: "", servicesEs: "", excluded: "", excludedEs: "", documents: [] as CaseDocument[] };
 const SCOPE: ["services" | "servicesEs" | "excluded" | "excludedEs", string][] = [
   ["services", "Included"], ["servicesEs", "Included, Spanish"], ["excluded", "Not included"], ["excludedEs", "Not included, Spanish"],
 ];
@@ -202,6 +202,11 @@ export function FeeKTypesSection() {
                           {r.board && !boards.includes(r.board) && <option value={r.board}>{r.board} (not on Monday)</option>}
                           {boards.map((b) => <option key={b} value={b}>{b}</option>)}
                         </select>
+                        <label className="flex items-center gap-1.5 mt-1 text-xs" style={{ color: "var(--color-ink-muted)" }}>
+                          <input type="checkbox" checked={r.prescheduling !== false}
+                            aria-label={`Prescheduling first for ${r.feeKType}`} onChange={(e) => set(r.feeKType, { prescheduling: e.target.checked })} />
+                          Prescheduling first
+                        </label>
                       </td>
                       <td className="px-2 py-1.5">
                         <input className="w-full text-sm px-2 py-1 rounded" style={inputStyle} value={r.feeSheetJob} maxLength={120}

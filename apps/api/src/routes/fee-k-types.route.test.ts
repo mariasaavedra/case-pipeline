@@ -90,7 +90,7 @@ describe("Fee K Types routes", () => {
     expect(res.status).toBe(200);
     const { data } = await get();
     expect(data.draft).toBe(false);
-    expect(data.rows).toEqual([{ feeKType: "Motion (c)", spanish: "Moción", board: "Motions", feeSheetJob: "Motion", services: "", servicesEs: "", excluded: "", excludedEs: "", documents: [] }]);
+    expect(data.rows).toEqual([{ feeKType: "Motion (c)", spanish: "Moción", board: "Motions", feeSheetJob: "Motion", prescheduling: true, services: "", servicesEs: "", excluded: "", excludedEs: "", documents: [] }]);
     expect(audits).toEqual([{ action: "fee_k_types.updated", metadata: { rows: 1 } }]);
   });
 });

@@ -43,7 +43,7 @@ const { runReminders, runReceivedTexts } = await import("./job.js");
 const { initBuzonSettings, saveBuzonSettings, DEFAULT_BUZON_SETTINGS } = await import("./settings.js");
 const { initSmsTemplates } = await import("../sms/templates.js");
 
-const BLANK = { spanish: "", board: "", feeSheetJob: "", services: "", servicesEs: "", excluded: "", excludedEs: "" };
+const BLANK = { spanish: "", board: "", feeSheetJob: "", prescheduling: true, services: "", servicesEs: "", excluded: "", excludedEs: "" };
 const TABLE: FeeKTypeRow[] = [
   { ...BLANK, feeKType: "I-130", documents: [
     { en: "Marriage certificate", es: "Acta de matrimonio", required: true },

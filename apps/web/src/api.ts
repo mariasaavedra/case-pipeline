@@ -866,6 +866,8 @@ export interface FeeKTypeRow {
   board: string;
   /** A fee sheet Job; "" = not set. */
   feeSheetJob: string;
+  /** Goes through Prescheduling (documents to collect) before its board. Missing = yes. */
+  prescheduling?: boolean;
   /** Scope of services the contract prints (EN + ES); "" = none. */
   services: string;
   servicesEs: string;

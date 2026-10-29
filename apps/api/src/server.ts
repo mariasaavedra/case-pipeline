@@ -88,8 +88,8 @@ import { registerDocumentRoutes } from "./routes/documents.js";
 import { initDocumentSettings } from "./documents/document-settings.js";
 import { registerSmsRoutes } from "./routes/sms.js";
 import { initSmsTemplates } from "./sms/templates.js";
-import { feeKTypeLookup, initFeeKTypes, loadFeeKTypes } from "./fee-k-types.js";
-import { registerFeeKTypeRoutes } from "./routes/fee-k-types.js";
+import { boardRouting, feeKTypeLookup, initFeeKTypes, loadFeeKTypes, needsPrescheduling } from "./fee-k-types.js";
+import { feeKTypeOptions, registerFeeKTypeRoutes } from "./routes/fee-k-types.js";
 import { initNotifySettings } from "./notify/settings.js";
 import { registerIntegrationRoutes } from "./routes/integrations.js";
 import { registerProfileWriteRoutes } from "./routes/profile-write.js";
@@ -514,8 +514,14 @@ app.get("/api/prescheduling", (_req, res) => {
 // E-File, each with the plan the hire protocol would run. Reads only; the
 // ledger check happens in the browser. See docs/features/consult-to-efile.md.
 app.get("/api/efiles-to-open", requireAdmin, (_req, res) => {
-  const boardForType = feeKTypeLookup(loadFeeKTypes());
-  res.json({ data: getEFilesToOpen(db, { boardForType: (t) => boardForType(t)?.board || undefined }) });
+  const table = loadFeeKTypes();
+  const boardForType = feeKTypeLookup(table);
+  res.json({
+    data: getEFilesToOpen(db, {
+      boardForType: (t) => boardForType(t)?.board || undefined,
+      prescheduling: (types) => needsPrescheduling(table, types),
+    }),
+  });
 });
 // Contracts — Pending Fee Ks by Contract Stage, aged from the sent date (30 / 60 days).
 app.get("/api/pending-contracts", (_req, res) => {
@@ -1172,8 +1178,8 @@ function scheduleFeeKAutofill() {
       feeKInFlight = true;
       trackRun(usersDb, "fee_k_autofill", () => withMondayJob("fee-k-autofill", async () => {
         const io = await mondayFeeKIo();
-        const routing = feeKTypeLookup(loadFeeKTypes());
-        const r = await runFeeKAutofill({ db, since, apply: true, ...io, boardFor: (t) => routing(t)?.board || null, log: (l) => console.log(l) });
+        const boardFor = boardRouting(loadFeeKTypes(), feeKTypeOptions(db).boards);
+        const r = await runFeeKAutofill({ db, since, apply: true, ...io, boardFor, log: (l) => console.log(l) });
         for (const w of r.written) {
           recordAudit({
             actor: { userId: null, email: "system:fee-k-autofill" },

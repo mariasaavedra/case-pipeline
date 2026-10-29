@@ -32,7 +32,7 @@ vi.mock("../audit/log.js", () => ({
 const { registerClientUploadPublicRoutes, registerClientUploadRoutes } = await import("./client-uploads.js");
 const { registerUploadChecklistRoutes } = await import("./upload-checklist.js");
 
-const BLANK = { spanish: "", board: "", feeSheetJob: "", services: "", servicesEs: "", excluded: "", excludedEs: "" };
+const BLANK = { spanish: "", board: "", feeSheetJob: "", prescheduling: true, services: "", servicesEs: "", excluded: "", excludedEs: "" };
 const TABLE: FeeKTypeRow[] = [
   { ...BLANK, feeKType: "I-130 - Petition for Alien Relative", documents: [
     { en: "Marriage certificate", es: "Acta de matrimonio", required: true },
