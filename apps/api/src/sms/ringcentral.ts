@@ -94,6 +94,17 @@ export class RingCentralClient {
     return (await res.json()) as T;
   }
 
+  /** Signed-in POST / PUT / DELETE of a REST path — the call-events subscription (scripts/rc-subscribe.ts). */
+  async sendJson<T>(method: "POST" | "PUT" | "DELETE", restPath: string, body?: unknown): Promise<T | null> {
+    const token = await this.accessToken();
+    const res = await this.call(`${this.config.serverUrl}${restPath}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+    return res.status === 204 ? null : ((await res.json()) as T);
+  }
+
   /** Send one text. `to` must already be E.164. */
   async sendSms(to: string, text: string): Promise<SentSms> {
     const token = await this.accessToken();

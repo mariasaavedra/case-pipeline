@@ -14,6 +14,7 @@
 
 import { clientUploadsConfig } from "../uploads/rules.js";
 import { slackMode } from "../notify/slack.js";
+import { smsMode } from "../sms/ringcentral.js";
 import type { NotifyEventKey } from "../notify/settings.js";
 
 export type WorkflowGroup = "monday" | "payments" | "files" | "messages" | "maintenance" | "external";
@@ -260,6 +261,21 @@ export const WORKFLOWS: WorkflowDef[] = [
       return mode === "dry-run" ? { on: true, reason: "Dry run — logged, not posted" } : { on: true };
     },
     history: "job_runs", doc: "docs/features/target-dates.md",
+  },
+  {
+    key: "ivr_scheduling_text",
+    name: "Phone menu: scheduling link",
+    when: "A caller presses 1 in the phone menu (RingCentral)",
+    then: "Text them the link to schedule an appointment (the \"Phone menu: scheduling link\" text)",
+    group: "messages", kind: "event",
+    enabled: ({ env }) => {
+      if (!isSet(env, "RC_WEBHOOK_SECRET")) return { on: false, reason: "Off — RC_WEBHOOK_SECRET isn't set" };
+      if (!isSet(env, "RC_SCHEDULING_EXTENSION")) return { on: false, reason: "Off — RC_SCHEDULING_EXTENSION isn't set" };
+      const mode = smsMode(env);
+      if (mode === "off") return { on: false, reason: "Off — SMS_MODE is off" };
+      return mode === "dry-run" ? { on: true, reason: "Dry run — logged, not sent" } : { on: true };
+    },
+    history: "job_runs", doc: "docs/features/phone-ivr.md",
   },
   {
     key: "slack_events",
