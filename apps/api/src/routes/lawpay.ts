@@ -196,7 +196,7 @@ export async function applyLawPayEvent(deps: LawPayDeps, eventId: number, paymen
 
   // Fully paid? Against the links handed out for this Fee K, else its Monday fees.
   const issued = usersDb.prepare(
-    "SELECT fee_type AS fee, amount, paid_at AS paidAt FROM payment_links WHERE contract_local_id = ? AND channel NOT LIKE 'matched-by-%'",
+    "SELECT fee_type AS fee, amount, paid_at AS paidAt, created_at AS createdAt FROM payment_links WHERE contract_local_id = ? AND channel NOT LIKE 'matched-by-%'",
   ).all(row.localId) as IssuedLink[];
   const paidRefs = (usersDb.prepare(
     "SELECT reference FROM payment_links WHERE contract_local_id = ? AND paid_at IS NOT NULL",

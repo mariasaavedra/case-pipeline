@@ -76,12 +76,30 @@ export interface IssuedLink {
   fee: FeeType;
   amount: number;
   paidAt: string | null;
+  /** users.db `created_at` ("YYYY-MM-DD HH:MM:SS", UTC). */
+  createdAt?: string;
+}
+
+/** Links recorded within this many seconds of the newest are one M21 hand-out. */
+const SET_WINDOW_S = 10;
+
+/**
+ * The latest set of links handed out: the ones M21 recorded last. Earlier
+ * sets were replaced (seen 2026-10-29: AF + FF links, then one AF with the
+ * litigation filing fee folded in, split in two — the old FF link must not
+ * count as still owed).
+ */
+export function latestLinkSet(issued: IssuedLink[]): IssuedLink[] {
+  const time = (l: IssuedLink) => (l.createdAt ? Date.parse(`${l.createdAt.replace(" ", "T")}Z`) : NaN);
+  const newest = Math.max(...issued.map(time).filter((t) => Number.isFinite(t)));
+  if (!Number.isFinite(newest)) return issued;
+  return issued.filter((l) => !(time(l) < newest - SET_WINDOW_S * 1000));
 }
 
 /**
  * Fully paid = every fee on the Fee K has a completed payment. The fees are
- * the links the app issued for it when there are any (their latest set),
- * else the Fee K's own AF / FF / PF on Monday.
+ * the latest set of links the app issued for it when there are any, else the
+ * Fee K's own AF / FF / PF on Monday.
  */
 export function isFullyPaid(
   issued: IssuedLink[],
@@ -89,7 +107,7 @@ export function isFullyPaid(
   paidFees: Set<FeeType>,
 ): boolean {
   const owed = issued.length
-    ? [...new Set(issued.map((l) => l.fee))]
+    ? [...new Set(latestLinkSet(issued).map((l) => l.fee))]
     : (["AF", "FF", "PF"] as FeeType[]).filter((f) => (feeK[f] ?? 0) > 0);
   return owed.length > 0 && owed.every((f) => paidFees.has(f));
 }
