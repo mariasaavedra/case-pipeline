@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import PizZip from "pizzip";
 import {
   peopleRows, fromFeeKTypes, contractTitle,
-  contractValues, contractProblems, contractDocumentName, motionEs, CONTRACT_FIELDS, inspectContractTemplate, fillContractTemplate, surchargeFor, unhighlightTags,
+  contractValues, contractProblems, contractDocumentName, shortClientName, motionEs, CONTRACT_FIELDS, inspectContractTemplate, fillContractTemplate, surchargeFor, unhighlightTags,
   type ContractInput,
 } from "./contract-fill";
 
@@ -97,21 +97,32 @@ describe("per-fee surcharges (2026 contracts)", () => {
 });
 
 describe("contractDocumentName", () => {
-  it("is Client name - Form(s)/Matter - MM-DD-YYYY", () => {
-    expect(contractDocumentName({ ...INPUT, formName: "I-212" })).toBe("Ana LOPEZ - I-212 - 10-05-2026");
+  it("is MM-DD-YY - Matter Contract - F. M. LAST", () => {
+    expect(contractDocumentName({ ...INPUT, formName: "I-212" })).toBe("10-05-26 - I-212 Contract - A. LOPEZ");
+    expect(contractDocumentName({ ...INPUT, formName: "", clientName: "Juan Carlos PEREZ", date: "2026-10-29" })).toBe("10-29-26 - Master Hearing Contract - J. C. PEREZ");
+  });
+  it("shortens the client to initials + LAST NAMES", () => {
+    expect(shortClientName("Ana Maria LOPEZ GARCIA")).toBe("A. M. LOPEZ GARCIA");
+    expect(shortClientName("ana maria lopez")).toBe("A. M. LOPEZ");
+    expect(shortClientName("José DE LA CRUZ")).toBe("J. DE LA CRUZ");
+    expect(shortClientName("J. C. PEREZ")).toBe("J. C. PEREZ");
+    expect(shortClientName("LOPEZ")).toBe("LOPEZ");
+  });
+  it("doesn't say Contract twice", () => {
+    expect(contractDocumentName({ ...INPUT, formName: "", hearingType: "" })).toBe("10-05-26 - Fee K - A. LOPEZ");
   });
   it("keeps the English half of a bilingual title, capped at a word", () => {
     const long = "I-212 Application for Permission to Reapply for Admission into the United States After Deportation or Removal / I-212 Aplicación de Permiso";
     const name = contractDocumentName({ ...INPUT, formName: long });
-    expect(name).toBe("Ana LOPEZ - I-212 Application for Permission to Reapply for Admission into the United… - 10-05-2026");
+    expect(name).toBe("10-05-26 - I-212 Application for Permission to Reapply for Admission into the United… Contract - A. LOPEZ");
   });
   it("falls back to the hearing type, and drops characters a file name can't hold", () => {
-    expect(contractDocumentName({ ...INPUT, formName: "", clientName: "Ana / LOPEZ" })).toBe("Ana LOPEZ - Master Hearing - 10-05-2026");
+    expect(contractDocumentName({ ...INPUT, formName: "", clientName: "Ana / LOPEZ" })).toBe("10-05-26 - Master Hearing Contract - A. LOPEZ");
   });
   it("names a Master Hearing + motion contract after the motion, only when the template has one", () => {
     const f = { ...INPUT, motionName: "Motion to Recalendar" };
-    expect(contractDocumentName(f, ["motion_name", "hearing_date"])).toBe("Ana LOPEZ - Master Hearing + Motion to Recalendar - 10-05-2026");
-    expect(contractDocumentName(f, ["form_name"])).toBe("Ana LOPEZ - I-130 - 10-05-2026");
+    expect(contractDocumentName(f, ["motion_name", "hearing_date"])).toBe("10-05-26 - Master Hearing + Motion to Recalendar Contract - A. LOPEZ");
+    expect(contractDocumentName(f, ["form_name"])).toBe("10-05-26 - I-130 Contract - A. LOPEZ");
   });
 });
 
@@ -237,8 +248,8 @@ describe("several people on one contract", () => {
   });
 
   it("names the file after the client, with how many people", () => {
-    expect(contractDocumentName(FAMILY)).toBe("Ana LOPEZ - I-130 (3 people) - 10-05-2026");
-    expect(contractDocumentName(INPUT)).toBe("Ana LOPEZ - I-130 - 10-05-2026");
+    expect(contractDocumentName(FAMILY)).toBe("10-05-26 - I-130 Contract (3 people) - A. LOPEZ");
+    expect(contractDocumentName(INPUT)).toBe("10-05-26 - I-130 Contract - A. LOPEZ");
   });
 });
 

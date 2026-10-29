@@ -115,10 +115,16 @@ export function payMethodFrom(raw: unknown, depth = 0): PayMethod | null {
   return null;
 }
 
-/** The signed copy's file name (no extension), from the agreement name on Zap 3's event. */
+/**
+ * The signed copy's file name (no extension), from the agreement name on Zap 3's
+ * event: "10-29-26 - Master Hearing Contract - J. C. PEREZ" → "10-29-26 - SIGNED
+ * Master Hearing Contract - J. C. PEREZ". Agreements sent before 2026-10-29
+ * ("Ana LOPEZ - I-212 - 10-15-2026") keep the name they were sent with.
+ */
 export function signedDocumentName(agreementName: string | null | undefined, clientName: string): string {
   const base = (agreementName ?? "").replace(/\s*\[CP-\d+\]\s*$/i, "").trim();
-  return base && !/^Fee K - /i.test(base) ? base : `${clientName.replace(/\s+/g, " ").trim()} - Signed Fee K`;
+  if (!base || /^Fee K - /i.test(base)) return `${clientName.replace(/\s+/g, " ").trim()} - Signed Fee K`;
+  return base.replace(/^(\d{2}-\d{2}-\d{2}) - (?!SIGNED )/, "$1 - SIGNED ");
 }
 
 export interface EsignRow {

@@ -309,26 +309,42 @@ export const motionEs = (en: string) => MOTIONS.find((m) => m.en.toLowerCase() =
 const BY_TAG = new Map(CONTRACT_FIELDS.map((f) => [f.tag, f]));
 
 /**
+ * "Juan Carlos PEREZ" → "J. C. PEREZ": given names as initials, last
+ * names (the ALL-CAPS words; else the last word) spelled out in capitals.
+ */
+export function shortClientName(full: string): string {
+  const words = full.split(/\s+/).map((w) => w.replace(/\.+$/, "")).filter(Boolean);
+  if (words.length < 2) return words.join("").toUpperCase();
+  const caps = (w: string) => w.length > 1 && /\p{L}/u.test(w) && w === w.toUpperCase();
+  let i = words.findIndex(caps);
+  if (i <= 0) i = words.length - 1;
+  const initials = words.slice(0, i).map((w) => `${w[0]!.toUpperCase()}.`);
+  return [...initials, words.slice(i).join(" ").toUpperCase()].join(" ");
+}
+
+/**
  * The contract's file name, the same everywhere (download, Adobe, the signed
- * copy in the E-File): "Client name - Form(s)/Matter - MM-DD-YYYY". Decided
- * 2026-10-15. A contract with a motion (motion_name) is named after it. A bilingual title typed into Form(s)/matter keeps its English
- * half ("… / I-212 Aplicación…" is dropped) and is capped at a word, so the
- * name stays readable in a folder.
+ * copy in the E-File): "MM-DD-YY - Matter Contract - F. M. LAST", e.g.
+ * "10-29-26 - Master Hearing Contract - J. C. PEREZ" (decided 2026-10-29;
+ * the signed copy adds "SIGNED" before the matter). A contract with a motion
+ * (motion_name) is named after it. A bilingual title typed into Form(s)/matter
+ * keeps its English half ("… / I-212 Aplicación…" is dropped) and is capped at
+ * a word, so the name stays readable in a folder.
  */
 export function contractDocumentName(f: ContractInput, tags: string[] = []): string {
   const clean = (s: string) => s.replace(/[\\/:*?"<>|#%{}~&]+/g, " ").replace(/\s+/g, " ").trim();
   // MASTER HEARING + MOTION: the motion names the matter ("Master Hearing + Motion to Recalendar").
   const motion = tags.includes("motion_name") && has(f.motionName) ? `Master Hearing + ${f.motionName.trim()}` : "";
-  // Several people: "Ana LOPEZ + 3" so the file still sorts under the client.
   const count = peopleOf(f).length;
-  const client = clean(f.clientName);
+  const client = shortClientName(clean(f.clientName));
   let matter = clean((motion || f.formName.trim() || f.hearingType.trim() || "Fee K").split(" / ")[0]!);
   if (matter.length > 80) matter = `${matter.slice(0, 80).replace(/\s+\S*$/, "")}…`;
+  if (!/\b(contract|fee k)$/i.test(matter)) matter = `${matter} Contract`;
   const p = ymd(f.date);
-  const date = p ? `${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}-${p.y}` : "";
-  // Several people: "… - Master Hearing (4 people) - …".
+  const date = p ? `${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}-${String(p.y % 100).padStart(2, "0")}` : "";
+  // Several people: "… - I-130 Contract (4 people) - …".
   if (count > 0) matter = `${matter} (${count} people)`;
-  return [client, matter, date].filter(Boolean).join(" - ");
+  return [date, matter, client].filter(Boolean).join(" - ");
 }
 
 /**

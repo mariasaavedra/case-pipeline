@@ -63,7 +63,7 @@ vi.mock("../lib/contract-fill", async (orig) => ({
   totalOf: () => 5150,
   money: (n: number) => `$${n}`,
   halfOf: (n: number) => n / 2,
-  contractDocumentName: () => "Ana Lopez - Court - 10-15-2026",
+  contractDocumentName: () => "10-15-26 - Court Contract - A. LOPEZ",
 }));
 
 const { GenerateContractModal } = await import("./GenerateContractModal");
@@ -110,7 +110,7 @@ describe("M22 preview", () => {
     await flush();
     expect(mocks.convert).toHaveBeenCalledTimes(1); // not made again
     // The standard name goes with it: Adobe's document and the signed copy carry it.
-    expect(mocks.send).toHaveBeenCalledWith("c1", pdf, { attorneyEmail: "jane@firm.com", clientEmail: "ana@mail.com", documentName: "Ana Lopez - Court - 10-15-2026" });
+    expect(mocks.send).toHaveBeenCalledWith("c1", pdf, { attorneyEmail: "jane@firm.com", clientEmail: "ana@mail.com", documentName: "10-15-26 - Court Contract - A. LOPEZ" });
     expect(onSent).toHaveBeenCalled();
   });
 

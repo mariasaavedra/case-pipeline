@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-29",
+    title: "Contract file names start with the date",
+    items: [
+      "Contracts are now named date first, then the matter, then the client's initials and last names: 10-29-26 - Master Hearing Contract - J. C. PEREZ.",
+      "The signed copy saved to the E-File says SIGNED: 10-29-26 - SIGNED Master Hearing Contract - J. C. PEREZ.",
+    ],
+  },
+  {
+    date: "2026-10-29",
     title: "CVP contracts: scope of services",
     items: [
       "Generate contract on a CVP - Consular Visa Process Fee K now fills Scope of services with the attorney-approved text (DS-260, I-864, NVC civil documents, interview scheduling), in English and Spanish.",
