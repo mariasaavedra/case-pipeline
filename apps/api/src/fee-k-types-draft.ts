@@ -185,6 +185,14 @@ const SCOPE: Record<string, [string, string, string, string]> = {
     "Appealing a denied or incomplete response.",
     "Apelar una respuesta negada o incompleta.",
   ],
+  // Written by an attorney, Spanish confirmed 2026-10-29. Government fees point
+  // at the Fees section: the firm often collects the visa fee as the FF.
+  "CVP - Consular Visa Process": [
+    "Preparing the following forms, reviewing the evidence for sufficiency and submitting them to the relevant authorities: DS-260 (Immigrant Visa Application) and I-864 (Affidavit of Support). Reviewing your civil documents and submitting them to the National Visa Center so your case becomes documentarily qualified. Relaying the U.S. Embassy's scheduling of your immigrant visa interview, including forwarding the instructions for the medical exam.",
+    "Preparar los siguientes formularios, revisar que la evidencia sea suficiente y presentarlos ante las autoridades correspondientes: DS-260 (Solicitud de Visa de Inmigrante) e I-864 (Declaración Jurada de Patrocinio). Revisar sus documentos civiles y presentarlos ante el Centro Nacional de Visas para que su caso quede documentalmente completo. Comunicarle la programación de su entrevista de visa de inmigrante por parte de la Embajada de los Estados Unidos, incluyendo el envío de las instrucciones para el examen médico.",
+    "The I-130 Petition for Alien Relative; waivers of inadmissibility (I-601, I-601A, I-212); legal services for 221(g) administrative processing or for the Embassy's requests for additional documents, which require additional attorney's fees and a new contract. Government fees collected under this contract are listed in the Fees section; the immigrant medical exam, biometrics and any other fee not listed there are your own responsibility.",
+    "La Petición de Familiar Extranjero I-130; los perdones de inadmisibilidad (I-601, I-601A, I-212); los servicios legales relacionados con el procesamiento administrativo 221(g) o con las solicitudes de documentos adicionales de la Embajada, que requieren honorarios adicionales y un nuevo contrato. Las tarifas del gobierno que se cobran en este contrato aparecen en la sección de Honorarios; el examen médico de inmigrante, la toma de datos biométricos y cualquier otra tarifa que no aparezca allí son su responsabilidad.",
+  ],
 };
 
 export const DRAFT_FEE_K_TYPES: FeeKTypeRow[] = rows.map(([feeKType, spanish, board, feeSheetJob]) => {

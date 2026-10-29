@@ -107,7 +107,8 @@ add a contract.
   `IntN` fields 1–13, "Sections 1 through 13", Fees = Section 3). It sits right
   before "2. Office Procedures" (after the Trial / Habeas deadline notices).
   Court templates carry it as fixed text in the Word file. FORMS prints a
-  common opening ("Preparing and filing your {{form_name}} with USCIS…") plus
+  common opening ("Preparing and filing your {{form_name}} with USCIS…", inside
+  `{{#uscis_filing}}`, left out for a CVP, which goes to the NVC) plus
   `{{services}}` / `{{services_excluded}}` (+ `_es`) from the Fee K Type's
   scope in Settings → Firm → Fee K Types ("Scope…" on each row; the draft
   carries the 11 approved examples and is used until the table is saved);

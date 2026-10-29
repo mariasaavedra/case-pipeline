@@ -271,6 +271,15 @@ const PERSON_TAGS = new Set(PERSON_FIELDS.map((f) => f.tag));
 /** {{#pro_hac_vice}} … {{/pro_hac_vice}}: printed only when "Includes a pro hac vice motion" is ticked. */
 export const PRO_HAC_VICE_SECTION = "pro_hac_vice";
 
+/**
+ * {{#uscis_filing}} … {{/uscis_filing}}: the FORMS opening ("Preparing and filing
+ * your … with USCIS"). Off when a picked Fee K Type isn't filed with USCIS: a
+ * CVP goes to the National Visa Center, and its own scope says what's done.
+ */
+export const USCIS_SECTION = "uscis_filing";
+const NOT_FILED_WITH_USCIS = new Set(["CVP - Consular Visa Process"].map(typeKey));
+export const filedWithUscis = (f: Pick<ContractInput, "feeKTypes">) => !f.feeKTypes.some((t) => NOT_FILED_WITH_USCIS.has(typeKey(t)));
+
 /** One row of the people loop per person. */
 export function peopleRows(f: ContractInput): Record<string, string>[] {
   return peopleOf(f).map((p, i) => ({
@@ -359,8 +368,8 @@ export function inspectContractTemplate(file: ArrayBuffer): TemplateCheck {
       },
     });
     return {
-      tags: [...CONTRACT_FIELDS.map((f) => f.tag), PEOPLE_SECTION, PEOPLE_LOOP, ...PERSON_TAGS, PRO_HAC_VICE_SECTION].filter((t) => found.has(t)),
-      unknown: [...found].filter((t) => !BY_TAG.has(t) && t !== PEOPLE_SECTION && t !== PEOPLE_LOOP && !PERSON_TAGS.has(t) && t !== PRO_HAC_VICE_SECTION && !isAdobeSignTag(t)),
+      tags: [...CONTRACT_FIELDS.map((f) => f.tag), PEOPLE_SECTION, PEOPLE_LOOP, ...PERSON_TAGS, PRO_HAC_VICE_SECTION, USCIS_SECTION].filter((t) => found.has(t)),
+      unknown: [...found].filter((t) => !BY_TAG.has(t) && t !== PEOPLE_SECTION && t !== PEOPLE_LOOP && !PERSON_TAGS.has(t) && t !== PRO_HAC_VICE_SECTION && t !== USCIS_SECTION && !isAdobeSignTag(t)),
       signTags: [...found].filter(isAdobeSignTag),
       errors: [],
     };
@@ -437,7 +446,7 @@ function withoutTagHighlight(file: ArrayBuffer): PizZip {
 
 /** Fill a template. Call contractProblems first. */
 export function fillContractTemplate(file: ArrayBuffer, input: ContractInput): Blob {
-  const values: Record<string, unknown> = { ...contractValues(input), [PEOPLE_LOOP]: peopleRows(input), [PEOPLE_SECTION]: peopleOf(input).length > 0, [PRO_HAC_VICE_SECTION]: input.proHacVice };
+  const values: Record<string, unknown> = { ...contractValues(input), [PEOPLE_LOOP]: peopleRows(input), [PEOPLE_SECTION]: peopleOf(input).length > 0, [PRO_HAC_VICE_SECTION]: input.proHacVice, [USCIS_SECTION]: filedWithUscis(input) };
   const doc = new Docxtemplater(withoutTagHighlight(file), {
     ...OPTIONS,
     // Adobe Sign tags print back as they were typed (spaces included: they set the field's width).
