@@ -38,6 +38,15 @@ updated: 2026-10-29
 
 Generating also makes you the Fee K's **Assistant** if it has none.
 
+### Habeas: pro hac vice motion
+
+When the attorney has to file a pro hac vice motion (Rekha sets the fee with the attorney):
+
+1. Tick **Includes a pro hac vice motion**. Without it, the contract prints without the pro hac vice clause.
+2. Pick or type the **Federal district** (e.g. Western District of Missouri).
+3. Type the **Pro hac vice fee**. It is added to the 3% surcharge and the total.
+4. The fee is paid into **Operating** with the attorney fee. The popup says what the AF payment link should be. If the Fee K's AF on Monday is different, fix it with **⋯ → Edit contract…** before sending the payment links.
+
 ## Send it for signature
 
 Either:

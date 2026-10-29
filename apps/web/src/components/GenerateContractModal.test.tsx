@@ -269,6 +269,42 @@ describe("M22 people on one contract", () => {
   });
 });
 
+describe("M22 pro hac vice (Habeas)", () => {
+  const typeInto = (el: HTMLInputElement, v: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, v);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const checkbox = () => Array.from(document.querySelectorAll("label")).find((l) => l.textContent?.includes("pro hac vice"))?.querySelector("input") as HTMLInputElement | undefined;
+  const open = async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await act(async () => { createRoot(host).render(<GenerateContractModal contract={contract} onClose={() => {}} />); });
+    await flush();
+  };
+
+  it("no box unless the template has the clause", async () => {
+    mocks.tags = ["client_name"];
+    await open();
+    expect(checkbox()).toBeUndefined();
+  });
+
+  it("ticked: district + fee, and the AF on Monday is flagged when it leaves the fee out", async () => {
+    mocks.tags = ["client_name", "pro_hac_vice", "pro_hac_vice_district", "pro_hac_vice_fee"];
+    await open();
+    expect(document.getElementById("m22-proHacViceFee")).toBeNull();
+    await act(async () => { checkbox()!.click(); });
+    await act(async () => { typeInto(document.getElementById("m22-proHacViceDistrict") as HTMLInputElement, "Western District of Missouri"); });
+    await act(async () => { typeInto(document.getElementById("m22-proHacViceFee") as HTMLInputElement, "500"); });
+    // Monday's AF (5000) is the payment link: it should be 5000 + 500.
+    expect(document.body.textContent).toContain("the AF payment link should be $5500");
+    expect(document.body.textContent).toContain("The Fee K's AF on Monday is $5000");
+
+    await act(async () => { button("Preview PDF")!.click(); });
+    await flush();
+    expect(mocks.fill.mock.calls[0]![1]).toMatchObject({ proHacVice: true, proHacViceFee: 500, proHacViceDistrict: "Western District of Missouri" });
+  });
+});
+
 describe("M22 case type and hearing type are picked, not typed", () => {
   const select = (id: string) => document.getElementById(id) as HTMLSelectElement;
   const choose = (el: HTMLSelectElement, v: string) => {

@@ -25,6 +25,7 @@ const INPUT: ContractInput = {
   trialPrepFee: null, trialPrepDueDate: "", trialFee: null, trialDueDate: "",
   services: "", servicesEs: "", servicesExcluded: "", servicesExcludedEs: "",
   formNameEs: "", feeKTypes: [],
+  proHacVice: false, proHacViceFee: null, proHacViceDistrict: "",
 };
 
 // The signer (Ana) is a relative; the contract is for three detained people.
@@ -238,6 +239,37 @@ describe("several people on one contract", () => {
   it("names the file after the client, with how many people", () => {
     expect(contractDocumentName(FAMILY)).toBe("Ana LOPEZ - I-130 (3 people) - 10-05-2026");
     expect(contractDocumentName(INPUT)).toBe("Ana LOPEZ - I-130 - 10-05-2026");
+  });
+});
+
+describe("pro hac vice (Habeas)", () => {
+  const PHV: ContractInput = { ...INPUT, filingFee: null, proHacVice: true, proHacViceFee: 500, proHacViceDistrict: "Western District of Missouri" };
+  const TEMPLATE = docx([
+    "Fee {{attorney_fee}}", "{{#pro_hac_vice}}", "Pro hac vice in the {{pro_hac_vice_district}}: {{pro_hac_vice_fee}}", "{{/pro_hac_vice}}", "Total {{total_fee}}",
+  ]);
+  const text = async (input: ContractInput) => {
+    const xml = new PizZip(await fillContractTemplate(TEMPLATE, input).arrayBuffer()).file("word/document.xml")!.asText();
+    return [...xml.matchAll(/<w:p>[\s\S]*?<\/w:p>/g)].map((m) => [...m[0].matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((t) => t[1]).join("")).join("|");
+  };
+
+  it("ticked: prints the clause, and the fee is in the surcharge and the total", async () => {
+    expect(inspectContractTemplate(TEMPLATE)).toMatchObject({ unknown: [], errors: [] });
+    expect(inspectContractTemplate(TEMPLATE).tags).toEqual(expect.arrayContaining(["pro_hac_vice", "pro_hac_vice_fee", "pro_hac_vice_district"]));
+    // 3% of 5000 + 500 = 165.
+    expect(contractValues(PHV)).toMatchObject({ surcharge: "$165.00", total_fee: "$5,665.00", pro_hac_vice_fee_surcharge: "$15.00" });
+    expect(await text(PHV)).toBe("Fee $5,000.00|Pro hac vice in the Western District of Missouri: $500.00|Total $5,665.00");
+  });
+
+  it("unticked: no clause, and a fee left typed counts for nothing", async () => {
+    const off = { ...PHV, proHacVice: false };
+    expect(await text(off)).toBe("Fee $5,000.00|Total $5,150.00");
+    expect(contractProblems(inspectContractTemplate(TEMPLATE), { ...off, proHacViceFee: null, proHacViceDistrict: "" })).toEqual([]);
+  });
+
+  it("ticked needs the fee and the district", () => {
+    expect(contractProblems(inspectContractTemplate(TEMPLATE), { ...PHV, proHacViceFee: null, proHacViceDistrict: " " })).toEqual([
+      "Pro hac vice fee (when the box is ticked) is missing", "Federal district for the pro hac vice motion is missing",
+    ]);
   });
 });
 
