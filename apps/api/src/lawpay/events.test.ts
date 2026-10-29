@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { feeKIdFromReference, isFullyPaid, paidFees, parseReference, partsLeft } from "./events";
+import { feeKIdFromReference, isFullyPaid, latestLinkSet, paidFees, parseReference, partsLeft } from "./events";
 
 describe("parseReference", () => {
   it("reads the references the app writes", () => {
@@ -38,6 +38,18 @@ describe("isFullyPaid", () => {
     const issued = [{ fee: "AF" as const, amount: 4120, paidAt: null }, { fee: "FF" as const, amount: 1210.25, paidAt: null }];
     expect(isFullyPaid(issued, {}, new Set(["AF"]))).toBe(false);
     expect(isFullyPaid(issued, {}, new Set(["AF", "FF"]))).toBe(true);
+  });
+  it("only the latest set of links counts (old AF + FF, then one AF split in two)", () => {
+    const issued = [
+      { fee: "AF" as const, amount: 4000, paidAt: null, createdAt: "2026-10-28 21:10:52" },
+      { fee: "FF" as const, amount: 5, paidAt: null, createdAt: "2026-10-28 21:10:52" },
+      { fee: "AF" as const, amount: 4005, paidAt: null, createdAt: "2026-10-28 21:12:04" },
+      { fee: "AF" as const, amount: 2005, paidAt: "x", createdAt: "2026-10-29 16:49:55" },
+      { fee: "AF" as const, amount: 2000, paidAt: "x", createdAt: "2026-10-29 16:49:56" },
+    ];
+    expect(latestLinkSet(issued).map((l) => l.amount)).toEqual([2005, 2000]);
+    expect(isFullyPaid(issued, {}, paidFees(["ANA K1ABCD - AF 1/2 2005", "ANA K1ABCD - AF 2/2 2000"]))).toBe(true);
+    expect(isFullyPaid(issued, {}, paidFees(["ANA K1ABCD - AF 1/2 2005"]))).toBe(false);
   });
   it("without a ledger, against the Fee K's own fees", () => {
     expect(isFullyPaid([], { AF: 900, FF: null, PF: 0 }, new Set(["AF"]))).toBe(true);
