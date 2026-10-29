@@ -124,9 +124,11 @@ describe("scope of services", () => {
 
   it("the draft carries the approved text for the example types, on real Fee K Types", () => {
     const withScope = DRAFT_FEE_K_TYPES.filter((r) => r.services);
-    expect(withScope.map((r) => r.feeKType)).toContain("I-485 + I-130 - Full Packet");
-    expect(withScope).toHaveLength(11);
+    expect(withScope.map((r) => r.feeKType)).toEqual(expect.arrayContaining(["I-485 + I-130 - Full Packet", "CVP - Consular Visa Process"]));
+    expect(withScope).toHaveLength(12);
     for (const r of withScope) expect([r.servicesEs, r.excluded, r.excludedEs].every(Boolean)).toBe(true);
+    // Saving the table must not cut the approved text.
+    expect(sanitizeFeeKTypes(withScope)).toEqual(withScope.map((r) => expect.objectContaining({ services: r.services, servicesEs: r.servicesEs, excluded: r.excluded, excludedEs: r.excludedEs })));
   });
 });
 

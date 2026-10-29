@@ -15,6 +15,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-29",
+    title: "CVP contracts: scope of services",
+    items: [
+      "Generate contract on a CVP - Consular Visa Process Fee K now fills Scope of services with the attorney-approved text (DS-260, I-864, NVC civil documents, interview scheduling), in English and Spanish.",
+    ],
+  },
+  {
+    date: "2026-10-29",
     title: "Fee K Types: where a case goes, and whether it needs Prescheduling",
     items: [
       "Waivers now go to Waivers (they stay in Prescheduling), and address changes go to Address Changes, in \"It will go to…\" on new Fee Ks.",
