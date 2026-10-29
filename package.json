@@ -45,7 +45,8 @@
     "ea:full-text": "tsx --env-file-if-exists=.env scripts/ea-full-text.ts",
     "dob:backfill": "tsx --env-file-if-exists=.env scripts/dob-backfill.ts",
     "staff:import": "tsx --env-file-if-exists=.env scripts/staff-import.ts",
-    "sms:check": "tsx --env-file-if-exists=.env scripts/ringcentral-check.ts"
+    "sms:check": "tsx --env-file-if-exists=.env scripts/ringcentral-check.ts",
+    "rc:subscribe": "tsx --env-file-if-exists=.env scripts/rc-subscribe.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

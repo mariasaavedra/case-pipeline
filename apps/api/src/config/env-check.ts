@@ -220,6 +220,21 @@ export function checkEnvironment(opts: CheckOptions = {}): EnvIssue[] {
       "Use at least 32 characters: openssl rand -hex 24",
     );
   }
+  const rcWebhookSecret = env.RC_WEBHOOK_SECRET?.trim();
+  if (rcWebhookSecret && rcWebhookSecret.length < 24) {
+    warn(
+      "RC_WEBHOOK_SECRET",
+      `is short (${rcWebhookSecret.length} chars) — it is the only thing authenticating the RingCentral call-events endpoint`,
+      "Use at least 32 characters: openssl rand -hex 24",
+    );
+  }
+  const rcSchedulingExt = env.RC_SCHEDULING_EXTENSION?.trim();
+  if (rcSchedulingExt && !/^\d{1,8}$/.test(rcSchedulingExt)) {
+    err("RC_SCHEDULING_EXTENSION", "must be an extension number (digits only, e.g. 150)");
+  }
+  if (rcSchedulingExt && !rcWebhookSecret) {
+    warn("RC_SCHEDULING_EXTENSION", "is set but RC_WEBHOOK_SECRET isn't — no call events arrive, so no scheduling texts go out");
+  }
 
   // ---------------------------------------------------------------------------
   // Cron expressions — an invalid one means the job silently never runs

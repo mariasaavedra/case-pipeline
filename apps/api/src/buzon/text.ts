@@ -53,7 +53,8 @@ export function effectiveSmsMode(seed: boolean): SmsMode {
 }
 
 let activityCache: { id: string; at: number } | null = null;
-async function activityId(token: string | undefined): Promise<string> {
+/** The E&A "Text message" type's id (else Casenote), cached 30 min. Also used by the IVR text. */
+export async function smsActivityTypeId(token: string | undefined): Promise<string> {
   if (activityCache && Date.now() - activityCache.at < 30 * 60_000) return activityCache.id;
   let id = CASENOTE_ACTIVITY_ID;
   try {
@@ -135,7 +136,7 @@ export async function sendBuzonText(
       return record("failed", message);
     }
     if (client.mondayId) {
-      const entry = smsActivity({ to: client.phone, body }, client.mondayId, await activityId(deps.mondayApiToken));
+      const entry = smsActivity({ to: client.phone, body }, client.mondayId, await smsActivityTypeId(deps.mondayApiToken));
       try {
         if (!deps.mondayApiToken) throw new Error("MONDAY_API_TOKEN is not set");
         await dataSource.createTimelineItem(entry, deps.mondayApiToken);

@@ -66,6 +66,16 @@ export const DEFAULT_SMS_TEMPLATES: SmsTemplate[] = [
     en: "Hi {{firstName}}, this is {{firmName}}. We received your documents. Thank you! {{stillNeeded}}\nQuestions? Call {{firmPhone}}. Reply STOP to opt out.",
     es: "Hola {{firstName}}, le escribe {{firmName}}. Recibimos sus documentos. ¡Gracias! {{stillNeeded}}\n¿Preguntas? Llame al {{firmPhone}}. Responda STOP para no recibir mensajes.",
   },
+  // The phone menu's "press 1" text (docs/features/phone-ivr.md): sent by the
+  // app to whoever called, so no {{firstName}} — most callers aren't clients
+  // yet — and no {{link}}: no one is there to fill it, so the link is written
+  // in (staff change it in Settings → Firm). A {{placeholder}} left in stops it.
+  {
+    key: "ivr_scheduling_link",
+    label: "Phone menu: scheduling link",
+    en: "This is {{firmName}}. You can schedule your consultation here: https://sharma-crawford.com/schedule-a-consultation/\nQuestions? Call {{firmPhone}}. Reply STOP to opt out.",
+    es: "Le escribe {{firmName}}. Puede agendar su consulta aquí: https://sharma-crawford.com/schedule-a-consultation/\n¿Preguntas? Llame al {{firmPhone}}. Responda STOP para no recibir mensajes.",
+  },
 ];
 
 /**
@@ -74,7 +84,7 @@ export const DEFAULT_SMS_TEMPLATES: SmsTemplate[] = [
  * admin saved before it existed — or a deleted one — never breaks that button.
  * An admin can still reword it.
  */
-export const REQUIRED_SMS_TEMPLATES = ["upload_link", "buzon_link", "buzon_reminder", "buzon_received"] as const;
+export const REQUIRED_SMS_TEMPLATES = ["upload_link", "buzon_link", "buzon_reminder", "buzon_received", "ivr_scheduling_link"] as const;
 
 export function withRequiredTemplates(list: SmsTemplate[]): SmsTemplate[] {
   const missing = DEFAULT_SMS_TEMPLATES.filter(
