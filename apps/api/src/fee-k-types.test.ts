@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { contractTitles, sanitizeDocuments, feeKTypeLookup, sanitizeFeeKTypes, scopeFor, type FeeKTypeRow } from "./fee-k-types.js";
+import { boardRouting, contractTitles, needsPrescheduling, sanitizeDocuments, feeKTypeLookup, sanitizeFeeKTypes, scopeFor, type FeeKTypeRow } from "./fee-k-types.js";
 import { DRAFT_FEE_K_TYPES } from "./fee-k-types-draft.js";
 import { SUGGESTED_DOCUMENTS } from "./fee-k-type-documents-draft.js";
 
-const BLANK: FeeKTypeRow = { feeKType: "", spanish: "", board: "", feeSheetJob: "", services: "", servicesEs: "", excluded: "", excludedEs: "", documents: [] };
+const BLANK: FeeKTypeRow = { feeKType: "", spanish: "", board: "", feeSheetJob: "", prescheduling: true, services: "", servicesEs: "", excluded: "", excludedEs: "", documents: [] };
 
 describe("sanitizeFeeKTypes", () => {
   it("keeps the Fee K Type's exact spelling, tidies the rest, drops rows with nothing set", () => {
@@ -12,7 +12,7 @@ describe("sanitizeFeeKTypes", () => {
       { feeKType: "Master (c)", spanish: "", board: "", feeSheetJob: "" },
       { spanish: "sin tipo" },
       "junk",
-    ])).toEqual([{ feeKType: "Bond MTN  (c)", spanish: "Moción de fianza", board: "Motions", feeSheetJob: "",
+    ])).toEqual([{ feeKType: "Bond MTN  (c)", spanish: "Moción de fianza", board: "Motions", feeSheetJob: "", prescheduling: true,
       services: "", servicesEs: "", excluded: "", excludedEs: "", documents: [] }]);
   });
 
@@ -22,6 +22,14 @@ describe("sanitizeFeeKTypes", () => {
       { feeKType: "i-130 - petition for alien relative", board: "Court Cases" },
     ]);
     expect(rows.map((r) => r.board)).toEqual(["Open Forms"]);
+  });
+
+  it("Prescheduling is yes unless set to false; a row with only that set is kept", () => {
+    const rows = sanitizeFeeKTypes([
+      { feeKType: "FOIA - EOIR", prescheduling: false },
+      { feeKType: "I-130 - Petition for Alien Relative", board: "Open Forms", prescheduling: "no" },
+    ]);
+    expect(rows.map((r) => [r.feeKType, r.prescheduling])).toEqual([["FOIA - EOIR", false], ["I-130 - Petition for Alien Relative", true]]);
   });
 
   it("anything but a list is an empty table", () => {
@@ -48,8 +56,52 @@ describe("the starting draft", () => {
     expect(DRAFT_FEE_K_TYPES.every((r) => r.spanish)).toBe(true);
   });
 
-  it("only names real boards", () => {
-    expect(DRAFT_FEE_K_TYPES.filter((r) => r.board && !BOARDS.includes(r.board))).toEqual([]);
+  it("only names real boards, plus Address Changes (a label still to add on Monday)", () => {
+    expect(DRAFT_FEE_K_TYPES.filter((r) => r.board && ![...BOARDS, "Address Changes"].includes(r.board))).toEqual([]);
+  });
+
+  it("waivers stay in Prescheduling (Waivers); address changes go to Address Changes, without Prescheduling", () => {
+    const row = feeKTypeLookup(DRAFT_FEE_K_TYPES);
+    for (const t of ["I-601A - Waiver", "I-601 - Waiver", "I-212 - Waiver", "I-601 + I-212 - Waiver"]) {
+      expect([row(t)?.board, row(t)?.prescheduling]).toEqual(["Waivers", true]);
+    }
+    for (const t of ["E33 - Address Change (c)", "AR-11 - USCIS Address Change", "Address Change - E33 + AR11"]) {
+      expect([row(t)?.board, row(t)?.prescheduling]).toEqual(["Address Changes", false]);
+    }
+  });
+
+  it("Prescheduling = the type has documents to collect", () => {
+    expect(DRAFT_FEE_K_TYPES.filter((r) => r.prescheduling !== !!SUGGESTED_DOCUMENTS[r.feeKType]?.length)).toEqual([]);
+    expect(feeKTypeLookup(DRAFT_FEE_K_TYPES)("I-130 - Petition for Alien Relative")?.prescheduling).toBe(true);
+  });
+});
+
+describe("boardRouting", () => {
+  const rows = [
+    { ...BLANK, feeKType: "Motion (c)", board: "Motions" },
+    { ...BLANK, feeKType: "AR-11 - USCIS Address Change", board: "Address Changes" },
+  ];
+
+  it("writes only a board Monday has as a label, in Monday's spelling", () => {
+    const boardFor = boardRouting(rows, ["motions", "Open Forms"]);
+    expect(boardFor("motion  (c)")).toBe("motions");
+    expect(boardFor("AR-11 - USCIS Address Change")).toBeNull();
+    expect(boardFor("Unknown")).toBeNull();
+    expect(boardRouting(rows, ["Motions", "Address Changes"])("AR-11 - USCIS Address Change")).toBe("Address Changes");
+  });
+});
+
+describe("needsPrescheduling", () => {
+  const rows = [
+    { ...BLANK, feeKType: "FOIA - EOIR", prescheduling: false },
+    { ...BLANK, feeKType: "I-130 - Petition for Alien Relative" },
+  ];
+
+  it("yes if any type needs it, and when in doubt", () => {
+    expect(needsPrescheduling(rows, ["FOIA - EOIR"])).toBe(false);
+    expect(needsPrescheduling(rows, ["FOIA - EOIR", "I-130 - Petition for Alien Relative"])).toBe(true);
+    expect(needsPrescheduling(rows, ["FOIA - EOIR", "Not in the table"])).toBe(true);
+    expect(needsPrescheduling(rows, [])).toBe(true);
   });
 });
 

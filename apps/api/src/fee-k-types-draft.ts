@@ -7,10 +7,14 @@
 //
 // Boards: where Fee Ks were actually sent, from "It will go to…" on ~1,700 Fee
 // Ks under their old "Contract for…" labels (2026-10-20); the clear majority,
-// with "Already in board" read as the board the case already lives on. Left
-// empty where staff split between boards (the waivers: Open Forms vs Waivers)
-// or no board fits (address changes, PD requests, briefs, the 10th Circuit
-// argument, criminal consequences).
+// with "Already in board" read as the board the case already lives on. Waivers
+// stay in Prescheduling, in the Fee Ks board's Waivers group ("Waivers"); address
+// changes go to Address Changes (a label to add on Monday — until it exists the
+// auto-fill skips it). Left empty where no board fits (PD requests, briefs, the
+// 10th Circuit argument, criminal consequences).
+// Prescheduling (2026-10-29): yes when the type has a suggested Buzón document
+// list (documents to collect), no for the types that need nothing from the
+// client (address changes, FOIA to EOIR, G-28, appeals, briefs, litigation…).
 // Spanish: reviewed by Rafael 2026-10-20. Fee sheet jobs: matched to "FINAL
 // COPY OF FIRM FEES 2026.xlsx" (Sheet1, 2026-10-20); empty where no job fits.
 // Picked among several (check in Settings): DACA → renewal-our client, TPS →
@@ -20,9 +24,12 @@
 // =============================================================================
 
 import type { FeeKTypeRow } from "./fee-k-types.js";
+import { SUGGESTED_DOCUMENTS } from "./fee-k-type-documents-draft.js";
 
 const OF = "Open Forms";
 const OFC = "Open Forms-Court Forms";
+const WAIVERS = "Waivers";
+const ADDRESS = "Address Changes";
 
 const rows: [feeKType: string, spanish: string, board: string, feeSheetJob: string][] = [
   ["I-485 + I-130 - Full Packet", "Paquete completo: ajuste de estatus (I-485) y petición familiar (I-130)", OF, "Full Packet"],
@@ -94,15 +101,15 @@ const rows: [feeKType: string, spanish: string, board: string, feeSheetJob: stri
   ["Litigation", "Litigio", "Litigations", ""],
   ["Federal Litigation", "Litigio federal", "Litigations", ""],
   ["AAF - Annual Asylum Fee", "Cuota anual de asilo", "Already in board", ""],
-  // No board yet: staff split between Open Forms and Waivers.
-  ["I-601A - Waiver", "Perdón provisional por presencia ilegal (I-601A)", "", "I-601A (Waiver for unlawful presence)"],
-  ["I-601 - Waiver", "Perdón de inadmisibilidad (I-601)", "", "I-601 (only)"],
-  ["I-212 - Waiver", "Permiso para volver a solicitar admisión (I-212)", "", "I-212, Application for Permission to Reapply for Admission into the United States After Deportation or Removal"],
-  ["I-601 + I-212 - Waiver", "Perdones de inadmisibilidad (I-601 e I-212)", "", ""],
+  // Waivers stay in Prescheduling, in the Waivers group.
+  ["I-601A - Waiver", "Perdón provisional por presencia ilegal (I-601A)", WAIVERS, "I-601A (Waiver for unlawful presence)"],
+  ["I-601 - Waiver", "Perdón de inadmisibilidad (I-601)", WAIVERS, "I-601 (only)"],
+  ["I-212 - Waiver", "Permiso para volver a solicitar admisión (I-212)", WAIVERS, "I-212, Application for Permission to Reapply for Admission into the United States After Deportation or Removal"],
+  ["I-601 + I-212 - Waiver", "Perdones de inadmisibilidad (I-601 e I-212)", WAIVERS, ""],
+  ["E33 - Address Change (c)", "Cambio de dirección ante la Corte de Inmigración (EOIR-33)", ADDRESS, "Address Changes for Immigration court"],
+  ["AR-11 - USCIS Address Change", "Cambio de dirección ante USCIS (AR-11)", ADDRESS, "USCIS Address changes"],
+  ["Address Change - E33 + AR11", "Cambio de dirección ante la Corte y USCIS (EOIR-33 y AR-11)", ADDRESS, ""],
   // No board yet: none of the "It will go to…" boards fits.
-  ["E33 - Address Change (c)", "Cambio de dirección ante la Corte de Inmigración (EOIR-33)", "", "Address Changes for Immigration court"],
-  ["AR-11 - USCIS Address Change", "Cambio de dirección ante USCIS (AR-11)", "", "USCIS Address changes"],
-  ["Address Change - E33 + AR11", "Cambio de dirección ante la Corte y USCIS (EOIR-33 y AR-11)", "", ""],
   ["PD Request (c)", "Solicitud de discreción procesal ante la Corte de Inmigración", "", "PD Requests (Immigration Court)"],
   ["Brief  (c)", "Escrito legal (brief) ante la Corte de Inmigración", "", ""],
   ["Oral Argument 10th Circuit Court", "Argumento oral ante la Corte de Apelaciones del Décimo Circuito", "", "Oral Argument"],
@@ -182,5 +189,6 @@ const SCOPE: Record<string, [string, string, string, string]> = {
 
 export const DRAFT_FEE_K_TYPES: FeeKTypeRow[] = rows.map(([feeKType, spanish, board, feeSheetJob]) => {
   const [services = "", servicesEs = "", excluded = "", excludedEs = ""] = SCOPE[feeKType] ?? [];
-  return { feeKType, spanish, board, feeSheetJob, services, servicesEs, excluded, excludedEs, documents: [] };
+  const prescheduling = (SUGGESTED_DOCUMENTS[feeKType]?.length ?? 0) > 0;
+  return { feeKType, spanish, board, feeSheetJob, prescheduling, services, servicesEs, excluded, excludedEs, documents: [] };
 });

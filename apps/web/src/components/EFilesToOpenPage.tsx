@@ -272,6 +272,12 @@ function PlanModal({ item, highestOnMonday, onClose }: { item: EFileToOpen; high
           </ul>
         </Section>
 
+        <Section title="Prescheduling">
+          {plan.prescheduling
+            ? <>Yes: PS Stage starts at <b>Need to contact client</b> (unless it already has one)</>
+            : "No: nothing to collect from the client, PS Stage is left alone"}
+        </Section>
+
         <Section title="Monday">
           <table className="w-full text-xs">
             <tbody>

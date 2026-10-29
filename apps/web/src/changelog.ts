@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-29",
+    title: "Fee K Types: where a case goes, and whether it needs Prescheduling",
+    items: [
+      "Waivers now go to Waivers (they stay in Prescheduling), and address changes go to Address Changes, in \"It will go to…\" on new Fee Ks.",
+      "Each Fee K Type has a Prescheduling first box in Settings → Firm → Fee K Types. It's ticked for every case where the client sends documents; when in doubt, leave it ticked.",
+      "E-Files to open shows whether the case goes through Prescheduling.",
+    ],
+  },
+  {
+    date: "2026-10-29",
     title: "Payment links: split a fee into parts",
     items: [
       "For a client whose bank won't take the whole amount at once: click Split next to a fee in Payment links to send it as 2 to 4 links. Type one part and the others fill in the rest.",

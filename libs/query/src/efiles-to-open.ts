@@ -44,6 +44,8 @@ export interface HirePlan {
   /** The row added to the ledger's tab for `ledgerTab`; null = no row (FOIA, existing client). */
   ledgerRow: LedgerRow | null;
   ledgerTab: string | null;
+  /** Goes through Prescheduling (documents to collect) before its board; false = PS Stage isn't set. */
+  prescheduling: boolean;
   /** Anything that stops the protocol from running. */
   blockers: string[];
   /** Things to check by hand; the protocol can still run. */
@@ -94,6 +96,8 @@ export interface EFilesToOpenOptions {
   today?: string;
   /** Fee K Type → the board it goes to once paid (Settings → Fee K Types). Used when the Fee K's own "It will go to…" is empty. */
   boardForType?: (feeKType: string) => string | undefined;
+  /** Whether a Fee K with these types goes through Prescheduling (Settings → Fee K Types). Default yes. */
+  prescheduling?: (feeKTypes: string[]) => boolean;
 }
 
 // =============================================================================
@@ -235,6 +239,8 @@ export interface PlanInput {
   consultFolderPath: string | null;
   /** Appointments whose Consult SharePoint column holds a link. */
   appointmentsWithConsultLink: { name: string; link: string }[];
+  /** Goes through Prescheduling first. Missing = yes. */
+  prescheduling?: boolean;
 }
 
 /** What opening this hire would do. Pure: the same input gives the same plan. */
@@ -291,7 +297,8 @@ export function buildHirePlan(input: PlanInput, freeCaseNo: string, today: strin
   const mondayChanges: MondayChange[] = [
     { item: "Fee K", column: "Contract Stage", from: input.contractStage, to: OPENED_STAGE },
   ];
-  if (!input.psStage) mondayChanges.push({ item: "Fee K", column: "PS Stage", from: null, to: FIRST_PS_STAGE });
+  const prescheduling = input.prescheduling !== false;
+  if (prescheduling && !input.psStage) mondayChanges.push({ item: "Fee K", column: "PS Stage", from: null, to: FIRST_PS_STAGE });
   if (newFile) {
     mondayChanges.push({ item: "Profile", column: "E-File", from: input.eFileUrl, to: `Link to ${target}` });
     mondayChanges.push({ item: "Profile", column: "Case No.", from: input.caseNo, to: caseNoForMonday(freeCaseNo) });
@@ -329,6 +336,7 @@ export function buildHirePlan(input: PlanInput, freeCaseNo: string, today: strin
     mondayChanges,
     ledgerRow,
     ledgerTab: ledgerRow ? `20${ledgerRow.caseNo.slice(0, 2)}` : null,
+    prescheduling,
     blockers,
     warnings,
   };
@@ -437,6 +445,7 @@ export function getEFilesToOpen(db: Database, options: EFilesToOpenOptions = {})
         consultFileUrl,
         consultFolderPath,
         appointmentsWithConsultLink: appts,
+        prescheduling: options.prescheduling?.(feeKTypes) ?? true,
       },
       free,
       today,

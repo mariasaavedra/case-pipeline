@@ -279,6 +279,17 @@ describe("plan", () => {
     db.close();
   });
 
+  test("a type with nothing to collect skips Prescheduling: no PS Stage written", () => {
+    const db = freshDb();
+    insertProfile(db, "p1", karla);
+    insertFeeK(db, { localId: "k", types: ["E33 - Address Change (c)"] });
+    const items = getEFilesToOpen(db, { today: TODAY, prescheduling: (types) => !types.includes("E33 - Address Change (c)") }).items;
+    expect(items[0]!.plan.prescheduling).toBe(false);
+    expect(items[0]!.plan.mondayChanges.some((c) => c.column === "PS Stage")).toBe(false);
+    expect(byId(db).k!.plan.prescheduling).toBe(true);
+    db.close();
+  });
+
   test("a Fee K with no profile is blocked", () => {
     const db = freshDb();
     insertFeeK(db, { localId: "k", profile: "nobody" });

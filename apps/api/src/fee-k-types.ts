@@ -4,7 +4,7 @@
 // One row per Fee K Type (the curated Fee Ks dropdown Monday requires on every
 // Fee K, 2026-10): what the client reads it as in Spanish, the board the case
 // moves to once paid (a label of the Fee K's "It will go to…" status column),
-// and the job on the firm's fee sheet that prices it (AF + FF). Prices stay in
+// whether it goes through Prescheduling first, and the job on the firm's fee sheet that prices it (AF + FF). Prices stay in
 // the fee sheet — this only names the row.
 //
 // Scope of services (2026-10-23, approved by Michael + Rekha): what a contract
@@ -33,6 +33,13 @@ export interface FeeKTypeRow {
   board: string;
   /** The fee sheet's Job that prices it. "" = not set. */
   feeSheetJob: string;
+  /**
+   * Goes through Prescheduling (documents to collect) before its board. The
+   * firm's rule (2026-10-29): yes whenever documents are needed, and when in
+   * doubt; no only for types that need nothing from the client. Rows saved
+   * before then have none → yes.
+   */
+  prescheduling: boolean;
   /** Scope of services: what the contract includes / leaves out, EN + ES. "" = nothing beyond the template's own text. */
   services: string;
   servicesEs: string;
@@ -106,11 +113,12 @@ export function sanitizeFeeKTypes(input: unknown): FeeKTypeRow[] {
     if (!feeKType || seen.has(key(feeKType))) return [];
     const row: FeeKTypeRow = {
       feeKType, spanish: str(o.spanish), board: str(o.board), feeSheetJob: str(o.feeSheetJob),
+      prescheduling: o.prescheduling !== false,
       services: str(o.services, MAX_SCOPE), servicesEs: str(o.servicesEs, MAX_SCOPE),
       excluded: str(o.excluded, MAX_SCOPE), excludedEs: str(o.excludedEs, MAX_SCOPE),
       documents: sanitizeDocuments(o.documents),
     };
-    if (!row.spanish && !row.board && !row.feeSheetJob && SCOPE_FIELDS.every((k) => !row[k]) && !row.documents!.length) return [];
+    if (row.prescheduling && !row.spanish && !row.board && !row.feeSheetJob && SCOPE_FIELDS.every((k) => !row[k]) && !row.documents!.length) return [];
     seen.add(key(feeKType));
     return [row];
   });
@@ -129,6 +137,29 @@ export function sanitizeDocuments(input: unknown): CaseDocument[] {
     seen.add(key(en));
     return [{ en, es: str(o.es) || en, required: o.required !== false }];
   }).slice(0, MAX_DOCUMENTS);
+}
+
+/**
+ * Fee K Type → the "It will go to…" label to write, or null. A board that
+ * isn't one of Monday's labels yet (e.g. Address Changes before it's added on
+ * Monday) is skipped rather than sent, since Monday refuses an unknown label.
+ */
+export function boardRouting(rows: FeeKTypeRow[], mondayBoards: string[]): (feeKType: string) => string | null {
+  const row = feeKTypeLookup(rows);
+  const labels = new Map(mondayBoards.map((b) => [key(b), b]));
+  return (t) => {
+    const board = row(t)?.board;
+    return board ? (labels.get(key(board)) ?? null) : null;
+  };
+}
+
+/**
+ * Whether a Fee K with these types goes through Prescheduling: yes if any of
+ * them does, and yes when in doubt (no types, a type not in the table).
+ */
+export function needsPrescheduling(rows: FeeKTypeRow[], feeKTypes: string[]): boolean {
+  const row = feeKTypeLookup(rows);
+  return feeKTypes.length === 0 || feeKTypes.some((t) => row(t)?.prescheduling !== false);
 }
 
 /** Fee K Type → its row (any case, any inner spacing). */
