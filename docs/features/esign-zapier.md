@@ -41,9 +41,13 @@ for contracts sent by hand.
 
 One open agreement per Fee K: to resend, recall it in Adobe first.
 
-**File names** (decided 2026-10-15): `Client name - Form(s)/Matter - MM-DD-YYYY`,
-e.g. `Ana LOPEZ - I-212 - 10-15-2026`, from M22's Client name, Form(s)/matter
-and Letter date (`contractDocumentName` in `apps/web/src/lib/contract-fill.ts`).
+**File names** (decided 2026-10-29, replacing the 2026-10-15 `Client name -
+Matter - MM-DD-YYYY`): `MM-DD-YY - Matter Contract - F. M. LAST NAMES`, e.g.
+`10-29-26 - Master Hearing Contract - J. C. PEREZ`, from M22's Letter date,
+Form(s)/matter and Client name (given names → initials, the ALL-CAPS last names
+spelled out; `contractDocumentName` in `apps/web/src/lib/contract-fill.ts`).
+The signed copy adds `SIGNED`: `10-29-26 - SIGNED Master Hearing Contract - J. C.
+PEREZ` (`signedDocumentName`); agreements sent before the change keep their name.
 A bilingual title keeps its English half, capped near 80 characters. The same
 name is used for the download, Adobe's document, the agreement (`… [CP-12]`,
 which is also the client's e-mail subject) and the signed copy.

@@ -202,11 +202,11 @@ describe("Adobe Sign via Zapier", () => {
       String(input) === "https://adobe.test/signed.pdf" ? Promise.resolve(new Response("%PDF-signed")) : realFetch(input, init));
     calls = [];
     efile.calls = [];
-    const ev = await event({ event: "signed_pdf", agreementName: "Ana Pérez - I-212 - 10-15-2026 [CP-1]", pdfUrl: "https://adobe.test/signed.pdf" });
+    const ev = await event({ event: "signed_pdf", agreementName: "10-15-26 - I-212 Contract - A. PÉREZ [CP-1]", pdfUrl: "https://adobe.test/signed.pdf" });
     spy.mockRestore();
     // (This test board has no file column, so the Monday attach is skipped; the copy is kept.)
     expect(ev.json).toMatchObject({ saved: true });
-    expect(efile.calls).toEqual([[1, "Ana Pérez - I-212 - 10-15-2026"]]);
+    expect(efile.calls).toEqual([[1, "10-15-26 - SIGNED I-212 Contract - A. PÉREZ"]]);
     await vi.waitFor(() => expect(String(calls.find((c) => c.op === "update")?.body)).toContain("E-File: FEE Ks / x.pdf"));
   });
 

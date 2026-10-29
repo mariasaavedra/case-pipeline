@@ -55,7 +55,11 @@ describe("document names", () => {
     expect(agreementNameOf(null, "Ana LOPEZ", 7)).toBe("Fee K - Ana LOPEZ [CP-7]");
     expect(esignRefOf(agreementNameOf("Ana LOPEZ - I-212 - 10-15-2026", "Ana LOPEZ", 7))).toBe(7);
   });
-  it("the signed copy is named like what was sent; old agreements keep the old name", () => {
+  it("the signed copy is named like what was sent, with SIGNED before the matter", () => {
+    expect(signedDocumentName("10-29-26 - Master Hearing Contract - J. C. PEREZ [CP-7]", "x")).toBe("10-29-26 - SIGNED Master Hearing Contract - J. C. PEREZ");
+    expect(signedDocumentName("10-29-26 - SIGNED I-212 Contract - A. LOPEZ", "x")).toBe("10-29-26 - SIGNED I-212 Contract - A. LOPEZ");
+  });
+  it("agreements sent before the new names keep their old name", () => {
     expect(signedDocumentName("Ana LOPEZ - I-212 - 10-15-2026 [CP-7]", "Ana LOPEZ")).toBe("Ana LOPEZ - I-212 - 10-15-2026");
     expect(signedDocumentName("Fee K - Ana LOPEZ [CP-7]", "Ana LOPEZ")).toBe("Ana LOPEZ - Signed Fee K");
     expect(signedDocumentName(null, "Ana  LOPEZ")).toBe("Ana LOPEZ - Signed Fee K");

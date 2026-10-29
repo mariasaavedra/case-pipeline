@@ -52,6 +52,7 @@ When the attorney has to file a pro hac vice motion (Rekha sets the fee with the
 Either:
 
 - **Send for signature** in the Generate popup: the contract goes to Adobe Sign, attorney first, then client. The stages move by themselves as each one signs, and the signed copy is saved to the client's E-File.
+- **File names** are date first, then the matter, then the client's initials and last names: *10-29-26 - Master Hearing Contract - J. C. PEREZ*. The signed copy in the E-File adds SIGNED: *10-29-26 - SIGNED Master Hearing Contract - J. C. PEREZ*. Write last names in CAPITALS in the client name so they come out whole.
 - Or sign in Acrobat yourself, and record each step from **⋯**: *Mark sent in Acrobat* → *attorney signed* → *client signed*. Each asks to confirm, then moves the stage and stamps the date on Monday.
 
 ## Payment links

@@ -6,7 +6,7 @@
 //
 // Started by the API (apps/api/src/esign/efile.ts) once Zap 3's signed copy is
 // saved in data/esign/signed-<id>.pdf. File name: ESIGN_DOCUMENT_NAME (the
-// standard "Client - Matter - MM-DD-YYYY"). Destination: the profile's E-File
+// standard "MM-DD-YY - SIGNED Matter Contract - F. M. LAST"). Destination: the profile's E-File
 // link, else its Consult File link (a client signs before staff open the
 // E-File — decided 2026-10-19), → its Fee K folder
 // (scripts/sharepoint/fee-k-folder.ts), created as "FEE Ks" when the client has
