@@ -326,3 +326,21 @@ describe("case type picked from the Fee K Types", () => {
     expect(contractValues({ ...INPUT, formName: "I-130", formNameEs: "" })).toMatchObject({ form_name_es: "I-130" });
   });
 });
+
+describe("FORMS opening (uscis_filing)", () => {
+  const TEMPLATE = docx(["{{#uscis_filing}}", "Filing your {{form_name}} with USCIS.", "{{/uscis_filing}}", "{{services}}"]);
+  const text = async (input: ContractInput) => {
+    const xml = new PizZip(await fillContractTemplate(TEMPLATE, input).arrayBuffer()).file("word/document.xml")!.asText();
+    return [...xml.matchAll(/<w:p>[\s\S]*?<\/w:p>/g)].map((m) => [...m[0].matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((t) => t[1]).join("")).join("|");
+  };
+
+  it("a known tag, printed for USCIS forms and for a typed title", async () => {
+    expect(inspectContractTemplate(TEMPLATE)).toMatchObject({ unknown: [], errors: [] });
+    expect(await text({ ...INPUT, feeKTypes: ["I-130 - Petition for Alien Relative"], services: "A." })).toBe("Filing your I-130 with USCIS.|A.");
+    expect(await text({ ...INPUT, feeKTypes: [], services: "" })).toBe("Filing your I-130 with USCIS.|");
+  });
+
+  it("left out when a type is a CVP (any spacing or case): only its own scope prints", async () => {
+    expect(await text({ ...INPUT, feeKTypes: ["cvp -  Consular Visa Process"], services: "DS-260." })).toBe("DS-260.");
+  });
+});
