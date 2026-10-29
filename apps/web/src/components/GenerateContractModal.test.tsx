@@ -288,20 +288,21 @@ describe("M22 pro hac vice (Habeas)", () => {
     expect(checkbox()).toBeUndefined();
   });
 
-  it("ticked: district + fee, and the AF on Monday is flagged when it leaves the fee out", async () => {
-    mocks.tags = ["client_name", "pro_hac_vice", "pro_hac_vice_district", "pro_hac_vice_fee"];
+  it("ticked: district + both fees, and the AF on Monday is flagged when it leaves the fee out", async () => {
+    mocks.tags = ["client_name", "pro_hac_vice", "pro_hac_vice_district", "pro_hac_vice_fee", "pro_hac_vice_filing_fee"];
     await open();
     expect(document.getElementById("m22-proHacViceFee")).toBeNull();
     await act(async () => { checkbox()!.click(); });
     await act(async () => { typeInto(document.getElementById("m22-proHacViceDistrict") as HTMLInputElement, "Western District of Missouri"); });
     await act(async () => { typeInto(document.getElementById("m22-proHacViceFee") as HTMLInputElement, "500"); });
-    // Monday's AF (5000) is the payment link: it should be 5000 + 500.
-    expect(document.body.textContent).toContain("the AF payment link should be $5500");
+    await act(async () => { typeInto(document.getElementById("m22-proHacViceFilingFee") as HTMLInputElement, "100"); });
+    // Monday's AF (5000) is the payment link: it should be 5000 + 500 + 100.
+    expect(document.body.textContent).toContain("the AF payment link should be $5600");
     expect(document.body.textContent).toContain("The Fee K's AF on Monday is $5000");
 
     await act(async () => { button("Preview PDF")!.click(); });
     await flush();
-    expect(mocks.fill.mock.calls[0]![1]).toMatchObject({ proHacVice: true, proHacViceFee: 500, proHacViceDistrict: "Western District of Missouri" });
+    expect(mocks.fill.mock.calls[0]![1]).toMatchObject({ proHacVice: true, proHacViceFee: 500, proHacViceFilingFee: 100, proHacViceDistrict: "Western District of Missouri" });
   });
 });
 

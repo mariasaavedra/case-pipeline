@@ -29,8 +29,9 @@
 // Pro hac vice (2026-10-29, Habeas): when the attorney must be admitted in the
 // federal district, M22's "Includes a pro hac vice motion" box turns on the
 // {{#pro_hac_vice}}…{{/pro_hac_vice}} clause, with {{pro_hac_vice_district}}
-// and {{pro_hac_vice_fee}}. Rekha sets the fee with the attorney. It is paid
-// into Operating with the AF, so it is in the surcharge and the total.
+// {{pro_hac_vice_fee}} (preparing the motion; Rekha sets it with the attorney)
+// and {{pro_hac_vice_filing_fee}} (the court's). Both are paid into Operating
+// with the AF, so both are in the surcharge and the total.
 // =============================================================================
 
 import PizZip from "pizzip";
@@ -92,6 +93,8 @@ export interface ContractInput {
   /** HABEAS: "Includes a pro hac vice motion" — the fee and district count only when ticked. */
   proHacVice: boolean;
   proHacViceFee: number | null;
+  /** The court's filing fee for the motion (not the firm's), paid with the AF too. */
+  proHacViceFilingFee: number | null;
   /** The federal district, e.g. "Western District of Missouri". */
   proHacViceDistrict: string;
 }
@@ -133,8 +136,9 @@ export const money = (n: number | null) => (n === null || !Number.isFinite(n) ? 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** 3% of the fees it applies to: AF + FF + postage. */
 export const surchargeFor = (...fees: (number | null)[]) => round2(fees.reduce<number>((s, f) => s + (f ?? 0), 0) * SURCHARGE_RATE);
-/** The pro hac vice fee, when the contract includes the motion (0 otherwise). */
-export const proHacViceFeeOf = (f: ContractInput) => (f.proHacVice ? f.proHacViceFee ?? 0 : 0);
+const phv = (f: ContractInput, fee: number | null) => (f.proHacVice ? fee ?? 0 : 0);
+/** Pro hac vice fee + the court's filing fee, when the contract includes the motion (0 otherwise): both go to Operating. */
+export const proHacViceFeeOf = (f: ContractInput) => phv(f, f.proHacViceFee) + phv(f, f.proHacViceFilingFee);
 export const surchargeOf = (f: ContractInput) => f.surcharge ?? surchargeFor(f.attorneyFee, f.filingFee, f.postageFee, proHacViceFeeOf(f));
 export const totalOf = (f: ContractInput) =>
   round2((f.attorneyFee ?? 0) + (f.filingFee ?? 0) + (f.postageFee ?? 0) + proHacViceFeeOf(f) + surchargeOf(f));
@@ -192,8 +196,10 @@ export const CONTRACT_FIELDS: ContractField[] = [
   { tag: "motion_fee_surcharge", label: "Surcharge on the motion fee (3%)", example: "$45.00", value: (f) => money(surchargeFor(f.motionFee)), required: (f) => !positive(f.motionFee) },
   { tag: "hearing_fee", label: "Attorney fee for the hearing", example: "$1,000.00", value: (f) => money(f.hearingFee), required: (f) => !positive(f.hearingFee) },
   { tag: "hearing_fee_surcharge", label: "Surcharge on the hearing fee (3%)", example: "$30.00", value: (f) => money(surchargeFor(f.hearingFee)), required: (f) => !positive(f.hearingFee) },
-  { tag: "pro_hac_vice_fee", label: "Pro hac vice fee (when the box is ticked)", example: "$500.00", value: (f) => money(proHacViceFeeOf(f)), required: (f) => f.proHacVice && !positive(f.proHacViceFee) },
-  { tag: "pro_hac_vice_fee_surcharge", label: "Surcharge on the pro hac vice fee (3%)", example: "$15.00", value: (f) => money(surchargeFor(proHacViceFeeOf(f))), required: (f) => f.proHacVice && !positive(f.proHacViceFee) },
+  { tag: "pro_hac_vice_fee", label: "Pro hac vice fee (when the box is ticked)", example: "$500.00", value: (f) => money(phv(f, f.proHacViceFee)), required: (f) => f.proHacVice && !positive(f.proHacViceFee) },
+  { tag: "pro_hac_vice_fee_surcharge", label: "Surcharge on the pro hac vice fee (3%)", example: "$15.00", value: (f) => money(surchargeFor(phv(f, f.proHacViceFee))), required: (f) => f.proHacVice && !positive(f.proHacViceFee) },
+  { tag: "pro_hac_vice_filing_fee", label: "Court filing fee for the pro hac vice motion (when ticked)", example: "$100.00", value: (f) => money(phv(f, f.proHacViceFilingFee)), required: (f) => f.proHacVice && !positive(f.proHacViceFilingFee) },
+  { tag: "pro_hac_vice_filing_fee_surcharge", label: "Surcharge on the pro hac vice filing fee (3%)", example: "$3.00", value: (f) => money(surchargeFor(phv(f, f.proHacViceFilingFee))), required: (f) => f.proHacVice && !positive(f.proHacViceFilingFee) },
   { tag: "pro_hac_vice_district", label: "Federal district for the pro hac vice motion", example: "Western District of Missouri", value: (f) => (f.proHacVice ? f.proHacViceDistrict.trim() : ""), required: (f) => f.proHacVice && !has(f.proHacViceDistrict) },
   { tag: "people_names", label: "Everyone on the contract, in a sentence", example: "Ana LOPEZ, Juan LOPEZ and Maria LOPEZ", value: (f) => joinNames(namesOf(f), "and"), required: (f) => !has(f.clientName) },
   { tag: "people_names_es", label: "Everyone on the contract, Spanish", example: "Ana LOPEZ, Juan LOPEZ y Maria LOPEZ", value: (f) => joinNames(namesOf(f), "y"), required: (f) => !has(f.clientName) },
