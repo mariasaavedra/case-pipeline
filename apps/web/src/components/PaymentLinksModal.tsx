@@ -17,6 +17,11 @@
 // (lib/payment-email.ts) from the staff member's own Outlook (Graph Mail.Send)
 // to the address the client signed with, then marks it sent. Staff see the
 // e-mail before sending: the one-click check while this is new.
+//
+// Split (rare — a client's bank won't take the whole fee at once): the small
+// "Split" next to a fee turns it into 2–4 links, equal by default; typing one
+// part fills in the others so they still add up. Each part has its own
+// reference ("AF 1/2"), and the API calls the fee paid once every part is.
 // =============================================================================
 
 import { useState } from "react";
@@ -26,7 +31,10 @@ import { GraphConsentRequiredError, sendMailAsMe } from "../sharepoint/graph";
 import { chargeFor, payMethodOf, paymentEmail, paymentLines, type PayMethod } from "../lib/payment-email";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { formatLawPayAmount, lawPayLink, lawPayReference, withFeeKCode, FEE_TYPE_LABELS, type FeeType } from "../lib/lawpay";
+import {
+  formatLawPayAmount, lawPayLink, lawPayReference, partsAddUp, rebalanceParts, splitEvenly, withFeeKCode,
+  FEE_TYPE_LABELS, MAX_PARTS, type FeePart, type FeeType,
+} from "../lib/lawpay";
 import { SendSmsModal } from "./SendSmsModal";
 import type { SendSmsResult } from "../api";
 
@@ -42,6 +50,19 @@ const FEES: FeeType[] = ["AF", "PF", "FF"];
 const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-ink-muted)", marginBottom: 4, fontFamily: "var(--font-body)" } as const;
 const inputStyle = { border: "1px solid var(--color-border-light)", background: "var(--color-surface)", color: "var(--color-ink)", fontFamily: "var(--font-body)" } as const;
 
+const toNumber = (raw: string) => {
+  const n = Number(raw.replace(/[^0-9.]/g, ""));
+  return raw.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null;
+};
+const toText = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+/** One link: a whole fee, or one part of a split fee. */
+interface LinkItem { fee: FeeType; part?: FeePart; amount: number; link: string | null }
+const itemKey = (i: Pick<LinkItem, "fee" | "part">) => (i.part ? `${i.fee}-${i.part.n}` : i.fee);
+const itemLabel = (i: Pick<LinkItem, "fee" | "part">) =>
+  `${FEE_TYPE_LABELS[i.fee]}${i.part ? ` (${i.part.n} of ${i.part.of})` : ""}`;
+
 export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
   const [description, setDescription] = useState(
     [c.clientName, ...c.contractFor].join(" ").trim(),
@@ -52,7 +73,10 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
     PF: start(c.processingFee),
     FF: start(c.filingFee),
   });
-  const [copied, setCopied] = useState<FeeType | "all" | null>(null);
+  /** Split fees: each part as typed. Monday's "SPLIT PAYMENTS" opens with the AF in two. */
+  const [splits, setSplits] = useState<Partial<Record<FeeType, string[]>>>(() =>
+    /split/i.test(c.paymentMethod ?? "") && (c.attorneyFee ?? 0) > 0 ? { AF: splitEvenly(c.attorneyFee!, 2).map(toText) } : {});
+  const [copied, setCopied] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,24 +86,63 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
 
   const { user } = useAuth();
   const [method, setMethod] = useState<PayMethod | null>(payMethodOf(c.paymentMethod));
-  const fee = (f: FeeType) => {
-    const n = Number(amounts[f].replace(/[^0-9.]/g, ""));
-    return amounts[f].trim() !== "" && Number.isFinite(n) && n > 0 ? n : null;
-  };
-  const charged = (f: FeeType) => {
-    const n = fee(f);
-    return n === null ? null : method === "credit" ? chargeFor(n, "credit") : n;
-  };
+  const fee = (f: FeeType) => toNumber(amounts[f]);
+  const charge = (n: number) => (method === "credit" ? chargeFor(n, "credit") : n);
   // Every reference carries the Fee K's code, so LawPay's receipt names its Fee K.
   const reference = withFeeKCode(description, c.mondayItemId);
-  const links = method === "cash" ? [] : FEES.map((f) => ({ fee: f, link: lawPayLink(reference, f, charged(f) ?? "") }));
+
+  // A split fee's parts, when they add up to the fee (else no links for it yet).
+  const partsOf = (f: FeeType): number[] | null => {
+    const total = fee(f);
+    const parts = splits[f]?.map((p) => toNumber(p) ?? 0);
+    return total !== null && parts && partsAddUp(total, parts) ? parts : null;
+  };
+  const unbalanced = FEES.filter((f) => splits[f] && fee(f) !== null && !partsOf(f));
+  const items: LinkItem[] = method === "cash" ? [] : FEES.flatMap((f) => {
+    const total = fee(f);
+    if (total === null) return [];
+    const parts = splits[f] ? partsOf(f) : [total];
+    if (!parts) return [];
+    return parts.map((base, i) => {
+      const part = parts.length > 1 ? { n: i + 1, of: parts.length } : undefined;
+      const amount = charge(base);
+      return { fee: f, part, amount, link: lawPayLink(reference, f, amount, part) };
+    });
+  });
+
+  const resplit = (f: FeeType, n: number) => {
+    const total = fee(f);
+    if (total !== null) setSplits((s) => ({ ...s, [f]: splitEvenly(total, n).map(toText) }));
+  };
+  const cancelSplit = (f: FeeType) => setSplits((s) => {
+    const rest = { ...s };
+    delete rest[f];
+    return rest;
+  });
+  // Typing one part fills in the others so they still add up to the fee.
+  const setPart = (f: FeeType, i: number, raw: string) => {
+    setSplits((s) => {
+      const parts = [...(s[f] ?? [])];
+      parts[i] = raw;
+      const total = fee(f);
+      const typed = toNumber(raw);
+      if (total === null || typed === null || typed >= total) return { ...s, [f]: parts };
+      const balanced = rebalanceParts(total, parts.map((p) => toNumber(p) ?? 0), i);
+      return { ...s, [f]: balanced.map((p, k) => (k === i ? raw : toText(p))) };
+    });
+  };
+  const setAmount = (f: FeeType, raw: string) => {
+    setAmounts((a) => ({ ...a, [f]: raw }));
+    // A new fee re-splits evenly in the same number of parts.
+    const total = toNumber(raw);
+    if (splits[f] && total !== null) setSplits((s) => ({ ...s, [f]: splitEvenly(total, s[f]!.length).map(toText) }));
+  };
 
   // Every way the links leave M21 is recorded, so LawPay's payment finds this Fee K.
   const record = (channel: "email" | "text" | "copy" | "mark") => {
-    const out = method === "cash" ? [] : FEES.flatMap((f) => {
-      const amount = charged(f);
-      const text = amount === null ? null : formatLawPayAmount(amount);
-      return text && reference ? [{ fee: f, amount: Number(text), reference: lawPayReference(reference, f, text) }] : [];
+    const out = items.flatMap((it) => {
+      const text = formatLawPayAmount(it.amount);
+      return text && reference ? [{ fee: it.fee, amount: Number(text), reference: lawPayReference(reference, it.fee, text, it.part) }] : [];
     });
     void recordPaymentLinks(c.localId, { channel, method, links: out });
   };
@@ -90,7 +153,8 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
     ? paymentEmail({
         clientName: c.clientName,
         matter: c.contractFor.join(", "),
-        lines: paymentLines(reference, { AF: fee("AF"), FF: fee("FF"), PF: fee("PF") }, method),
+        lines: paymentLines(reference, { AF: fee("AF"), FF: fee("FF"), PF: fee("PF") }, method,
+          Object.fromEntries(FEES.flatMap((f) => { const p = partsOf(f); return p ? [[f, p]] : []; }))),
         method,
         senderName: user?.name ?? "",
       })
@@ -122,8 +186,9 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
     }
     setMailing(false);
   };
-  const ready = links.filter((l): l is { fee: FeeType; link: string } => l.link !== null);
-  const linksText = ready.map((l) => `${FEE_TYPE_LABELS[l.fee]}: ${l.link}`).join("\n");
+  // Nothing goes out while a split doesn't add up: the client would get part of a fee.
+  const ready = unbalanced.length ? [] : items.filter((l): l is LinkItem & { link: string } => l.link !== null);
+  const linksText = ready.map((l) => `${itemLabel(l)}: ${l.link}`).join("\n");
 
   // A live text is the link going out, so it records the step the same as
   // "Mark sent". A failure there is shown here; the text itself already went.
@@ -140,7 +205,7 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
     }
   };
 
-  const copy = async (text: string, which: FeeType | "all") => {
+  const copy = async (text: string, which: string) => {
     try {
       await navigator.clipboard.writeText(text);
       record("copy");
@@ -202,7 +267,11 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
             </p>
           ) : (
           <ul className="space-y-3">
-            {FEES.map((fee) => ({ fee, link: links.find((l) => l.fee === fee)?.link ?? null })).map(({ fee, link }) => (
+            {FEES.map((fee) => {
+              const split = splits[fee];
+              const total = toNumber(amounts[fee]);
+              const whole = split ? undefined : items.find((i) => i.fee === fee);
+              return (
               <li key={fee}>
                 <div className="flex items-center gap-2">
                   <label htmlFor={`m21-${fee}`} className="text-sm w-36 shrink-0" style={{ color: "var(--color-ink)" }}>
@@ -210,30 +279,67 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
                   </label>
                   <span className="text-sm" style={{ color: "var(--color-ink-muted)" }}>$</span>
                   <input id={`m21-${fee}`} inputMode="decimal" value={amounts[fee]} placeholder="—"
-                    onChange={(e) => setAmounts((a) => ({ ...a, [fee]: e.target.value }))}
+                    onChange={(e) => setAmount(fee, e.target.value)}
                     className="w-24 rounded-md px-2 py-1 text-sm tabular-nums" style={inputStyle} />
                   <span className="text-xs" style={{ color: "var(--color-ink-faint)" }}>
                     {fee === "FF" ? "Trust" : "Operating"}
-                    {method === "credit" && charged(fee) !== null && <> · link ${charged(fee)!.toFixed(2)} with 3%</>}
+                    {method === "credit" && whole && <> · link ${whole.amount.toFixed(2)} with 3%</>}
                   </span>
-                  {link && (
-                    <div className="ml-auto flex gap-1.5">
-                      <Button type="button" size="sm" variant="outline" onClick={() => copy(link, fee)}>
-                        {copied === fee ? "Copied ✓" : "Copy"}
-                      </Button>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => window.open(link, "_blank", "noopener")}>
-                        Open
-                      </Button>
-                    </div>
+                  {!split && total !== null && (
+                    <button type="button" onClick={() => resplit(fee, 2)} className="text-xs underline"
+                      style={{ color: "var(--color-ink-faint)" }}
+                      title="For a client whose bank won't take the whole amount at once: one link per part">
+                      Split
+                    </button>
                   )}
+                  {whole?.link && <LinkButtons link={whole.link} copied={copied === fee} onCopy={() => copy(whole.link!, fee)} />}
                 </div>
-                {link && (
-                  <div className="mt-1 text-xs break-all" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono, monospace)" }}>
-                    {link}
+                {whole?.link && <LinkText link={whole.link} />}
+
+                {split && total !== null && (
+                  <div className="mt-2 ml-4 rounded-md border p-2 space-y-2" style={{ borderColor: "var(--color-border-light)" }}>
+                    <div className="flex items-center gap-2 text-xs" style={{ color: "var(--color-ink-muted)" }}>
+                      <label htmlFor={`m21-${fee}-n`}>Split into</label>
+                      <select id={`m21-${fee}-n`} value={split.length} onChange={(e) => resplit(fee, Number(e.target.value))}
+                        className="rounded-md px-1 py-0.5 text-xs" style={inputStyle}>
+                        {Array.from({ length: MAX_PARTS - 1 }, (_, k) => k + 2).map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                      <span>payments</span>
+                      <button type="button" onClick={() => cancelSplit(fee)} className="ml-auto underline">Don&apos;t split</button>
+                    </div>
+                    {split.map((raw, i) => {
+                      const n = i + 1;
+                      const item = items.find((it) => it.fee === fee && it.part?.n === n);
+                      return (
+                        <div key={i}>
+                          <div className="flex items-center gap-2">
+                            <label htmlFor={`m21-${fee}-${i}`} className="text-sm w-32 shrink-0" style={{ color: "var(--color-ink)" }}>
+                              Part {n} of {split.length}
+                            </label>
+                            <span className="text-sm" style={{ color: "var(--color-ink-muted)" }}>$</span>
+                            <input id={`m21-${fee}-${i}`} inputMode="decimal" value={raw}
+                              onChange={(e) => setPart(fee, i, e.target.value)}
+                              className="w-24 rounded-md px-2 py-1 text-sm tabular-nums" style={inputStyle} />
+                            {method === "credit" && item && (
+                              <span className="text-xs" style={{ color: "var(--color-ink-faint)" }}>link ${item.amount.toFixed(2)} with 3%</span>
+                            )}
+                            {item?.link && <LinkButtons link={item.link} copied={copied === itemKey(item)} onCopy={() => copy(item.link!, itemKey(item))} />}
+                          </div>
+                          {item?.link && <LinkText link={item.link} />}
+                        </div>
+                      );
+                    })}
+                    {unbalanced.includes(fee) && (
+                      <p className="text-xs" style={{ color: "var(--urgency-overdue)" }}>
+                        The parts add up to {usd.format(split.reduce((sum, p) => sum + (toNumber(p) ?? 0), 0))}, not {usd.format(total)}
+                        {split.some((p) => toNumber(p) === null) ? " — every part needs an amount" : ""}.
+                      </p>
+                    )}
                   </div>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
           )}
 
@@ -265,7 +371,7 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
             <p className="text-sm" style={{ color: "var(--color-ink-muted)" }}>Pick how the client pays to e-mail the links.</p>
           )}
 
-          {method !== "cash" && ready.length === 0 && (
+          {method !== "cash" && ready.length === 0 && !unbalanced.length && (
             <p className="text-sm" style={{ color: "var(--color-ink-faint)" }}>Enter a description and at least one amount.</p>
           )}
           {error && <p className="text-sm" style={{ color: "var(--urgency-overdue)" }}>{error}</p>}
@@ -317,5 +423,26 @@ export function PaymentLinksModal({ contract: c, onMarkSent, onClose }: Props) {
         />
       )}
     </Dialog>
+  );
+}
+
+function LinkButtons({ link, copied, onCopy }: { link: string; copied: boolean; onCopy: () => void }) {
+  return (
+    <div className="ml-auto flex gap-1.5">
+      <Button type="button" size="sm" variant="outline" onClick={onCopy}>
+        {copied ? "Copied ✓" : "Copy"}
+      </Button>
+      <Button type="button" size="sm" variant="ghost" onClick={() => window.open(link, "_blank", "noopener")}>
+        Open
+      </Button>
+    </div>
+  );
+}
+
+function LinkText({ link }: { link: string }) {
+  return (
+    <div className="mt-1 text-xs break-all" style={{ color: "var(--color-ink-faint)", fontFamily: "var(--font-mono, monospace)" }}>
+      {link}
+    </div>
   );
 }

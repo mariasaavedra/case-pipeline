@@ -5,6 +5,8 @@
 // The key is the payment's REFERENCE, which the app wrote itself and the client
 // can't change (lib/lawpay.ts, `readOnlyFields=reference,amount`):
 //   "<DESCRIPTION> - <AF|PF|FF> <AMOUNT>"   e.g. "ANA LOPEZ I-212 - AF 4120"
+// A fee split into parts (the client's bank limit) adds "n/N" before the
+// amount: "ANA LOPEZ I-212 - AF 1/2 2000".
 // =============================================================================
 
 export type FeeType = "AF" | "PF" | "FF";
@@ -25,13 +27,21 @@ export interface ParsedReference {
   description: string;
   fee: FeeType;
   amount: number;
+  /** Set when the fee was split: part `n` of `of`. */
+  part?: { n: number; of: number };
 }
 
-/** "ANA LOPEZ I-212 - AF 4120.00" → its parts; null when it isn't one of ours. */
+/** "ANA LOPEZ I-212 - AF 4120.00" (or "- AF 1/2 2000") → its parts; null when it isn't one of ours. */
 export function parseReference(ref: string): ParsedReference | null {
-  const m = /^(.*\S)\s+-\s+(AF|PF|FF)\s+(\d+(?:\.\d{1,2})?)\s*$/i.exec(ref.replace(/\s+/g, " ").trim());
+  const m = /^(.*\S)\s+-\s+(AF|PF|FF)\s+(?:([1-9])\/([2-9])\s+)?(\d+(?:\.\d{1,2})?)\s*$/i.exec(ref.replace(/\s+/g, " ").trim());
   if (!m) return null;
-  return { description: m[1]!.toUpperCase(), fee: m[2]!.toUpperCase() as FeeType, amount: Number(m[3]) };
+  const out: ParsedReference = { description: m[1]!.toUpperCase(), fee: m[2]!.toUpperCase() as FeeType, amount: Number(m[5]) };
+  if (m[3]) {
+    const n = Number(m[3]), of = Number(m[4]);
+    if (n > of) return null;
+    out.part = { n, of };
+  }
+  return out;
 }
 
 export const normalizeReference = (ref: string) => ref.replace(/\s+/g, " ").trim().toUpperCase();
@@ -82,6 +92,38 @@ export function isFullyPaid(
     ? [...new Set(issued.map((l) => l.fee))]
     : (["AF", "FF", "PF"] as FeeType[]).filter((f) => (feeK[f] ?? 0) > 0);
   return owed.length > 0 && owed.every((f) => paidFees.has(f));
+}
+
+/**
+ * The fees paid in full, from the references of the payments received: a fee
+ * is paid by one whole-fee payment, or by every part of a split ("1/2" and
+ * "2/2"). Parts of different splits of the same fee don't add up.
+ */
+export function paidFees(paidReferences: string[]): Set<FeeType> {
+  const whole = new Set<FeeType>();
+  const parts = new Map<string, Set<number>>();
+  for (const r of paidReferences) {
+    const ref = parseReference(r);
+    if (!ref) continue;
+    if (!ref.part) { whole.add(ref.fee); continue; }
+    const key = `${ref.fee} ${ref.part.of}`;
+    parts.set(key, (parts.get(key) ?? new Set()).add(ref.part.n));
+  }
+  for (const [key, got] of parts) {
+    const [fee, of] = key.split(" ") as [FeeType, string];
+    if (got.size >= Number(of)) whole.add(fee);
+  }
+  return whole;
+}
+
+/** How many parts of this payment's split are still unpaid; null when it isn't a part. */
+export function partsLeft(ref: ParsedReference, paidReferences: string[]): number | null {
+  if (!ref.part) return null;
+  const got = new Set(paidReferences.flatMap((r) => {
+    const p = parseReference(r);
+    return p?.part && p.fee === ref.fee && p.part.of === ref.part!.of ? [p.part.n] : [];
+  }));
+  return Math.max(0, ref.part.of - got.size);
 }
 
 export const FEE_WORDS: Record<FeeType, string> = { AF: "Attorney fee", FF: "Filing fee", PF: "Postage fee" };

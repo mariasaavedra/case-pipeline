@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { feeKIdFromReference, isFullyPaid, parseReference } from "./events";
+import { feeKIdFromReference, isFullyPaid, paidFees, parseReference, partsLeft } from "./events";
 
 describe("parseReference", () => {
   it("reads the references the app writes", () => {
@@ -7,6 +7,29 @@ describe("parseReference", () => {
     expect(parseReference("  ana  lopez - ff 1210.25 ")).toEqual({ description: "ANA LOPEZ", fee: "FF", amount: 1210.25 });
     expect(parseReference("Invoice 123")).toBeNull();
     expect(parseReference("ANA - XX 10")).toBeNull();
+  });
+  it("reads a split fee's part", () => {
+    expect(parseReference("ANA LOPEZ K8F2XQ1 - AF 1/2 2000")).toEqual({ description: "ANA LOPEZ K8F2XQ1", fee: "AF", amount: 2000, part: { n: 1, of: 2 } });
+    expect(parseReference("ANA - af 3/3 700.50")?.part).toEqual({ n: 3, of: 3 });
+    expect(parseReference("ANA - AF 3/2 700")).toBeNull();
+  });
+});
+
+describe("paidFees", () => {
+  it("a whole payment pays its fee", () => {
+    expect(paidFees(["ANA - AF 4120", "ANA - FF 675"])).toEqual(new Set(["AF", "FF"]));
+  });
+  it("a split fee is paid only when every part is", () => {
+    expect(paidFees(["ANA - AF 1/2 2000"])).toEqual(new Set());
+    expect(paidFees(["ANA - AF 1/2 2000", "ANA - AF 1/2 2000"])).toEqual(new Set());
+    expect(paidFees(["ANA - AF 1/2 2000", "ANA - AF 2/2 2120"])).toEqual(new Set(["AF"]));
+    expect(paidFees(["ANA - AF 1/2 2000", "ANA - AF 2/3 1000"])).toEqual(new Set());
+  });
+  it("counts the parts left", () => {
+    const ref = parseReference("ANA - AF 1/3 1000")!;
+    expect(partsLeft(ref, ["ANA - AF 1/3 1000"])).toBe(2);
+    expect(partsLeft(ref, ["ANA - AF 1/3 1000", "ANA - AF 2/3 1000", "ANA - AF 3/3 1120"])).toBe(0);
+    expect(partsLeft(parseReference("ANA - AF 4120")!, [])).toBeNull();
   });
 });
 

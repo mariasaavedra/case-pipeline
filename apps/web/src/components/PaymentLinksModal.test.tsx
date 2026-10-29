@@ -164,15 +164,18 @@ describe("PaymentLinksModal → Email links to client (contracts signed in the a
     expect(button("Email links to client")).toBeUndefined();
   });
 
-  it("split / unknown method: staff pick it before the e-mail shows", async () => {
+  it("SPLIT PAYMENTS: staff pick the method; the AF opens split in two", async () => {
     await render({ ...signed, paymentMethod: "SPLIT PAYMENTS" } as unknown as PendingContract);
     expect(button("Email links to client")).toBeUndefined();
     expect(document.body.textContent).toContain("Pick how the client pays");
+    expect(document.body.textContent).toContain("Part 2 of 2");
     const debit = Array.from(document.querySelectorAll("label")).find((l) => l.textContent?.includes("Debit card"))!.querySelector("input")!;
     await act(async () => { debit.click(); });
     await act(async () => { button("Email links to client")!.click(); });
     await flush();
-    expect(mocks.mail[0]!.html).toContain("amount=4000&amp;");
+    expect(mocks.mail[0]!.html.split("amount=2000&amp;").length - 1).toBe(4); // 2 parts × EN + ES
+    expect(mocks.mail[0]!.html).toContain("AF%201%2F2%202000");
+    expect(mocks.mail[0]!.html).toContain("Attorney's fee (2 of 2)");
     expect(mocks.mail[0]!.html).not.toContain("surcharge");
   });
 });

@@ -78,6 +78,13 @@ the client): `<DESCRIPTION> - <AF|PF|FF> <AMOUNT>`, e.g. `ANA LOPEZ I-212 - AF 4
 "Every fee paid" = every fee among the links handed out for that Fee K; with none
 recorded, its AF / FF / PF on Monday. Rules: `apps/api/src/lawpay/events.ts`.
 
+**Split payments** (2026-10-29, for clients whose bank has a daily limit): M21's
+**Split** turns one fee into 2–4 links. Each part's reference has `n/N` before
+the amount — `ANA LOPEZ I-212 K8F2XQ1 - AF 1/2 2000` — so every part is its own
+row in `payment_links` and its own receipt. A fee counts as paid by one
+whole-fee payment or by every part of one split (`paidFees`); the note on each
+part says how many are still to come (`partsLeft`).
+
 ## Setup
 
 1. Outlook rule on rafael@ (done 2026-10-16): from LawPay → forward to importantdocuments@.
