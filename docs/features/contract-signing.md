@@ -95,9 +95,10 @@ add a contract.
   Application adds the DHS `{{bio_fee}}`; Trial's "signed contract by" date is
   `{{sign_by_date}}` (payment = `{{due_date}}`). Habeas (2026-10-29) has an
   optional pro hac vice clause, `{{#pro_hac_vice}}…{{/pro_hac_vice}}` with
-  `{{pro_hac_vice_district}}` and `{{pro_hac_vice_fee}}` (+ `_surcharge`):
+  `{{pro_hac_vice_district}}`, `{{pro_hac_vice_fee}}` (preparing the motion) and
+  `{{pro_hac_vice_filing_fee}}` (the court's), each with `_surcharge`:
   M22's "Includes a pro hac vice motion" box turns it on. The fee (set by
-  Rekha with the attorney) is paid into Operating with the AF, so it counts in
+  Rekha with the attorney) and the court's fee are paid into Operating with the AF, so both count in
   `{{surcharge}}` / `{{total_fee}}`; M22 shows what the Fee K's AF on Monday
   (= the AF payment link) should be and flags a mismatch. Nothing is written
   to Monday.
